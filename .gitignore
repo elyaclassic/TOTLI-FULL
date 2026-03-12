@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Database — barcha ma'lumotlar shu yerda, Git ga KIRMAYDI (o'chib ketmaydi)
+*.db
+*.sqlite
+*.sqlite3
+totli_holva.db
+totli_holva.db-wal
+totli_holva.db-shm
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+debug_*.log
+
+# Environment variables
+.env
+.env.local
+
+# Temporary files
+*.tmp
+temp_*.txt
+DumpStack.log.tmp
+
+# Backup files
+*.backup
+*_backup.html
+
+# Flutter / totli_mobile
+totli_mobile/.dart_tool/
+totli_mobile/.packages
+totli_mobile/build/
+totli_mobile/.flutter-plugins
+totli_mobile/.flutter-plugins-dependencies
+totli_mobile/android/.gradle/
+totli_mobile/android/app/debug/
+totli_mobile/android/app/profile/
+totli_mobile/android/app/release/
+totli_mobile/ios/Pods/
+totli_mobile/ios/.symlinks/
+totli_mobile/ios/Flutter/Flutter.framework
+totli_mobile/ios/Flutter/Flutter.podspec

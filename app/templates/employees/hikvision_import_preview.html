@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-camera-video"></i> Hikvision — yuklanadigan xodimlar</h5>
+        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Xodimlar</a>
+    </div>
+    <p class="text-muted small">Keraklilarini belgilang va «Tanlanganlarni yuklash» ni bosing.</p>
+    <form method="POST" action="/employees/import-from-hikvision">
+        <input type="hidden" name="hikvision_host" value="{{ hikvision_host }}">
+        <input type="hidden" name="hikvision_port" value="{{ hikvision_port }}">
+        <input type="hidden" name="hikvision_username" value="{{ hikvision_username }}">
+        <input type="hidden" name="hikvision_password" value="{{ hikvision_password }}">
+        <div class="card mb-3">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="50">
+                                    <label class="form-check mb-0">
+                                        <input type="checkbox" class="form-check-input" id="selectAll" title="Barchasini tanlash">
+                                    </label>
+                                </th>
+                                <th>Kod / ID</th>
+                                <th>F.I.O</th>
+                                <th>Bo'lim</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in persons %}
+                            {% set key = p.get('employeeNo') or p.get('name') %}
+                            {% if key %}
+                            <tr>
+                                <td>
+                                    <label class="form-check mb-0">
+                                        <input type="checkbox" class="form-check-input row-select" name="employee_no" value="{{ key }}">
+                                    </label>
+                                </td>
+                                <td><code>{{ p.get('employeeNo') or '-' }}</code></td>
+                                <td>{{ p.get('name') or 'Noma\'lum' }}</td>
+                                <td>{{ p.get('department') or '-' }}</td>
+                            </tr>
+                            {% endif %}
+                            {% else %}
+                            <tr>
+                                <td colspan="4" class="text-center text-muted py-4">Qurilmada shaxs topilmadi.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% if persons %}
+        <button type="submit" class="btn btn-success"><i class="bi bi-cloud-download"></i> Tanlanganlarni yuklash</button>
+        <a href="/employees" class="btn btn-secondary">Bekor</a>
+        {% endif %}
+    </form>
+</div>
+<script>
+(function() {
+    var selectAll = document.getElementById('selectAll');
+    var rows = document.querySelectorAll('.row-select');
+    if (!selectAll || !rows.length) return;
+    selectAll.addEventListener('change', function() {
+        rows.forEach(function(cb) { cb.checked = selectAll.checked; });
+    });
+})();
+</script>
+{% endblock %}

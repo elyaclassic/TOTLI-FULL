@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<link href="/static/css/production.css" rel="stylesheet">
+{% endblock %}
+{% block content %}
+<div class="container-fluid production-page">
+<div class="page-header">
+    <div>
+        <a href="/production/orders" class="btn btn-outline-secondary btn-sm mb-2">
+            <i class="bi bi-arrow-left"></i> Buyurtmalar
+        </a>
+        <h4><i class="bi bi-pencil-square"></i> Xom ashyo miqdorlarini tahrirlash</h4>
+    </div>
+</div>
+
+<div class="alert alert-info py-2 px-3 mb-3">
+    <strong>{{ production.number }}</strong> — {{ recipe.name }}<br>
+    <strong>Ishlab chiqarish miqdori: {{ "%.2f"|format(production.quantity) }} {{ output_unit_name|default('kg') }}</strong> (o'zgarmaydi).<br>
+    {% if read_only %}
+    <span class="badge bg-success">Yakunlangan</span> — faqat ko'rish rejimi. Tasdiqni bekor qilish uchun pastdagi tugmani bosing.
+    {% else %}
+    Retsept asli turadi; faqat shu buyurtma uchun xom ashyo miqdorlarini o'zgartiring.
+    {% endif %}
+</div>
+{% if (current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar']) and total_material_cost is defined and output_units is defined %}
+<div class="card mb-3 border-success">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <strong>Jami xarajat (xom ashyo):</strong> {{ "{:,.0f}".format(total_material_cost) }} so'm
+            </div>
+            <div class="col-md-6">
+                <strong>Tannarx (1 {{ output_unit_name|default('kg') }} uchun):</strong> {{ "{:,.2f}".format(cost_per_unit) }} so'm
+            </div>
+        </div>
+        <small class="text-muted">Tannarx = jami xarajat ÷ ishlab chiqarish miqdori. Bu yerda faqat xom ashyo summasi; 1C da «Жами харажатлар» odatda material + Харажатлар + Иш хақи bo‘lishi mumkin — shuning uchun summa 1C dan farq qilishi mumkin.</small>
+    </div>
+</div>
+{% endif %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-check"></i> Shu buyurtma uchun xom ashyo</span>
+        {% if read_only and current_user and current_user.role == 'admin' %}
+        <form method="POST" action="/production/{{ production.id }}/revert" style="display: inline;">
+            <button type="submit" class="btn btn-warning btn-sm"
+                onclick="return confirm('Tasdiqni bekor qilish — xom ashyo qaytadi, tayyor mahsulot olib tashlanadi. Davom etasizmi?');">
+                <i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="card-body">
+        <form method="POST" action="/production/{{ production.id }}/materials" {% if read_only %}style="pointer-events: none;"{% endif %}>
+            <table class="table">
+                <thead class="table-light">
+                    <tr>
+                        <th>Xom ashyo</th>
+                        <th>Retseptda (1 chiqish uchun)</th>
+                        <th>Shu buyurtma uchun</th>
+                        {% if production.warehouse_id %}<th class="text-center">Tarix</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for pi in production.production_items %}
+                    {% set _unit = (pi.product.unit.name or pi.product.unit.code if pi.product and pi.product.unit else 'kg') %}
+                    <tr>
+                        <td>
+                            <strong>{{ pi.product.name if pi.product else 'Noma\'lum' }}</strong>
+                            {% if pi.product %}<br><small class="text-muted"><code>{{ pi.product.barcode or pi.product.code or '-' }}</code></small>{% endif %}
+                        </td>
+                        <td>
+                            {% for ri in recipe.items %}
+                                {% if ri.product_id == pi.product_id %}
+                                {% set _ri_unit = (ri.product.unit.name or ri.product.unit.code if ri.product and ri.product.unit else 'kg') %}
+                                {{ "%.3f"|format(ri.quantity) }} {{ _ri_unit }}
+                                {% endif %}
+                            {% endfor %}
+                        </td>
+                        <td>
+                            {% if read_only %}
+                            {{ "%.3f"|format(pi.quantity) }} {{ _unit }}
+                            {% else %}
+                            <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm" 
+                                   value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width: 120px;">
+                            <span class="text-muted small ms-1">{{ _unit }}</span>
+                            {% endif %}
+                        </td>
+                        {% if production.warehouse_id %}
+                        <td class="text-center">
+                            <a href="/reports/stock/source?warehouse_id={{ production.warehouse_id }}&product_id={{ pi.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi (1-ombor)"><i class="bi bi-clock-history"></i></a>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if production.warehouse_id %}4{% else %}3{% endif %}" class="text-center text-muted">Xom ashyo yo'q.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% if production.production_items and not read_only %}
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-check-lg"></i> Saqlash
+            </button>
+            <a href="/production/orders" class="btn btn-secondary">Bekor</a>
+            {% elif read_only %}
+            <a href="/production/orders" class="btn btn-secondary">Buyurtmalarga qaytish</a>
+            {% endif %}
+        </form>
+    </div>
+</div>
+</div><!-- .production-page -->
+{% if not read_only and production.production_items %}
+<script>
+(function() {
+    var inputs = document.querySelectorAll('input[name^="qty_"]');
+    inputs.forEach(function(inp, i) {
+        inp.addEventListener('keydown', function(e) {
+            if (e.key !== 'Enter') return;
+            e.preventDefault();
+            if (i + 1 < inputs.length) {
+                inputs[i + 1].focus();
+                inputs[i + 1].select();
+            } else {
+                var btn = document.querySelector('form button[type="submit"]');
+                if (btn) btn.focus();
+            }
+        });
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

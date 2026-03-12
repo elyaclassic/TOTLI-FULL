@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="card mb-3">
+    <div class="card-body">
+        <a href="/qoldiqlar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiqlar</a>
+    </div>
+</div>
+
+{% if error_message %}
+<div class="alert alert-danger mb-3" role="alert">
+    <strong>Xatolik:</strong> {{ error_message }}
+</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-clock-history"></i> Mahsulot harakati tarixi — qayerdan keldi / qayerga ketdi
+    </div>
+    <div class="card-body">
+        <p class="text-muted small mb-3">Tanlanmasa barcha mahsulotlar harakati ko'rinadi. Ma'lum ombor yoki mahsulotni tekshirish kerak bo'lsa — filtrni to'ldiring va «Ko'rish» bosing.</p>
+        <form method="get" action="/qoldiqlar/tarix" class="row g-3 align-items-end" id="tarixForm">
+            <div class="col-md-4">
+                <label class="form-label">Ombor (ixtiyoriy)</label>
+                <select name="warehouse_id" class="form-select" id="tarix_warehouse_select">
+                    <option value="">— Barchasi —</option>
+                    {% for wh in warehouses or [] %}
+                    <option value="{{ wh.id }}" {% if selected_warehouse_id and selected_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 position-relative">
+                <label class="form-label">Mahsulot (ixtiyoriy)</label>
+                <input type="text" class="form-control" id="tarix_product_input" placeholder="Nomi yoki kod bo'yicha qidirish..." autocomplete="off" value="">
+                <input type="hidden" name="product_id" id="tarix_product_id_hidden" value="{{ selected_product_id or '' }}">
+                <div id="tarix_product_results" class="list-group position-absolute bg-white border" style="z-index: 1000; max-height: 280px; overflow-y: auto; display: none; left: 0; right: 0; box-shadow: 0 4px 12px rgba(0,0,0,0.15); border-radius: 0.25rem; margin-top: 2px;"></div>
+                <select id="tarix_product_select" style="display: none;" aria-hidden="true">
+                    <option value="">Tanlang...</option>
+                    {% for p in products or [] %}
+                    <option value="{{ p.id }}" data-name="{{ p.name or '' }}" data-code="{{ p.code or '' }}" data-barcode="{{ p.barcode or '' }}">{{ p.name }}{% if p.code or p.barcode %} ({{ p.code or p.barcode }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-eye"></i> Ko'rish</button>
+                {% if selected_warehouse_id and selected_product_id %}
+                <a href="/reports/stock/source?warehouse_id={{ selected_warehouse_id }}&product_id={{ selected_product_id }}" class="btn btn-outline-info btn-sm ms-2" target="_blank">Batafsil (qoldiq harakatdan keyin)</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+    {% if movements is defined and movements %}
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Sana</th>
+                        <th>Ombor</th>
+                        <th>Mahsulot</th>
+                        <th>Hujjat turi</th>
+                        <th>Hujjat raqami</th>
+                        <th class="text-end">O'zgarish (+/−)</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in movements %}
+                    <tr>
+                        <td>{{ m.date }}</td>
+                        <td>{{ m.warehouse_name }}</td>
+                        <td>{{ m.product_name }}{% if m.product_code %} <small class="text-muted">({{ m.product_code }})</small>{% endif %}</td>
+                        <td>{{ m.doc_type_label }}</td>
+                        <td><code>{{ m.doc_number }}</code></td>
+                        <td class="text-end {% if m.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:+,.3f}".format(m.quantity_change) }}</td>
+                        <td>{% if m.warehouse_id is not none and m.product_id is not none %}<a href="/reports/stock/source?warehouse_id={{ m.warehouse_id }}&product_id={{ m.product_id }}" class="btn btn-sm btn-outline-secondary" title="Bu ombor + mahsulot uchun batafsil tarix"><i class="bi bi-box-arrow-up-right"></i></a>{% else %}—{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <p class="text-muted small px-3 py-2 mb-0">Oxirgi 500 ta harakat. Aniqlashtirish uchun ombor yoki mahsulotni tanlang.</p>
+    </div>
+    {% else %}
+    <div class="card-body">
+        <p class="text-muted mb-0">Harakatlar topilmadi. Filtrni o'zgartiring yoki boshqa ombor/mahsulot tanlang.</p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+#tarix_product_results .list-group-item { cursor: pointer; }
+#tarix_product_results .list-group-item:hover { background-color: #f8f9fa; }
+#tarix_product_results .list-group-item.active { background-color: var(--bs-primary); color: #fff; }
+</style>
+<script>
+(function() {
+    var productInput = document.getElementById('tarix_product_input');
+    var productResults = document.getElementById('tarix_product_results');
+    var productIdHidden = document.getElementById('tarix_product_id_hidden');
+    var productSelect = document.getElementById('tarix_product_select');
+    var form = document.getElementById('tarixForm');
+
+    var selectedProductId = {{ (selected_product_id or 0) | tojson }};
+    if (selectedProductId && productSelect) {
+        var opt = productSelect.querySelector('option[value="' + selectedProductId + '"]');
+        if (opt) {
+            productInput.value = opt.textContent.trim();
+            productIdHidden.value = selectedProductId;
+        }
+    }
+
+    if (productInput && productSelect) {
+        productInput.addEventListener('input', function() {
+            var q = (this.value || '').trim().toLowerCase();
+            productResults.style.display = 'none';
+            productResults.innerHTML = '';
+            productIdHidden.value = '';
+            if (!q) return;
+            var opts = Array.from(productSelect.options).slice(1);
+            var found = opts.filter(function(o) {
+                var name = (o.dataset.name || '').toLowerCase();
+                var code = (o.dataset.code || '').toLowerCase();
+                var barcode = (o.dataset.barcode || '').toLowerCase();
+                var id = (o.value || '').toString();
+                return name.indexOf(q) !== -1 || code.indexOf(q) !== -1 || barcode.indexOf(q) !== -1 || id === q;
+            });
+            if (found.length) {
+                found.forEach(function(o) {
+                    var a = document.createElement('a');
+                    a.href = '#';
+                    a.className = 'list-group-item list-group-item-action';
+                    a.textContent = o.textContent;
+                    a.dataset.value = o.value;
+                    a.dataset.name = o.dataset.name || '';
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        productInput.value = this.dataset.name || this.textContent;
+                        productIdHidden.value = this.dataset.value;
+                        productResults.style.display = 'none';
+                        productResults.innerHTML = '';
+                    });
+                    productResults.appendChild(a);
+                });
+                productResults.style.display = 'block';
+            } else {
+                productResults.innerHTML = '<div class="list-group-item text-muted">Topilmadi</div>';
+                productResults.style.display = 'block';
+            }
+        });
+        productInput.addEventListener('focus', function() {
+            if (productResults.innerHTML && productResults.querySelector('.list-group-item')) productResults.style.display = 'block';
+        });
+        document.addEventListener('click', function(e) {
+            if (productResults && !productInput.contains(e.target) && !productResults.contains(e.target))
+                productResults.style.display = 'none';
+        });
+    }
+
+    // Filtr ixtiyoriy — tanlanmasa ham forma yuboriladi, barcha harakatlar ko'rinadi
+})();
+</script>
+{% endblock %}

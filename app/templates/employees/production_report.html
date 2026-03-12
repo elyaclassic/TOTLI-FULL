@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+            <h5 class="mb-0"><i class="bi bi-gear"></i> HR hisobot — Ishlab chiqarish (hodimlar bo'yicha)</h5>
+            <form method="get" action="/employees/production-report" class="d-flex flex-wrap gap-2 align-items-center">
+                <input type="date" name="start_date" value="{{ start_date }}" class="form-control form-control-sm" style="width: auto;">
+                <span>—</span>
+                <input type="date" name="end_date" value="{{ end_date }}" class="form-control form-control-sm" style="width: auto;">
+                <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
+            </form>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Foydalanuvchi</th>
+                            <th>Xodim (HR)</th>
+                            <th class="text-end">Ishlab chiqarishlar soni</th>
+                            <th class="text-end">Jami miqdor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in report_rows %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ row.user_name or '-' }}</td>
+                            <td>{{ row.employee_name or '-' }}</td>
+                            <td class="text-end">{{ row.production_count }}</td>
+                            <td class="text-end">{{ "%.2f"|format(row.total_quantity) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">Tanlangan davrda ma'lumot yo'q.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

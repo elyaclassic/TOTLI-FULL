@@ -1,0 +1,456 @@
+"""
+Buyurtma va ishlab chiqarish integratsiyasi funksiyalari
+"""
+from datetime import datetime
+from typing import List, Dict, Optional, Tuple
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+
+from app.models.database import (
+    Order,
+    OrderItem,
+    Product,
+    Recipe,
+    RecipeItem,
+    Production,
+    ProductionItem,
+    ProductionStage,
+    Stock,
+    Warehouse,
+    User,
+    Department,
+)
+from app.utils.notifications import create_notification
+
+
+def get_semi_finished_warehouse(db: Session):
+    """Yarim tayyor omborini topish (nomi yoki kodida 'yarim' yoki 'semi' bo'lgan)."""
+    return db.query(Warehouse).filter(
+        func.lower(Warehouse.name).contains("yarim") |
+        func.lower(Warehouse.name).contains("semi") |
+        func.lower(Warehouse.code).contains("yarim") |
+        func.lower(Warehouse.code).contains("semi")
+    ).first()
+
+
+def get_product_stock_in_warehouse(db: Session, warehouse_id: int, product_id: int) -> float:
+    """Berilgan omborda mahsulot qoldig'ini qaytaradi."""
+    stock = db.query(Stock).filter(
+        Stock.warehouse_id == warehouse_id,
+        Stock.product_id == product_id,
+    ).first()
+    return float(stock.quantity if stock else 0.0)
+
+
+def notify_operator_semi_finished_available(
+    db: Session,
+    order_number: str,
+    order_id: int,
+    product_name: str,
+):
+    """
+    Yarim tayyor omborda mahsulot bor ekanini operatorlar (ishlab chiqarish bo'limi) ga bildirish.
+    Ovozli push uchun priority='high' ishlatiladi.
+    """
+    production_department = db.query(Department).filter(
+        func.lower(Department.name).contains("ishlab") |
+        func.lower(Department.name).contains("chiqarish") |
+        func.lower(Department.code).contains("prod")
+    ).first()
+    if production_department:
+        users = db.query(User).filter(
+            User.department_id == production_department.id,
+            User.is_active == True,
+        ).all()
+    else:
+        users = db.query(User).filter(User.is_active == True).limit(10).all()
+    for user in users:
+        create_notification(
+            db=db,
+            title="📦 Yarim tayyor omborda mahsulot bor",
+            message=f"Sotuv {order_number} uchun «{product_name}» yarim tayyor omborda mavjud. Tashlab bering.",
+            notification_type="info",
+            user_id=user.id,
+            priority="high",
+            action_url=f"/sales/edit/{order_id}",
+            related_entity_type="order",
+            related_entity_id=order_id,
+        )
+
+
+def is_qiyom_recipe(recipe) -> bool:
+    """Retsept 'qiyom' (oralama mahsulot) bo'lsa — jamida hisoblanmasin (shablon: qiyom hisobga olinmaydi)."""
+    if not recipe or not getattr(recipe, "name", None):
+        return False
+    return "qiyom" in (recipe.name or "").lower()
+
+
+def recipe_kg_per_unit(recipe: Optional[Recipe]) -> float:
+    """Retsept uchun 1 dona (birlik) ning og'irligi kg da. Nomidan 250gr/400gr/2kg/3kg/4kg/5kg/1kg aniqlanadi, aks holda retseptdagi output_quantity."""
+    if not recipe:
+        return 1.0
+    name = (recipe.name or "").lower()
+    if "250gr" in name or "250 gr" in name:
+        return 0.25
+    if "400gr" in name or "400 gr" in name:
+        return 0.4
+    if "5kg" in name or "5 kg" in name:
+        return 5.0
+    if "4kg" in name or "4 kg" in name:
+        return 4.0
+    if "3kg" in name or "3 kg" in name:
+        return 3.0
+    if "2kg" in name or "2 kg" in name:
+        return 2.0
+    if "1kg" in name or "1 kg" in name:
+        return 1.0
+    return float(recipe.output_quantity or 1.0)
+
+
+def production_output_quantity_for_stock(db: Session, production, recipe) -> float:
+    """Tayyor mahsulot uchun qoldiq/harakatda yoziladigan miqdor: dona mahsulotda production.quantity, kg mahsulotda production.quantity * recipe_kg_per_unit(recipe)."""
+    if not recipe:
+        return 0.0
+    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+    if not output_product:
+        _unit_str = ""
+    else:
+        unit = getattr(output_product, "unit", None)
+        name = (getattr(unit, "name", None) or "") if unit else ""
+        code = (getattr(unit, "code", None) or "") if unit else ""
+        _unit_str = (name + " " + code).lower()
+    if "dona" in _unit_str:
+        return float(production.quantity or 0)
+    return float(production.quantity or 0) * recipe_kg_per_unit(recipe)
+
+
+def check_semi_finished_stock(
+    db: Session,
+    recipe: Recipe,
+    required_quantity: float,
+    semi_finished_warehouse_id: Optional[int] = None,
+) -> Tuple[float, Optional[int]]:
+    """
+    Yarim tayyor mahsulot omborida yetarli yarim tayyor mahsulot bormi tekshirish.
+    
+    Args:
+        db: Database session
+        recipe: Retsept
+        required_quantity: Kerakli miqdor (tayyor mahsulot uchun)
+        semi_finished_warehouse_id: Yarim tayyor ombor ID (agar None bo'lsa, avtomatik topiladi)
+    
+    Returns:
+        Tuple[float, Optional[int]]: (mavjud miqdor, yarim_tayyor_ombor_id)
+    """
+    # Agar yarim tayyor ombor ID berilmagan bo'lsa, topishga harakat qilamiz
+    if semi_finished_warehouse_id is None:
+        # Yarim tayyor omborini topish (nomi yoki kodida "yarim" yoki "semi" bo'lgan)
+        semi_warehouse = db.query(Warehouse).filter(
+            func.lower(Warehouse.name).contains("yarim") |
+            func.lower(Warehouse.name).contains("semi") |
+            func.lower(Warehouse.code).contains("yarim") |
+            func.lower(Warehouse.code).contains("semi")
+        ).first()
+        if semi_warehouse:
+            semi_finished_warehouse_id = semi_warehouse.id
+        else:
+            return (0.0, None)
+    
+    # Retseptdan yarim tayyor mahsulotni topish
+    # Retseptning 2-bosqichida yarim tayyor mahsulot yaratiladi
+    # Shuning uchun retseptning output mahsuloti yarim tayyor bo'lishi mumkin
+    # Yoki retsept items ichida yarim tayyor mahsulot bo'lishi mumkin
+    
+    recipe_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+    if not recipe_product:
+        return (0.0, semi_finished_warehouse_id)
+    
+        # Agar retsept mahsuloti yarim tayyor bo'lsa, uni tekshiramiz
+    if recipe_product and hasattr(recipe_product, 'type') and recipe_product.type == "yarim_tayyor":
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == semi_finished_warehouse_id,
+            Stock.product_id == recipe.product_id,
+        ).first()
+        available = stock.quantity if stock else 0.0
+        return (available, semi_finished_warehouse_id)
+    
+    # Aks holda, retsept items ichida yarim tayyor mahsulot qidiramiz
+    recipe_items = db.query(RecipeItem).filter(RecipeItem.recipe_id == recipe.id).all()
+    for item in recipe_items:
+        product = db.query(Product).filter(Product.id == item.product_id).first()
+        if product and product.type == "yarim_tayyor":
+            stock = db.query(Stock).filter(
+                Stock.warehouse_id == semi_finished_warehouse_id,
+                Stock.product_id == product.id,
+            ).first()
+            available = stock.quantity if stock else 0.0
+            # Retseptda qancha yarim tayyor kerak?
+            # Agar retsept 1 kg tayyor mahsulot uchun X kg yarim tayyor kerak bo'lsa:
+            required_semi = item.quantity * required_quantity
+            return (available, semi_finished_warehouse_id)
+    
+    return (0.0, semi_finished_warehouse_id)
+
+
+def create_production_from_order(
+    db: Session,
+    order: Order,
+    insufficient_items: List[Dict],
+    current_user: Optional[User] = None,
+) -> List[Production]:
+    """
+    Yetarli bo'lmagan mahsulotlar uchun ishlab chiqarish buyurtmalari yaratish.
+    
+    Args:
+        db: Database session
+        order: Buyurtma
+        insufficient_items: Yetarli bo'lmagan mahsulotlar ro'yxati
+            [{"product": Product, "required": float, "available": float}]
+        current_user: Joriy foydalanuvchi
+    
+    Returns:
+        List[Production]: Yaratilgan ishlab chiqarish buyurtmalari
+    """
+    productions = []
+    
+    # Omborlarni topish
+    # Xom ashyo ombori (materiallar shu yerdan olinadi)
+    raw_material_warehouse = db.query(Warehouse).filter(
+        func.lower(Warehouse.name).contains("xom") |
+        func.lower(Warehouse.name).contains("material") |
+        func.lower(Warehouse.code).contains("xom") |
+        func.lower(Warehouse.code).contains("mat")
+    ).first()
+    
+    # Yarim tayyor ombori
+    semi_finished_warehouse = db.query(Warehouse).filter(
+        func.lower(Warehouse.name).contains("yarim") |
+        func.lower(Warehouse.name).contains("semi") |
+        func.lower(Warehouse.code).contains("yarim") |
+        func.lower(Warehouse.code).contains("semi")
+    ).first()
+    
+    # Tayyor mahsulot ombori (buyurtma ombori)
+    finished_warehouse_id = order.warehouse_id
+    
+    # Agar omborlar topilmasa, default omborlardan foydalanamiz
+    if not raw_material_warehouse:
+        raw_material_warehouse = db.query(Warehouse).first()
+    if not semi_finished_warehouse:
+        semi_finished_warehouse = raw_material_warehouse  # Fallback
+    
+    for item_data in insufficient_items:
+        product = item_data["product"]
+        required = item_data["required"]
+        available = item_data["available"]
+        needed = required - available
+        
+        # Retseptni topish
+        recipe = db.query(Recipe).filter(
+            Recipe.product_id == product.id,
+            Recipe.is_active == True
+        ).first()
+        
+        if not recipe:
+            # Retsept topilmasa, davom etamiz
+            continue
+        
+        # Yarim tayyor mahsulot tekshiruvi
+        semi_available, semi_warehouse_id = check_semi_finished_stock(
+            db, recipe, needed, semi_finished_warehouse.id if semi_finished_warehouse else None
+        )
+        
+        # Retseptdan yarim tayyor mahsulot kerak miqdorini hisoblash
+        recipe_items = db.query(RecipeItem).filter(RecipeItem.recipe_id == recipe.id).all()
+        required_semi_quantity = 0.0
+        semi_product_id = None
+        
+        for r_item in recipe_items:
+            r_product = db.query(Product).filter(Product.id == r_item.product_id).first()
+            if r_product and r_product.type == "yarim_tayyor":
+                required_semi_quantity = r_item.quantity * needed
+                semi_product_id = r_product.id
+                break
+        
+        # Agar retsept mahsuloti o'zi yarim tayyor bo'lsa
+        recipe_output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+        if recipe_output_product and hasattr(recipe_output_product, 'type') and recipe_output_product.type == "yarim_tayyor":
+            required_semi_quantity = needed
+            semi_product_id = recipe.product_id
+        
+        # Ishlab chiqarish bosqichlarini aniqlash
+        max_stage = _recipe_max_stage(recipe)
+        start_stage = 1
+        
+        if semi_available >= required_semi_quantity and semi_product_id:
+            # Yarim tayyor yetarli → kesish + qadoqlash (bosqich 3-4)
+            start_stage = 3
+            notification_stages = ["kesish", "qadoqlash"]
+        else:
+            # Yarim tayyor yetmasa → to'liq jarayon (bosqich 1-4)
+            start_stage = 1
+            notification_stages = ["qiyom"]
+        
+        # Ishlab chiqarish buyurtmasi yaratish
+        today = datetime.now()
+        count = db.query(Production).filter(
+            Production.date >= today.replace(hour=0, minute=0, second=0)
+        ).count()
+        number = f"PR-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(3)}"
+        
+        production = Production(
+            number=number,
+            recipe_id=recipe.id,
+            warehouse_id=raw_material_warehouse.id if raw_material_warehouse else order.warehouse_id,
+            output_warehouse_id=finished_warehouse_id,
+            quantity=needed,
+            status="draft",
+            current_stage=start_stage,
+            max_stage=max_stage,
+            user_id=current_user.id if current_user else order.user_id,
+            order_id=order.id,
+            note=f"Buyurtma {order.number} uchun avtomatik yaratilgan",
+        )
+        db.add(production)
+        db.flush()  # ID olish uchun
+        
+        # Ishlab chiqarish bosqichlarini yaratish
+        for stage_num in range(start_stage, max_stage + 1):
+            db.add(ProductionStage(
+                production_id=production.id,
+                stage_number=stage_num
+            ))
+        
+        # Retsept items dan ProductionItem yaratish
+        for r_item in recipe_items:
+            db.add(ProductionItem(
+                production_id=production.id,
+                product_id=r_item.product_id,
+                quantity=r_item.quantity * needed
+            ))
+        
+        productions.append(production)
+        
+        # Notification yuborish - tegishli bo'lim foydalanuvchilariga
+        notify_production_users(
+            db=db,
+            stages=notification_stages,
+            order_number=order.number,
+            production_number=production.number,
+            product_name=product.name if product else "Mahsulot"
+        )
+    
+    db.commit()
+    return productions
+
+
+def _recipe_max_stage(recipe) -> int:
+    """Retseptdagi maksimal bosqich sonini topish"""
+    if not recipe or not recipe.stages:
+        return 4  # Default: 4 bosqich
+    return max(s.stage_number for s in recipe.stages)
+
+
+def notify_production_users(
+    db: Session,
+    stages: List[str],
+    order_number: str,
+    production_number: str,
+    product_name: str,
+):
+    """
+    Ishlab chiqarish bosqichlari foydalanuvchilariga habar yuborish.
+    
+    Args:
+        db: Database session
+        stages: Bosqichlar ro'yxati (masalan: ["qiyom", "kesish", "qadoqlash"])
+        order_number: Buyurtma raqami
+        production_number: Ishlab chiqarish raqami
+        product_name: Mahsulot nomi
+    """
+    # Bosqich nomlarini o'zbek tiliga tarjima qilish
+    stage_names = {
+        "qiyom": "Qiyom tayyorlash",
+        "kesish": "Holva kesish",
+        "qadoqlash": "Qadoqlash",
+    }
+    
+    stage_display = ", ".join([stage_names.get(s, s) for s in stages])
+    
+    # Ishlab chiqarish bo'limidagi barcha foydalanuvchilarga habar yuborish
+    production_department = db.query(Department).filter(
+        func.lower(Department.name).contains("ishlab") |
+        func.lower(Department.name).contains("chiqarish") |
+        func.lower(Department.code).contains("prod")
+    ).first()
+    
+    if production_department:
+        # Bo'limga biriktirilgan foydalanuvchilar
+        users = db.query(User).filter(
+            User.department_id == production_department.id,
+            User.is_active == True
+        ).all()
+        
+        for user in users:
+            create_notification(
+                db=db,
+                title=f"🔄 Yangi ishlab chiqarish buyurtmasi",
+                message=f"Buyurtma {order_number} uchun {product_name} mahsulotini ishlab chiqarish kerak. "
+                       f"Bosqichlar: {stage_display}. "
+                       f"Ishlab chiqarish raqami: {production_number}",
+                notification_type="info",
+                user_id=user.id,
+                priority="high",
+                action_url=f"/production/orders/{production_number}",
+                related_entity_type="production",
+            )
+    else:
+        # Agar bo'lim topilmasa, barcha faol foydalanuvchilarga yuborish
+        users = db.query(User).filter(User.is_active == True).limit(10).all()
+        for user in users:
+            create_notification(
+                db=db,
+                title=f"🔄 Yangi ishlab chiqarish buyurtmasi",
+                message=f"Buyurtma {order_number} uchun {product_name} mahsulotini ishlab chiqarish kerak. "
+                       f"Bosqichlar: {stage_display}.",
+                notification_type="info",
+                user_id=user.id,
+                priority="normal",
+                action_url=f"/production/orders",
+                related_entity_type="production",
+            )
+
+
+def notify_managers_production_ready(db: Session, production) -> None:
+    """
+    Ishlab chiqarish buyurtmasi operator tomonidan yakunlanganda menejerlarga ovozli push (high priority) bildirishnoma.
+    """
+    if not production:
+        return
+    order_number = ""
+    if getattr(production, "order_id", None):
+        order = db.query(Order).filter(Order.id == production.order_id).first()
+        if order:
+            order_number = order.number or ""
+    recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
+    product_name = "Mahsulot"
+    if recipe and recipe.product_id:
+        p = db.query(Product).filter(Product.id == recipe.product_id).first()
+        if p:
+            product_name = p.name or product_name
+    managers = db.query(User).filter(
+        User.is_active == True,
+        User.role.in_(["manager", "admin"]),
+    ).all()
+    for user in managers:
+        create_notification(
+            db=db,
+            title="✅ Ishlab chiqarish tayyor",
+            message=f"Buyurtma {order_number} uchun «{product_name}» tayyorlandi. Ishlab chiqarish raqami: {production.number}",
+            notification_type="success",
+            user_id=user.id,
+            priority="high",
+            action_url=f"/production/orders",
+            related_entity_type="production",
+            related_entity_id=production.id,
+        )

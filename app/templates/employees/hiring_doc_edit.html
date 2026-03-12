@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger py-2 small">{{ request.query_params.get('error') }}</div>
+    {% endif %}
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Ishga qabul hujjatini tahrirlash</h5>
+        <a href="/employees/hiring-doc/{{ doc.id }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hujjatga</a>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/edit">
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">Xodim</label>
+                        <input type="text" class="form-control" value="{{ doc.employee.full_name }} ({{ doc.employee.code or doc.employee.id }})" disabled>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Imzolangan sana *</label>
+                        <input type="date" class="form-control" name="doc_date" value="{{ doc.doc_date.strftime('%Y-%m-%d') if doc.doc_date else '' }}" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Ishga kirgan sana</label>
+                        <input type="date" class="form-control" name="hire_date" value="{{ doc.hire_date.strftime('%Y-%m-%d') if doc.hire_date else '' }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Lavozim</label>
+                        <select class="form-select" name="position" id="positionSelect">
+                            <option value="">— Lavozimni tanlang —</option>
+                            {% for p in positions %}
+                            <option value="{{ p.name }}" {% if (doc.position or doc.employee.position) == p.name %}selected{% endif %}>{{ p.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Ro'yxatda yo'q bo'lsa: <a href="/info/positions" target="_blank">Ma'lumotnomalar → Lavozim</a> da qo'shing</small>
+                    </div>
+
+                    <div class="col-md-4">
+                        <label class="form-label">Bo'lim</label>
+                        <select class="form-select" name="department" id="departmentSelect">
+                            <option value="">— Bo'limni tanlang —</option>
+                            {% for d in departments %}
+                            <option value="{{ d.name }}" {% if (doc.department or display_department) == d.name %}selected{% endif %}>{{ d.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <small class="text-muted">Ro'yxatda yo'q bo'lsa: <a href="/info/departments" target="_blank">Ma'lumotnomalar → Bo'limlar</a> da qo'shing</small>
+                    </div>
+
+                    <div class="col-md-3">
+                        <label class="form-label">Ish haqi turi (oylik turi)</label>
+                        <select class="form-select" name="salary_type" id="salaryTypeSelect">
+                            <option value="">— Tanlang —</option>
+                            <option value="oylik" {% if doc.salary_type == 'oylik' %}selected{% endif %}>Oylik</option>
+                            <option value="soatlik" {% if doc.salary_type == 'soatlik' %}selected{% endif %}>Soatlik</option>
+                            <option value="bo'lak" {% if doc.salary_type == "bo'lak" %}selected{% endif %}>Bo'lak</option>
+                            <option value="bo'lak_oylik" {% if doc.salary_type == "bo'lak_oylik" %}selected{% endif %}>Bo'lak + oylik</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5" id="pieceworkWrap" style="display:none;">
+                        <label class="form-label">Bo'lak ishlar (bo'lak turlari) — bir nechta tanlash mumkin</label>
+                        <div class="border rounded p-2" style="max-height: 180px; overflow:auto;">
+                            {% for t in piecework_tasks %}
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="piecework_task_ids" value="{{ t.id }}"
+                                    id="pw_{{ t.id }}"
+                                    {% if (selected_piecework_ids or []) and t.id in (selected_piecework_ids or []) %}checked{% endif %}>
+                                <label class="form-check-label" for="pw_{{ t.id }}">
+                                    {{ t.name or t.code or t.id }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} so'm/{{ t.unit_name or 'birlik' }}
+                                </label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <small class="text-muted">Ro'yxatda yo'q bo'lsa: <a href="/info/piecework-tasks" target="_blank">Ma'lumotnomalar → Bo'lak ishlar</a> da qo'shing</small>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Mehnat haqi miqdori (so'm)</label>
+                        <input type="number" class="form-control" name="salary" value="{{ doc.salary or 0 }}" step="100000">
+                    </div>
+                    <div class="col-md-12">
+                        <hr class="my-2">
+                        <small class="text-muted d-block mb-1">Ish vaqti hamda dam olish kunlari</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Dam olish kunlari *</label>
+                        {% set days = [
+                            ('mon', 'Dushanba'),
+                            ('tue', 'Seshanba'),
+                            ('wed', 'Chorshanba'),
+                            ('thu', 'Payshanba'),
+                            ('fri', 'Juma'),
+                            ('sat', 'Shanba'),
+                            ('sun', 'Yakshanba'),
+                        ] %}
+                        {% set selected_rest = (doc.rest_days.split(',') if doc.rest_days else []) %}
+                        <div class="border rounded p-2 small">
+                            {% for code, label in days %}
+                            <div class="form-check form-check-inline">
+                                <input class="form-check-input" type="checkbox" name="rest_days" value="{{ code }}" id="edit_rest_{{ code }}"
+                                    {% if code in selected_rest %}checked{% endif %}>
+                                <label class="form-check-label" for="edit_rest_{{ code }}">{{ label }}</label>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">Sinov muddati</label>
+                        <select class="form-select" name="probation">
+                            <option value="" {% if not doc.probation %}selected{% endif %}>Sinovsiz</option>
+                            <option value="1 oy" {% if doc.probation == '1 oy' %}selected{% endif %}>1 oy</option>
+                            <option value="3 oy" {% if doc.probation == '3 oy' %}selected{% endif %}>3 oy</option>
+                            <option value="6 oy" {% if doc.probation == '6 oy' %}selected{% endif %}>6 oy</option>
+                        </select>
+                    </div>
+
+                    <div class="col-md-12"><hr class="my-2"><small class="text-muted">Mehnat shartnomasi muddati (O'zR Mehnat kodeksi)</small></div>
+                    <div class="col-md-4">
+                        <label class="form-label">Shartnoma turi</label>
+                        <select class="form-select" name="contract_type" id="contractType">
+                            <option value="indefinite" {% if (doc.contract_type or 'indefinite') == 'indefinite' %}selected{% endif %}>Nomuayyan muddatga</option>
+                            <option value="fixed" {% if doc.contract_type == 'fixed' %}selected{% endif %}>Muayyan muddatga (5 yildan oshmasligi kerak)</option>
+                            <option value="task" {% if doc.contract_type == 'task' %}selected{% endif %}>Muayyan ishni bajarish vaqtiga</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4" id="contractEndDateWrap" style="display:none;">
+                        <label class="form-label">Amal qilish tugash sanasi</label>
+                        <input type="date" class="form-control" name="contract_end_date" id="contractEndDate" value="{{ doc.contract_end_date.strftime('%Y-%m-%d') if doc.contract_end_date else '' }}">
+                    </div>
+
+                    <div class="col-md-12">
+                        <label class="form-label">Mehnatning boshqa shartlari (izoh)</label>
+                        <input type="text" class="form-control" name="note" value="{{ doc.note or '' }}" placeholder="Ixtiyoriy">
+                    </div>
+                    <div class="col-12 d-flex gap-2">
+                        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Saqlash</button>
+                        <a href="/employees/hiring-doc/{{ doc.id }}" class="btn btn-secondary">Bekor</a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function(){
+    var st = document.getElementById('salaryTypeSelect');
+    var pw = document.getElementById('pieceworkWrap');
+    function togglePiecework() {
+        if (!st || !pw) return;
+        pw.style.display = (st.value === "bo'lak" || st.value === "bo'lak_oylik") ? 'block' : 'none';
+    }
+    if (st) { st.addEventListener('change', togglePiecework); togglePiecework(); }
+
+    var ct = document.getElementById('contractType');
+    var wrap = document.getElementById('contractEndDateWrap');
+    function toggleEndDate(){ if (wrap) wrap.style.display = (ct && ct.value === 'fixed') ? 'block' : 'none'; }
+    if (ct) { ct.addEventListener('change', toggleEndDate); toggleEndDate(); }
+})();
+</script>
+{% endblock %}
+

@@ -1,0 +1,19 @@
+---
+description: Har bir tuzatishdan keyin tekshiruv, xato bo'lmasa git push
+alwaysApply: true
+---
+
+# Git va tekshiruv tartibi
+
+**Har bir ish/tuzatishdan keyin:** avval tekshiruv, xato chiqmasa git push. Buni esingdan chiqarma.
+
+1. **Tekshiruv** — xatolik chiqmasligini tekshirish:
+   - O'zgartirilgan fayllar uchun `ReadLints` (yoki loyihadagi testlar).
+   - Tekshiruvdan keyin **xato chiqmasa** davom et.
+
+2. **Xato bo'lmasa** — Git'ga saqlang va push qiling:
+   - `git add -A`
+   - `git commit -m "..."` (qisqa va aniq xabar)
+   - `git push`
+
+3. **Eslab qoling:** har bir tuzatishdan keyin tekshirib, keyin git push qilishni unutmang.

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <a href="/employees/attendance" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Orqaga</a>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
+            {% if current_user and current_user.role == 'admin' %}
+            {% if not doc.confirmed_at %}
+            <a href="/employees/attendance/records?start_date={{ doc.date.strftime('%Y-%m-%d') }}&end_date={{ doc.date.strftime('%Y-%m-%d') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-pencil"></i> O'zgartirish</a>
+            <form action="/employees/attendance/doc/{{ doc.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Hujjatni o\'chirishni xohlaysizmi?');">
+                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+            </form>
+            {% else %}
+            <form action="/employees/attendance/doc/{{ doc.id }}/cancel-confirm" method="POST" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
+                <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-x-circle"></i> Tasdiqlashni bekor qilish</button>
+            </form>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-1"><i class="bi bi-file-earmark-check"></i> Kunlik tabel hujjati</h5>
+            <p class="mb-0">
+                <strong>Hujjat raqami:</strong> {{ doc.number }} &nbsp;|&nbsp;
+                <strong>Sana:</strong> {{ doc.date.strftime('%d.%m.%Y') }}
+                {% if doc.confirmed_at %}&nbsp;|&nbsp; <span class="text-success"><i class="bi bi-check-circle"></i> Tasdiqlangan</span>{% endif %}
+            </p>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-bordered mb-0 table-print-a4">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Xodim</th>
+                            <th>Keldi</th>
+                            <th>Ketdi</th>
+                            <th>Soat</th>
+                            <th>Rasm</th>
+                            <th>Izoh</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for att in rows %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>{{ att.employee.full_name }}</td>
+                            <td>{{ att.check_in.strftime('%H:%M') if att.check_in else '-' }}</td>
+                            <td>{{ att.check_out.strftime('%H:%M') if att.check_out else '-' }}</td>
+                            <td>{{ att.hours_worked }}</td>
+                            <td>{% if att.event_snapshot_path %}<a href="/static/{{ att.event_snapshot_path }}" target="_blank" title="Hodisa rasmi"><img src="/static/{{ att.event_snapshot_path }}" alt="" class="rounded" style="max-width:48px;max-height:48px;object-fit:cover;"></a>{% else %}-{% endif %}</td>
+                            <td><small>{{ att.note or '-' }}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">Hujjatda yozuv yo'q.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<style>
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+    .no-print, .sidebar, nav.sidebar, .btn, .navbar, header, .sidebar-overlay, .hamburger { display: none !important; }
+    html, body {
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #fff !important;
+        font-size: 11pt !important;
+        width: 100% !important;
+        min-width: 0 !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    .container-fluid {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .card {
+        width: 100% !important;
+        max-width: 100% !important;
+        border: 1px solid #333 !important;
+        box-shadow: none !important;
+        page-break-inside: avoid;
+    }
+    .card-header {
+        padding: 8px 10px !important;
+        font-size: 13pt !important;
+    }
+    .card-body, .table-responsive {
+        padding: 0 !important;
+        overflow: visible !important;
+        max-width: 100% !important;
+    }
+    table.table-print-a4 {
+        table-layout: fixed !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        font-size: 10pt !important;
+    }
+    table.table-print-a4 th:nth-child(1) { width: 6%; }
+    table.table-print-a4 th:nth-child(2) { width: 26%; }
+    table.table-print-a4 th:nth-child(3), table.table-print-a4 th:nth-child(4) { width: 10%; }
+    table.table-print-a4 th:nth-child(5) { width: 10%; }
+    table.table-print-a4 th:nth-child(6) { width: 14%; }
+    table.table-print-a4 th:nth-child(7) { width: 24%; }
+    table.table-print-a4 td, table.table-print-a4 th {
+        padding: 4px 6px !important;
+        overflow: hidden;
+        word-wrap: break-word;
+    }
+    table.table-print-a4 img {
+        max-width: 100% !important;
+        height: auto !important;
+        max-height: 32px !important;
+        object-fit: contain;
+    }
+    a[href]::after { content: none !important; }
+}
+</style>
+{% endblock %}

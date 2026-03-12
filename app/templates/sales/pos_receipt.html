@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=80mm">
+    <title>Chek {{ order.number if order else '' }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            margin: 0;
+            padding: 6px 8px;
+            max-width: 80mm;
+            margin: 0 auto;
+            color: #000;
+        }
+        .receipt-logo {
+            text-align: center;
+            margin-bottom: 6px;
+        }
+        .receipt-logo .brand {
+            font-size: 18px;
+            font-weight: bold;
+            color: #0d6b4b;
+            letter-spacing: 0.5px;
+        }
+        .receipt-logo .sweets {
+            font-size: 11px;
+            color: #FFB50D;
+            margin-top: 2px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: 700;
+        }
+        .dotted { border-bottom: 1px dotted #333; margin: 6px 0; }
+        .receipt-line { font-size: 11px; margin: 2px 0; }
+        .receipt-line.center { text-align: center; }
+        .item-block { margin: 4px 0; padding: 4px 0; border-bottom: 1px dotted #333; }
+        .item-block .name { font-size: 11px; }
+        .item-block .row2 { font-size: 11px; padding-left: 12px; margin-top: 2px; color: #333; }
+        .summary-block { margin: 8px 0; }
+        .summary-line { display: flex; justify-content: space-between; font-size: 11px; margin: 3px 0; }
+        .jami-total {
+            border-top: 1px dotted #333;
+            border-bottom: 1px dotted #333;
+            margin: 8px 0;
+            padding: 8px 0;
+            font-size: 14px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .payment-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px dotted #333;
+            font-size: 11px;
+        }
+        .payment-row .method { display: flex; align-items: center; gap: 4px; }
+        .thanks { text-align: center; margin-top: 12px; font-size: 12px; }
+        .receipt-barcode {
+            text-align: center;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dotted #333;
+        }
+        .receipt-barcode img {
+            max-width: 100%;
+            width: auto;
+            height: auto;
+            min-height: 44px;
+            max-height: 64px;
+            display: block;
+            margin: 0 auto;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+        }
+        .receipt-barcode .barcode-number { font-size: 12px; margin-top: 4px; letter-spacing: 1px; font-weight: bold; }
+        @media print {
+            body { padding: 4px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body onload="setTimeout(function(){ window.print(); }, 400);">
+    {% if order %}
+    <div class="receipt-logo">
+        <div class="brand">Totli Holva</div>
+        <div class="sweets">SWEETS</div>
+    </div>
+    <div class="dotted"></div>
+    <div class="receipt-line">Chek: {{ order.number }}</div>
+    <div class="receipt-line">Sana: {{ order.created_at.strftime('%d.%m.%Y %H:%M:%S') if order.created_at else '—' }}</div>
+    <div class="receipt-line">Sotuvchi: {{ (order.user.full_name or order.user.username if order.user else '—') }}{% if order.user and order.user.role %} ({{ order.user.role }}){% endif %}</div>
+    <div class="dotted"></div>
+
+    {% for item in order.items %}
+    {% set _uc = (item.product.unit.code or '')|lower if (item.product and item.product.unit) else '' %}
+    {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
+    {% set qty_fmt = "%.0f"|format((item.quantity or 0)|round(0)|int) if _is_dona else "%.3f"|format(item.quantity or 0) %}
+    <div class="item-block">
+        <div class="name">{{ loop.index }}. {{ item.product.name if item.product else '—' }}</div>
+        <div class="row2">{{ qty_fmt }} x {{ "{:,.0f}".format(item.price or 0) }} = {{ "{:,.0f}".format(item.total or 0) }}</div>
+    </div>
+    {% endfor %}
+
+    <div class="dotted"></div>
+    <div class="summary-block">
+        {% set subtotal = order.subtotal if order.subtotal is not none else order.total %}
+        <div class="summary-line"><span>Jami summa:</span><span>{{ "{:,.2f}".format(subtotal or 0) }}</span></div>
+        {% if order.discount_percent is not none and order.discount_percent > 0 %}
+        <div class="summary-line"><span>Chegirma {{ "%.2f"|format(order.discount_percent) }} %</span><span>{{ "{:,.2f}".format(order.discount_amount or 0) }}</span></div>
+        {% endif %}
+    </div>
+    <div class="jami-total">JAMI: {{ "{:,.2f}".format(order.total or 0) }}</div>
+    <div class="dotted"></div>
+
+    <div class="payment-row">
+        <div class="method">
+            {% if order.payment_type == 'plastik' %}
+            <span>💳</span> <span>Plastik</span>
+            {% else %}
+            <span>💵</span> <span>Naqd</span>
+            {% endif %}
+        </div>
+        <div>{{ "{:,.2f}".format(order.paid or order.total or 0) }}</div>
+    </div>
+
+    <div class="thanks">Haridingiz uchun Rahmat!</div>
+    {% if receipt_barcode_b64 %}
+    <div class="receipt-barcode">
+        <img src="data:image/png;base64,{{ receipt_barcode_b64 }}" alt="Chek {{ order.number }}">
+        <div class="barcode-number center">{{ order.number }}</div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="receipt-line">Hujjat topilmadi.</div>
+    {% endif %}
+    <div class="no-print" style="margin-top: 16px; text-align: center; font-size: 11px;">
+        <p class="text-muted mb-2">Printer ishlamasa, «Saqlab qo'yish» ni bosing va chop etish oynasida «PDF ga saqlash» ni tanlang.</p>
+        <button type="button" onclick="window.print();" style="padding: 6px 14px; font-size: 12px; margin-right: 8px;">Saqlab qo'yish / Qayta chop etish</button>
+        <button type="button" onclick="window.close();" style="padding: 6px 14px; font-size: 12px;">Yopish</button>
+    </div>
+</body>
+</html>

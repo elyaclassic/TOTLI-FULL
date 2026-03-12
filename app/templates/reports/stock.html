@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if msg %}
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    {{ msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<div class="card mb-3">
+    <div class="card-body">
+        <form method="get" action="/reports/stock" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small mb-0">Sana bo'yicha qoldiq</label>
+                <input type="date" name="report_date" class="form-control form-control-sm" value="{{ report_date or '' }}" max="{{ today }}" placeholder="{{ today }}" title="Sana tanlansa — shu sanadagi qoldiq, bo'sh — joriy qoldiq">
+            </div>
+            <div class="col-auto">
+                <label class="form-label small mb-0">Ombor</label>
+                <select name="warehouse_id" class="form-select form-select-sm" style="min-width: 180px;">
+                    <option value="">Barcha omborlar</option>
+                    {% for w in warehouses %}
+                    <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Ko'rsatish</button>
+            </div>
+            {% if report_date %}
+            <div class="col-auto">
+                <a href="/reports/stock{% if selected_warehouse_id %}?warehouse_id={{ selected_warehouse_id }}{% endif %}" class="btn btn-outline-secondary btn-sm">Joriy qoldiq</a>
+            </div>
+            {% endif %}
+        </form>
+        {% if report_date %}
+        <p class="text-muted small mb-0 mt-2"><i class="bi bi-calendar-check"></i> Qoldiq <strong>{{ report_date }}</strong> sanasi oxiridagi harakatlar bo'yicha</p>
+        {% endif %}
+    </div>
+</div>
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-boxes"></i> {% if report_date %}Qoldiq hisoboti — {{ report_date }}{% else %}Qoldiq hisoboti (joriy){% endif %}</span>
+        <div class="btn-group btn-group-sm">
+            <a href="/reports/stock/andoza" class="btn btn-outline-secondary" title="Import uchun andoza yuklab olish"><i class="bi bi-file-earmark-arrow-down"></i> Andoza</a>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importStockModal" title="Exceldan qoldiqlarni yuklash"><i class="bi bi-upload"></i> Import</button>
+            <a href="/reports/stock/export?{% if report_date %}report_date={{ report_date }}&{% endif %}{% if selected_warehouse_id %}warehouse_id={{ selected_warehouse_id }}{% endif %}" class="btn btn-success"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+            <a href="/reports/stock/no-history" class="btn btn-outline-warning" title="Qoldigi bor lekin harakat tarixi yo'q mahsulotlar"><i class="bi bi-exclamation-triangle"></i> Tarixsiz qoldiqlar</a>
+            {% if current_user and current_user.role == 'admin' %}
+            <form method="post" action="/reports/stock/cleanup-orphan-movements" class="d-inline" onsubmit="return confirm('O\'chirilgan ombordan omborga, ishlab chiqarish, kirim, qoldiq tuzatish hujjatlariga tegishli harakatlarni o\'chirib qoldiqni qaytarishni xohlaysizmi? (Do\'kon 1 va boshqa omborlardagi \"qayerdan keldi\" nomalum qoldiqlar tozalanadi.)');">
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirilgan hujjatlar — ombordan omborga, ishlab chiqarish, kirim, qoldiq tuzatish"><i class="bi bi-arrow-counterclockwise"></i> O'chirilgan hujjatlar harakatlarini tozalash</button>
+            </form>
+            <form method="post" action="/reports/stock/cleanup-orphan-sale-movements" class="d-inline" onsubmit="return confirm('O\'chirilgan sotuv/qaytish hujjatlariga tegishli harakatlarni o\'chirib, qoldiqni qaytarishni xohlaysizmi?');">
+                <button type="submit" class="btn btn-outline-danger btn-sm" title="Hujjati o'chirilgan sotuv harakatlarini tozalash"><i class="bi bi-arrow-counterclockwise"></i> O'chirilgan sotuv harakatlarini tozalash</button>
+            </form>
+            <form method="post" action="/reports/stock/cleanup-orphans" class="d-inline" onsubmit="return confirm('O\'chirilgan tovar/ombor/hujjatlarga tegishli yozuvlarni o\'chirishni xohlaysizmi?');">
+                <button type="submit" class="btn btn-outline-warning" title="O'chirilgan tovar/ombor/hujjatlarga tegishli Stock va harakat yozuvlarini o'chirish"><i class="bi bi-trash"></i> O'chirilgan ma'lumotlarni tozalash</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover">
+            <thead class="table-light">
+                <tr>
+                    <th>#</th>
+                    <th>Kodi</th>
+                    <th>Tovar nomi</th>
+                    <th>Ombor</th>
+                    <th>Qoldiq</th>
+                    <th>O'lchov</th>
+                    <th>Tannarx</th>
+                    <th>Summa</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if stocks %}
+                    {% for stock in stocks %}
+                    {% set _uc = (stock.product.unit.code or '')|lower if (stock.product and stock.product.unit) else '' %}
+                    {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
+                    <tr class="{% if stock.quantity <= stock.product.min_stock %}table-warning{% endif %}">
+                        <td>{{ loop.index }}</td>
+                        <td><code>{{ stock.product.barcode or stock.product.code or '-' }}</code></td>
+                        <td>
+                            <strong>{{ stock.product.name }}</strong>
+                            {% if stock.quantity <= stock.product.min_stock %}
+                            <br><small class="text-danger">Kam qoldi!</small>
+                            {% endif %}
+                        </td>
+                        <td>{{ stock.warehouse.name }}</td>
+                        <td class="fw-bold">{{ "{:,.0f}".format((stock.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.quantity) }}</td>
+                        <td>{{ stock.product.unit.code if stock.product.unit else '-' }}</td>
+                        <td>{{ "{:,.0f}".format(stock.product.purchase_price or 0) }}</td>
+                        <td class="text-success">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price or 0)) }}</td>
+                        <td>
+                            <a href="/reports/stock/source?warehouse_id={{ stock.warehouse.id }}&product_id={{ stock.product.id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi — qayerdan qo'shilgan / chiqarilgan"><i class="bi bi-clock-history"></i></a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-5">
+                            <i class="bi bi-boxes fs-1 d-block mb-2"></i>
+                            Qoldiqlar topilmadi
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Exceldan qoldiqlarni yuklash -->
+<div class="modal fade" id="importStockModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="/reports/stock/import" enctype="multipart/form-data">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-upload"></i> Qoldiqlarni Exceldan yuklash</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Andoza ustunlari: <strong>Ombor nomi (yoki kodi)</strong>, <strong>Mahsulot nomi (yoki kodi)</strong>, <strong>Qoldiq</strong>. Ixtiyoriy: <strong>Tannarx (so'm)</strong>, <strong>Sotuv narxi (so'm)</strong>. Birinchi qator sarlavha bo'lsin.</p>
+                    <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="submit" class="btn btn-primary">Yuklash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

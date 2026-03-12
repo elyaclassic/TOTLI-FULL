@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('added') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Guruh qo'shildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('updated') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Guruh yangilandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') == '1' %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> Guruh o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-people"></i> Ishlab chiqarish guruhlari (qiyomchilar)</h5>
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addGroupModal"><i class="bi bi-plus-circle"></i> Guruh qo'shish</button>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">Operator bitta xodim nomidan tizimga kirib buyurtmalarni yakunlaydi. Shu oy uchun ishlab chiqarilgan kg kunlik tabel bo'yicha <strong>o'sha kuni ishga kelgan</strong> guruh a'zolari orasida teng bo'linadi. Har bir a'zo uchun bo'lak = (uning kg ulushi × bo'lak narxi). Agar hisoblangan summa mehnat haqidan kam bo'lsa — minimal oylik hisoblanadi.</p>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Guruh nomi</th>
+                            <th>Operator</th>
+                            <th>Bo'lak narxi (so'm/kg)</th>
+                            <th>Qiyom kiritilsin</th>
+                            <th>A'zolar</th>
+                            <th width="120"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for g in groups %}
+                        <tr>
+                            <td>{{ g.id }}</td>
+                            <td><strong>{{ g.name }}</strong></td>
+                            <td>{{ g.operator.full_name if g.operator else '—' }} <small class="text-muted">({{ g.operator.code or g.operator_id }})</small></td>
+                            <td>{% if g.piecework_task %}{{ "{:,.0f}".format(g.piecework_task.price_per_unit or 0) }} / {{ g.piecework_task.unit_name or 'kg' }}{% else %}—{% endif %}</td>
+                            <td>{% if g.include_qiyom %}Ha{% else %}Yo'q{% endif %}</td>
+                            <td>{% if g.members %}{{ g.members|length }} kishi: {% for m in g.members %}{{ m.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</td>
+                            <td>
+                                <a href="/info/production-groups/edit/{{ g.id }}" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                <form action="/info/production-groups/delete/{{ g.id }}" method="POST" class="d-inline" onsubmit="return confirm('Guruhni o\'chirishni xohlaysizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">Hozircha guruh yo'q. «Guruh qo'shish» orqali qiyomchilar guruhini yarating.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Guruh qo'shish modal -->
+<div class="modal fade" id="addGroupModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <form method="POST" action="/info/production-groups/add">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Yangi guruh</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Guruh nomi *</label>
+                            <input type="text" class="form-control" name="name" placeholder="Qiyomchilar" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Operator (tizimga kirib buyurtma yakunlovchi) *</label>
+                            <select class="form-select" name="operator_id" required>
+                                <option value="">— Tanlang —</option>
+                                {% for e in employees %}
+                                <option value="{{ e.id }}">{{ e.full_name }} ({{ e.code }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Bo'lak narxi (so'm/kg)</label>
+                            <select class="form-select" name="piecework_task_id">
+                                <option value="">— Tanlang —</option>
+                                {% for t in piecework_tasks %}
+                                <option value="{{ t.id }}">{{ t.name or t.code }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} / {{ t.unit_name or 'kg' }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Qiyom ishlab chiqarish kg ga kiritilsin</label>
+                            <select class="form-select" name="include_qiyom">
+                                <option value="1" selected>Ha</option>
+                                <option value="0">Yo'q</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Guruh a'zolari (kunlik tabel bo'yicha ishga kelganlariga teng bo'linadi)</label>
+                            <div class="border rounded p-2" style="max-height: 200px; overflow: auto;">
+                                {% for e in employees %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="member_ids" value="{{ e.id }}" id="m_{{ e.id }}">
+                                    <label class="form-check-label" for="m_{{ e.id }}">{{ e.full_name }} ({{ e.code }}) — {{ e.position or '—' }}</label>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="submit" class="btn btn-success">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

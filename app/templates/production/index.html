@@ -1,0 +1,483 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<link href="/static/css/production.css" rel="stylesheet">
+{% endblock %}
+{% block content %}
+<div class="container-fluid production-page">
+<div class="page-header">
+    <h4><i class="bi bi-gear-fill"></i> Ishlab chiqarish</h4>
+    <div class="btn-group-wrap">
+        <a href="/production/new" class="btn btn-primary btn-sm">
+            <i class="bi bi-plus"></i> Yangi ishlab chiqarish
+        </a>
+    </div>
+</div>
+
+<!-- Statistika -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <p>Retseptlar</p>
+                    <h3>{{ total_recipes }}</h3>
+                </div>
+                <div class="icon blue">
+                    <i class="bi bi-journal-text"></i>
+                </div>
+            </div>
+            <a href="/production/recipes" class="text-primary small">Barchasi →</a>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <p>Bugun ishlab chiqarildi</p>
+                    <h3>{{ "%.1f"|format(today_quantity or 0) }} kg</h3>
+                </div>
+                <div class="icon green">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <p>Kutilmoqda</p>
+                    <h3>{{ pending_productions }}</h3>
+                </div>
+                <div class="icon orange">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="stat-card">
+            <div class="d-flex justify-content-between">
+                <div>
+                    <p>Buyurtmalar</p>
+                    <h3>{{ recent_productions|length }}</h3>
+                </div>
+                <div class="icon purple">
+                    <i class="bi bi-clipboard-check"></i>
+                </div>
+            </div>
+            <a href="/production/orders" class="text-primary small">Barchasi (bosqichlar) →</a>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- Tezkor ishlab chiqarish -->
+    <div class="col-lg-5">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-lightning-fill text-warning"></i> Tezkor ishlab chiqarish
+            </div>
+            <div class="card-body">
+                <form method="POST" action="/production/create">
+                    <div class="mb-3">
+                        <label class="form-label">Retsept</label>
+                        <div class="position-relative" style="overflow: visible;">
+                            <input type="text" class="form-control" id="quickRecipeSearch" placeholder="Retseptni yozib qidiring yoki ro'yxatni oching..." autocomplete="off" value="" aria-describedby="quickRecipeHelp">
+                            <input type="hidden" name="recipe_id" id="quickRecipeId" value="" required>
+                            <div id="quickRecipeDropdown" class="list-group position-absolute start-0 end-0 shadow-sm border" style="top: 100%; margin-top: 2px; z-index: 1060; max-height: 280px; overflow-y: auto; display: none;"></div>
+                        </div>
+                        <small id="quickRecipeHelp" class="text-muted">Bir necha harf yozing — ro'yxat filtirlanadi; maydonni bosib barcha retseptlarni ko'ring va tanlang</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">1-ombor: Xom ashyo ombori</label>
+                        {% set wh_list = warehouses or [] %}
+                        {% if not wh_list %}
+                        <div class="alert alert-warning py-2 mb-0">
+                            <small><i class="bi bi-exclamation-triangle"></i> Omborlar ro'yxati bo'sh. Avval <a href="/info/warehouses">Ma'lumotnomalar → Omborlar</a> orqali ombor qo'shing.</small>
+                        </div>
+                        {% endif %}
+                        <select class="form-select" name="warehouse_id" id="quickWarehouseId" required {% if not wh_list %}disabled{% endif %}>
+                            <option value="">Tanlang...</option>
+                            {% for wh in wh_list %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">2-ombor: Yarim tayyor ombori</label>
+                        <select class="form-select" name="output_warehouse_id" id="quickOutputWarehouseId" required {% if not wh_list %}disabled{% endif %}>
+                            <option value="">Tanlang...</option>
+                            {% for wh in wh_list %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Miqdori (<span id="quickQuantityUnit">kg</span>)</label>
+                        <input type="number" class="form-control" name="quantity" id="quickQuantityInput" step="0.01" min="0.01" value="10" required title="F4 — kalkulyator">
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-play-fill"></i> Boshlash
+                    </button>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Retseptlar (operator / ishlab chiqarish / qadoqlash uchun ko'rinmasin) -->
+        {% if show_recipes_section|default(true) %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-journal-text"></i> Retseptlar</span>
+                <a href="/production/recipes" class="btn btn-sm btn-outline-primary">Barchasi</a>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for recipe in recipes[:5] %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span>{{ recipe.name }}</span>
+                        <span class="badge bg-primary">{{ recipe.items|length }} xom ashyo</span>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted">Retseptlar yo'q</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Oxirgi ishlab chiqarishlar -->
+    <div class="col-lg-7">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> Oxirgi ishlab chiqarishlar</span>
+                <a href="/production/orders" class="btn btn-sm btn-outline-primary" title="Buyurtmalar ro'yxati va bosqichlar">Buyurtmalar (bosqichlar)</a>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Raqam</th>
+                            <th>Retsept</th>
+                            <th>Miqdor</th>
+                            <th>Sana</th>
+                            <th>Holat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for prod in recent_productions %}
+                        <tr style="cursor: pointer;" onclick="window.location.href='/production/{{ prod.id }}/materials';">
+                            <td><a href="/production/{{ prod.id }}/materials" class="text-decoration-none fw-bold" onclick="event.stopPropagation();">{{ prod.number }}</a></td>
+                            <td>
+                                {% if prod.recipe %}
+                                <a href="/production/{{ prod.id }}/materials" onclick="event.stopPropagation();">{{ prod.recipe.name }}</a>
+                                {% else %}
+                                -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% set _unit = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
+                                {{ "%.1f"|format(prod.quantity or 0) }} {{ _unit }}{% if _unit|lower != 'kg' and prod.recipe and prod.recipe.output_quantity %} <span class="text-muted small">({{ "%.1f"|format(prod.quantity * (prod.recipe.output_quantity or 1)) }} kg)</span>{% endif %}
+                            </td>
+                            <td>{{ prod.date.strftime('%d.%m.%Y %H:%M') if prod.date else '-' }}</td>
+                            <td>
+                                {% if prod.status == 'completed' %}
+                                <span class="badge bg-success">Yakunlandi</span>
+                                {% elif prod.status == 'draft' %}
+                                <span class="badge bg-warning">Kutilmoqda</span>
+                                {% else %}
+                                <span class="badge bg-danger">Bekor</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-1"></i><br>
+                                Ishlab chiqarish yo'q
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</div><!-- .production-page -->
+
+<script>
+window.quickRecipes = [
+{% for recipe in recipes %}
+  { "id": {{ recipe.id }}, "name": {{ (recipe.name or '')|tojson }}, "unit": {{ ((recipe.product.unit.name if recipe.product and recipe.product.unit else None) or 'kg')|tojson }}, "wh": "{{ recipe.default_warehouse_id or '' }}", "whOut": "{{ recipe.default_output_warehouse_id or '' }}" }{% if not loop.last %},{% endif %}
+{% endfor %}
+];
+</script>
+<!-- F4 kalkulyator (tezkor ishlab chiqarish) -->
+<div class="modal fade" id="calcModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-calculator"></i> Kalkulyator (F4)</h6>
+                <button type="button" class="btn-close btn-sm" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-3">
+                <input type="text" class="form-control form-control-lg mb-2 text-end font-monospace" id="calcDisplay" value="0" style="font-size:1.25rem;" placeholder="Klaviaturada yozing yoki tugmalardan foydalaning" autocomplete="off" inputmode="decimal">
+                <div class="row g-1 mb-2">
+                    <div class="col-3"><button type="button" class="btn btn-outline-danger w-100 btn-sm" id="calcBtnC">C</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 btn-sm" id="calcBtnCE">CE</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 btn-sm" id="calcBtnBack">&larr;</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 btn-sm" disabled>/</button></div>
+                </div>
+                <div class="row g-1 mb-2">
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="7">7</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="8">8</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="9">9</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 btn-sm" disabled>*</button></div>
+                </div>
+                <div class="row g-1 mb-2">
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="4">4</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="5">5</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="6">6</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 btn-sm" id="calcBtnMinus">−</button></div>
+                </div>
+                <div class="row g-1 mb-2">
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="1">1</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="2">2</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="3">3</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 btn-sm" id="calcBtnPlus">+</button></div>
+                </div>
+                <div class="row g-1 mb-2">
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100 calcDigit" data-digit="0">0</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100" id="calcBtn00">00</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-dark w-100" id="calcBtnComma">,</button></div>
+                    <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 btn-sm" id="calcBtnEq">=</button></div>
+                </div>
+                <div class="row g-1">
+                    <div class="col-12"><button type="button" class="btn btn-success w-100" id="calcOK">OK — qiymatni qo'yish</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var calcTargetInput = null;
+    var calcAcc = 0;
+    var calcDisplayStr = '0';
+    var calcNewEntry = false;
+    var calcDisplayEl = null;
+    function calcParse(s) {
+        if (!s) return 0;
+        var n = parseFloat(String(s).replace(',', '.')) || 0;
+        return isNaN(n) ? 0 : n;
+    }
+    function calcFormat(n) {
+        var r = Math.round(parseFloat(n) * 1e6) / 1e6;
+        return String(r).replace('.', ',');
+    }
+    function calcNorm(s) {
+        s = String(s || '0').replace(',', '.').replace(/[^\d.]/g, '');
+        var parts = s.split('.');
+        if (parts.length > 2) s = parts[0] + '.' + parts.slice(1).join('');
+        if (s === '' || s === '.') s = '0';
+        if (s.indexOf('.') === 0) s = '0' + s;
+        s = s.replace(/^0+(\d)/, '$1').replace(/^0+$/, '0');
+        return s.replace('.', ',');
+    }
+    function calcUpdateDisplay() { if (calcDisplayEl) calcDisplayEl.value = calcDisplayStr; }
+    function calcInput(ch) {
+        if (ch === 'C') { calcAcc = 0; calcDisplayStr = '0'; calcNewEntry = false; calcUpdateDisplay(); return; }
+        if (ch === 'CE') { calcDisplayStr = '0'; calcNewEntry = false; calcUpdateDisplay(); return; }
+        if (ch === '+') { calcAcc = Math.round((calcAcc + calcParse(calcDisplayStr)) * 1e6) / 1e6; calcDisplayStr = calcFormat(calcAcc); calcNewEntry = true; calcUpdateDisplay(); return; }
+        if (ch === '-') { calcAcc = Math.round((calcAcc - calcParse(calcDisplayStr)) * 1e6) / 1e6; calcDisplayStr = calcFormat(calcAcc); calcNewEntry = true; calcUpdateDisplay(); return; }
+        if (ch === '=') { calcAcc = Math.round((calcAcc + calcParse(calcDisplayStr)) * 1e6) / 1e6; calcDisplayStr = calcFormat(calcAcc); calcNewEntry = true; calcUpdateDisplay(); return; }
+        if (ch === '\u2190' || ch === 'Back') { calcDisplayStr = calcDisplayStr.slice(0, -1) || '0'; calcNewEntry = false; calcUpdateDisplay(); return; }
+        if (ch === '00') {
+            if (calcNewEntry) { calcDisplayStr = '0'; calcNewEntry = false; } else if (calcDisplayStr !== '0') calcDisplayStr += '00';
+            calcUpdateDisplay(); return;
+        }
+        if (ch === '.' || ch === ',') {
+            if (calcNewEntry) { calcDisplayStr = '0,'; calcNewEntry = false; } else if (calcDisplayStr.indexOf(',') === -1) calcDisplayStr += ',';
+            calcUpdateDisplay(); return;
+        }
+        if (/^\d$/.test(ch)) {
+            if (calcNewEntry) { calcDisplayStr = ch === '0' ? '0' : ch; calcNewEntry = false; }
+            else { if (calcDisplayStr === '0' && ch !== '0') calcDisplayStr = ch; else calcDisplayStr += ch; }
+            calcUpdateDisplay();
+        }
+    }
+    window.openCalcForInput = function(inputEl) {
+        if (!inputEl || (inputEl.type !== 'number' && inputEl.type !== 'text')) return;
+        calcTargetInput = inputEl;
+        calcDisplayStr = calcNorm((inputEl.value || '0').toString());
+        calcAcc = 0;
+        calcNewEntry = false;
+        calcDisplayEl = document.getElementById('calcDisplay');
+        calcUpdateDisplay();
+        var modal = new bootstrap.Modal(document.getElementById('calcModal'));
+        modal.show();
+    };
+    document.addEventListener('DOMContentLoaded', function() {
+        calcDisplayEl = document.getElementById('calcDisplay');
+        document.getElementById('calcBtnC').onclick = function() { calcInput('C'); };
+        document.getElementById('calcBtnCE').onclick = function() { calcInput('CE'); };
+        document.getElementById('calcBtnBack').onclick = function() { calcInput('Back'); };
+        document.getElementById('calcBtnPlus').onclick = function() { calcInput('+'); };
+        document.getElementById('calcBtnMinus').onclick = function() { calcInput('-'); };
+        document.getElementById('calcBtnEq').onclick = function() { calcInput('='); };
+        document.getElementById('calcBtn00').onclick = function() { calcInput('00'); };
+        document.getElementById('calcBtnComma').onclick = function() { calcInput(','); };
+        document.querySelectorAll('.calcDigit').forEach(function(btn) { btn.onclick = function() { calcInput(btn.getAttribute('data-digit')); }; });
+        calcDisplayEl.addEventListener('input', function() {
+            calcDisplayStr = calcNorm(this.value);
+            calcNewEntry = false;
+            this.value = calcDisplayStr;
+        });
+        calcDisplayEl.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); document.getElementById('calcOK').click(); return; }
+            if (e.key === 'Escape') { e.preventDefault(); bootstrap.Modal.getInstance(document.getElementById('calcModal')).hide(); return; }
+            if (e.key >= '0' && e.key <= '9') { e.preventDefault(); calcInput(e.key); return; }
+            if (e.key === ',' || e.key === '.') { e.preventDefault(); calcInput(','); return; }
+            if (e.key === '+') { e.preventDefault(); calcInput('+'); return; }
+            if (e.key === '-') { e.preventDefault(); calcInput('-'); return; }
+            if (e.key === '=') { e.preventDefault(); calcInput('='); return; }
+            if (e.key === 'Backspace') { e.preventDefault(); calcInput('Back'); }
+        });
+        document.getElementById('calcModal').addEventListener('shown.bs.modal', function() {
+            calcDisplayEl.value = calcDisplayStr;
+            calcDisplayEl.select();
+            setTimeout(function() { calcDisplayEl.focus(); calcDisplayEl.select(); }, 50);
+        });
+        document.getElementById('calcOK').addEventListener('click', function() {
+            calcDisplayStr = calcNorm(calcDisplayEl.value);
+            var num;
+            if (!calcNewEntry && calcDisplayStr !== '' && calcDisplayStr !== '0') {
+                calcAcc = Math.round((calcAcc + calcParse(calcDisplayStr)) * 1e6) / 1e6;
+                num = calcAcc;
+            } else {
+                num = calcParse(calcDisplayStr);
+            }
+            if (calcTargetInput) { calcTargetInput.value = num; calcTargetInput.focus(); }
+            bootstrap.Modal.getInstance(document.getElementById('calcModal')).hide();
+            calcTargetInput = null;
+        });
+        var qtyInput = document.getElementById('quickQuantityInput');
+        if (qtyInput) qtyInput.addEventListener('keydown', function(e) {
+            if (e.key === 'F4') { e.preventDefault(); openCalcForInput(this); }
+        });
+        var quickRecipeSearch = document.getElementById('quickRecipeSearch');
+        var quickRecipeId = document.getElementById('quickRecipeId');
+        var quickRecipeDropdown = document.getElementById('quickRecipeDropdown');
+        var quickQuantityUnit = document.getElementById('quickQuantityUnit');
+        var quickWh = document.getElementById('quickWarehouseId');
+        var quickWhOut = document.getElementById('quickOutputWarehouseId');
+        var quickRecipes = window.quickRecipes || [];
+        var quickRecipesLoadPromise = null;
+        function ensureQuickRecipes(cb) {
+            var list = window.quickRecipes;
+            if (list && Array.isArray(list) && list.length > 0) { if (cb) cb(); return Promise.resolve(); }
+            if (quickRecipesLoadPromise) return quickRecipesLoadPromise.then(function() { if (cb) cb(); });
+            quickRecipesLoadPromise = fetch('/production/api/quick-recipes', { credentials: 'same-origin' }).then(function(r) { return r.json(); }).then(function(data) {
+                window.quickRecipes = Array.isArray(data) ? data : [];
+                if (cb) cb();
+            }).catch(function() { window.quickRecipes = []; if (cb) cb(); });
+            return quickRecipesLoadPromise;
+        }
+        var quickDropdownHideTimer = null;
+        function applyQuickRecipe(r) {
+            if (!r) return;
+            quickRecipeId.value = r.id;
+            quickRecipeSearch.value = r.name;
+            if (quickQuantityUnit) quickQuantityUnit.textContent = r.unit || 'kg';
+            if (quickWh && r.wh) quickWh.value = r.wh;
+            if (quickWhOut && r.whOut) quickWhOut.value = r.whOut;
+            quickRecipeDropdown.style.display = 'none';
+        }
+        function normForSearch(s) {
+            if (!s) return '';
+            var m = { '\u0430':'a','\u0431':'b','\u0432':'v','\u0433':'g','\u0434':'d','\u0435':'e','\u0451':'e','\u0436':'j','\u0437':'z','\u0438':'i','\u0439':'i','\u043a':'k','\u043b':'l','\u043c':'m','\u043d':'n','\u043e':'o','\u043f':'p','\u0440':'r','\u0441':'s','\u0442':'t','\u0443':'u','\u0444':'f','\u0445':'x','\u0446':'c','\u0447':'ch','\u0448':'sh','\u0449':'sh','\u044a':'','\u044b':'y','\u044c':'','\u044d':'e','\u044e':'yu','\u044f':'ya',
+                '\u0410':'a','\u0411':'b','\u0412':'v','\u0413':'g','\u0414':'d','\u0415':'e','\u0401':'e','\u0416':'j','\u0417':'z','\u0418':'i','\u0419':'i','\u041a':'k','\u041b':'l','\u041c':'m','\u041d':'n','\u041e':'o','\u041f':'p','\u0420':'r','\u0421':'s','\u0422':'t','\u0423':'u','\u0424':'f','\u0425':'x','\u0426':'c','\u0427':'ch','\u0428':'sh','\u0429':'sh','\u042a':'','\u042b':'y','\u042c':'','\u042d':'e','\u042e':'yu','\u042f':'ya' };
+            var out = '';
+            for (var i = 0; i < s.length; i++) { var c = s.charAt(i); out += m[c] !== undefined ? m[c] : c; }
+            return out.toLowerCase();
+        }
+        function showQuickRecipeList(q) {
+            q = (q || '').trim().toLowerCase();
+            var all = window.quickRecipes || [];
+            var list = all;
+            if (q) {
+                var qNorm = normForSearch(q);
+                list = all.filter(function(r) {
+                    var name = (r.name || '').toLowerCase();
+                    var nameNorm = normForSearch(r.name || '');
+                    return name.indexOf(q) !== -1 || nameNorm.indexOf(qNorm) !== -1 || name.indexOf(qNorm) !== -1;
+                });
+            }
+            quickRecipeDropdown.innerHTML = '';
+            if (list.length === 0) {
+                var msg = all.length === 0 ? 'Retseptlar yuklanmoqda…' : 'Retsept topilmadi. Boshqa harflar yozib ko\'ring.';
+                quickRecipeDropdown.innerHTML = '<div class="list-group-item list-group-item-secondary text-muted small">' + msg + '</div>';
+            } else {
+                list.slice(0, 50).forEach(function(r) {
+                    var a = document.createElement('a');
+                    a.href = '#';
+                    a.className = 'list-group-item list-group-item-action';
+                    a.setAttribute('data-id', r.id);
+                    a.textContent = r.name;
+                    a.addEventListener('click', function(e) { e.preventDefault(); applyQuickRecipe(r); });
+                    quickRecipeDropdown.appendChild(a);
+                });
+                if (list.length > 50) {
+                    var more = document.createElement('div');
+                    more.className = 'list-group-item small text-muted';
+                    more.textContent = '… yana ' + (list.length - 50) + ' ta';
+                    quickRecipeDropdown.appendChild(more);
+                }
+            }
+            quickRecipeDropdown.style.display = 'block';
+        }
+        if (quickRecipeSearch && quickRecipeDropdown) {
+            quickRecipeSearch.addEventListener('focus', function() {
+                var self = this;
+                ensureQuickRecipes(function() { showQuickRecipeList(self.value); });
+            });
+            quickRecipeSearch.addEventListener('input', function() {
+                var self = this;
+                ensureQuickRecipes(function() { showQuickRecipeList(self.value); });
+            });
+            quickRecipeSearch.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') { quickRecipeDropdown.style.display = 'none'; return; }
+                var items = quickRecipeDropdown.querySelectorAll('.list-group-item-action');
+                if (items.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter')) {
+                    e.preventDefault();
+                    var idx = -1;
+                    for (var i = 0; i < items.length; i++) { if (items[i].classList.contains('active')) { idx = i; break; } }
+                    if (e.key === 'ArrowDown') idx = Math.min(idx + 1, items.length - 1);
+                    else if (e.key === 'ArrowUp') idx = Math.max(idx - 1, 0);
+                    else if (e.key === 'Enter' && idx >= 0) { var rid = parseInt(items[idx].getAttribute('data-id'), 10); applyQuickRecipe((window.quickRecipes || []).filter(function(r) { return r.id === rid; })[0]); return; }
+                    items.forEach(function(el, i) { el.classList.toggle('active', i === idx); });
+                    if (idx >= 0) items[idx].scrollIntoView({ block: 'nearest' });
+                }
+            });
+            quickRecipeSearch.addEventListener('blur', function() {
+                quickDropdownHideTimer = setTimeout(function() { quickRecipeDropdown.style.display = 'none'; }, 200);
+            });
+            quickRecipeDropdown.addEventListener('mousedown', function(e) { e.preventDefault(); });
+        }
+        if ((!window.quickRecipes || window.quickRecipes.length === 0) && document.getElementById('quickRecipeSearch')) {
+            ensureQuickRecipes(function() {});
+        }
+        document.querySelector('form[action="/production/create"]').addEventListener('submit', function(e) {
+            if (!quickRecipeId || !quickRecipeId.value) {
+                e.preventDefault();
+                if (quickRecipeSearch) { quickRecipeSearch.focus(); quickRecipeSearch.select(); }
+                return false;
+            }
+        });
+    });
+})();
+</script>
+{% endblock %}

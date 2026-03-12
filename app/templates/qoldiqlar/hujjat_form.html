@@ -1,0 +1,587 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
+<style>
+    .product-results, .add-product-results { box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid #0d6efd; border-radius: 0.25rem; margin-top: 2px; background: white; z-index: 1050; position: fixed; min-width: 280px; max-width: 420px; max-height: 280px; overflow-y: auto; }
+    .product-results .list-group-item, .add-product-results .list-group-item { cursor: pointer; }
+    .product-results .list-group-item:hover, .add-product-results .list-group-item:hover { background-color: #e7f1ff; }
+    /* Jadval ixcham va simmetrik, hajmi o‘rtacha */
+    .table-compact { font-size: 0.875rem; table-layout: fixed; width: 100%; }
+    .table-compact th, .table-compact td { padding: 0.35rem 0.5rem; vertical-align: middle; }
+    .table-compact .form-control, .table-compact .form-select { font-size: 0.875rem; padding: 0.25rem 0.5rem; min-height: 1.9rem; height: 1.9rem; box-sizing: border-box; }
+    .table-compact input[type="number"] { min-width: 0; width: 100%; max-width: 100%; white-space: nowrap; }
+    .table-compact select { min-width: 0; width: 100%; max-width: 100%; }
+    .table-compact .btn { padding: 0.2rem 0.4rem; font-size: 0.875rem; }
+    .table-compact .col-tovar { width: 180px; min-width: 180px; max-width: 180px; word-wrap: break-word; overflow-wrap: break-word; }
+    .table-compact .col-number { white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .table-compact td.text-end .row-sum-tannarx,
+    .table-compact td.text-end .row-sum-sotuv { white-space: nowrap; display: inline-block; }
+    .hujjat-doc-info .row { margin-bottom: 0.25rem; }
+    .hujjat-doc-info p { margin-bottom: 0.2rem; font-size: 0.875rem; }
+</style>
+
+<div class="container-fluid">
+    <div class="mb-3">
+        <a href="/qoldiqlar/tovar/hujjat" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hujjatlar ro'yxati</a>
+    </div>
+
+    <div class="card">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center">
+            <h5 class="mb-0" style="font-size: 1.1rem;">
+                {% if doc %}
+                Tovar qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
+                {% else %}
+                Yangi tovar qoldiq hujjati
+                {% endif %}
+            </h5>
+            {% if doc and doc.status == 'draft' %}
+            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline" id="tasdiqlash-form">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+            </form>
+            {% if current_user and current_user.role == 'admin' %}
+            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
+            </form>
+            {% endif %}
+            {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/apply-to-warehouse" class="d-inline" onsubmit="return confirm('Hujjatda yo\'q mahsulotlar uchun ombor qoldig\'i 0 qilinadi (savdoda ko\'rinmaydi). Davom etasizmi?');">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <button type="submit" class="btn btn-info btn-sm" title="Hujjatda qatori yo'q mahsulotlarni omborda 0 qiladi"><i class="bi bi-arrow-repeat"></i> Omborni hujjatga moslash</button>
+            </form>
+            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Faqat siz (admin) bu amalni qilasiz. Davom etasizmi?');">
+                <button type="submit" class="btn btn-warning" title="Faqat admin tasdiqni bekor qiladi — tizim o'zidan bekor qilmaydi"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+            </form>
+            {% endif %}
+        </div>
+        <div class="card-body py-2">
+            {% if doc %}
+            <div class="row hujjat-doc-info mb-2">
+                <div class="col-md-6">
+                    <p class="mb-0"><strong>Hujjat raqami:</strong> <span class="badge bg-primary">{{ doc.number }}</span> &nbsp; <strong>Sana:</strong> {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} &nbsp; <strong>Foydalanuvchi:</strong> {{ doc.user.full_name or doc.user.username if doc.user else '-' }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p class="mb-0"><strong>Holat:</strong> {% if doc.status == 'draft' %}<span class="badge bg-warning text-dark">Qoralama</span>{% else %}<span class="badge bg-success">Tasdiqlangan</span> <small class="text-muted">(tasdiq o'zidan bekor bo'lmaydi — faqat admin bekor qiladi)</small>{% endif %}
+                    {% if show_tannarx %}&nbsp; <strong>Jami tannarx:</strong> <span class="text-success fw-bold">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</span> so'm{% endif %}
+                    &nbsp; <strong>Jami sotuv:</strong> <span class="text-primary fw-bold">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</span> so'm</p>
+                </div>
+            </div>
+            {% if doc.status == 'draft' %}
+            <div class="alert alert-warning py-2 mb-2 small" role="alert">
+                <i class="bi bi-exclamation-triangle-fill"></i> <strong>Qoralama:</strong> O'zgarishlar omborga va savdo oynasiga <strong>«Tasdiqlash»</strong> bosilguncha qo'llanmaydi. Mahsulot qoldig'ini nolga tushirsangiz yoki qatorni o'chirsangiz, savdoda ko'rinmasligi uchun avval <strong>Tasdiqlash</strong> tugmasini bosing.
+            </div>
+            {% endif %}
+            {% if doc.status == 'confirmed' and request.query_params.get('applied') == '1' %}
+            <div class="alert alert-success py-2 mb-2 small" role="alert">
+                <i class="bi bi-check-circle-fill"></i> Ombor hujjatga moslashtirildi. Hujjatda yo'q mahsulotlar uchun qoldiq 0 qilindi — savdo oynasini yangilang (F5).
+            </div>
+            {% endif %}
+            <hr class="my-2">
+            {% endif %}
+
+            {% if doc %}
+            <div class="mb-1 d-flex flex-wrap align-items-center gap-2">
+                <h6 class="mb-0 small"><i class="bi bi-list-ul"></i> Hujjat qatorlari ({{ doc.items|length }} ta)</h6>
+                <input type="text" class="form-control form-control-sm hujjat-row-search" placeholder="Tovar nomi bo'yicha qidirish (masalan: alpen gold plitka)..." style="max-width: 280px;" autocomplete="off">
+                <span class="small text-muted hujjat-search-count"></span>
+            </div>
+            <div class="table-responsive mb-3">
+                <table class="table table-sm table-bordered table-hover table-compact">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40px;" class="text-center">№</th>
+                            <th class="col-tovar">Tovar</th>
+                            <th style="width: 135px;">Ombor</th>
+                            <th style="width: 88px;" class="text-end">Qoldiq</th>
+                            {% if show_tannarx %}<th style="width: 98px;" class="text-end">Tannarx</th><th style="width: 108px;" class="text-end">Summa tann.</th>{% endif %}
+                            <th style="width: 98px;" class="text-end">Sotuv narx</th>
+                            <th style="width: 108px;" class="text-end">Sotuv summa</th>
+                            {% if doc.status == 'draft' %}<th style="width: 64px;" class="text-center">Amal</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in doc.items %}
+                        <tr class="hujjat-data-row {% if doc.status == 'draft' %}edit-row{% endif %}" data-item-id="{{ item.id }}" data-search="{{ (item.product.name if item.product else '')|lower }} {{ (item.product.code or '')|lower }} {{ (item.quantity)|string|lower }} {{ (item.warehouse.name if item.warehouse else '')|lower }}">
+                            <td class="text-center">{{ loop.index }}</td>
+                            <td class="small col-tovar">
+                                <strong>{{ item.product.name if item.product else '-' }}</strong>
+                                {% if item.product and (item.product.code or item.product.barcode) %}
+                                <br><span class="text-muted" style="font-size: 0.75rem;"><code>{{ item.product.code or item.product.barcode }}</code></span>
+                                {% endif %}
+                                {% if item.product and item.product.unit %}
+                                <br><span class="text-muted" style="font-size: 0.75rem;">{{ item.product.unit.name }}</span>
+                                {% endif %}
+                            </td>
+                            {% if doc.status == 'draft' %}
+                            <td>
+                                <select form="edit-form-{{ item.id }}" name="warehouse_id" class="form-select form-select-sm" required>
+                                    {% for wh in warehouses %}
+                                    <option value="{{ wh.id }}" {% if item.warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="text-end col-number">
+                                <input form="edit-form-{{ item.id }}" type="number" name="quantity" class="form-control form-control-sm text-end" step="0.001" min="0.001" required value="{{ item.quantity }}">
+                            </td>
+                            {% if show_tannarx %}
+                            <td class="text-end col-number">
+                                <input form="edit-form-{{ item.id }}" type="number" name="cost_price" class="form-control form-control-sm text-end row-cost" step="0.001" min="0" value="{{ item.cost_price or 0 }}">
+                            </td>
+                            <td class="text-end col-number"><strong class="text-success row-sum-tannarx">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
+                            {% else %}
+                            <input form="edit-form-{{ item.id }}" type="hidden" name="cost_price" value="{{ item.cost_price or 0 }}">
+                            {% endif %}
+                            <td class="text-end col-number">
+                                <input form="edit-form-{{ item.id }}" type="number" name="sale_price" class="form-control form-control-sm text-end row-sale" step="0.001" min="0" value="{{ item.sale_price or 0 }}">
+                            </td>
+                            <td class="text-end col-number"><strong class="text-primary row-sum-sotuv">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
+                            <td class="text-center">
+                                <form id="edit-form-{{ item.id }}" method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/edit-row/{{ item.id }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}"></form>
+                                <button type="submit" form="edit-form-{{ item.id }}" class="btn btn-sm btn-success py-0 px-1" title="Saqlash"><i class="bi bi-check-lg"></i></button>
+                                <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete-row/{{ item.id }}" class="d-inline" onsubmit="return confirm('Ushbu qatorni o\'chirishni xohlaysizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                            {% else %}
+                            <td>{{ item.warehouse.name if item.warehouse else '-' }}</td>
+                            <td class="text-end fw-bold col-number">{{ "{:,.3f}".format(item.quantity) }}</td>
+                            {% if show_tannarx %}
+                            <td class="text-end col-number">{{ "{:,.0f}".format(item.cost_price or 0) }}</td>
+                            <td class="text-end col-number"><strong class="text-success">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
+                            {% endif %}
+                            <td class="text-end col-number">{{ "{:,.0f}".format(item.sale_price or 0) }}</td>
+                            <td class="text-end col-number"><strong class="text-primary">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
+                            {% endif %}
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="{% if doc.status == 'draft' %}{{ 9 if show_tannarx else 7 }}{% else %}{{ 8 if show_tannarx else 6 }}{% endif %}" class="text-muted text-center py-4">Hozircha qatorlar yo'q.</td></tr>
+                        {% endfor %}
+                        {% if doc.items %}
+                        <tr class="table-info fw-bold table-compact hujjat-jami-row">
+                            <td colspan="3" class="text-end py-1">JAMI:</td>
+                            <td class="text-end py-1 col-number">{{ "{:,.3f}".format(doc.items|sum(attribute='quantity')) }}</td>
+                            {% if show_tannarx %}<td class="py-1"></td>
+                            <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</td>
+                            <td class="py-1"></td>{% endif %}
+                            <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</td>
+                            {% if doc.status == 'draft' %}<td class="py-1"></td>{% endif %}
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+
+            {% if doc.status == 'draft' %}
+            <!-- Qator qo'shish -->
+            <h6 class="mb-2">Qator qo'shish</h6>
+            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/add-row" class="row g-2 align-items-end mb-4">
+                <div class="col-md-3 position-relative">
+                    <label class="form-label small">Mahsulot *</label>
+                    <input type="text" class="form-control form-control-sm add-product-search" placeholder="Yozing yoki bosing — mahsulotni tanlang" autocomplete="off">
+                    <input type="hidden" name="product_id" id="add_row_product_id" required>
+                    <div class="add-product-results list-group" style="display:none;"></div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">O'mbor *</label>
+                    <select name="warehouse_id" class="form-select form-select-sm" required>
+                        <option value="">Tanlang...</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small">Soni *</label>
+                    <input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0.01" required placeholder="0">
+                </div>
+                {% if show_tannarx %}
+                <div class="col-md-1">
+                    <label class="form-label small">Tannarx</label>
+                    <input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
+                </div>
+                {% else %}
+                <input type="hidden" name="cost_price" value="0">
+                {% endif %}
+                <div class="col-md-1">
+                    <label class="form-label small">Sotuv narx</label>
+                    <input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                </div>
+            </form>
+            <select id="add_row_product_list" style="display:none;" aria-hidden="true">
+                {% for p in products %}
+                <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+            {% else %}
+            <!-- Yangi hujjat: barcha qatorlar bir formda -->
+            <form method="post" action="/qoldiqlar/tovar/hujjat" id="newDocForm">
+                <h6 class="mb-2">Qatorlar</h6>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>N</th>
+                                <th>Tovar *</th>
+                                <th>O'mbor *</th>
+                                <th>Soni *</th>
+                                {% if show_tannarx %}<th>Tannarx (so'm)</th>{% endif %}
+                                <th>Sotuv narx (so'm)</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsTableBody">
+                            <tr class="item-row">
+                                <td class="row-n">1</td>
+                                <td class="position-relative">
+                                    <input type="text" class="form-control form-control-sm product-search" placeholder="Yozing yoki maydonni bosing — ro'yxatdan tanlang" autocomplete="off">
+                                    <input type="hidden" name="product_id" class="row-product-id">
+                                    <div class="product-results list-group" style="display:none;"></div>
+                                </td>
+                                <td>
+                                    <select name="warehouse_id" class="form-select form-select-sm">
+                                        <option value="">Tanlang...</option>
+                                        {% for wh in warehouses %}
+                                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
+                                {% if show_tannarx %}<td><input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>{% else %}<td style="display:none"><input type="hidden" name="cost_price" value="0"></td>{% endif %}
+                                <td><input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>
+                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="addRowBtn"><i class="bi bi-plus-circle"></i> Qator qo'shish</button>
+                <div>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Saqlash</button>
+                </div>
+            </form>
+            <select id="product_list" style="display:none;" aria-hidden="true">
+                {% for p in products %}
+                <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    // Raqam maydonida: 0 bo'lsa va 1-9 yozilsa 0 o'rniga raqam; . yozilsa "0." bo'lsin
+    document.addEventListener('keydown', function(e) {
+        var el = e.target;
+        if (el.tagName !== 'INPUT' || (el.getAttribute('type') || '').toLowerCase() !== 'number') return;
+        var v = (el.value || '').trim();
+        if (v === '' || v === '0') {
+            if (e.key >= '1' && e.key <= '9') {
+                e.preventDefault();
+                el.value = e.key;
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            } else if (e.key === '.') {
+                e.preventDefault();
+                el.value = '0.';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+            }
+        }
+    }, true);
+
+    // Inline qator: soni / tannarx / sotuv narx o'zgarganda summalarni yangilash
+    document.querySelectorAll('tr.edit-row').forEach(function(tr) {
+        var qtyInput = tr.querySelector('input[name="quantity"]');
+        var costInput = tr.querySelector('input[name="cost_price"]');
+        var saleInput = tr.querySelector('input[name="sale_price"]');
+        var sumTannarx = tr.querySelector('.row-sum-tannarx');
+        var sumSotuv = tr.querySelector('.row-sum-sotuv');
+        function formatNum(n) { return (Math.round(n) || 0).toLocaleString('uz-UZ'); }
+        function updateSums() {
+            var q = parseFloat(qtyInput && qtyInput.value) || 0;
+            var c = parseFloat(costInput && costInput.value) || 0;
+            var s = parseFloat(saleInput && saleInput.value) || 0;
+            if (sumTannarx) sumTannarx.textContent = formatNum(q * c);
+            if (sumSotuv) sumSotuv.textContent = formatNum(q * s);
+        }
+        if (qtyInput) qtyInput.addEventListener('input', updateSums);
+        if (costInput) costInput.addEventListener('input', updateSums);
+        if (saleInput) saleInput.addEventListener('input', updateSums);
+        // Enter: tannarx -> sotuv narx, sotuv narx -> keyingi qatordagi tannarx
+        if (costInput) {
+            costInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (saleInput) saleInput.focus();
+                }
+            });
+        }
+        if (saleInput) {
+            saleInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    var nextRow = tr.nextElementSibling;
+                    if (nextRow && nextRow.classList.contains('edit-row')) {
+                        var nextCost = nextRow.querySelector('input[name="cost_price"]');
+                        if (nextCost) nextCost.focus();
+                    }
+                }
+            });
+        }
+    });
+
+    // Tasdiqlash bosilganda avval barcha qatorlardagi tannarx/sotuv narxni saqlab keyin tasdiqlash
+    (function() {
+        var tasdiqlashForm = document.getElementById('tasdiqlash-form');
+        var editRows = document.querySelectorAll('tr.edit-row');
+        if (!tasdiqlashForm || !editRows.length) return;
+        tasdiqlashForm.addEventListener('submit', function(e) {
+            if (tasdiqlashForm._tasdiqlashSubmitting) return;
+            e.preventDefault();
+            var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute('content') || '';
+            var promises = [];
+            editRows.forEach(function(tr) {
+                var itemId = tr.getAttribute('data-item-id');
+                if (!itemId) return;
+                var form = document.getElementById('edit-form-' + itemId);
+                if (!form) return;
+                var fd = new FormData(form);
+                if (csrfToken) fd.set('csrf_token', csrfToken);
+                promises.push(fetch(form.action, { method: 'POST', body: fd }));
+            });
+            var btn = tasdiqlashForm.querySelector('button[type="submit"]');
+            if (btn) { btn.disabled = true; btn.textContent = ' Saqlanmoqda...'; }
+            Promise.all(promises).then(function() {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-circle"></i> Tasdiqlash'; }
+                tasdiqlashForm._tasdiqlashSubmitting = true;
+                tasdiqlashForm.submit();
+            }).catch(function(err) {
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-circle"></i> Tasdiqlash'; }
+                alert('Qatorlarni saqlashda xato. Qaytadan urinib ko\'ring.');
+            });
+        });
+    })();
+
+    const productList = document.getElementById('product_list') || document.getElementById('add_row_product_list');
+
+    function filterProducts(term) {
+        if (!productList || !productList.options) return [];
+        term = (term || '').trim().toLowerCase();
+        if (!term) return Array.from(productList.options);
+        return Array.from(productList.options).filter(function(opt) {
+            var name = (opt.dataset.name || '').toLowerCase();
+            var code = (opt.dataset.code || '').toLowerCase();
+            var barcode = (opt.dataset.barcode || '').toLowerCase();
+            return name.indexOf(term) !== -1 || code.indexOf(term) !== -1 || barcode.indexOf(term) !== -1;
+        });
+    }
+
+    // Yangi hujjat: qatorlar jadvali
+    const itemsBody = document.getElementById('itemsTableBody');
+    const addRowBtn = document.getElementById('addRowBtn');
+    if (itemsBody && addRowBtn) {
+        const rowTemplate = itemsBody.querySelector('tr.item-row').outerHTML;
+        addRowBtn.addEventListener('click', function() {
+            const tr = document.createElement('tr');
+            tr.className = 'item-row';
+            tr.innerHTML = document.querySelector('#itemsTableBody tr.item-row').innerHTML;
+            tr.querySelector('.row-product-id').value = '';
+            tr.querySelector('.product-search').value = '';
+            tr.querySelectorAll('input[type="number"]').forEach(function(inp) { inp.value = ''; });
+            tr.querySelector('select[name="warehouse_id"]').value = '';
+            tr.querySelector('.remove-row').addEventListener('click', function() {
+                if (itemsBody.querySelectorAll('tr.item-row').length > 1) tr.remove();
+                updateRowNumbers();
+            });
+            itemsBody.appendChild(tr);
+            updateRowNumbers();
+            bindProductSearch(tr);
+        });
+        itemsBody.querySelectorAll('tr.item-row').forEach(function(row) {
+            row.querySelector('.remove-row').addEventListener('click', function() {
+                if (itemsBody.querySelectorAll('tr.item-row').length > 1) row.remove();
+                updateRowNumbers();
+            });
+            bindProductSearch(row);
+        });
+        function updateRowNumbers() {
+            itemsBody.querySelectorAll('tr.item-row').forEach(function(r, i) { var n = r.querySelector('.row-n'); if (n) n.textContent = i + 1; });
+        }
+        function positionDropdown(resultsDiv, inputEl) {
+            if (!resultsDiv || !inputEl) return;
+            var r = inputEl.getBoundingClientRect();
+            var spaceBelow = window.innerHeight - r.bottom - 12;
+            var spaceAbove = r.top - 12;
+            var maxH = 280;
+            if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                resultsDiv.style.top = 'auto';
+                resultsDiv.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+                resultsDiv.style.maxHeight = Math.min(maxH, spaceAbove) + 'px';
+            } else {
+                resultsDiv.style.bottom = 'auto';
+                resultsDiv.style.top = (r.bottom + 4) + 'px';
+                resultsDiv.style.maxHeight = Math.min(maxH, Math.max(150, spaceBelow)) + 'px';
+            }
+            resultsDiv.style.left = r.left + 'px';
+            resultsDiv.style.width = Math.max(r.width, 280) + 'px';
+        }
+        function showRowResults(row, term) {
+            const resultsDiv = row.querySelector('.product-results');
+            const searchInput = row.querySelector('.product-search');
+            if (!resultsDiv) return;
+            const matches = filterProducts((term || '').trim());
+            resultsDiv.innerHTML = '';
+            if (matches.length > 0) {
+                matches.forEach(function(opt) {
+                    const a = document.createElement('a');
+                    a.href = '#'; a.className = 'list-group-item list-group-item-action';
+                    a.textContent = (opt.dataset.name || '') + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        const inp = row.querySelector('.product-search');
+                        const hid = row.querySelector('.row-product-id');
+                        if (inp) inp.value = opt.dataset.name + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
+                        if (hid) hid.value = opt.value;
+                        resultsDiv.style.display = 'none';
+                    });
+                    resultsDiv.appendChild(a);
+                });
+                resultsDiv.style.display = 'block';
+                positionDropdown(resultsDiv, searchInput);
+            }
+        }
+        function bindProductSearch(row) {
+            const searchInput = row.querySelector('.product-search');
+            const hiddenId = row.querySelector('.row-product-id');
+            const resultsDiv = row.querySelector('.product-results');
+            if (!searchInput || !resultsDiv) return;
+            searchInput.addEventListener('focus', function() {
+                showRowResults(row, this.value.trim());
+            });
+            searchInput.addEventListener('input', function() {
+                if (!this.value.trim()) hiddenId.value = '';
+                showRowResults(row, this.value);
+            });
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') { resultsDiv.style.display = 'none'; return; }
+                if (e.key === 'Enter') {
+                    var first = resultsDiv.querySelector('.list-group-item');
+                    if (first) { first.click(); e.preventDefault(); }
+                }
+            });
+        }
+        document.getElementById('newDocForm').addEventListener('submit', function(e) {
+            const rows = itemsBody.querySelectorAll('tr.item-row');
+            let hasValid = false;
+            let firstIncompleteRow = null;
+            rows.forEach(function(r) {
+                const pid = r.querySelector('.row-product-id');
+                const qtyInput = r.querySelector('input[name="quantity"]');
+                const qty = qtyInput ? parseFloat(qtyInput.value) : 0;
+                if (pid && pid.value && qty > 0) hasValid = true;
+                else if (!firstIncompleteRow && (r.querySelector('.product-search').value || qty > 0))
+                    firstIncompleteRow = r;
+            });
+            if (!hasValid) {
+                e.preventDefault();
+                if (firstIncompleteRow) {
+                    const searchInput = firstIncompleteRow.querySelector('.product-search');
+                    searchInput.focus();
+                    showRowResults(firstIncompleteRow, searchInput.value);
+                }
+                alert('Kamida bitta qator to\'ldiring: mahsulotni ro\'yxatdan tanlang (pastdagi ro\'yxatdan bosing) va miqdorni kiriting.');
+            }
+        });
+    }
+
+    // Mavjud hujjat: qator qo'shish formadagi mahsulot qidiruv (focusda ham ro'yxat ko'rinsin)
+    const addProductSearch = document.querySelector('.add-product-search');
+    const addProductResults = document.querySelector('.add-product-results');
+    const addRowProductId = document.getElementById('add_row_product_id');
+    if (addProductSearch && addProductResults && addRowProductId) {
+        function showAddProductResults(term) {
+            addProductResults.innerHTML = '';
+            const matches = filterProducts(term || '');
+            if (matches.length > 0) {
+                matches.forEach(function(opt) {
+                    const a = document.createElement('a');
+                    a.href = '#'; a.className = 'list-group-item list-group-item-action';
+                    a.textContent = (opt.dataset.name || '') + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
+                    a.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        addProductSearch.value = opt.dataset.name + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
+                        addRowProductId.value = opt.value;
+                        addProductResults.style.display = 'none';
+                    });
+                    addProductResults.appendChild(a);
+                });
+                addProductResults.style.display = 'block';
+                var r = addProductSearch.getBoundingClientRect();
+                var spaceBelow = window.innerHeight - r.bottom - 12;
+                var spaceAbove = r.top - 12;
+                var maxH = 280;
+                if (spaceBelow < 200 && spaceAbove > spaceBelow) {
+                    addProductResults.style.top = 'auto';
+                    addProductResults.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+                    addProductResults.style.maxHeight = Math.min(maxH, spaceAbove) + 'px';
+                } else {
+                    addProductResults.style.bottom = 'auto';
+                    addProductResults.style.top = (r.bottom + 4) + 'px';
+                    addProductResults.style.maxHeight = Math.min(maxH, Math.max(150, spaceBelow)) + 'px';
+                }
+                addProductResults.style.left = r.left + 'px';
+                addProductResults.style.width = Math.max(r.width, 280) + 'px';
+            } else {
+                addProductResults.style.display = 'none';
+            }
+        }
+        addProductSearch.addEventListener('focus', function() {
+            showAddProductResults(this.value.trim());
+        });
+        addProductSearch.addEventListener('input', function() {
+            if (!this.value.trim()) addRowProductId.value = '';
+            showAddProductResults(this.value);
+        });
+        document.addEventListener('click', function(ev) {
+            if (!addProductSearch.contains(ev.target) && !addProductResults.contains(ev.target)) addProductResults.style.display = 'none';
+        });
+    }
+
+    document.addEventListener('click', function(ev) {
+        if (ev.target.closest('.product-search') || ev.target.closest('.product-results')) return;
+        document.querySelectorAll('.product-results').forEach(function(el) { el.style.display = 'none'; });
+    });
+
+    // Hujjat qatorlari bo'yicha qidiruv (tovar nomi, kod, miqdor, ombor) — tasdiqlangan va qoralama hujjatlar uchun
+    var rowSearch = document.querySelector('.hujjat-row-search');
+    var searchCount = document.querySelector('.hujjat-search-count');
+    var dataRows = document.querySelectorAll('tr.hujjat-data-row');
+    var jamiRow = document.querySelector('tr.hujjat-jami-row');
+    if (rowSearch) {
+        function applyRowSearch() {
+            var q = (rowSearch.value || '').trim().toLowerCase();
+            var visible = 0;
+            if (dataRows && dataRows.length) {
+                dataRows.forEach(function(tr) {
+                    var text = (tr.getAttribute('data-search') || '').toLowerCase();
+                    var show = !q || text.indexOf(q) !== -1;
+                    tr.style.display = show ? '' : 'none';
+                    if (show) visible++;
+                });
+            }
+            if (searchCount) {
+                if (q) searchCount.textContent = visible + ' ta topildi';
+                else searchCount.textContent = '';
+            }
+            if (jamiRow) jamiRow.style.display = '';
+        }
+        rowSearch.addEventListener('input', applyRowSearch);
+        rowSearch.addEventListener('keyup', applyRowSearch);
+    }
+})();
+</script>
+{% endblock %}

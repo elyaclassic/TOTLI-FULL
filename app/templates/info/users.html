@@ -1,0 +1,906 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    #addUserScopeTabs .nav-link, #editUserScopeTabs .nav-link { font-size: 0.8rem; }
+    #addUserScopeContent .tab-pane, #editUserScopeContent .tab-pane { min-height: 2.5rem; }
+</style>
+<div class="container-fluid">
+    {% if error %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Yopish"></button>
+    </div>
+    {% endif %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-people"></i> Foydalanuvchilar</h5>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Login</th>
+                            <th>To'liq ism</th>
+                            <th>Rol</th>
+                            <th>Holat</th>
+                            <th>Yaratilgan</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for user in users %}
+                <tr>
+                    <td>{{ user.id }}</td>
+                    <td>{{ user.username }}</td>
+                    <td>{{ user.full_name }}</td>
+                    <td>
+                        {% if user.role == 'admin' %}
+                        <span class="badge bg-danger">Administrator</span>
+                        {% elif user.role == 'manager' %}
+                        <span class="badge bg-warning">Menejer</span>
+                        {% elif user.role == 'production' %}
+                        <span class="badge bg-primary">Ishlab chiqarish</span>
+                        {% elif user.role == 'qadoqlash' %}
+                        <span class="badge bg-success">Qadoqlash</span>
+                        {% elif user.role == 'sotuvchi' %}
+                        <span class="badge bg-success">Sotuvchi</span>
+                        {% elif user.role == 'agent' %}
+                        <span class="badge bg-info">Agent (PWA)</span>
+                        {% elif user.role == 'driver' %}
+                        <span class="badge bg-secondary">Haydovchi (PWA)</span>
+                        {% else %}
+                        <span class="badge bg-info">Foydalanuvchi</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if user.is_active %}
+                        <span class="badge bg-success">Faol</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Faol emas</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else '-' }}</td>
+                    <td>
+                        <button class="btn btn-sm btn-warning"
+                            data-user-id="{{ user.id }}"
+                            data-username="{{ user.username }}"
+                            data-full-name="{{ user.full_name }}"
+                            data-employee-id="{{ user_to_employee[user.id].id if user_to_employee and user.id in user_to_employee else '' }}"
+                            data-role="{{ user.role }}"
+                            data-active="{{ 'true' if user.is_active else 'false' }}"
+                            data-allowed-sections="{{ user.allowed_sections or '' }}"
+                            data-department-ids="{% if user.departments_list %}{% for d in user.departments_list %}{{ d.id }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}"
+                            data-department-names="{% if user.departments_list %}{% for d in user.departments_list %}{{ d.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
+                            data-warehouse-ids="{% if user.warehouses_list %}{% for w in user.warehouses_list %}{{ w.id }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}"
+                            data-warehouse-names="{% if user.warehouses_list %}{% for w in user.warehouses_list %}{{ w.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
+                            data-cash-register-ids="{% if user.cash_registers_list %}{% for c in user.cash_registers_list %}{{ c.id }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}"
+                            data-cash-register-names="{% if user.cash_registers_list %}{% for c in user.cash_registers_list %}{{ c.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
+                            data-partner-ids="{% if user.partners_list %}{% for p in user.partners_list %}{{ p.id }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}"
+                            data-partner-names="{% if user.partners_list %}{% for p in user.partners_list %}{{ p.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
+                            onclick="editUserFromBtn(this)">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-info"
+                            onclick="changePassword({{ user.id }}, '{{ user.username }}')">
+                            <i class="fas fa-key"></i>
+                        </button>
+                        {% if user.id != current_user.id %}
+                        <button class="btn btn-sm btn-danger"
+                            onclick="deleteUser({{ user.id }}, '{{ user.username }}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-muted text-center py-4">Hozircha foydalanuvchilar yo'q. Yangi qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    #add_employee_select, #edit_employee_select { cursor: pointer; }
+</style>
+{% endblock %}
+
+{% block modals %}
+<!-- Yangi foydalanuvchi qo'shish modali -->
+<div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">Yangi foydalanuvchi</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+            </div>
+            <form method="POST" action="/info/users/add">
+                <div class="modal-body py-2">
+                    <div class="row g-2 mb-2">
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Login *</label>
+                            <input type="text" class="form-control form-control-sm" name="username" id="add_user_username" required autocomplete="username">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Parol *</label>
+                            <div class="input-group input-group-sm">
+                                <input type="password" class="form-control" name="password" id="add_user_password" required autocomplete="new-password" aria-label="Parol">
+                                <button type="button" class="btn btn-outline-secondary" onclick="togglePass(this, 'add_user_password')" title="Ko'rsatish" aria-label="Parolni ko'rsatish"><i class="bi bi-eye"></i></button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-12">
+                            <label class="form-label small mb-0">Xodim (hodimlar ro'yxatidan tanlang)</label>
+                            <select class="form-select form-select-sm" id="add_employee_select" aria-label="Xodimni tanlang">
+                                <option value="">— Xodimni tanlang yoki qo'lda ism yozing —</option>
+                                {% for e in (employees or []) %}
+                                <option value="{{ e.id }}" data-full-name="{{ e.full_name or '' }}">{{ e.full_name }}{% if e.code %} ({{ e.code }}){% endif %}</option>
+                                {% endfor %}
+                                {% if not (employees or []) %}
+                                <option value="" disabled>— Hodimlar ro'yxati bo'sh —</option>
+                                {% endif %}
+                            </select>
+                            <input type="hidden" name="employee_id" id="add_employee_id" value="">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">To'liq ism *</label>
+                            <input type="text" class="form-control form-control-sm" name="full_name" id="add_full_name" required autocomplete="name" placeholder="Xodim tanlanganida avtomatik to'ldiriladi">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Telefon</label>
+                            <input type="text" class="form-control form-control-sm" name="phone" id="add_phone" placeholder="+998901234567" autocomplete="tel">
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-end gap-2 mb-2">
+                        <div class="flex-grow-1">
+                            <label class="form-label small mb-0">Rol *</label>
+                            <select class="form-select form-select-sm" name="role" id="userRole" onchange="toggleUserFields()" required>
+                                <optgroup label="ERP">
+                                    <option value="user">Foydalanuvchi</option>
+                                    <option value="manager">Menejer</option>
+                                    <option value="admin">Administrator</option>
+                                    <option value="production">Ishlab chiqarish</option>
+                                    <option value="qadoqlash">Qadoqlash</option>
+                                    <option value="sotuvchi">Sotuvchi</option>
+                                </optgroup>
+                                <optgroup label="PWA">
+                                    <option value="agent">Agent</option>
+                                    <option value="driver">Haydovchi</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div class="form-check form-check-inline mb-0 pb-1">
+                            <input type="checkbox" class="form-check-input" name="is_active" checked>
+                            <label class="form-check-label small">Faol</label>
+                        </div>
+                    </div>
+
+                    <!-- Bo'lim, Ombor, Kassa — 1C uslubida tablar: bosganda o'z ro'yxati -->
+                    <div class="mb-2">
+                        <ul class="nav nav-tabs nav-tabs-sm flex-nowrap" id="addUserScopeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-1 px-2 small" id="add-tab-department" data-bs-toggle="tab" data-bs-target="#add-pane-department" type="button" role="tab">Bo'lim</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="add-tab-warehouse" data-bs-toggle="tab" data-bs-target="#add-pane-warehouse" type="button" role="tab">Ombor</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="add-tab-cash" data-bs-toggle="tab" data-bs-target="#add-pane-cash" type="button" role="tab">Kassa</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="add-tab-partner" data-bs-toggle="tab" data-bs-target="#add-pane-partner" type="button" role="tab">Kontragentlar</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content border border-top-0 rounded-bottom p-2 bg-light" id="addUserScopeContent">
+                            <div class="tab-pane fade show active" id="add-pane-department" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="add_department_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for d in (departments or []) %}
+                                        <option value="{{ d.id }}">{{ d.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="add_btn_department" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="add_department_ids_container"></div>
+                                <ul id="add_department_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="add-pane-warehouse" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="add_warehouse_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for w in (warehouses or []) %}
+                                        <option value="{{ w.id }}">{{ w.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="add_btn_warehouse" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="add_warehouse_ids_container"></div>
+                                <ul id="add_warehouse_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="add-pane-cash" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="add_cash_register_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for c in (cash_registers or []) %}
+                                        <option value="{{ c.id }}">{{ c.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="add_btn_cash_register" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="add_cash_register_ids_container"></div>
+                                <ul id="add_cash_register_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="add-pane-partner" role="tabpanel">
+                                <div class="position-relative">
+                                    <input type="text" class="form-control form-control-sm" id="add_partner_search" placeholder="Kontragentni yozib qidiring..." autocomplete="off">
+                                    <div id="add_partner_search_results" class="list-group position-absolute start-0 end-0 mt-1 border rounded shadow-sm" style="max-height:200px;overflow-y:auto;z-index:1050;display:none;"></div>
+                                </div>
+                                <select id="add_partner_id" style="display:none;" aria-hidden="true">
+                                    <option value="">-- Tanlang --</option>
+                                    {% for p in (partners or []) %}
+                                    <option value="{{ p.id }}" data-name="{{ (p.name or '')|e }}">{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div id="add_partner_ids_container"></div>
+                                <ul id="add_partner_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                        </div>
+                        <small class="text-muted small d-block mt-1" style="font-size:0.7rem">Bo'lim / Ombor / Kassa / Kontragentlar — tabni bosib ro'yxatdan tanlang.</small>
+                    </div>
+
+                    <!-- Ruxsatlar (Hisobotlar) -->
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Hisobotlar ruxsati</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_sales" id="perm_sales">
+                                <label class="form-check-label small" for="perm_sales">Savdo hisoboti</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_stock" id="perm_stock">
+                                <label class="form-check-label small" for="perm_stock">Qoldiq hisoboti</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_debts" id="perm_debts">
+                                <label class="form-check-label small" for="perm_debts">Qarzdorlik</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_production" id="perm_production">
+                                <label class="form-check-label small" for="perm_production">Ishlab chiqarish</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_employees" id="perm_employees">
+                                <label class="form-check-label small" for="perm_employees">Xodimlar</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_profit" id="perm_profit">
+                                <label class="form-check-label small" for="perm_profit">Foyda hisoboti</label>
+                            </div>
+                        </div>
+                        <small class="text-muted small d-block mt-1" style="font-size:0.7rem">Admin uchun barcha hisobotlar avtomatik ochiq.</small>
+                    </div>
+
+                    <!-- PWA uchun qo'shimcha maydonlar -->
+                    <div id="pwaFields" style="display:none;" class="mb-2">
+                        <div class="mb-2">
+                            <label class="form-label small mb-0">Telefon (PWA) *</label>
+                            <input type="text" class="form-control form-control-sm" name="pwa_phone" placeholder="+998901234567">
+                        </div>
+                        <div id="driverFields" style="display:none;" class="row g-2">
+                            <div class="col-6">
+                                <label class="form-label small mb-0">Mashina raqami *</label>
+                                <input type="text" class="form-control form-control-sm" name="vehicle_number" placeholder="01 A 123 BC">
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label small mb-0">Mashina turi</label>
+                                <select class="form-select form-select-sm" name="vehicle_type">
+                                    <option value="car">Yengil</option>
+                                    <option value="van">Furgon</option>
+                                    <option value="truck">Yuk</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <script>
+                    (function() {
+                        function addToList(selectId, containerId, listId, inputName) {
+                            var sel = document.getElementById(selectId);
+                            var container = document.getElementById(containerId);
+                            var listEl = document.getElementById(listId);
+                            if (!sel || !container || !listEl) return;
+                            var opt = sel.options[sel.selectedIndex];
+                            if (!opt || !opt.value) return;
+                            var id = opt.value;
+                            var name = opt.text;
+                            if (container.querySelector('input[value="' + id + '"]')) return;
+                            var inp = document.createElement('input');
+                            inp.type = 'hidden';
+                            inp.name = inputName;
+                            inp.value = id;
+                            container.appendChild(inp);
+                            var li = document.createElement('li');
+                            li.className = 'list-group-item d-flex justify-content-between align-items-center py-1 px-2';
+                            li.innerHTML = '<span>' + name + '</span> <button type="button" class="btn btn-link p-0 text-danger" style="font-size:0.8rem" aria-label="O\'chirish">&times;</button>';
+                            li.querySelector('button').addEventListener('click', function() {
+                                container.querySelector('input[value="' + id + '"]').remove();
+                                li.remove();
+                            });
+                            listEl.appendChild(li);
+                        }
+                        function clearAddLists() {
+                            ['add_department_ids_container','add_warehouse_ids_container','add_cash_register_ids_container','add_partner_ids_container'].forEach(function(cid) {
+                                var c = document.getElementById(cid);
+                                if (c) c.innerHTML = '';
+                            });
+                            ['add_department_list','add_warehouse_list','add_cash_register_list','add_partner_list'].forEach(function(lid) {
+                                var l = document.getElementById(lid);
+                                if (l) l.innerHTML = '';
+                            });
+                            var ps = document.getElementById('add_partner_search');
+                            if (ps) { ps.value = ''; }
+                            var pr = document.getElementById('add_partner_search_results');
+                            if (pr) { pr.innerHTML = ''; pr.style.display = 'none'; }
+                        }
+                        document.getElementById('add_btn_department').addEventListener('click', function() { addToList('add_department_id', 'add_department_ids_container', 'add_department_list', 'department_ids'); });
+                        document.getElementById('add_btn_warehouse').addEventListener('click', function() { addToList('add_warehouse_id', 'add_warehouse_ids_container', 'add_warehouse_list', 'warehouse_ids'); });
+                        document.getElementById('add_btn_cash_register').addEventListener('click', function() { addToList('add_cash_register_id', 'add_cash_register_ids_container', 'add_cash_register_list', 'cash_register_ids'); });
+                        // add_partner: qo'shish faqat qidiruv orqali (pastda add_partner_search)
+                        var addModal = document.getElementById('addUserModal');
+                        if (addModal) addModal.addEventListener('show.bs.modal', function() { clearAddLists(); });
+                    })();
+                    function toggleUserFields() {
+                        const role = document.getElementById('userRole').value;
+                        const pwaFields = document.getElementById('pwaFields');
+                        const driverFields = document.getElementById('driverFields');
+
+                        if (role === 'agent' || role === 'driver') {
+                            pwaFields.style.display = 'block';
+                            if (role === 'driver') {
+                                driverFields.style.display = 'block';
+                            } else {
+                                driverFields.style.display = 'none';
+                            }
+                        } else {
+                            pwaFields.style.display = 'none';
+                            driverFields.style.display = 'none';
+                        }
+                    }
+                </script>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tahrirlash modali -->
+<div class="modal fade" id="editUserModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">Foydalanuvchini tahrirlash</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+            </div>
+            <form method="POST" id="editUserForm">
+                <div class="modal-body py-2">
+                    <div class="row g-2 mb-2">
+                        <div class="col-12">
+                            <label class="form-label small mb-0">Xodim (hodimlar ro'yxatidan tanlang)</label>
+                            <select class="form-select form-select-sm" id="edit_employee_select" aria-label="Xodimni tanlang">
+                                <option value="">— Xodimni tanlang yoki qo'lda ism yozing —</option>
+                                {% for e in (employees or []) %}
+                                <option value="{{ e.id }}" data-full-name="{{ e.full_name or '' }}">{{ e.full_name }}{% if e.code %} ({{ e.code }}){% endif %}</option>
+                                {% endfor %}
+                                {% if not (employees or []) %}
+                                <option value="" disabled>— Hodimlar ro'yxati bo'sh —</option>
+                                {% endif %}
+                            </select>
+                            <input type="hidden" name="employee_id" id="edit_employee_id" value="">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">Login *</label>
+                            <input type="text" class="form-control form-control-sm" name="username" id="edit_username" required autocomplete="username">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small mb-0">To'liq ism *</label>
+                            <input type="text" class="form-control form-control-sm" name="full_name" id="edit_full_name" required autocomplete="name">
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-end gap-2 mb-2">
+                        <div class="flex-grow-1">
+                            <label class="form-label small mb-0">Rol</label>
+                            <select class="form-select form-select-sm" name="role" id="edit_role">
+                                <option value="user">Foydalanuvchi</option>
+                                <option value="manager">Menejer</option>
+                                <option value="admin">Administrator</option>
+                                <option value="production">Ishlab chiqarish</option>
+                                <option value="qadoqlash">Qadoqlash</option>
+                                <option value="sotuvchi">Sotuvchi</option>
+                                <option value="agent">Agent (PWA)</option>
+                                <option value="driver">Haydovchi (PWA)</option>
+                            </select>
+                        </div>
+                        <div class="form-check form-check-inline mb-0 pb-1">
+                            <input type="checkbox" class="form-check-input" name="is_active" id="edit_is_active">
+                            <label class="form-check-label small">Faol</label>
+                        </div>
+                    </div>
+                    <!-- Bo'lim, Ombor, Kassa — 1C uslubida tablar: bosganda o'z ro'yxati -->
+                    <div class="mb-2">
+                        <ul class="nav nav-tabs nav-tabs-sm flex-nowrap" id="editUserScopeTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active py-1 px-2 small" id="edit-tab-department" data-bs-toggle="tab" data-bs-target="#edit-pane-department" type="button" role="tab">Bo'lim</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="edit-tab-warehouse" data-bs-toggle="tab" data-bs-target="#edit-pane-warehouse" type="button" role="tab">Ombor</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="edit-tab-cash" data-bs-toggle="tab" data-bs-target="#edit-pane-cash" type="button" role="tab">Kassa</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link py-1 px-2 small" id="edit-tab-partner" data-bs-toggle="tab" data-bs-target="#edit-pane-partner" type="button" role="tab">Kontragentlar</button>
+                            </li>
+                        </ul>
+                        <div class="tab-content border border-top-0 rounded-bottom p-2 bg-light" id="editUserScopeContent">
+                            <div class="tab-pane fade show active" id="edit-pane-department" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="edit_department_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for d in (departments or []) %}
+                                        <option value="{{ d.id }}">{{ d.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="edit_btn_department" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="edit_department_ids_container"></div>
+                                <ul id="edit_department_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="edit-pane-warehouse" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="edit_warehouse_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for w in (warehouses or []) %}
+                                        <option value="{{ w.id }}">{{ w.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="edit_btn_warehouse" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="edit_warehouse_ids_container"></div>
+                                <ul id="edit_warehouse_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="edit-pane-cash" role="tabpanel">
+                                <div class="d-flex gap-1 align-items-center">
+                                    <select class="form-select form-select-sm flex-grow-1" id="edit_cash_register_id">
+                                        <option value="">-- Tanlang --</option>
+                                        {% for c in (cash_registers or []) %}
+                                        <option value="{{ c.id }}">{{ c.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="edit_btn_cash_register" title="Qo'shish"><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                                <div id="edit_cash_register_ids_container"></div>
+                                <ul id="edit_cash_register_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                            <div class="tab-pane fade" id="edit-pane-partner" role="tabpanel">
+                                <div class="position-relative">
+                                    <input type="text" class="form-control form-control-sm" id="edit_partner_search" placeholder="Kontragentni yozib qidiring..." autocomplete="off">
+                                    <div id="edit_partner_search_results" class="list-group position-absolute start-0 end-0 mt-1 border rounded shadow-sm" style="max-height:200px;overflow-y:auto;z-index:1050;display:none;"></div>
+                                </div>
+                                <select id="edit_partner_id" style="display:none;" aria-hidden="true">
+                                    <option value="">-- Tanlang --</option>
+                                    {% for p in (partners or []) %}
+                                    <option value="{{ p.id }}" data-name="{{ (p.name or '')|e }}">{{ p.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <div id="edit_partner_ids_container"></div>
+                                <ul id="edit_partner_list" class="list-group list-group-flush mt-1 small" style="max-height:120px;overflow-y:auto;"></ul>
+                            </div>
+                        </div>
+                        <small class="text-muted small d-block mt-1" style="font-size:0.7rem">Bo'lim / Ombor / Kassa / Kontragentlar — tabni bosib ro'yxatdan tanlang.</small>
+                    </div>
+                    <!-- Ruxsatlar (Hisobotlar) -->
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Hisobotlar ruxsati</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_sales" id="edit_perm_sales">
+                                <label class="form-check-label small" for="edit_perm_sales">Savdo hisoboti</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_stock" id="edit_perm_stock">
+                                <label class="form-check-label small" for="edit_perm_stock">Qoldiq hisoboti</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_debts" id="edit_perm_debts">
+                                <label class="form-check-label small" for="edit_perm_debts">Qarzdorlik</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_production" id="edit_perm_production">
+                                <label class="form-check-label small" for="edit_perm_production">Ishlab chiqarish</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_employees" id="edit_perm_employees">
+                                <label class="form-check-label small" for="edit_perm_employees">Xodimlar</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="allowed_sections" value="reports_profit" id="edit_perm_profit">
+                                <label class="form-check-label small" for="edit_perm_profit">Foyda hisoboti</label>
+                            </div>
+                        </div>
+                        <small class="text-muted small d-block mt-1" style="font-size:0.7rem">Admin uchun barcha hisobotlar avtomatik ochiq.</small>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Parolni o'zgartirish modali -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0">Parolni o'zgartirish</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+            </div>
+            <form method="POST" id="changePasswordForm">
+                <input type="hidden" name="username" id="change_password_username" value="" autocomplete="username" aria-hidden="true">
+                <div class="modal-body py-2">
+                    <p class="small mb-2">Foydalanuvchi: <strong id="password_username"></strong></p>
+                    <div class="mb-0">
+                        <label class="form-label small mb-0">Yangi parol *</label>
+                        <div class="input-group input-group-sm">
+                            <input type="password" class="form-control" name="new_password" id="new_password_input" required autocomplete="new-password" aria-label="Yangi parol">
+                            {% if current_user and current_user.role == 'admin' %}
+                            <button type="button" class="btn btn-outline-secondary" onclick="togglePass(this, 'new_password_input')" title="Ko'rsatish" aria-label="Parolni ko'rsatish"><i class="bi bi-eye"></i></button>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-sm btn-primary">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function editUserFromBtn(btn) {
+        var id = btn.getAttribute('data-user-id');
+        document.getElementById('editUserForm').action = '/info/users/edit/' + id;
+        document.getElementById('edit_username').value = btn.getAttribute('data-username') || '';
+        document.getElementById('edit_full_name').value = btn.getAttribute('data-full-name') || '';
+        var empId = btn.getAttribute('data-employee-id') || '';
+        document.getElementById('edit_employee_id').value = empId;
+        var sel = document.getElementById('edit_employee_select');
+        if (sel) { sel.value = empId || ''; }
+        document.getElementById('edit_role').value = btn.getAttribute('data-role') || 'user';
+        document.getElementById('edit_is_active').checked = btn.getAttribute('data-active') === 'true';
+        // Ruxsatlarni to'ldirish
+        var allowedSectionsStr = btn.getAttribute('data-allowed-sections') || '';
+        if (allowedSectionsStr) {
+            try {
+                var allowedSections = JSON.parse(allowedSectionsStr);
+                if (Array.isArray(allowedSections)) {
+                    document.getElementById('edit_perm_sales').checked = allowedSections.indexOf('reports_sales') !== -1;
+                    document.getElementById('edit_perm_stock').checked = allowedSections.indexOf('reports_stock') !== -1;
+                    document.getElementById('edit_perm_debts').checked = allowedSections.indexOf('reports_debts') !== -1;
+                    document.getElementById('edit_perm_production').checked = allowedSections.indexOf('reports_production') !== -1;
+                    document.getElementById('edit_perm_employees').checked = allowedSections.indexOf('reports_employees') !== -1;
+                    document.getElementById('edit_perm_profit').checked = allowedSections.indexOf('reports_profit') !== -1;
+                }
+            } catch (e) {
+                console.warn('allowed_sections parse error:', e);
+            }
+        } else {
+            // Ruxsatlar yo'q bo'lsa, barcha checkbox'larni o'chirish
+            document.getElementById('edit_perm_sales').checked = false;
+            document.getElementById('edit_perm_stock').checked = false;
+            document.getElementById('edit_perm_debts').checked = false;
+            document.getElementById('edit_perm_production').checked = false;
+            document.getElementById('edit_perm_employees').checked = false;
+            document.getElementById('edit_perm_profit').checked = false;
+        }
+        function fillList(idsStr, namesStr, containerId, listId, inputName) {
+            var container = document.getElementById(containerId);
+            var listEl = document.getElementById(listId);
+            container.innerHTML = '';
+            listEl.innerHTML = '';
+            if (!idsStr || !namesStr) return;
+            var ids = idsStr.split(',').filter(Boolean);
+            var names = namesStr.split('|||');
+            for (var i = 0; i < ids.length; i++) {
+                var id = ids[i].trim();
+                var name = names[i] ? names[i].trim() : id;
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = inputName;
+                inp.value = id;
+                container.appendChild(inp);
+                var li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center py-1 px-2';
+                li.innerHTML = '<span>' + name + '</span> <button type="button" class="btn btn-link p-0 text-danger" style="font-size:0.8rem" data-id="' + id + '" aria-label="O\'chirish">&times;</button>';
+                li.querySelector('button').addEventListener('click', function() {
+                    var rid = this.getAttribute('data-id');
+                    container.querySelector('input[value="' + rid + '"]').remove();
+                    this.closest('.list-group-item').remove();
+                });
+                listEl.appendChild(li);
+            }
+        }
+        fillList(btn.getAttribute('data-department-ids') || '', btn.getAttribute('data-department-names') || '', 'edit_department_ids_container', 'edit_department_list', 'department_ids');
+        fillList(btn.getAttribute('data-warehouse-ids') || '', btn.getAttribute('data-warehouse-names') || '', 'edit_warehouse_ids_container', 'edit_warehouse_list', 'warehouse_ids');
+        fillList(btn.getAttribute('data-cash-register-ids') || '', btn.getAttribute('data-cash-register-names') || '', 'edit_cash_register_ids_container', 'edit_cash_register_list', 'cash_register_ids');
+        fillList(btn.getAttribute('data-partner-ids') || '', btn.getAttribute('data-partner-names') || '', 'edit_partner_ids_container', 'edit_partner_list', 'partner_ids');
+        new bootstrap.Modal(document.getElementById('editUserModal')).show();
+    }
+    (function() {
+        function addEditToList(selectId, containerId, listId, inputName) {
+            var sel = document.getElementById(selectId);
+            var container = document.getElementById(containerId);
+            var listEl = document.getElementById(listId);
+            if (!sel || !container || !listEl) return;
+            var opt = sel.options[sel.selectedIndex];
+            if (!opt || !opt.value) return;
+            var id = opt.value;
+            var name = opt.text;
+            if (container.querySelector('input[value="' + id + '"]')) return;
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = inputName;
+            inp.value = id;
+            container.appendChild(inp);
+            var li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-center py-1 px-2';
+            li.innerHTML = '<span>' + name + '</span> <button type="button" class="btn btn-link p-0 text-danger" style="font-size:0.8rem" data-id="' + id + '" aria-label="O\'chirish">&times;</button>';
+            li.querySelector('button').addEventListener('click', function() {
+                var rid = this.getAttribute('data-id');
+                container.querySelector('input[value="' + rid + '"]').remove();
+                this.closest('.list-group-item').remove();
+            });
+            listEl.appendChild(li);
+        }
+        document.getElementById('edit_btn_department').addEventListener('click', function() { addEditToList('edit_department_id', 'edit_department_ids_container', 'edit_department_list', 'department_ids'); });
+        document.getElementById('edit_btn_warehouse').addEventListener('click', function() { addEditToList('edit_warehouse_id', 'edit_warehouse_ids_container', 'edit_warehouse_list', 'warehouse_ids'); });
+        document.getElementById('edit_btn_cash_register').addEventListener('click', function() { addEditToList('edit_cash_register_id', 'edit_cash_register_ids_container', 'edit_cash_register_list', 'cash_register_ids'); });
+        // Kontragentlar: yozib qidirish (edit)
+        (function() {
+            var searchInp = document.getElementById('edit_partner_search');
+            var resultsDiv = document.getElementById('edit_partner_search_results');
+            var selectEl = document.getElementById('edit_partner_id');
+            var container = document.getElementById('edit_partner_ids_container');
+            var listEl = document.getElementById('edit_partner_list');
+            if (!searchInp || !resultsDiv || !selectEl || !container || !listEl) return;
+            function addPartner(id, name) {
+                if (container.querySelector('input[value="' + id + '"]')) return;
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'partner_ids';
+                inp.value = id;
+                container.appendChild(inp);
+                var li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center py-1 px-2';
+                li.innerHTML = '<span>' + (name || id) + '</span> <button type="button" class="btn btn-link p-0 text-danger" style="font-size:0.8rem" data-id="' + id + '" aria-label="O\'chirish">&times;</button>';
+                li.querySelector('button').addEventListener('click', function() {
+                    var rid = this.getAttribute('data-id');
+                    container.querySelector('input[value="' + rid + '"]').remove();
+                    this.closest('.list-group-item').remove();
+                });
+                listEl.appendChild(li);
+            }
+            function showResults() {
+                var term = (searchInp.value || '').trim().toLowerCase();
+                resultsDiv.innerHTML = '';
+                resultsDiv.style.display = 'none';
+                if (!term) return;
+                var opts = Array.from(selectEl.options).slice(1);
+                var matches = opts.filter(function(opt) {
+                    var name = (opt.getAttribute('data-name') || opt.textContent || '').toLowerCase();
+                    return name.indexOf(term) !== -1;
+                });
+                if (matches.length > 0) {
+                    matches.slice(0, 50).forEach(function(opt) {
+                        var id = opt.value;
+                        var name = opt.getAttribute('data-name') || opt.textContent || id;
+                        var a = document.createElement('a');
+                        a.href = '#';
+                        a.className = 'list-group-item list-group-item-action py-2 small';
+                        a.textContent = name;
+                        a.setAttribute('data-id', id);
+                        a.setAttribute('data-name', name);
+                        a.addEventListener('click', function(e) { e.preventDefault(); addPartner(this.getAttribute('data-id'), this.getAttribute('data-name')); searchInp.value = ''; resultsDiv.style.display = 'none'; resultsDiv.innerHTML = ''; });
+                        resultsDiv.appendChild(a);
+                    });
+                    resultsDiv.style.display = 'block';
+                }
+            }
+            searchInp.addEventListener('input', showResults);
+            searchInp.addEventListener('focus', showResults);
+            document.addEventListener('click', function(e) {
+                if (!resultsDiv.contains(e.target) && e.target !== searchInp) { resultsDiv.style.display = 'none'; }
+            });
+        })();
+        // Kontragentlar: yozib qidirish (add)
+        (function() {
+            var searchInp = document.getElementById('add_partner_search');
+            var resultsDiv = document.getElementById('add_partner_search_results');
+            var selectEl = document.getElementById('add_partner_id');
+            var container = document.getElementById('add_partner_ids_container');
+            var listEl = document.getElementById('add_partner_list');
+            if (!searchInp || !resultsDiv || !selectEl || !container || !listEl) return;
+            function addPartner(id, name) {
+                if (container.querySelector('input[value="' + id + '"]')) return;
+                var inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'partner_ids';
+                inp.value = id;
+                container.appendChild(inp);
+                var li = document.createElement('li');
+                li.className = 'list-group-item d-flex justify-content-between align-items-center py-1 px-2';
+                li.innerHTML = '<span>' + (name || id) + '</span> <button type="button" class="btn btn-link p-0 text-danger" style="font-size:0.8rem" data-id="' + id + '" aria-label="O\'chirish">&times;</button>';
+                li.querySelector('button').addEventListener('click', function() {
+                    var rid = this.getAttribute('data-id');
+                    container.querySelector('input[value="' + rid + '"]').remove();
+                    this.closest('.list-group-item').remove();
+                });
+                listEl.appendChild(li);
+            }
+            function showResults() {
+                var term = (searchInp.value || '').trim().toLowerCase();
+                resultsDiv.innerHTML = '';
+                resultsDiv.style.display = 'none';
+                if (!term) return;
+                var opts = Array.from(selectEl.options).slice(1);
+                var matches = opts.filter(function(opt) {
+                    var name = (opt.getAttribute('data-name') || opt.textContent || '').toLowerCase();
+                    return name.indexOf(term) !== -1;
+                });
+                if (matches.length > 0) {
+                    matches.slice(0, 50).forEach(function(opt) {
+                        var id = opt.value;
+                        var name = opt.getAttribute('data-name') || opt.textContent || id;
+                        var a = document.createElement('a');
+                        a.href = '#';
+                        a.className = 'list-group-item list-group-item-action py-2 small';
+                        a.textContent = name;
+                        a.setAttribute('data-id', id);
+                        a.setAttribute('data-name', name);
+                        a.addEventListener('click', function(e) { e.preventDefault(); addPartner(this.getAttribute('data-id'), this.getAttribute('data-name')); searchInp.value = ''; resultsDiv.style.display = 'none'; resultsDiv.innerHTML = ''; });
+                        resultsDiv.appendChild(a);
+                    });
+                    resultsDiv.style.display = 'block';
+                }
+            }
+            searchInp.addEventListener('input', showResults);
+            searchInp.addEventListener('focus', function() { if ((searchInp.value || '').trim()) showResults(); });
+            document.addEventListener('click', function(e) {
+                if (!resultsDiv.contains(e.target) && e.target !== searchInp) { resultsDiv.style.display = 'none'; }
+            });
+        })();
+    })();
+
+    function toggleUserFields() {
+        const role = document.getElementById('userRole').value;
+        const pwaFields = document.getElementById('pwaFields');
+        const driverFields = document.getElementById('driverFields');
+
+        if (role === 'agent' || role === 'driver') {
+            pwaFields.style.display = 'block';
+            if (role === 'driver') {
+                driverFields.style.display = 'block';
+            } else {
+                driverFields.style.display = 'none';
+            }
+        } else {
+            pwaFields.style.display = 'none';
+            driverFields.style.display = 'none';
+        }
+    }
+
+    function changePassword(id, username) {
+        document.getElementById('changePasswordForm').action = '/info/users/change-password/' + id;
+        document.getElementById('password_username').textContent = username;
+        document.getElementById('change_password_username').value = username;
+        new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+    }
+
+    function togglePass(btn, inputId) {
+        try {
+            var inp = document.getElementById(inputId);
+            if (!inp) return;
+            var icon = btn.querySelector('i');
+            if (inp.type === 'password') {
+                inp.type = 'text';
+                if (icon) icon.className = 'bi bi-eye-slash';
+                btn.title = 'Parolni yashirish';
+            } else {
+                inp.type = 'password';
+                if (icon) icon.className = 'bi bi-eye';
+                btn.title = 'Parolni ko\'rsatish';
+            }
+        } catch (error) {
+            console.error('togglePass xatosi:', error);
+        }
+    }
+
+    (function() {
+        var addSel = document.getElementById('add_employee_select');
+        var addFullName = document.getElementById('add_full_name');
+        var addEmpId = document.getElementById('add_employee_id');
+        if (addSel && addFullName && addEmpId) {
+            addSel.addEventListener('change', function() {
+                var opt = this.options[this.selectedIndex];
+                if (opt && opt.value) {
+                    addFullName.value = opt.getAttribute('data-full-name') || opt.text.trim();
+                    addEmpId.value = opt.value;
+                } else {
+                    addFullName.value = '';
+                    addEmpId.value = '';
+                }
+            });
+        }
+        var editSel = document.getElementById('edit_employee_select');
+        var editFullName = document.getElementById('edit_full_name');
+        var editEmpId = document.getElementById('edit_employee_id');
+        if (editSel && editFullName && editEmpId) {
+            editSel.addEventListener('change', function() {
+                var opt = this.options[this.selectedIndex];
+                if (opt && opt.value) {
+                    editFullName.value = opt.getAttribute('data-full-name') || opt.text.trim();
+                    editEmpId.value = opt.value;
+                } else {
+                    editEmpId.value = '';
+                }
+            });
+        }
+        // Yangi foydalanuvchi modali ochilganda xodim/ism maydonlarini tozalash (autocomplete va eski qiymatlardan xoli)
+        var addModal = document.getElementById('addUserModal');
+        if (addModal) {
+            addModal.addEventListener('show.bs.modal', function() {
+                if (addSel) { addSel.selectedIndex = 0; addSel.value = ''; }
+                if (addFullName) { addFullName.value = ''; }
+                if (addEmpId) { addEmpId.value = ''; }
+            });
+        }
+    })();
+
+    function deleteUser(id, username) {
+        if (confirm(`"${username}" foydalanuvchisini o'chirishni xohlaysizmi?`)) {
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/info/users/delete/' + id;
+            var csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            csrfInput.value = meta ? meta.getAttribute('content') : '';
+            form.appendChild(csrfInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+</script>
+{% endblock %}

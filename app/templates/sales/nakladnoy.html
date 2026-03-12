@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>Nakladnoy {{ order.number if order else '' }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 210mm; margin: 0 auto; }
+        .no-print { margin-bottom: 16px; }
+        @media print { .no-print { display: none !important; } body { padding: 10px; } }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: 600; }
+        .header { margin-bottom: 20px; text-align: center; }
+        .header h1 { margin: 0 0 8px 0; font-size: 20px; }
+        .header .sub { font-size: 14px; color: #555; }
+        .meta { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 16px 24px; }
+        .meta span { font-size: 12px; }
+        .meta strong { margin-right: 4px; }
+        .signatures { margin-top: 32px; display: flex; justify-content: space-between; gap: 40px; }
+        .sig-block { flex: 1; text-align: center; }
+        .sig-line { border-bottom: 1px solid #333; height: 40px; margin-bottom: 4px; }
+        .sig-label { font-size: 11px; color: #555; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <a href="/sales/edit/{{ order.id }}">← Orqaga</a> &nbsp;
+        <button onclick="window.print();" style="padding: 6px 14px;">Chop etish</button>
+    </div>
+    {% if order %}
+    <div class="header">
+        <h1>NAKLADNOY</h1>
+        <div class="sub">Sotuv hujjati</div>
+    </div>
+    <div class="meta">
+        <span><strong>Hujjat №:</strong> {{ order.number }}</span>
+        <span><strong>Sana:</strong> {{ (order.date or order.created_at).strftime('%d.%m.%Y %H:%M') if (order.date or order.created_at) else '—' }}</span>
+        <span><strong>Mijoz:</strong> {{ order.partner.name if order.partner else '-' }}{% if order.partner and order.partner.phone %} ({{ order.partner.phone }}){% endif %}</span>
+        <span><strong>Ombor:</strong> {{ order.warehouse.name if order.warehouse else '-' }}</span>
+        <span><strong>Narx turi:</strong> {{ order.price_type.name if order.price_type_id and order.price_type else '-' }}</span>
+        <span><strong>Sotuvchi:</strong> {{ (order.user.full_name or order.user.username) if order.user else '-' }}</span>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;">№</th>
+                <th>Mahsulot</th>
+                <th class="text-right" style="width: 80px;">Miqdor</th>
+                <th class="text-right" style="width: 100px;">Narx (so'm)</th>
+                <th class="text-right" style="width: 110px;">Summa (so'm)</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in order.items %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.product.name if item.product else '-' }}</td>
+                <td class="text-right">{{ "{:,.3f}".format(item.quantity or 0) }}</td>
+                <td class="text-right">{{ "{:,.0f}".format(item.price or 0) }}</td>
+                <td class="text-right">{{ "{:,.0f}".format(item.total or 0) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="text-center">Mahsulotlar yo'q</td></tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="4" class="text-right">Jami:</th>
+                <th class="text-right">{{ "{:,.0f}".format(order.total or 0) }}</th>
+            </tr>
+        </tfoot>
+    </table>
+    <div class="signatures">
+        <div class="sig-block">
+            <div class="sig-line"></div>
+            <div class="sig-label">Berildi (imzo)</div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-line"></div>
+            <div class="sig-label">Qabul qildi (imzo)</div>
+        </div>
+    </div>
+    {% else %}
+    <p>Hujjat topilmadi.</p>
+    {% endif %}
+</body>
+</html>

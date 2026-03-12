@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between mb-4">
+    <h4><i class="bi bi-geo-alt"></i> Real vaqtda xarita</h4>
+    <div>
+        <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
+            <i class="bi bi-arrow-clockwise"></i> Yangilash
+        </button>
+        <small class="text-muted ms-2">Auto: <span id="countdown">30</span>s</small>
+    </div>
+</div>
+
+<script>
+    // Auto-refresh every 30 seconds
+    let countdown = 30;
+    setInterval(() => {
+        countdown--;
+        document.getElementById('countdown').textContent = countdown;
+        if (countdown <= 0) {
+            location.reload();
+        }
+    }, 1000);
+</script>
+
+<!-- Filtrlar -->
+<div class="row mb-3">
+    <div class="col-md-8">
+        <div class="btn-group flex-wrap" role="group">
+            <span class="btn btn-outline-primary">
+                <i class="bi bi-person-walking"></i> Agentlar ({{ agents|length }})
+            </span>
+            <span class="btn btn-outline-info">
+                <i class="bi bi-truck"></i> Haydovchilar ({{ drivers|length }})
+            </span>
+            <span class="btn btn-outline-success">
+                <i class="bi bi-shop"></i> Mijozlar ({{ partner_locations|length }})
+            </span>
+        </div>
+    </div>
+</div>
+
+<!-- Xarita -->
+<div class="card">
+    <div class="card-body p-0">
+        <div id="mainMap" style="height: 70vh; min-height: 500px;"></div>
+    </div>
+</div>
+
+<!-- Legend -->
+<div class="card mt-3">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap justify-content-around gap-2">
+            <span><i class="bi bi-circle-fill text-primary"></i> Agent</span>
+            <span><i class="bi bi-circle-fill text-info"></i> Haydovchi</span>
+            <span><i class="bi bi-circle-fill text-success"></i> Mijoz</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{# Xarita provider'ga qarab to'g'ri template'ni yuklash #}
+{# Load correct template based on map provider #}
+{% if map_provider == 'google' %}
+{% include 'map/_google_map.html' %}
+{% else %}
+{% include 'map/_yandex_map.html' %}
+{% endif %}

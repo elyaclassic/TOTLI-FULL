@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-file-earmark-bar-graph"></i> Hisobotlar formasi</h4>
+    <a href="/reports" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hisobotlar ro'yxati</a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header bg-light">
+        <i class="bi bi-funnel"></i> Hisobot turi va filtrlarni tanlang
+    </div>
+    <div class="card-body">
+        <form id="reportForm" method="GET" action="/reports/sales" class="row g-3">
+            <div class="col-md-6 col-lg-4">
+                <label class="form-label fw-semibold">Hisobot turi <span class="text-danger">*</span></label>
+                <select name="report_type" id="reportType" class="form-select" required>
+                    {% if current_user.role == 'admin' %}
+                        <option value="sales">Savdo hisoboti</option>
+                        <option value="stock">Qoldiq hisoboti</option>
+                        <option value="debts">Qarzdorlik hisoboti</option>
+                        <option value="production">Ishlab chiqarish hisoboti</option>
+                        <option value="employees">Xodimlar hisoboti</option>
+                        <option value="profit">Foyda hisoboti</option>
+                    {% else %}
+                        {% if 'sales' in allowed_report_types %}<option value="sales">Savdo hisoboti</option>{% endif %}
+                        {% if 'stock' in allowed_report_types %}<option value="stock">Qoldiq hisoboti</option>{% endif %}
+                        {% if 'debts' in allowed_report_types %}<option value="debts">Qarzdorlik hisoboti</option>{% endif %}
+                        {% if 'production' in allowed_report_types %}<option value="production">Ishlab chiqarish hisoboti</option>{% endif %}
+                        {% if 'employees' in allowed_report_types %}<option value="employees">Xodimlar hisoboti</option>{% endif %}
+                        {% if 'profit' in allowed_report_types %}<option value="profit">Foyda hisoboti</option>{% endif %}
+                    {% endif %}
+                </select>
+            </div>
+
+            <div class="col-md-6 col-lg-4" id="wrapDateStart">
+                <label class="form-label">Boshlanish sanasi</label>
+                <input type="date" class="form-control" name="start_date" id="startDate" value="{{ start_date }}">
+            </div>
+            <div class="col-md-6 col-lg-4" id="wrapDateEnd">
+                <label class="form-label">Tugash sanasi</label>
+                <input type="date" class="form-control" name="end_date" id="endDate" value="{{ end_date }}">
+            </div>
+
+            <div class="col-md-6 col-lg-4" id="wrapWarehouse" style="display: none;">
+                <label class="form-label">Ombor</label>
+                <select name="warehouse_id" id="warehouseId" class="form-select">
+                    <option value="">Barcha omborlar</option>
+                    {% for wh in warehouses or [] %}
+                    <option value="{{ wh.id }}">{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-12 mt-3 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary" id="btnView">
+                    <i class="bi bi-eye"></i> Hisobotni ko'rish
+                </button>
+                <button type="button" class="btn btn-success" id="btnExcel" style="display: none;">
+                    <i class="bi bi-file-earmark-excel"></i> Excelga eksport
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card mt-4 border-0 bg-light bg-opacity-50">
+    <div class="card-body py-3">
+        <p class="mb-0 small text-muted">
+            <i class="bi bi-info-circle"></i>
+            <strong>Savdo</strong> va <strong>Ishlab chiqarish</strong> hisobotlarida sana oralig'i talab qilinadi.
+            <strong>Qoldiq hisoboti</strong>da ixtiyoriy ravishda omborni tanlashingiz mumkin.
+            <strong>Qarzdorlik</strong> hisoboti sana va ombor talab qilmaydi.
+        </p>
+    </div>
+</div>
+
+<script>
+(function() {
+    var form = document.getElementById('reportForm');
+    var reportType = document.getElementById('reportType');
+    var wrapDateStart = document.getElementById('wrapDateStart');
+    var wrapDateEnd = document.getElementById('wrapDateEnd');
+    var wrapWarehouse = document.getElementById('wrapWarehouse');
+    var btnExcel = document.getElementById('btnExcel');
+    var startDate = document.getElementById('startDate');
+    var endDate = document.getElementById('endDate');
+    var warehouseId = document.getElementById('warehouseId');
+
+    var reportConfig = {
+        sales:     { action: '/reports/sales',     hasDates: true,  hasWarehouse: false, exportUrl: '/reports/sales/export' },
+        stock:     { action: '/reports/stock',     hasDates: false, hasWarehouse: true,  exportUrl: '/reports/stock/export' },
+        debts:     { action: '/reports/debts',     hasDates: false, hasWarehouse: false, exportUrl: '/reports/debts/export' },
+        production: { action: '/reports/production', hasDates: true,  hasWarehouse: false, exportUrl: null },
+        employees: { action: '/reports/employees', hasDates: true,  hasWarehouse: false, exportUrl: null },
+        profit:    { action: '/reports/profit',    hasDates: true,  hasWarehouse: false, exportUrl: null }
+    };
+
+    function updateForm() {
+        var type = reportType.value;
+        var cfg = reportConfig[type] || reportConfig.sales;
+        form.action = cfg.action;
+        wrapDateStart.style.display = cfg.hasDates ? 'block' : 'none';
+        wrapDateEnd.style.display = cfg.hasDates ? 'block' : 'none';
+        wrapWarehouse.style.display = cfg.hasWarehouse ? 'block' : 'none';
+        btnExcel.style.display = (cfg.exportUrl ? 'inline-block' : 'none');
+        if (!cfg.hasDates) {
+            startDate.removeAttribute('name');
+            endDate.removeAttribute('name');
+        } else {
+            startDate.setAttribute('name', 'start_date');
+            endDate.setAttribute('name', 'end_date');
+        }
+        if (!cfg.hasWarehouse) {
+            warehouseId.removeAttribute('name');
+        } else {
+            warehouseId.setAttribute('name', 'warehouse_id');
+        }
+    }
+
+    reportType.addEventListener('change', updateForm);
+    updateForm();
+
+    btnExcel.addEventListener('click', function() {
+        var type = reportType.value;
+        var cfg = reportConfig[type];
+        if (!cfg || !cfg.exportUrl) return;
+        var url = cfg.exportUrl;
+        var params = [];
+        if (startDate.value && (type === 'sales' || type === 'production' || type === 'employees' || type === 'profit')) {
+            params.push('start_date=' + encodeURIComponent(startDate.value));
+            params.push('end_date=' + encodeURIComponent(endDate.value));
+        }
+        if (warehouseId.value && type === 'stock') {
+            params.push('warehouse_id=' + encodeURIComponent(warehouseId.value));
+        }
+        if (params.length) url += '?' + params.join('&');
+        window.location.href = url;
+    });
+})();
+</script>
+{% endblock %}

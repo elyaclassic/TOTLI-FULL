@@ -1,0 +1,386 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set from_pos = from_pos|default(false) %}
+<style>
+    .product_search_results {
+        position: fixed !important;
+        z-index: 9999 !important;
+        max-height: 300px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        display: none !important;
+        background: white !important;
+        border: 1px solid #dee2e6 !important;
+        border-radius: 0.25rem !important;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
+    }
+    .product_search_results.show {
+        display: block !important;
+    }
+    .product_search_results .list-group-item:hover {
+        background-color: #f8f9fa;
+        cursor: pointer;
+    }
+</style>
+<div class="container-fluid">
+    {% if revert_error and revert_detail %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <strong>Tasdiqni bekor qilish mumkin emas.</strong> {{ revert_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    <div class="row mb-3">
+        <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
+            <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="btn btn-outline-secondary mb-0">
+                <i class="bi bi-arrow-left"></i> Orqaga
+            </a>
+            {% if from_pos %}
+            <a href="/sales/pos" class="btn btn-outline-primary mb-0"><i class="bi bi-cart-check me-1"></i>Sotuv oynasiga</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ purchase.number }}</h5>
+                    <div>
+                        {% if purchase.status == 'draft' %}
+                        <form method="POST" action="/purchases/{{ purchase.id }}/confirm" style="display: inline;">
+                            <button type="submit" class="btn btn-success btn-sm"
+                                onclick="return confirm('Tovar kirimini tasdiqlaysizmi?')">
+                                <i class="bi bi-check-circle"></i> Tasdiqlash
+                            </button>
+                        </form>
+                        {% elif purchase.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                        <form method="POST" action="/purchases/{{ purchase.id }}/revert" style="display: inline;">
+                            <button type="submit" class="btn btn-warning btn-sm"
+                                onclick="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Davom etasizmi?');">
+                                <i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish
+                            </button>
+                        </form>
+                        {% elif purchase.status == 'draft' and current_user and current_user.role == 'admin' %}
+                        <form method="POST" action="/purchases/{{ purchase.id }}/delete" style="display: inline;" onsubmit="return confirm('Ushbu kirimni o\'chirmoqchimisiz?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Ta'minotchi:</strong> {{ purchase.partner.name if purchase.partner else '-' }}
+                        </div>
+                        <div class="col-md-6">
+                            <strong>Ombor:</strong> {{ purchase.warehouse.name if purchase.warehouse else '-' }}
+                        </div>
+                    </div>
+
+                    <h6 class="mb-3">Mahsulotlar</h6>
+                    {% if purchase.items %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Mahsulot</th>
+                                    <th>Miqdor</th>
+                                    <th>Narx</th>
+                                    <th>Summa</th>
+                                    {% if purchase.warehouse_id %}<th class="text-center">Tarix</th>{% endif %}
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in purchase.items %}
+                                <tr>
+                                    <td>{{ loop.index }}</td>
+                                    <td>{{ item.product.name if item.product else '-' }}</td>
+                                    <td>{{ "{:,.3f}".format(item.quantity or 0) }} {{ item.product.unit.name if item.product and
+                                        item.product.unit else '' }}</td>
+                                    <td>{{ "{:,.0f}".format(item.price) }} so'm</td>
+                                    <td><strong>{{ "{:,.0f}".format(item.total) }} so'm</strong></td>
+                                    {% if purchase.warehouse_id %}
+                                    <td class="text-center">
+                                        <a href="/reports/stock/source?warehouse_id={{ purchase.warehouse_id }}&product_id={{ item.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
+                                    </td>
+                                    {% endif %}
+                                    <td>
+                                        {% if purchase.status == 'draft' %}
+                                        <form method="POST"
+                                            action="/purchases/{{ purchase.id }}/delete-item/{{ item.id }}"
+                                            style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger"
+                                                onclick="return confirm('O\'chirmoqchimisiz?')">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="{% if purchase.warehouse_id %}5{% else %}4{% endif %}" class="text-end">Tovarlar jami:</th>
+                                    <th colspan="2"><strong>{{ "{:,.0f}".format(purchase.total or 0) }} so'm</strong></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-info">
+                        Hozircha mahsulotlar qo'shilmagan
+                    </div>
+                    {% endif %}
+
+                    <h6 class="mb-2 mt-4">Xarajatlar</h6>
+                    {% if purchase.expenses %}
+                    <div class="table-responsive mb-2">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr><th>Nomi</th><th>Summa</th>{% if purchase.status == 'draft' %}<th></th>{% endif %}</tr>
+                            </thead>
+                            <tbody>
+                                {% for exp in purchase.expenses %}
+                                <tr>
+                                    <td>{{ exp.name }}</td>
+                                    <td>{{ "{:,.0f}".format(exp.amount) }} so'm</td>
+                                    {% if purchase.status == 'draft' %}
+                                    <td>
+                                        <form method="POST" action="/purchases/{{ purchase.id }}/delete-expense/{{ exp.id }}" style="display: inline;">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger" onclick="return confirm('O\'chirmoqchimisiz?')"><i class="bi bi-trash"></i></button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot>
+                                <tr>
+                                    <th class="text-end">Xarajatlar jami:</th>
+                                    <th colspan="2"><strong>{{ "{:,.0f}".format(purchase.total_expenses or 0) }} so'm</strong></th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-light py-2 mb-2">Xarajatlar kiritilmagan</div>
+                    {% endif %}
+                    <p class="mb-0"><strong>Jami (tovarlar + xarajatlar):</strong> {{ "{:,.0f}".format((purchase.total or 0) + (purchase.total_expenses or 0)) }} so'm</p>
+
+                    {% if purchase.expenses %}
+                    <div class="mt-3 pt-3 border-top">
+                        <form method="POST" action="/purchases/{{ purchase.id }}/set-expense-cash" class="d-flex flex-wrap align-items-end gap-3">
+                            <div class="mb-0">
+                                <label class="form-label small mb-1">Kassa</label>
+                                <select name="expense_cash_register_id" class="form-select form-select-sm" style="min-width: 160px;">
+                                    <option value="">— Tanlang —</option>
+                                    {% for cr in cash_registers|default([]) %}
+                                    <option value="{{ cr.id }}" {% if purchase.expense_cash_register_id == cr.id %}selected{% endif %}>{{ cr.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small mb-1">Yo'nalishdan</label>
+                                <select name="expense_direction_id" class="form-select form-select-sm" style="min-width: 160px;">
+                                    <option value="">— Tanlang —</option>
+                                    {% for d in directions|default([]) %}
+                                    <option value="{{ d.id }}" {% if purchase.expense_direction_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-0">
+                                <label class="form-label small mb-1">Bo'limdan</label>
+                                <select name="expense_department_id" class="form-select form-select-sm" style="min-width: 160px;">
+                                    <option value="">— Tanlang —</option>
+                                    {% for d in departments|default([]) %}
+                                    <option value="{{ d.id }}" {% if purchase.expense_department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <button type="submit" class="btn btn-sm btn-outline-primary">Saqlash</button>
+                        </form>
+                        <small class="text-muted">Harajatlar jurnalida ko'rsatiladi.</small>
+                    </div>
+                    {% endif %}
+
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4">
+            {% if purchase.status == 'draft' %}
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h6 class="mb-0">Mahsulot qo'shish</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="/purchases/{{ purchase.id }}/add-item" id="purchaseEditAddItemForm">
+                        <div class="mb-3">
+                            <label class="form-label">Mahsulot</label>
+                            <div class="product-search-wrapper" style="position: relative;">
+                                <input type="text" class="form-control product-search-input" id="purchaseEditProductSearch" 
+                                    placeholder="Nomi yoki kod bo'yicha qidiring..." autocomplete="off">
+                                <input type="hidden" name="product_id" id="purchaseEditProductId" required>
+                                <div class="product_search_results list-group" id="purchaseEditProductSearchResults" style="display: none;"></div>
+                            </div>
+                            <select id="purchaseEditProductSelect" style="display: none;">
+                                <option value="">Tanlang...</option>
+                                {% for product in products %}
+                                <option value="{{ product.id }}" data-name="{{ product.name|e }}" data-code="{{ product.code or '' }}">{{ product.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Miqdor</label>
+                            <input type="number" name="quantity" class="form-control" step="0.01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Narx (so'm)</label>
+                            <input type="number" name="price" class="form-control" step="0.01" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-plus-circle"></i> Qo'shish
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h6 class="mb-0">Xarajat qo'shish</h6>
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="/purchases/{{ purchase.id }}/add-expense">
+                        <div class="mb-3">
+                            <label class="form-label">Xarajat nomi</label>
+                            <input type="text" name="name" class="form-control" placeholder="masalan: Yo'l, Yuk, Boj" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Summa (so'm)</label>
+                            <input type="number" name="amount" class="form-control" step="0.01" min="0" required>
+                        </div>
+                        <button type="submit" class="btn btn-outline-primary w-100">
+                            <i class="bi bi-plus-circle"></i> Xarajat qo'shish
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var productSearch = document.getElementById('purchaseEditProductSearch');
+    var productId = document.getElementById('purchaseEditProductId');
+    var productSelect = document.getElementById('purchaseEditProductSelect');
+    var productSearchResults = document.getElementById('purchaseEditProductSearchResults');
+    var form = document.getElementById('purchaseEditAddItemForm');
+
+    if (!productSearch || !productId || !productSelect || !productSearchResults) return;
+
+    function showProductResults(term) {
+        term = (term || '').trim().toLowerCase();
+        productSearchResults.innerHTML = '';
+        productSearchResults.classList.remove('show');
+        productSearchResults.style.setProperty('display', 'none', 'important');
+        
+        if (!term) {
+            productId.value = '';
+            return;
+        }
+        
+        const options = Array.from(productSelect.options).slice(1);
+        const matches = options.filter(function(opt) {
+            const name = (opt.dataset.name || opt.textContent || '').toLowerCase();
+            const code = (opt.dataset.code || '').toLowerCase();
+            const id = (opt.value || '').toString();
+            return name.indexOf(term) !== -1 || code.indexOf(term) !== -1 || id === term;
+        });
+        
+        if (matches.length > 0) {
+            const inputRect = productSearch.getBoundingClientRect();
+            productSearchResults.style.position = 'fixed';
+            productSearchResults.style.left = inputRect.left + 'px';
+            productSearchResults.style.top = (inputRect.bottom + 2) + 'px';
+            productSearchResults.style.width = inputRect.width + 'px';
+            productSearchResults.style.maxHeight = '300px';
+            productSearchResults.style.overflowY = 'auto';
+            productSearchResults.style.zIndex = '9999';
+            productSearchResults.classList.add('show');
+            productSearchResults.style.setProperty('display', 'block', 'important');
+            
+            matches.forEach(function(opt) {
+                const item = document.createElement('a');
+                item.href = '#';
+                item.className = 'list-group-item list-group-item-action';
+                const displayName = opt.dataset.name || opt.textContent || '';
+                const displayCode = opt.dataset.code || '';
+                item.innerHTML = '<strong>' + displayName + '</strong>' + 
+                    (displayCode ? ' <span class="badge bg-secondary">' + displayCode + '</span>' : '');
+                item.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    productSearch.value = displayName + (displayCode ? ' (' + displayCode + ')' : '');
+                    productId.value = opt.value;
+                    productSearchResults.classList.remove('show');
+                    productSearchResults.style.setProperty('display', 'none', 'important');
+                });
+                productSearchResults.appendChild(item);
+            });
+        } else {
+            const inputRect = productSearch.getBoundingClientRect();
+            productSearchResults.style.position = 'fixed';
+            productSearchResults.style.left = inputRect.left + 'px';
+            productSearchResults.style.top = (inputRect.bottom + 2) + 'px';
+            productSearchResults.style.width = inputRect.width + 'px';
+            productSearchResults.style.zIndex = '9999';
+            productSearchResults.classList.add('show');
+            productSearchResults.style.setProperty('display', 'block', 'important');
+            productSearchResults.innerHTML = '<div class="list-group-item text-muted">Topilmadi.</div>';
+        }
+    }
+
+    productSearch.addEventListener('focus', function() {
+        const currentValue = this.value.trim();
+        if (currentValue) {
+            showProductResults(currentValue);
+        }
+    });
+    
+    productSearch.addEventListener('input', function() {
+        showProductResults(this.value);
+    });
+    
+    productSearch.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            productSearchResults.classList.remove('show');
+            productSearchResults.style.setProperty('display', 'none', 'important');
+        }
+    });
+    
+    document.addEventListener('click', function(e) {
+        if (!productSearch.contains(e.target) && !productSearchResults.contains(e.target)) {
+            productSearchResults.classList.remove('show');
+            productSearchResults.style.setProperty('display', 'none', 'important');
+        }
+    });
+
+    // Form submit qilganda tekshirish
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (!productId.value) {
+                e.preventDefault();
+                alert('Mahsulotni tanlang');
+                productSearch.focus();
+                return false;
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

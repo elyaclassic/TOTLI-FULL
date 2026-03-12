@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="/qoldiqlar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiqlar</a>
+            <h4 class="mb-0 mt-2"><i class="bi bi-file-earmark-text"></i> Tovar qoldiqlari hujjatlari</h4>
+        </div>
+        <a href="/qoldiqlar/tovar/hujjat/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
+    </div>
+
+    {% if reverted %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        Tasdiqlash bekor qilindi. Hujjat qoralamaga o'tkazildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>№</th>
+                            <th>Sana</th>
+                            <th>Foydalanuvchi</th>
+                            {% if show_tannarx %}<th>Jami summa tannarx (so'm)</th>{% endif %}
+                            <th>Jami sotuv (so'm)</th>
+                            <th>Holat</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in docs %}
+                        <tr>
+                            <td><a href="/qoldiqlar/tovar/hujjat/{{ d.id }}">{{ d.number }}</a></td>
+                            <td>{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
+                            <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
+                            {% if show_tannarx %}<td>{{ "{:,.0f}".format(d.total_tannarx or 0) }}</td>{% endif %}
+                            <td>{{ "{:,.0f}".format(d.total_sotuv or 0) }}</td>
+                            <td>
+                                {% if d.status == 'draft' %}
+                                <span class="badge bg-warning text-dark">Qoralama</span>
+                                {% else %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="/qoldiqlar/tovar/hujjat/{{ d.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
+                                {% if current_user.role == 'admin' and d.status != 'draft' %}
+                                <form method="post" action="{% if d.warehouse_id %}/inventory/{{ d.id }}/revoke{% else %}/qoldiqlar/tovar/hujjat/{{ d.id }}/revert{% endif %}" class="d-inline ms-1" onsubmit="return confirm('Tasdiqni bekor qilishni xohlaysizmi? Ombordagi qoldiq qayta hisoblanadi.');">
+                                    {% if d.warehouse_id %}<input type="hidden" name="return_to" value="list">{% endif %}
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqlashni bekor qilish">Tasdiqni bekor qilish</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="{% if show_tannarx %}7{% else %}6{% endif %}" class="text-muted text-center py-4">Hujjatlar yo'q. <a href="/qoldiqlar/tovar/hujjat/new">Yangi hujjat yaratish</a></td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

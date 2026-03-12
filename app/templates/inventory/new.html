@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <a href="/inventory" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxat</a>
+            <h4 class="mb-0 mt-2"><i class="bi bi-clipboard-check"></i> Inventarizatsiya — yangi hujjat</h4>
+        </div>
+    </div>
+
+    {% if request.query_params.get('message') %}
+    <div class="alert alert-info alert-dismissible fade show">{{ request.query_params.get('message') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-body">
+            <p class="text-muted">Omborni tanlang, keyin «Davom etish» bosib hujjat yaratasiz. So'ng qoldiq tovarlarni yuklash yoki tovarlarni qo'lda tanlash orqali jadvalni to'ldiring.</p>
+            <form method="post" action="/inventory/create-draft" class="row g-3 align-items-end">
+                <div class="col-md-6">
+                    <label class="form-label">Ombor</label>
+                    <select name="warehouse_id" class="form-select" required>
+                        <option value="">Tanlang...</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}">{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <button type="submit" class="btn btn-success">Davom etish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

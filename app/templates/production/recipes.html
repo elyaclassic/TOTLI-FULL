@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+    <h4 class="mb-0"><i class="bi bi-journal-text"></i> Retseptlar</h4>
+    <div class="d-flex align-items-center gap-2">
+        <form method="get" action="/production/recipes" class="d-flex gap-1" style="min-width: 220px;">
+            <input type="search" name="q" value="{{ search_q or '' }}" class="form-control form-control-sm" placeholder="Retsept nomi bo'yicha qidirish..." autocomplete="off">
+            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
+        </form>
+        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addRecipeModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+    </div>
+</div>
+
+{% if request.query_params.get('error') == 'delete' and request.query_params.get('detail') %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('detail') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if request.query_params.get('success') == 'deleted' %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="bi bi-check-circle"></i> Retsept muvaffaqiyatli o'chirildi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="row g-3">
+    {% for recipe in recipes %}
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <strong>{{ recipe.name }}</strong>
+                {% if recipe.is_active %}
+                <span class="badge bg-success">Faol</span>
+                {% else %}
+                <span class="badge bg-secondary">Nofaol</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% set _out_unit = (recipe.product.unit.name or recipe.product.unit.code if recipe.product and recipe.product.unit else 'kg') %}
+                <p class="text-muted mb-2">
+                    <i class="bi bi-box"></i> Chiqish: {{ recipe.output_quantity }} {{ _out_unit }}
+                </p>
+
+                <h6>Tarkibi:</h6>
+                <ul class="list-unstyled mb-3">
+                    {% for item in recipe.items %}
+                    {% set _item_unit = (item.product.unit.name or item.product.unit.code if item.product and item.product.unit else 'kg') %}
+                    <li class="d-flex justify-content-between border-bottom py-1">
+                        <span>{{ item.product.name if item.product else 'Noma\'lum' }}</span>
+                        <span class="text-muted">{{ item.quantity }} {{ _item_unit }}</span>
+                    </li>
+                    {% else %}
+                    <li class="text-muted">Tarkib bo'sh</li>
+                    {% endfor %}
+                </ul>
+
+                {% if recipe.description %}
+                <p class="small text-muted">{{ recipe.description }}</p>
+                {% endif %}
+            </div>
+            <div class="card-footer">
+                <a href="/production/recipes/{{ recipe.id }}{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-pencil"></i> Tahrirlash
+                </a>
+                <button class="btn btn-sm btn-success" onclick="quickProduce({{ recipe.id }}, '{{ recipe.name }}')">
+                    <i class="bi bi-play-fill"></i> Ishlab chiqarish
+                </button>
+                {% if current_user and current_user.role == 'admin' %}
+                <form method="POST" action="/production/recipes/{{ recipe.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu retseptni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi.');">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                        <i class="bi bi-trash"></i> O'chirish
+                    </button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <i class="bi bi-journal-x" style="font-size: 4rem; color: #ccc;"></i>
+                <h5 class="mt-3 text-muted">Retseptlar yo'q</h5>
+                <p class="text-muted">Yangi retsept qo'shish uchun tugmani bosing</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRecipeModal">
+                    <i class="bi bi-plus"></i> Yangi retsept
+                </button>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- Yangi retsept modal -->
+<div class="modal fade" id="addRecipeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="/production/recipes/add">
+                <input type="hidden" name="return_q" value="{{ search_q or '' }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Yangi retsept</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Mahsulot (chiqish)</label>
+                        <div class="position-relative" style="overflow: visible;">
+                            <input type="text" class="form-control" id="productSelectInput" placeholder="Nom yoki kod yozib qidiring (F4)" autocomplete="off">
+                            <input type="hidden" name="product_id" id="productSelectHidden" value="">
+                            <div id="productSelectDrop" class="border rounded shadow-sm bg-white overflow-auto" style="max-height: 220px; z-index: 9999; display: none; position: fixed;"></div>
+                        </div>
+                        <small class="text-muted">Yozing yoki F4 bosing — ro'yxatdan tanlang</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Retsept nomi</label>
+                        <input type="text" class="form-control" name="name" id="recipeNameInput"
+                            placeholder="Masalan: Halva oddiy" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Chiqish miqdori (<span id="outputQuantityUnit">kg</span>)</label>
+                        <input type="number" class="form-control" name="output_quantity" value="1" step="0.1" min="0.1"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Izoh</label>
+                        <textarea class="form-control" name="description" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="submit" class="btn btn-primary">Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tezkor ishlab chiqarish modal -->
+<div class="modal fade" id="quickProduceModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="/production/create">
+                <div class="modal-header">
+                    <h5 class="modal-title">Ishlab chiqarish: <span id="recipeName"></span></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="recipe_id" id="recipeIdInput">
+                    <div class="mb-3">
+                        <label class="form-label">1-ombor: Xom ashyo ombori</label>
+                        {% set wh_list = warehouses or [] %}
+                        {% if not wh_list %}
+                        <div class="alert alert-warning py-2 mb-0"><small><i class="bi bi-exclamation-triangle"></i> <a href="/info/warehouses">Ma'lumotnomalar → Omborlar</a> orqali ombor qo'shing.</small></div>
+                        {% endif %}
+                        <select class="form-select" name="warehouse_id" required {% if not wh_list %}disabled{% endif %}>
+                            <option value="">Tanlang...</option>
+                            {% for wh in wh_list %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">2-ombor: Yarim tayyor ombori</label>
+                        <select class="form-select" name="output_warehouse_id" required {% if not wh_list %}disabled{% endif %}>
+                            <option value="">Tanlang...</option>
+                            {% for wh in wh_list %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Miqdori (kg)</label>
+                        <input type="number" class="form-control" name="quantity" value="10" step="0.1" min="0.1"
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Izoh</label>
+                        <textarea class="form-control" name="note" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-play-fill"></i> Boshlash
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<div id="recipe-products-data" data-json="{{ recipe_products_json | default('[]') | e }}" style="display:none"></div>
+<script>
+    var recipeProducts = [];
+    try {
+        var el = document.getElementById('recipe-products-data');
+        if (el && el.getAttribute('data-json')) recipeProducts = JSON.parse(el.getAttribute('data-json'));
+    } catch (e) { console.warn('recipeProducts parse:', e); }
+
+    function quickProduce(recipeId, recipeName) {
+        document.getElementById('recipeIdInput').value = recipeId;
+        document.getElementById('recipeName').textContent = recipeName;
+        var modal = new bootstrap.Modal(document.getElementById('quickProduceModal'));
+        modal.show();
+    }
+
+    function updateRecipeName() {
+        var inp = document.getElementById("productSelectInput");
+        var hid = document.getElementById("productSelectHidden");
+        var nameInput = document.getElementById("recipeNameInput");
+        if (hid && hid.value && inp) {
+            nameInput.value = inp.value;
+        } else {
+            nameInput.value = "";
+        }
+    }
+
+    (function() {
+        var inp = document.getElementById("productSelectInput");
+        var hid = document.getElementById("productSelectHidden");
+        var drop = document.getElementById("productSelectDrop");
+        var nameInput = document.getElementById("recipeNameInput");
+        if (!inp || !drop) return;
+
+        function showList() {
+            var q = (inp.value || "").trim().toLowerCase();
+            var html = "";
+            (recipeProducts || []).forEach(function(p) {
+                var name = (String(p.name || "")).toLowerCase();
+                if (q && name.indexOf(q) === -1) return;
+                var esc = (p.name || '').replace(/"/g, '&quot;');
+                var text = (p.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                var unit = (p.unit || 'kg').replace(/"/g, '&quot;');
+                html += '<div class="dropdown-item py-2" style="cursor:pointer" data-id="' + p.id + '" data-name="' + esc + '" data-unit="' + unit + '">' + text + '</div>';
+            });
+            drop.innerHTML = html || '<div class="dropdown-item text-muted">Topilmadi</div>';
+            var rect = inp.getBoundingClientRect();
+            drop.style.display = "block";
+            drop.style.position = "fixed";
+            drop.style.top = rect.bottom + "px";
+            drop.style.left = rect.left + "px";
+            drop.style.width = Math.max(rect.width, 200) + "px";
+            drop.style.minHeight = "40px";
+            drop.querySelectorAll("[data-id]").forEach(function(el) {
+                el.onclick = function() {
+                    hid.value = this.dataset.id;
+                    inp.value = this.dataset.name;
+                    if (nameInput) nameInput.value = this.dataset.name;
+                    var unitSpan = document.getElementById("outputQuantityUnit");
+                    if (unitSpan) unitSpan.textContent = this.dataset.unit || "kg";
+                    drop.style.display = "none";
+                };
+            });
+        }
+
+        inp.addEventListener("focus", function() { showList(); });
+        inp.addEventListener("input", showList);
+        inp.addEventListener("keydown", function(e) {
+            if (e.key === "F4") { e.preventDefault(); showList(); }
+            if (e.key === "Escape") drop.style.display = "none";
+        });
+        document.addEventListener("click", function(e) {
+            if (!inp.contains(e.target) && !drop.contains(e.target)) drop.style.display = "none";
+        });
+
+        document.getElementById("addRecipeModal").addEventListener("show.bs.modal", function() {
+            inp.value = "";
+            hid.value = "";
+            if (nameInput) nameInput.value = "";
+            var unitSpan = document.getElementById("outputQuantityUnit");
+            if (unitSpan) unitSpan.textContent = "kg";
+            drop.style.display = "none";
+        });
+
+        var form = inp.closest("form");
+        if (form) {
+            form.addEventListener("submit", function(e) {
+                if (!hid.value) {
+                    e.preventDefault();
+                    alert("Mahsulot (chiqish)ni tanlang yoki yozib qidiring.");
+                    inp.focus();
+                }
+            });
+        }
+    })();
+</script>
+</div>
+{% endblock %}

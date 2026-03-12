@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <div class="mb-3">
+        <a href="/production/orders" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Buyurtmalar</a>
+        <a href="/production/{{ production.id }}/materials" class="btn btn-outline-primary btn-sm ms-2"><i class="bi bi-pencil-square"></i> Xom ashyo</a>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <i class="bi bi-clock-history"></i> Ishlab chiqarish harakati tarixi — {{ production.number }}
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-2">
+                <strong>Buyurtma:</strong> {{ production.number }} &nbsp;|&nbsp;
+                {% if production.recipe %}<strong>Retsept:</strong> {{ production.recipe.name }}{% endif %}
+                &nbsp;|&nbsp; <strong>Sana:</strong> {{ production.date.strftime('%d.%m.%Y %H:%M') if production.date else '—' }}
+            </p>
+            <p class="text-muted small mb-3">Tasdiqlanganda: 1-ombordan xom ashyo chiqadi (−), 2-omborga tayyor mahsulot kiradi (+).</p>
+            {% if rows %}
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Sana</th>
+                            <th>Ombor</th>
+                            <th>Mahsulot</th>
+                            <th class="text-end">O'zgarish (+/−)</th>
+                            <th class="text-end">Qoldiq (harakatdan keyin)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rows %}
+                        <tr>
+                            <td>{{ r.created_at }}</td>
+                            <td>{{ r.warehouse_name }}</td>
+                            <td>{{ r.product_name }}{% if r.product_code %} <small class="text-muted">({{ r.product_code }})</small>{% endif %}</td>
+                            <td class="text-end {% if r.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:+,.3f}".format(r.quantity_change) }}</td>
+                            <td class="text-end">{{ "{:,.3f}".format(r.quantity_after) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-muted mb-0">Bu buyurtma uchun ombor harakati yozuvlari yo'q (buyurtma tasdiqlanmagan yoki tasdiq bekor qilingan bo'lishi mumkin).</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

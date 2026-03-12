@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-list-ul"></i> Davomat yozuvlari</h5>
+        <a href="/employees/attendance" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kunlik tabellar</a>
+    </div>
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show py-2 small">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('added') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Davomat yozuvi qo'shildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('updated') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> {{ request.query_params.get('msg', 'O\'zgarishlar saqlandi.') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> {{ request.query_params.get('msg', 'Tanlangan yozuvlar o\'chirildi.') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="get" class="d-flex gap-2 align-items-end flex-wrap">
+                <div>
+                    <label class="form-label small mb-1">Sanadan</label>
+                    <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}" style="width: auto;">
+                </div>
+                <div>
+                    <label class="form-label small mb-1">Sanagacha</label>
+                    <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}" style="width: auto;">
+                </div>
+                <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
+            </form>
+        </div>
+    </div>
+
+    {% if current_user and current_user.role == 'admin' %}
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="post" action="/employees/attendance/form/confirm" class="d-flex gap-2 align-items-end flex-wrap">
+                <div>
+                    <label class="form-label small mb-1">Kunni tasdiqlash (tabel hujjati)</label>
+                    <input type="date" name="date" class="form-control form-control-sm" value="{{ start_date }}" style="width: auto;" required>
+                </div>
+                <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Tanlangan kun uchun tabel hujjati yaratilsinmi?');">
+                    <i class="bi bi-check-circle"></i> Tasdiqlash
+                </button>
+            </form>
+            <small class="text-muted">Shu sana uchun davomat yozuvlari bo‘lsa, tabel hujjati yaratiladi va kun tasdiqlangan hisoblanadi.</small>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-header"><span>Qo'lda qo'shish</span></div>
+        <div class="card-body">
+            <form method="post" action="/employees/attendance/records/add" class="row g-2 align-items-end">
+                <input type="hidden" name="start_date" value="{{ start_date }}">
+                <input type="hidden" name="end_date" value="{{ end_date }}">
+                <div class="col-md-2">
+                    <label class="form-label small">Xodim *</label>
+                    <select name="employee_id" class="form-select form-select-sm" required>
+                        <option value="">Tanlang...</option>
+                        {% for e in employees %}
+                        <option value="{{ e.id }}">{{ e.full_name }}{% if e.code %} ({{ e.code }}){% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Sana *</label>
+                    <input type="date" name="att_date" class="form-control form-control-sm" value="{{ start_date }}" required>
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small">Keldi</label>
+                    <input type="time" name="check_in" class="form-control form-control-sm" step="60">
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small">Ketdi</label>
+                    <input type="time" name="check_out" class="form-control form-control-sm" step="60">
+                </div>
+                <div class="col-md-1">
+                    <label class="form-label small">Soat</label>
+                    <input type="number" name="hours_worked" class="form-control form-control-sm" step="0.01" min="0" placeholder="0">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Izoh</label>
+                    <input type="text" name="note" class="form-control form-control-sm" placeholder="Izoh">
+                </div>
+                <div class="col-md-1">
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus"></i> Qo'shish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>Ro'yxat</span>
+            <div class="d-flex gap-2">
+                <form method="post" action="/employees/attendance/records/bulk-time-all" class="d-inline" onsubmit="return confirm('«Sanadan»–«Sanagacha» oralig\'idagi har bir kun uchun BARCHA faol xodimlarga Keldi 9:00, Ketdi 18:00 yuklansinmi?');">
+                    <input type="hidden" name="start_date" value="{{ start_date }}">
+                    <input type="hidden" name="end_date" value="{{ end_date }}">
+                    <button type="submit" class="btn btn-sm btn-primary" title="Oraliqdagi har kun uchun barcha xodimlarga 9:00–18:00">
+                        <i class="bi bi-people-fill"></i> Barcha xodimlarni yuklash (9:00–18:00)
+                    </button>
+                </form>
+                <button type="submit" form="formBulkTimeRecordsInner" class="btn btn-sm btn-outline-primary" title="Tanlangan yozuvlarga Keldi 9:00, Ketdi 18:00, Soat 9 qo'llash">
+                    <i class="bi bi-clock-history"></i> Tanlanganlarga vaqt yuklash
+                </button>
+                <form method="post" action="/employees/attendance/records/bulk-delete" id="formBulkDelete" class="d-inline">
+                    <input type="hidden" name="start_date" value="{{ start_date }}">
+                    <input type="hidden" name="end_date" value="{{ end_date }}">
+                    <button type="button" class="btn btn-sm btn-outline-danger" id="btnBulkDelete" title="Tanlangan yozuvlarni o'chirish">
+                        <i class="bi bi-trash"></i> Tanlanganlarni o'chirish
+                    </button>
+                </form>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <form method="post" action="/employees/attendance/records/bulk-time" id="formBulkTimeRecordsInner" onsubmit="var c=document.querySelectorAll('#formBulkTimeRecordsInner .bulk-record-check:checked'); if(c.length===0){alert('Kamida bitta yozuvni tanlang.'); return false;} return confirm('Tanlangan '+c.length+' ta yozuvga Keldi 9:00, Ketdi 18:00 yuklansinmi?');">
+                <input type="hidden" name="start_date" value="{{ start_date }}">
+                <input type="hidden" name="end_date" value="{{ end_date }}">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="40" class="text-center">Tanlash</th>
+                                <th width="45" class="text-center">№</th>
+                                <th>Sana</th>
+                                <th>Xodim</th>
+                                <th>Keldi</th>
+                                <th>Ketdi</th>
+                                <th>Soat</th>
+                                <th>Holat</th>
+                                <th width="100">Amal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in records %}
+                            <tr>
+                                <td class="text-center"><input type="checkbox" name="record_ids" value="{{ r.id }}" class="form-check-input bulk-record-check"></td>
+                                <td class="text-center">{{ loop.index }}</td>
+                                <td>{{ r.date.strftime('%d.%m.%Y') }}</td>
+                                <td>{{ r.employee.full_name }}</td>
+                                <td>{{ r.check_in.strftime('%H:%M') if r.check_in else '-' }}</td>
+                                <td>{{ r.check_out.strftime('%H:%M') if r.check_out else '-' }}</td>
+                                <td>{{ r.hours_worked or '-' }}</td>
+                                <td><span class="badge bg-{% if r.status == 'present' %}success{% else %}secondary{% endif %}">{{ r.status or 'present' }}</span></td>
+                                <td>
+                                    <a href="/employees/attendance/records/edit/{{ r.id }}?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-sm btn-outline-secondary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                    <form method="post" action="/employees/attendance/records/delete/{{ r.id }}" class="d-inline" onsubmit="return confirm('O\'chirilsinmi?');">
+                                        <input type="hidden" name="start_date" value="{{ start_date }}">
+                                        <input type="hidden" name="end_date" value="{{ end_date }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="9" class="text-center text-muted py-4">Tanlangan oralikda yozuv yo'q.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="card-footer py-2">
+                    <button type="submit" form="formBulkTimeRecordsInner" class="btn btn-sm btn-outline-primary"><i class="bi bi-clock-history"></i> Tanlanganlarga vaqt yuklash (9:00–18:00)</button>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="btnBulkDeleteFooter" title="Tanlangan yozuvlarni o'chirish"><i class="bi bi-trash"></i> Tanlanganlarni o'chirish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    function doBulkDelete() {
+        var checked = document.querySelectorAll('.bulk-record-check:checked');
+        if (!checked.length) {
+            alert('Kamida bitta yozuvni tanlang.');
+            return;
+        }
+        if (!confirm('Tanlangan ' + checked.length + ' ta yozuvni o\'chirishni xohlaysizmi?')) return;
+        var form = document.getElementById('formBulkDelete');
+        if (!form) return;
+        form.querySelectorAll('input[name="record_ids"]').forEach(function(inp) { inp.remove(); });
+        checked.forEach(function(cb) {
+            var inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = 'record_ids';
+            inp.value = cb.value;
+            form.appendChild(inp);
+        });
+        form.submit();
+    }
+    var btn = document.getElementById('btnBulkDelete');
+    if (btn) btn.addEventListener('click', doBulkDelete);
+    var btnFooter = document.getElementById('btnBulkDeleteFooter');
+    if (btnFooter) btnFooter.addEventListener('click', doBulkDelete);
+})();
+</script>
+{% endblock %}

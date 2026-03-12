@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('deleted') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-check-circle"></i> Hujjat o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show py-2 small" role="alert">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h5 class="mb-0"><i class="bi bi-bank"></i> Kassadan kassaga o'tkazish</h5>
+        <div class="d-flex align-items-center gap-2">
+            <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasi</a>
+            <a href="/cash/transfers/new" class="btn btn-success btn-sm"><i class="bi bi-plus-lg"></i> Yaratish</a>
+        </div>
+    </div>
+    <p class="text-muted small mb-3">Jo'natuvchi (1-kassa) hujjat yaratadi va «Yuborish» ni bosadi. Qabul qiluvchi (2-kassa) «Tasdiqlash» orqali pulni qabul qiladi.</p>
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>№</th>
+                            <th>Sana</th>
+                            <th>Holat</th>
+                            <th>Qayerdan (kassa)</th>
+                            <th>Qayerga (kassa)</th>
+                            <th class="text-end">Summa</th>
+                            <th>Jo'natuvchi</th>
+                            <th>Tasdiqlagan</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in transfers %}
+                        <tr>
+                            <td><a href="/cash/transfers/{{ t.id }}">{{ t.number }}</a></td>
+                            <td>{{ t.date.strftime('%d.%m.%Y %H:%M') if t.date else '—' }}</td>
+                            <td>
+                                {% if t.status == 'draft' %}
+                                <span class="badge bg-warning text-dark">Qoralama</span>
+                                {% elif t.status == 'pending_approval' %}
+                                <span class="badge bg-primary">Tasdiqlash kutilmoqda</span>
+                                {% elif t.status == 'confirmed' %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ t.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ t.from_cash.name if t.from_cash else '—' }}</td>
+                            <td>{{ t.to_cash.name if t.to_cash else '—' }}</td>
+                            <td class="text-end fw-bold">{{ "{:,.0f}".format(t.amount or 0) }} so'm</td>
+                            <td>{{ t.user.full_name if t.user else t.user.username if t.user else '—' }}</td>
+                            <td>
+                                {% if t.approved_by %}
+                                {{ t.approved_by.full_name or t.approved_by.username }}
+                                {% if t.approved_at %}<br><small class="text-muted">{{ t.approved_at.strftime('%d.%m.%Y %H:%M') }}</small>{% endif %}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                <a href="/cash/transfers/{{ t.id }}" class="btn btn-outline-primary btn-sm">Ochish</a>
+                                {% if t.status == 'pending_approval' %}
+                                <form method="post" action="/cash/transfers/{{ t.id }}/confirm" class="d-inline" onsubmit="return confirm('Pulni qabul qildingizmi? Tasdiqlash — kassa balanslari o\'zgaradi.');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                                    <button type="submit" class="btn btn-success btn-sm ms-1"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">Hujjatlar yo'q. «Yaratish» tugmasini bosing.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

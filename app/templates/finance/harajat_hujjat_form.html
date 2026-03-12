@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0"><i class="bi bi-receipt"></i> {{ page_title }}</h4>
+        <a href="/finance/harajatlar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Harajatlar jurnali</a>
+    </div>
+
+    <form method="post" action="/finance/harajat/hujjat/save" id="harajatForm">
+        {% if doc %}<input type="hidden" name="doc_id" value="{{ doc.id }}">{% endif %}
+        <div class="card mb-2">
+            <div class="card-header py-2">Hujjat ma'lumotlari</div>
+            <div class="card-body py-2">
+                <div class="row g-2">
+                    <div class="col-md-3">
+                        <label class="form-label">Sana *</label>
+                        <input type="date" class="form-control" name="date" value="{{ doc_date.strftime('%Y-%m-%d') if doc_date else '' }}" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Kassadan *</label>
+                        <select class="form-select" name="cash_register_id" required>
+                            {% for c in cash_registers %}
+                            <option value="{{ c.id }}" {% if doc and doc.cash_register_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Yo'nalishdan</label>
+                        <select class="form-select" name="direction_id">
+                            <option value="">— Tanlash —</option>
+                            {% for d in directions %}
+                            <option value="{{ d.id }}" {% if doc and doc.direction_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Bo'limdan</label>
+                        <select class="form-select" name="department_id">
+                            <option value="">— Tanlash —</option>
+                            {% for dep in departments %}
+                            <option value="{{ dep.id }}" {% if doc and doc.department_id == dep.id %}selected{% endif %}>{{ dep.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-2">
+            <div class="card-header py-2 d-flex justify-content-between align-items-center">
+                <span>Qatorlar — harajat turi va summa</span>
+                <button type="button" class="btn btn-sm btn-success" id="addRow"><i class="bi bi-plus"></i> Qator qo'shish</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0" id="itemsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th width="36">#</th>
+                                <th>Harajat turi</th>
+                                <th width="140">Summa (so'm)</th>
+                                <th>Izoh</th>
+                                <th width="44"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="itemsBody">
+                            {% if doc and doc.items %}
+                            {% for it in doc.items %}
+                            <tr>
+                                <td class="align-middle">{{ loop.index }}</td>
+                                <td>
+                                    <select class="form-select form-select-sm" name="expense_type_id" required>
+                                        <option value="">— Tanlang —</option>
+                                        {% for et in expense_types %}
+                                        <option value="{{ et.id }}" {% if it.expense_type_id == et.id %}selected{% endif %}>{{ et.name }}{% if et.category %} ({{ et.category }}){% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control form-control-sm" name="amount" value="{{ '%.2f'|format(it.amount) if it.amount is not none else '' }}" min="0" step="0.01" required></td>
+                                <td><input type="text" class="form-control form-control-sm" name="description" value="{{ it.description or '' }}" placeholder="Izoh"></td>
+                                <td><button type="button" class="btn btn-sm btn-outline-danger removeRow" title="O'chirish"><i class="bi bi-trash"></i></button></td>
+                            </tr>
+                            {% endfor %}
+                            {% else %}
+                            <tr>
+                                <td class="align-middle">1</td>
+                                <td>
+                                    <select class="form-select form-select-sm" name="expense_type_id" required>
+                                        <option value="">— Tanlang —</option>
+                                        {% for et in expense_types %}
+                                        <option value="{{ et.id }}">{{ et.name }}{% if et.category %} ({{ et.category }}){% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><input type="number" class="form-control form-control-sm" name="amount" value="" min="0" step="0.01" required placeholder="0"></td>
+                                <td><input type="text" class="form-control form-control-sm" name="description" placeholder="Izoh"></td>
+                                <td><button type="button" class="btn btn-sm btn-outline-danger removeRow" title="O'chirish"><i class="bi bi-trash"></i></button></td>
+                            </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="p-3 border-top">
+                    <small class="text-muted">Harajat turlari ro'yxatida yo'q bo'lsa: <a href="/finance/expense-types" target="_blank">Harajat turlari</a> sahifasida qo'shing.</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+            {% if doc and doc.status == 'draft' and doc.items %}
+            <a href="/finance/harajatlar" class="btn btn-outline-secondary">Bekor qilish</a>
+            {% endif %}
+        </div>
+    </form>
+
+    {% if doc and doc.status == 'draft' and doc.items %}
+    <hr class="my-4">
+    <form method="post" action="/finance/harajat/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassadan chiqim yoziladi va balans yangilanadi. Davom etasizmi?');">
+        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+    </form>
+    {% endif %}
+</div>
+
+<script>
+(function() {
+    function renumberRows() {
+        document.querySelectorAll('#itemsBody tr').forEach(function(tr, i) {
+            var td = tr.querySelector('td:first-child');
+            if (td) td.textContent = i + 1;
+        });
+    }
+    document.getElementById('addRow').addEventListener('click', function() {
+        var tbody = document.getElementById('itemsBody');
+        var firstRow = tbody.querySelector('tr');
+        if (!firstRow) return;
+        var clone = firstRow.cloneNode(true);
+        clone.querySelectorAll('input').forEach(function(inp) { inp.value = ''; });
+        clone.querySelectorAll('select').forEach(function(sel) { sel.selectedIndex = 0; });
+        tbody.appendChild(clone);
+        renumberRows();
+    });
+    document.getElementById('itemsBody').addEventListener('click', function(e) {
+        if (e.target.closest('.removeRow')) {
+            var tr = e.target.closest('tr');
+            if (document.getElementById('itemsBody').rows.length > 1) {
+                tr.remove();
+                renumberRows();
+            }
+        }
+    });
+})();
+</script>
+<style>
+#itemsTable th, #itemsTable td { padding: 0.3rem 0.4rem; vertical-align: middle; }
+#itemsTable .form-control-sm, #itemsTable .form-select-sm { font-size: 0.875rem; }
+</style>
+{% endblock %}

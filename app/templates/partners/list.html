@@ -1,0 +1,1066 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* Fix modal scrolling */
+    .modal-dialog-scrollable .modal-body {
+        max-height: calc(100vh - 200px);
+        overflow-y: auto;
+    }
+
+    .modal-xl {
+        max-width: 1140px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <a href="/partners" class="btn btn-sm {% if current_type == 'all' %}btn-primary{% else %}btn-outline-primary{% endif %}">Hammasi</a>
+                    <a href="/partners?type=customer" class="btn btn-sm {% if current_type == 'customer' %}btn-primary{% else %}btn-outline-primary{% endif %}">Mijozlar</a>
+                    <a href="/partners?type=supplier" class="btn btn-sm {% if current_type == 'supplier' %}btn-primary{% else %}btn-outline-primary{% endif %}">Yetkazib beruvchilar</a>
+                </div>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <form action="/partners/export" method="get" class="d-inline">
+                        <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Export</button>
+                    </form>
+                    <a href="/partners/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza yuklab olish"><i class="bi bi-download"></i> Andoza</a>
+                    <form action="/partners/import" method="post" enctype="multipart/form-data" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                        <label class="btn btn-outline-primary btn-sm mb-0">
+                            <i class="bi bi-upload"></i> Import
+                            <input type="file" name="file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
+                        </label>
+                    </form>
+                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addPartnerModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Nomi</th>
+                            <th>Turi</th>
+                            <th>Telefon</th>
+                            <th>Manzil</th>
+                            <th>Balans</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if partners %}
+                        {% for partner in partners %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                <strong>{{ partner.name or '-' }}</strong>
+                                {% if (partner.discount_percent or 0) > 0 %}
+                                <br><small class="text-success">{{ partner.discount_percent }}% chegirma</small>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if partner.type == 'customer' %}
+                                <span class="badge bg-primary">Mijoz</span>
+                                {% elif partner.type == 'supplier' %}
+                                <span class="badge bg-info">Yetkazib beruvchi</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Ikkalasi</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ partner.phone or '-' }}</td>
+                            <td>{{ partner.address or '-' }}</td>
+                            <td>
+                                {% set bal = partner.balance if partner.balance is not none else 0 %}
+                                {% if bal > 0 %}
+                                <span class="text-danger">{{ "{:,.0f}".format(bal) }}</span>
+                                <small class="text-muted">qarzdor</small>
+                                {% elif bal < 0 %}
+                                <span class="text-success">{{ "{:,.0f}".format(-bal) }}</span>
+                                <small class="text-muted">avans</small>
+                                {% else %}
+                                <span class="text-muted">0</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" title="Tahrirlash"
+                                    data-partner-id="{{ partner.id }}"
+                                    data-partner-name="{{ partner.name or '' }}"
+                                    data-partner-type="{{ partner.type or 'customer' }}"
+                                    data-partner-phone="{{ partner.phone or '' }}"
+                                    data-partner-address="{{ partner.address or '' }}"
+                                    data-partner-credit="{{ partner.credit_limit if partner.credit_limit is not none else 0 }}"
+                                    data-partner-discount="{{ partner.discount_percent if partner.discount_percent is not none else 0 }}"
+                                    onclick="editPartnerFromData(this)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger" title="O'chirish"
+                                    data-partner-id="{{ partner.id }}" data-partner-name="{{ partner.name or '' }}"
+                                    onclick="deletePartnerFromData(this)">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-5">
+                                <i class="bi bi-people fs-1 d-block mb-2"></i>
+                                Hozircha kontragentlar yo'q<br>
+                                <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Kontragent qo'shish modal -->
+<div class="modal fade" id="addPartnerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <form action="/partners/add" method="POST" enctype="multipart/form-data">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Savdo nuqtasi qo'shish</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Photo Upload -->
+                    <div class="mb-4 text-center">
+                        <div id="partnerPhotoPreview"
+                            style="width: 100px; height: 100px; background: #f0f0f0; border-radius: 10px; margin: 0 auto; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                            onclick="document.getElementById('partnerPhoto').click()">
+                            <i class="bi bi-camera" style="font-size: 40px; color: #999;"></i>
+                        </div>
+                        <input type="file" id="partnerPhoto" name="photo" accept="image/*" style="display: none;"
+                            onchange="previewPartnerPhoto(event)">
+                        <small class="text-muted">Rasm yuklash (ixtiyoriy)</small>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Basic Info -->
+                        <div class="col-md-8">
+                            <label class="form-label">*Savdo nuqtasi nomi</label>
+                            <input type="text" class="form-control" name="name" required placeholder="Nomini kiriting">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Turi *</label>
+                            <select class="form-select" name="type" id="add_partner_type" required>
+                                <option value="customer">Mijoz</option>
+                                <option value="supplier">Yetkazib beruvchi</option>
+                                <option value="both">Ikkalasi</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Yuridik nomi</label>
+                            <input type="text" class="form-control" name="legal_name"
+                                placeholder="Yuridik nomini kiriting">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Aloqa shaxsi</label>
+                            <input type="text" class="form-control" name="contact_person" placeholder="Aloqa shaxsi">
+                        </div>
+
+                        <!-- Contact Info -->
+                        <div class="col-md-6">
+                            <label class="form-label">Telefon raqami</label>
+                            <input type="tel" class="form-control" name="phone" placeholder="+998 90 123 45 67">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Qo'shimcha telefon</label>
+                            <input type="tel" class="form-control" name="phone2" placeholder="+998 90 123 45 67">
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">Manzil</label>
+                            <input type="text" class="form-control" name="address"
+                                placeholder="To'liq manzilni kiriting">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Mo'ljal</label>
+                            <input type="text" class="form-control" name="landmark" placeholder="Mo'ljalini kiriting">
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Izoh</label>
+                            <textarea class="form-control" name="notes" rows="2" placeholder="Izoh kiriting"></textarea>
+                        </div>
+
+                        <!-- Visit Schedule & Categories (majburiy faqat Mijoz/Ikkalasi uchun) -->
+                        <div class="col-md-4">
+                            <label class="form-label" id="add_visit_day_label">*Tashrif kuni</label>
+                            <select class="form-select" name="visit_day" id="add_visit_day" required>
+                                <option value="">Tanlang</option>
+                                <option value="1">Dushanba</option>
+                                <option value="2">Seshanba</option>
+                                <option value="3">Chorshanba</option>
+                                <option value="4">Payshanba</option>
+                                <option value="5">Juma</option>
+                                <option value="6">Shanba</option>
+                                <option value="0">Yakshanba</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" id="add_category_label">*Kategoriya</label>
+                            <select class="form-select" name="category" id="add_category" required>
+                                <option value="">Tanlang</option>
+                                <option value="A">A - VIP</option>
+                                <option value="B">B - Katta</option>
+                                <option value="C">C - O'rta</option>
+                                <option value="D">D - Kichik</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" id="add_region_label">*Hudud</label>
+                            <select class="form-select" name="region" id="add_region" required>
+                                <option value="">Tanlang</option>
+                                <option value="tashkent">Toshkent</option>
+                                <option value="samarkand">Samarqand</option>
+                                <option value="bukhara">Buxoro</option>
+                                <option value="andijan">Andijon</option>
+                                <option value="fergana">Farg'ona</option>
+                                <option value="namangan">Namangan</option>
+                                <option value="other">Boshqa</option>
+                            </select>
+                        </div>
+
+                        <!-- Location -->
+                        <div class="col-md-12">
+                            <label class="form-label">Lokatsiya</label>
+                            <div class="input-group">
+                                <input type="text" id="partnerLocation" class="form-control"
+                                    placeholder="GPS koordinatalar" readonly>
+                                <button class="btn btn-outline-success" type="button" onclick="getPartnerLocation()">
+                                    <i class="bi bi-geo-alt"></i> GPS olish
+                                </button>
+                                <button class="btn btn-outline-primary" type="button" onclick="openPartnerMapPicker()">
+                                    <i class="bi bi-map"></i> Xaritadan tanlash
+                                </button>
+                            </div>
+                            <input type="hidden" name="latitude" id="partnerLatitude">
+                            <input type="hidden" name="longitude" id="partnerLongitude">
+                        </div>
+
+                        <!-- Customer Type & Sales -->
+                        <div class="col-md-4">
+                            <label class="form-label">Mijoz turi</label>
+                            <select class="form-select" name="customer_type">
+                                <option value="">Tanlang</option>
+                                <option value="retail">Chakana</option>
+                                <option value="wholesale">Ulgurji</option>
+                                <option value="horeca">HoReCa</option>
+                                <option value="distributor">Distribyutor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Sotuv kanali</label>
+                            <select class="form-select" name="sales_channel">
+                                <option value="">Tanlang</option>
+                                <option value="direct">To'g'ridan-to'g'ri</option>
+                                <option value="distributor">Distribyutor orqali</option>
+                                <option value="online">Online</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Mahsulot toifalari</label>
+                            <select class="form-select" name="product_categories">
+                                <option value="">Tanlang</option>
+                                <option value="food">Oziq-ovqat</option>
+                                <option value="drinks">Ichimliklar</option>
+                                <option value="household">Maishiy</option>
+                                <option value="cosmetics">Kosmetika</option>
+                            </select>
+                        </div>
+
+                        <!-- Financial -->
+                        <div class="col-md-6">
+                            <label class="form-label">Kredit limiti</label>
+                            <input type="number" class="form-control" name="credit_limit" value="0" step="100000">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Chegirma %</label>
+                            <input type="number" class="form-control" name="discount_percent" value="0" step="0.5"
+                                max="100">
+                        </div>
+
+                        <!-- Requisites Accordion -->
+                        <div class="col-md-12">
+                            <div class="accordion" id="requisitesAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#requisitesCollapse">
+                                            <strong>Mijoz rekvizitlari</strong>
+                                        </button>
+                                    </h2>
+                                    <div id="requisitesCollapse" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label">INN</label>
+                                                    <input type="text" class="form-control" name="inn"
+                                                        placeholder="INN kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Hisob raqami (Р/С)</label>
+                                                    <input type="text" class="form-control" name="account"
+                                                        placeholder="Hisob raqamini kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Bank</label>
+                                                    <input type="text" class="form-control" name="bank"
+                                                        placeholder="Bank nomini kiriting">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">MFO</label>
+                                                    <input type="text" class="form-control" name="mfo"
+                                                        placeholder="MFO">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">OKED</label>
+                                                    <input type="text" class="form-control" name="oked"
+                                                        placeholder="OKED">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">PINFL</label>
+                                                    <input type="text" class="form-control" name="pinfl"
+                                                        placeholder="PINFL kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Shartnoma raqami</label>
+                                                    <input type="text" class="form-control" name="contract_number"
+                                                        placeholder="Shartnoma raqamini kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Shartnoma sanasi</label>
+                                                    <input type="date" class="form-control" name="contract_date">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Kontragent tahrirlash modal -->
+<div class="modal fade" id="editPartnerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <form id="editPartnerForm" method="POST" enctype="multipart/form-data">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title"><i class="bi bi-pencil"></i> Kontragentni tahrirlash</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Photo Upload -->
+                    <div class="mb-4 text-center">
+                        <div id="editPartnerPhotoPreview"
+                            style="width: 100px; height: 100px; background: #f0f0f0; border-radius: 10px; margin: 0 auto; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                            onclick="document.getElementById('editPartnerPhoto').click()">
+                            <i class="bi bi-camera" style="font-size: 40px; color: #999;"></i>
+                        </div>
+                        <input type="file" id="editPartnerPhoto" name="photo" accept="image/*" style="display: none;"
+                            onchange="previewEditPartnerPhoto(event)">
+                        <small class="text-muted">Rasm yuklash (ixtiyoriy)</small>
+                    </div>
+
+                    <div class="row g-3">
+                        <!-- Basic Info -->
+                        <div class="col-md-8">
+                            <label class="form-label">*Savdo nuqtasi nomi</label>
+                            <input type="text" class="form-control" name="name" id="edit_name" required
+                                placeholder="Nomini kiriting">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Turi *</label>
+                            <select class="form-select" name="type" id="edit_type" required>
+                                <option value="customer">Mijoz</option>
+                                <option value="supplier">Yetkazib beruvchi</option>
+                                <option value="both">Ikkalasi</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Yuridik nomi</label>
+                            <input type="text" class="form-control" name="legal_name" id="edit_legal_name"
+                                placeholder="Yuridik nomini kiriting">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Aloqa shaxsi</label>
+                            <input type="text" class="form-control" name="contact_person" id="edit_contact_person"
+                                placeholder="Aloqa shaxsi">
+                        </div>
+
+                        <!-- Contact Info -->
+                        <div class="col-md-6">
+                            <label class="form-label">Telefon raqami</label>
+                            <input type="tel" class="form-control" name="phone" id="edit_phone"
+                                placeholder="+998 90 123 45 67">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Qo'shimcha telefon</label>
+                            <input type="tel" class="form-control" name="phone2" id="edit_phone2"
+                                placeholder="+998 90 123 45 67">
+                        </div>
+
+                        <div class="col-md-8">
+                            <label class="form-label">Manzil</label>
+                            <input type="text" class="form-control" name="address" id="edit_address"
+                                placeholder="To'liq manzilni kiriting">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Mo'ljal</label>
+                            <input type="text" class="form-control" name="landmark" id="edit_landmark"
+                                placeholder="Mo'ljalini kiriting">
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label">Izoh</label>
+                            <textarea class="form-control" name="notes" id="edit_notes" rows="2"
+                                placeholder="Izoh kiriting"></textarea>
+                        </div>
+
+                        <!-- Visit Schedule & Categories (majburiy faqat Mijoz/Ikkalasi uchun) -->
+                        <div class="col-md-4">
+                            <label class="form-label" id="edit_visit_day_label">*Tashrif kuni</label>
+                            <select class="form-select" name="visit_day" id="edit_visit_day" required>
+                                <option value="">Tanlang</option>
+                                <option value="1">Dushanba</option>
+                                <option value="2">Seshanba</option>
+                                <option value="3">Chorshanba</option>
+                                <option value="4">Payshanba</option>
+                                <option value="5">Juma</option>
+                                <option value="6">Shanba</option>
+                                <option value="0">Yakshanba</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" id="edit_category_label">*Kategoriya</label>
+                            <select class="form-select" name="category" id="edit_category" required>
+                                <option value="">Tanlang</option>
+                                <option value="A">A - VIP</option>
+                                <option value="B">B - Katta</option>
+                                <option value="C">C - O'rta</option>
+                                <option value="D">D - Kichik</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label" id="edit_region_label">*Hudud</label>
+                            <select class="form-select" name="region" id="edit_region" required>
+                                <option value="">Tanlang</option>
+                                <option value="tashkent">Toshkent</option>
+                                <option value="samarkand">Samarqand</option>
+                                <option value="bukhara">Buxoro</option>
+                                <option value="andijan">Andijon</option>
+                                <option value="fergana">Farg'ona</option>
+                                <option value="namangan">Namangan</option>
+                                <option value="other">Boshqa</option>
+                            </select>
+                        </div>
+
+                        <!-- Location -->
+                        <div class="col-md-12">
+                            <label class="form-label">Lokatsiya</label>
+                            <div class="input-group">
+                                <input type="text" id="editPartnerLocation" class="form-control"
+                                    placeholder="GPS koordinatalar" readonly>
+                                <button class="btn btn-outline-success" type="button"
+                                    onclick="getEditPartnerLocation()">
+                                    <i class="bi bi-geo-alt"></i> GPS olish
+                                </button>
+                                <button class="btn btn-outline-primary" type="button"
+                                    onclick="openEditPartnerMapPicker()">
+                                    <i class="bi bi-map"></i> Xaritadan tanlash
+                                </button>
+                            </div>
+                            <input type="hidden" name="latitude" id="editPartnerLatitude">
+                            <input type="hidden" name="longitude" id="editPartnerLongitude">
+                        </div>
+
+                        <!-- Customer Type & Sales -->
+                        <div class="col-md-4">
+                            <label class="form-label">Mijoz turi</label>
+                            <select class="form-select" name="customer_type" id="edit_customer_type">
+                                <option value="">Tanlang</option>
+                                <option value="retail">Chakana</option>
+                                <option value="wholesale">Ulgurji</option>
+                                <option value="horeca">HoReCa</option>
+                                <option value="distributor">Distribyutor</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Sotuv kanali</label>
+                            <select class="form-select" name="sales_channel" id="edit_sales_channel">
+                                <option value="">Tanlang</option>
+                                <option value="direct">To'g'ridan-to'g'ri</option>
+                                <option value="distributor">Distribyutor orqali</option>
+                                <option value="online">Online</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Mahsulot toifalari</label>
+                            <select class="form-select" name="product_categories" id="edit_product_categories">
+                                <option value="">Tanlang</option>
+                                <option value="food">Oziq-ovqat</option>
+                                <option value="drinks">Ichimliklar</option>
+                                <option value="household">Maishiy</option>
+                                <option value="cosmetics">Kosmetika</option>
+                            </select>
+                        </div>
+
+                        <!-- Financial -->
+                        <div class="col-md-6">
+                            <label class="form-label">Kredit limiti</label>
+                            <input type="number" class="form-control" name="credit_limit" id="edit_credit_limit"
+                                value="0" step="100000">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Chegirma %</label>
+                            <input type="number" class="form-control" name="discount_percent" id="edit_discount_percent"
+                                value="0" step="0.5" max="100">
+                        </div>
+
+                        <!-- Requisites Accordion -->
+                        <div class="col-md-12">
+                            <div class="accordion" id="editRequisitesAccordion">
+                                <div class="accordion-item">
+                                    <h2 class="accordion-header">
+                                        <button class="accordion-button collapsed" type="button"
+                                            data-bs-toggle="collapse" data-bs-target="#editRequisitesCollapse">
+                                            <strong>Mijoz rekvizitlari</strong>
+                                        </button>
+                                    </h2>
+                                    <div id="editRequisitesCollapse" class="accordion-collapse collapse">
+                                        <div class="accordion-body">
+                                            <div class="row g-3">
+                                                <div class="col-md-6">
+                                                    <label class="form-label">INN</label>
+                                                    <input type="text" class="form-control" name="inn" id="edit_inn"
+                                                        placeholder="INN kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Hisob raqami (Р/С)</label>
+                                                    <input type="text" class="form-control" name="account"
+                                                        id="edit_account" placeholder="Hisob raqamini kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Bank</label>
+                                                    <input type="text" class="form-control" name="bank" id="edit_bank"
+                                                        placeholder="Bank nomini kiriting">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">MFO</label>
+                                                    <input type="text" class="form-control" name="mfo" id="edit_mfo"
+                                                        placeholder="MFO">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">OKED</label>
+                                                    <input type="text" class="form-control" name="oked" id="edit_oked"
+                                                        placeholder="OKED">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">PINFL</label>
+                                                    <input type="text" class="form-control" name="pinfl" id="edit_pinfl"
+                                                        placeholder="PINFL kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Shartnoma raqami</label>
+                                                    <input type="text" class="form-control" name="contract_number"
+                                                        id="edit_contract_number"
+                                                        placeholder="Shartnoma raqamini kiriting">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Shartnoma sanasi</label>
+                                                    <input type="date" class="form-control" name="contract_date"
+                                                        id="edit_contract_date">
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Map Picker Modal -->
+<div class="modal fade" id="mapPickerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title"><i class="bi bi-map"></i> Xaritadan lokatsiyani tanlang</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="mapPickerContainer" style="width: 100%; height: 500px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                <button type="button" class="btn btn-primary" onclick="confirmMapLocation()">
+                    <i class="bi bi-check-lg"></i> Tanlash
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ{% if yandex_maps_apikey %}&apikey={{ yandex_maps_apikey }}{% endif %}" type="text/javascript"></script>
+
+<script>
+    // Turi "Yetkazib beruvchi" bo'lganda Tashrif kuni, Kategoriya, Hudud ixtiyoriy
+    function updateAddPartnerRequired() {
+        var typeSelect = document.getElementById('add_partner_type');
+        var isSupplier = typeSelect && typeSelect.value === 'supplier';
+        var ids = ['add_visit_day', 'add_category', 'add_region'];
+        var labels = ['add_visit_day_label', 'add_category_label', 'add_region_label'];
+        var titles = ['Tashrif kuni', 'Kategoriya', 'Hudud'];
+        ids.forEach(function (id, i) {
+            var el = document.getElementById(id);
+            var labelEl = document.getElementById(labels[i]);
+            if (el) {
+                el.required = !isSupplier;
+            }
+            if (labelEl) {
+                labelEl.textContent = (isSupplier ? '' : '*') + titles[i] + (isSupplier ? ' (ixtiyoriy)' : '');
+            }
+        });
+    }
+    function updateEditPartnerRequired() {
+        var typeSelect = document.getElementById('edit_type');
+        var isSupplier = typeSelect && typeSelect.value === 'supplier';
+        var ids = ['edit_visit_day', 'edit_category', 'edit_region'];
+        var labels = ['edit_visit_day_label', 'edit_category_label', 'edit_region_label'];
+        var titles = ['Tashrif kuni', 'Kategoriya', 'Hudud'];
+        ids.forEach(function (id, i) {
+            var el = document.getElementById(id);
+            var labelEl = document.getElementById(labels[i]);
+            if (el) {
+                el.required = !isSupplier;
+            }
+            if (labelEl) {
+                labelEl.textContent = (isSupplier ? '' : '*') + titles[i] + (isSupplier ? ' (ixtiyoriy)' : '');
+            }
+        });
+    }
+    document.getElementById('add_partner_type').addEventListener('change', updateAddPartnerRequired);
+    document.getElementById('edit_type').addEventListener('change', updateEditPartnerRequired);
+    document.getElementById('addPartnerModal').addEventListener('shown.bs.modal', function () {
+        updateAddPartnerRequired();
+    });
+    document.getElementById('editPartnerModal').addEventListener('shown.bs.modal', function () {
+        updateEditPartnerRequired();
+    });
+
+    // Yangi kontragent qo'shish
+    document.querySelector('#addPartnerModal form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+
+        try {
+            const response = await fetch('/partners/add', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                showNotification('Kontragent muvaffaqiyatli saqlandi!', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                const errorText = await response.text();
+                let errorMessage = 'Xatolik yuz berdi!';
+                if (errorText.includes('allaqachon mavjud')) {
+                    const match = errorText.match(/"detail":"([^"]+)"/);
+                    if (match) {
+                        errorMessage = match[1];
+                    }
+                }
+                showNotification(errorMessage, 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification('Tarmoq xatosi yuz berdi!', 'danger');
+        }
+    });
+
+    // Tahrirlash
+    document.querySelector('#editPartnerModal form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const action = this.action;
+
+        try {
+            const response = await fetch(action, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                showNotification('Kontragent muvaffaqiyatli yangilandi!', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                const errorText = await response.text();
+                let errorMessage = 'Xatolik yuz berdi!';
+                if (errorText.includes('allaqachon mavjud')) {
+                    const match = errorText.match(/"detail":"([^"]+)"/);
+                    if (match) {
+                        errorMessage = match[1];
+                    }
+                }
+                showNotification(errorMessage, 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification('Tarmoq xatosi yuz berdi!', 'danger');
+        }
+    });
+
+    function editPartnerFromData(btn) {
+        var id = btn.getAttribute('data-partner-id');
+        var name = btn.getAttribute('data-partner-name') || '';
+        var type = btn.getAttribute('data-partner-type') || 'customer';
+        var phone = btn.getAttribute('data-partner-phone') || '';
+        var address = btn.getAttribute('data-partner-address') || '';
+        var credit = btn.getAttribute('data-partner-credit') || '0';
+        var discount = btn.getAttribute('data-partner-discount') || '0';
+        editPartner(id, name, type, phone, address, parseFloat(credit) || 0, parseFloat(discount) || 0);
+    }
+    function editPartner(id, name, type, phone, address, credit_limit, discount_percent) {
+        document.getElementById('editPartnerForm').action = '/partners/edit/' + id;
+        document.getElementById('edit_name').value = name || '';
+        document.getElementById('edit_type').value = type || 'customer';
+        document.getElementById('edit_phone').value = phone || '';
+        document.getElementById('edit_address').value = address || '';
+        document.getElementById('edit_credit_limit').value = credit_limit != null ? credit_limit : 0;
+        document.getElementById('edit_discount_percent').value = discount_percent != null ? discount_percent : 0;
+
+        // Clear other fields (will be populated from backend if needed)
+        document.getElementById('edit_legal_name').value = '';
+        document.getElementById('edit_contact_person').value = '';
+        document.getElementById('edit_phone2').value = '';
+        document.getElementById('edit_landmark').value = '';
+        document.getElementById('edit_notes').value = '';
+        document.getElementById('edit_visit_day').value = '';
+        document.getElementById('edit_category').value = '';
+        document.getElementById('edit_region').value = '';
+        document.getElementById('editPartnerLocation').value = '';
+        document.getElementById('editPartnerLatitude').value = '';
+        document.getElementById('editPartnerLongitude').value = '';
+        document.getElementById('edit_customer_type').value = '';
+        document.getElementById('edit_sales_channel').value = '';
+        document.getElementById('edit_product_categories').value = '';
+        document.getElementById('edit_inn').value = '';
+        document.getElementById('edit_account').value = '';
+        document.getElementById('edit_bank').value = '';
+        document.getElementById('edit_mfo').value = '';
+        document.getElementById('edit_oked').value = '';
+        document.getElementById('edit_pinfl').value = '';
+        document.getElementById('edit_contract_number').value = '';
+        document.getElementById('edit_contract_date').value = '';
+
+        updateEditPartnerRequired();
+        var modal = new bootstrap.Modal(document.getElementById('editPartnerModal'));
+        modal.show();
+    }
+
+    function deletePartnerFromData(btn) {
+        var id = btn.getAttribute('data-partner-id');
+        var name = (btn.getAttribute('data-partner-name') || '').replace(/"/g, '&quot;');
+        deletePartner(id, name);
+    }
+    function deletePartner(id, name) {
+        if (confirm('Haqiqatan ham "' + name + '" kontragentni o\'chirmoqchimisiz?')) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/partners/delete/' + id;
+            var csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            csrfInput.value = meta ? meta.getAttribute('content') : '';
+            form.appendChild(csrfInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    // Notification ko'rsatish funksiyasi
+    function showNotification(message, type = 'info') {
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+        }
+
+        const toastId = 'toast_' + Date.now();
+        const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, {
+            autohide: true,
+            delay: 5000
+        });
+        toast.show();
+
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            toastElement.remove();
+        });
+    }
+
+    // Photo preview
+    function previewPartnerPhoto(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const preview = document.getElementById('partnerPhotoPreview');
+                preview.innerHTML = `<img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // GPS location (faqat HTTPS yoki localhost da ishlaydi)
+    function getPartnerLocation() {
+        if (!window.isSecureContext) {
+            showNotification('GPS faqat xavfsiz ulanishda (HTTPS) ishlaydi. "Xaritadan tanlash" tugmasidan foydalaning yoki saytni HTTPS orqali oching.', 'warning');
+            return;
+        }
+        if (!navigator.geolocation) {
+            showNotification('GPS qo\'llab-quvvatlanmaydi', 'danger');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition((position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            document.getElementById('partnerLatitude').value = lat;
+            document.getElementById('partnerLongitude').value = lng;
+            document.getElementById('partnerLocation').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+            showNotification('GPS koordinatalar olindi!', 'success');
+        }, (error) => {
+            var msg = error.message || 'Noma\'lum xato';
+            if (msg.indexOf('secure') !== -1 || error.code === 1) {
+                msg = 'GPS faqat HTTPS da ishlaydi. "Xaritadan tanlash" tugmasidan foydalaning.';
+            }
+            showNotification('GPS xatosi: ' + msg, 'warning');
+        }, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
+    }
+
+    // Edit partner photo preview
+    function previewEditPartnerPhoto(event) {
+        const file = event.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const preview = document.getElementById('editPartnerPhotoPreview');
+                preview.innerHTML = `<img src="${e.target.result}" style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">`;
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+
+    // Edit partner GPS location (faqat HTTPS yoki localhost da ishlaydi)
+    function getEditPartnerLocation() {
+        if (!window.isSecureContext) {
+            showNotification('GPS faqat xavfsiz ulanishda (HTTPS) ishlaydi. "Xaritadan tanlash" tugmasidan foydalaning yoki saytni HTTPS orqali oching.', 'warning');
+            return;
+        }
+        if (!navigator.geolocation) {
+            showNotification('GPS qo\'llab-quvvatlanmaydi', 'danger');
+            return;
+        }
+
+        navigator.geolocation.getCurrentPosition((position) => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+
+            document.getElementById('editPartnerLatitude').value = lat;
+            document.getElementById('editPartnerLongitude').value = lng;
+            document.getElementById('editPartnerLocation').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+            showNotification('GPS koordinatalar olindi!', 'success');
+        }, (error) => {
+            var msg = error.message || 'Noma\'lum xato';
+            if (msg.indexOf('secure') !== -1 || error.code === 1) {
+                msg = 'GPS faqat HTTPS da ishlaydi. "Xaritadan tanlash" tugmasidan foydalaning.';
+            }
+            showNotification('GPS xatosi: ' + msg, 'warning');
+        }, {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        });
+    }
+
+    // Map picker variables
+    let mapPickerInstance = null;
+    let mapPickerPlacemark = null;
+    let selectedMapCoords = null;
+    let mapPickerMode = 'add'; // 'add' or 'edit'
+
+    // Open map picker
+    function openPartnerMapPicker() {
+        mapPickerMode = 'add';
+        openMapPicker();
+    }
+
+    function openEditPartnerMapPicker() {
+        mapPickerMode = 'edit';
+        openMapPicker();
+    }
+
+    function openMapPicker() {
+        const modal = new bootstrap.Modal(document.getElementById('mapPickerModal'));
+        modal.show();
+
+        // Initialize map after modal is shown
+        document.getElementById('mapPickerModal').addEventListener('shown.bs.modal', function () {
+            if (!mapPickerInstance) {
+                ymaps.ready(initMapPicker);
+            }
+        }, { once: true });
+    }
+
+    function initMapPicker() {
+        // Default center - Tashkent
+        const defaultCenter = [41.2995, 69.2401];
+
+        // Get current location if available
+        let currentLat, currentLng;
+        if (mapPickerMode === 'add') {
+            currentLat = document.getElementById('partnerLatitude').value;
+            currentLng = document.getElementById('partnerLongitude').value;
+        } else {
+            currentLat = document.getElementById('editPartnerLatitude').value;
+            currentLng = document.getElementById('editPartnerLongitude').value;
+        }
+
+        const center = (currentLat && currentLng) ? [parseFloat(currentLat), parseFloat(currentLng)] : defaultCenter;
+
+        mapPickerInstance = new ymaps.Map('mapPickerContainer', {
+            center: center,
+            zoom: 15,
+            controls: ['zoomControl', 'searchControl', 'geolocationControl']
+        });
+
+        // Add placemark if location exists
+        if (currentLat && currentLng) {
+            mapPickerPlacemark = new ymaps.Placemark(center, {
+                balloonContent: 'Tanlangan lokatsiya'
+            }, {
+                preset: 'islands#redDotIcon',
+                draggable: true
+            });
+            mapPickerInstance.geoObjects.add(mapPickerPlacemark);
+            selectedMapCoords = center;
+
+            // Update coords on drag
+            mapPickerPlacemark.events.add('dragend', function () {
+                selectedMapCoords = mapPickerPlacemark.geometry.getCoordinates();
+            });
+        }
+
+        // Click on map to set location
+        mapPickerInstance.events.add('click', function (e) {
+            const coords = e.get('coords');
+
+            if (mapPickerPlacemark) {
+                mapPickerInstance.geoObjects.remove(mapPickerPlacemark);
+            }
+
+            mapPickerPlacemark = new ymaps.Placemark(coords, {
+                balloonContent: 'Tanlangan lokatsiya'
+            }, {
+                preset: 'islands#redDotIcon',
+                draggable: true
+            });
+
+            mapPickerInstance.geoObjects.add(mapPickerPlacemark);
+            selectedMapCoords = coords;
+
+            // Update coords on drag
+            mapPickerPlacemark.events.add('dragend', function () {
+                selectedMapCoords = mapPickerPlacemark.geometry.getCoordinates();
+            });
+        });
+    }
+
+    function confirmMapLocation() {
+        if (!selectedMapCoords) {
+            showNotification('Xaritadan lokatsiyani tanlang!', 'warning');
+            return;
+        }
+
+        const lat = selectedMapCoords[0];
+        const lng = selectedMapCoords[1];
+
+        if (mapPickerMode === 'add') {
+            document.getElementById('partnerLatitude').value = lat;
+            document.getElementById('partnerLongitude').value = lng;
+            document.getElementById('partnerLocation').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        } else {
+            document.getElementById('editPartnerLatitude').value = lat;
+            document.getElementById('editPartnerLongitude').value = lng;
+            document.getElementById('editPartnerLocation').value = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+        }
+
+        // Close modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('mapPickerModal'));
+        modal.hide();
+
+        showNotification('Lokatsiya tanlandi!', 'success');
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+            <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> Tovarlar tekshiruvi — bir xil nomdagi tovarlar</h5>
+            <a href="/products" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Tovarlar ro'yxati</a>
+        </div>
+        <div class="card-body">
+            <p class="text-muted small mb-3">
+                Quyida bir xil nom bilan yozilgan tovarlar ko'rsatiladi. Bitta tovar bitta nom va bitta ID bilan bo'lishi kerak.
+                Dublikatlarni tahrirlash orqali nomini o'zgartiring yoki keraksizini o'chiring.
+            </p>
+            {% if duplicate_groups %}
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Takrorlanuvchi nom</th>
+                            <th>Tovarlar (ID, kod, havola)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for group in duplicate_groups %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td><strong>{{ group[0].name }}</strong></td>
+                            <td>
+                                <ul class="list-unstyled mb-0">
+                                    {% for p in group %}
+                                    <li class="mb-1">
+                                        <a href="/products/{{ p.id }}">{{ p.code or '—' }}</a>
+                                        — {{ p.name }}
+                                        <span class="text-muted">(ID: {{ p.id }})</span>
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-success mb-0">
+                <i class="bi bi-check-circle"></i> Bir xil nomdagi tovarlar topilmadi. Barcha tovar nomlari bitta-bitta.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

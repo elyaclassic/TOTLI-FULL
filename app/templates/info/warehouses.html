@@ -1,0 +1,290 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="card mb-3">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <h5 class="mb-0"><i class="bi bi-building text-secondary"></i> Omborlar</h5>
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <form action="/info/warehouses/export" method="get" class="d-inline">
+                        <button type="submit" class="btn btn-outline-success btn-sm">
+                            <i class="bi bi-file-earmark-excel"></i> Export
+                        </button>
+                    </form>
+                    <a href="/info/warehouses/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza yuklab olish">
+                        <i class="bi bi-download"></i> Andoza
+                    </a>
+                    <form action="/info/warehouses/import" method="post" enctype="multipart/form-data" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                        <label class="btn btn-outline-primary btn-sm mb-0">
+                            <i class="bi bi-upload"></i> Import
+                            <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
+                        </label>
+                    </form>
+                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addWarehouseModal">
+                        <i class="bi bi-plus-circle"></i> Yaratish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Nomi</th>
+                            <th>Bo'lim</th>
+                            <th>Manzil</th>
+                            <th>Holati</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for warehouse in warehouses %}
+                    <tr>
+                        <td>{{ warehouse.id }}</td>
+                        <td><strong>{{ warehouse.name }}</strong></td>
+                        <td>
+                            {% if warehouse.department %}
+                            <span class="badge bg-info">{{ warehouse.department.name }}</span>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ warehouse.address or '-' }}</td>
+                        <td>
+                            {% if warehouse.is_active %}
+                            <span class="badge bg-success">Faol</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Nofaol</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-primary" title="Tahrirlash"
+                                onclick="editWarehouse({{ warehouse.id }}, `{{ warehouse.name }}`, `{{ warehouse.address or '' }}`, {{ warehouse.department_id or 'null' }})">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" title="O'chirish"
+                                onclick="deleteWarehouse({{ warehouse.id }}, `{{ warehouse.name }}`)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-muted text-center py-4">Hozircha omborlar yo'q. Yangi ombor qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
+                        </tr>
+                        {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Yangi ombor qo'shish modal -->
+<div class="modal fade" id="addWarehouseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="addWarehouseForm">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi ombor</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2">
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Nomi *</label>
+                        <input type="text" class="form-control form-control-sm" name="name" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Bo'lim</label>
+                        <select class="form-select form-select-sm" name="department_id">
+                            <option value="">— Tanlanmagan —</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Manzil</label>
+                        <input type="text" class="form-control form-control-sm" name="address">
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tahrirlash modal -->
+<div class="modal fade" id="editWarehouseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="editWarehouseForm" method="POST">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Omborni tahrirlash</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2">
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Nomi *</label>
+                        <input type="text" class="form-control form-control-sm" name="name" id="edit_name" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Bo'lim</label>
+                        <select class="form-select form-select-sm" name="department_id" id="edit_department_id">
+                            <option value="">— Tanlanmagan —</option>
+                            {% for dept in departments %}
+                            <option value="{{ dept.id }}">{{ dept.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Manzil</label>
+                        <input type="text" class="form-control form-control-sm" name="address" id="edit_address">
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Yangi ombor qo'shish
+    document.getElementById('addWarehouseForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+
+        try {
+            const response = await fetch('/info/warehouses/add', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                showNotification('Ombor muvaffaqiyatli saqlandi!', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                const errorText = await response.text();
+                let errorMessage = 'Xatolik yuz berdi!';
+                if (errorText.includes('allaqachon mavjud')) {
+                    const match = errorText.match(/"detail":"([^"]+)"/);
+                    if (match) {
+                        errorMessage = match[1];
+                    }
+                }
+                showNotification(errorMessage, 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification('Tarmoq xatosi yuz berdi!', 'danger');
+        }
+    });
+
+    // Tahrirlash
+    document.getElementById('editWarehouseForm').addEventListener('submit', async function (e) {
+        e.preventDefault();
+
+        const formData = new FormData(this);
+        const action = this.action;
+
+        try {
+            const response = await fetch(action, {
+                method: 'POST',
+                body: formData
+            });
+
+            if (response.ok) {
+                showNotification('Ombor muvaffaqiyatli yangilandi!', 'success');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1000);
+            } else {
+                showNotification('Xatolik yuz berdi!', 'danger');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showNotification('Tarmoq xatosi yuz berdi!', 'danger');
+        }
+    });
+
+    function editWarehouse(id, name, address, departmentId) {
+        document.getElementById('editWarehouseForm').action = '/info/warehouses/edit/' + id;
+        document.getElementById('edit_name').value = name;
+        document.getElementById('edit_address').value = address;
+        document.getElementById('edit_department_id').value = departmentId || '';
+
+        var modal = new bootstrap.Modal(document.getElementById('editWarehouseModal'));
+        modal.show();
+    }
+
+    function deleteWarehouse(id, name) {
+        if (confirm('Haqiqatan ham "' + name + '" omborni o\'chirmoqchimisiz?')) {
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/info/warehouses/delete/' + id;
+            var csrfInput = document.createElement('input');
+            csrfInput.type = 'hidden';
+            csrfInput.name = 'csrf_token';
+            var meta = document.querySelector('meta[name="csrf-token"]');
+            csrfInput.value = meta ? meta.getAttribute('content') : '';
+            form.appendChild(csrfInput);
+            document.body.appendChild(form);
+            form.submit();
+        }
+    }
+
+    // Notification ko'rsatish funksiyasi
+    function showNotification(message, type = 'info') {
+        let toastContainer = document.getElementById('toastContainer');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toastContainer';
+            toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+            toastContainer.style.zIndex = '9999';
+            document.body.appendChild(toastContainer);
+        }
+
+        const toastId = 'toast_' + Date.now();
+        const toastHtml = `
+        <div id="${toastId}" class="toast align-items-center text-white bg-${type} border-0" role="alert">
+            <div class="d-flex">
+                <div class="toast-body">
+                    <i class="bi bi-${type === 'success' ? 'check-circle' : 'exclamation-triangle'}"></i>
+                    ${message}
+                </div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
+    `;
+
+        toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+
+        const toastElement = document.getElementById(toastId);
+        const toast = new bootstrap.Toast(toastElement, {
+            autohide: true,
+            delay: 5000
+        });
+        toast.show();
+
+        toastElement.addEventListener('hidden.bs.toast', function () {
+            toastElement.remove();
+        });
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-calculator"></i> Oylik hisoblash</h5>
+        <div>
+            <a href="/employees/salary/new" class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Yaratish</a>
+            <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-badge"></i> Xodimlar</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Oylik hujjatlar ro'yxati</div>
+        <div class="card-body p-0">
+            {% if documents %}
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Hujjat raqami</th>
+                        <th>Yil</th>
+                        <th>Oy</th>
+                        <th>Holat</th>
+                        <th>Amallar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td><strong>{{ doc.number }}</strong></td>
+                        <td>{{ doc.year }}</td>
+                        <td>{{ doc.month }} — {% if doc.month == 1 %}Yanvar{% elif doc.month == 2 %}Fevral{% elif doc.month == 3 %}Mart{% elif doc.month == 4 %}Aprel{% elif doc.month == 5 %}May{% elif doc.month == 6 %}Iyun{% elif doc.month == 7 %}Iyul{% elif doc.month == 8 %}Avgust{% elif doc.month == 9 %}Sentabr{% elif doc.month == 10 %}Oktabr{% elif doc.month == 11 %}Noyabr{% else %}Dekabr{% endif %}</td>
+                        <td>
+                            {% if doc.status == 'confirmed' %}
+                            <span class="badge bg-success">Tasdiqlangan</span>
+                            {% elif doc.status == 'cancelled' %}
+                            <span class="badge bg-secondary">Bekor qilindi</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">Qoralama</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="/employees/salary?year={{ doc.year }}&month={{ doc.month }}" class="btn btn-sm btn-outline-primary" title="Tahrirlash">O'zgartirish</a>
+                            {% if doc.status == 'draft' %}
+                            <form method="post" action="/employees/salary/confirm" class="d-inline">
+                                <input type="hidden" name="year" value="{{ doc.year }}">
+                                <input type="hidden" name="month" value="{{ doc.month }}">
+                                <button type="submit" class="btn btn-sm btn-success">Tasdiqlash</button>
+                            </form>
+                            <form method="post" action="/employees/salary/cancel" class="d-inline">
+                                <input type="hidden" name="year" value="{{ doc.year }}">
+                                <input type="hidden" name="month" value="{{ doc.month }}">
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Bekor qilish</button>
+                            </form>
+                            {% elif doc.status == 'confirmed' %}
+                            <form method="post" action="/employees/salary/cancel" class="d-inline">
+                                <input type="hidden" name="year" value="{{ doc.year }}">
+                                <input type="hidden" name="month" value="{{ doc.month }}">
+                                <button type="submit" class="btn btn-sm btn-outline-warning">Bekor qilish</button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="/employees/salary/delete-doc" class="d-inline" onsubmit="return confirm('Hujjat va shu oy uchun barcha oylik yozuvlari o\'chiriladi. Davom etasizmi?');">
+                                <input type="hidden" name="year" value="{{ doc.year }}">
+                                <input type="hidden" name="month" value="{{ doc.month }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">O'chirish</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="text-center text-muted py-5">
+                <i class="bi bi-inbox fs-1"></i><br>
+                Oylik hujjatlari yo'q.<br>
+                <a href="/employees/salary/new" class="btn btn-success btn-sm mt-2"><i class="bi bi-plus-circle"></i> Birinchi hujjatni yaratish</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

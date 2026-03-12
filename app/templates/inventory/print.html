@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventarizatsiya — {{ doc.number }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; }
+        .no-print { margin-bottom: 12px; }
+        @media print { .no-print { display: none; } }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+        th { background: #f0f0f0; }
+        .header { margin-bottom: 16px; }
+        .header h1 { margin: 0 0 4px 0; font-size: 18px; }
+        .meta { color: #555; font-size: 11px; }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <a href="/inventory/{{ doc.id }}">← Orqaga</a> &nbsp;
+        <button onclick="window.print();">Chop etish</button>
+    </div>
+    <div class="header">
+        <h1>Inventarizatsiya</h1>
+        <div class="meta">
+            Raqam: <strong>{{ doc.number }}</strong> &nbsp;|&nbsp;
+            Sana: {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} &nbsp;|&nbsp;
+            Ombor: {{ warehouse.name if warehouse else '-' }}
+        </div>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>№</th>
+                <th>Tovar</th>
+                <th>Kod</th>
+                <th>Miqdor</th>
+                {% if show_tannarx %}<th>Tannarx (so'm)</th><th>Sotuv narx (so'm)</th>{% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in rows %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ row.product_name }}</td>
+                <td>{{ row.product_code }}</td>
+                <td>{{ "{:,.3f}".format(row.quantity) }}</td>
+                {% if show_tannarx %}<td>{{ "{:,.0f}".format(row.cost_price) }}</td><td>{{ "{:,.0f}".format(row.sale_price) }}</td>{% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="6" class="text-center">Qatorlar yo'q</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p style="margin-top: 16px; font-size: 11px; color: #555;">
+        Jami tannarx: {{ "{:,.0f}".format(doc.total_tannarx or 0) }} so'm &nbsp;|&nbsp; Jami sotuv: {{ "{:,.0f}".format(doc.total_sotuv or 0) }} so'm
+    </p>
+</body>
+</html>

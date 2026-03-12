@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+{% block extra_css %}
+<link href="/static/css/production.css" rel="stylesheet">
+{% endblock %}
+{% block content %}
+<style>
+    .production-orders-wrap .card.mb-0 + .card { margin-top: 0 !important; }
+    .production-orders-wrap .card .card-body.p-0 { padding: 0 !important; }
+    .production-orders-wrap .table-responsive { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .production-orders-wrap #productionTable { font-size: 0.85rem; }
+    .production-orders-wrap #productionTable td:last-child { min-width: 1px; white-space: normal; }
+    .production-orders-wrap #productionTable .amallar-cell { min-width: 1px; max-width: 240px; }
+    .production-orders-wrap #productionTable .amallar-cell .form-select-sm { min-width: 72px; max-width: 95px; font-size: 0.8rem; padding: 0.2rem 0.35rem; }
+    .production-orders-wrap #productionTable .amallar-cell form { display: inline; vertical-align: middle; margin: 1px; }
+    .production-orders-wrap #productionTable .amallar-cell .btn { padding: 0.25rem 0.4rem; font-size: 0.8rem; }
+    .production-orders-wrap #productionTable .col-retsept { max-width: 140px; }
+    .production-orders-wrap #productionTable .col-retsept a { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .production-orders-wrap #productionTable .col-ombor { max-width: 100px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .production-orders-wrap #productionTable .col-sana { white-space: nowrap; font-size: 0.8rem; }
+    .production-orders-wrap #productionTable th { font-weight: 600; white-space: nowrap; }
+    .production-orders-wrap #productionTable .bosqich-desc { font-size: 0.75rem; max-width: 85px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .production-orders-wrap #productionTable td, .production-orders-wrap #productionTable th { padding: 0.35rem 0.5rem; vertical-align: middle; }
+    @media (max-width: 767px) {
+        .production-orders-wrap .production-table-wrap { display: none !important; }
+        .production-orders-wrap .production-orders-cards { display: block; }
+    }
+    @media (min-width: 768px) {
+        .production-orders-wrap .production-orders-cards { display: none !important; }
+    }
+    .production-orders-wrap .production-order-card { border: 1px solid rgba(0,0,0,.1); border-radius: 8px; margin-bottom: 12px; overflow: hidden; }
+    .production-orders-wrap .production-order-card .card-body { padding: 12px; }
+    .production-orders-wrap .production-order-card .prod-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 6px; font-size: 0.9rem; }
+    .production-orders-wrap .production-order-card .prod-row:last-child { margin-bottom: 0; }
+    .production-orders-wrap .production-order-card .prod-actions { flex-wrap: wrap; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid #eee; }
+    .production-orders-wrap .production-order-card select.form-select-sm { min-width: 120px; }
+    #production-error-alert .production-error-detail { font-size: 1rem; }
+    .production-orders-wrap .filter-card .card-header { background: #f8f9fa; border-bottom: 1px solid #eee; font-weight: 500; }
+    .production-orders-wrap .production-table-wrap .card-header { background: #f8f9fa; border-bottom: 1px solid #eee; }
+</style>
+{% if error == "insufficient_stock" %}
+<div id="production-error-alert" class="alert alert-danger alert-dismissible fade show mb-0" role="alert">
+    <strong>Omborda yetarli xom ashyo yo'q.</strong>
+    {% if error_detail %}<br><span class="production-error-detail">{{ error_detail|e }}</span>{% endif %}
+    <br><small class="text-muted">Qoldiq faqat buyurtmadagi <strong>1-ombor (xom ashyo ombori)</strong> bo'yicha tekshiriladi — kerakli mahsulotni shu omborga kiriting (kirim yoki inventarizatsiya).</small>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error == "revert" %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <strong>Tasdiqni bekor qilish mumkin emas.</strong> {% if error_detail %}{{ error_detail }}{% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error == "complete" %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <strong>Tasdiqlash xatosi.</strong> {% if error_detail %}{{ error_detail }}{% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error == "stage" %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <strong>Bosqich xatosi.</strong> {% if error_detail %}{{ error_detail }}{% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if error in ("not_found", "forbidden", "invalid") and error_detail %}
+<div id="production-error-alert" class="alert alert-warning alert-dismissible fade show" role="alert">
+    {{ error_detail|e }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('operator_set') %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-check-circle"></i> Operator belgilandi. Oylik hisoblash sahifasida shu oy uchun kg avtomatik chiqadi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('fix_dates') %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-calendar-check"></i> {{ request.query_params.get('fix_dates') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('bulk_reverted') %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-arrow-counterclockwise"></i> Tasdiqlash bekor qilindi: {{ request.query_params.get('bulk_reverted') }} ta buyurtma.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('bulk_completed') %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-check-all"></i> Tasdiqlandi: {{ request.query_params.get('bulk_completed') }} ta buyurtma.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% set _display_total_t = total_output_kg|default(0)|float %}
+{% set _display_total_y = total_yarim_tayyor_kg|default(0)|float %}
+{% if (_display_total_t == 0 and _display_total_y == 0) and productions %}
+{% set _sums = namespace(t=0.0, y=0.0) %}
+{% for _p in productions %}
+  {% set _completed = (_p.status or '') == 'completed' %}
+  {% set _out_wh = ((_p.output_warehouse.name or '')|lower) if _p.output_warehouse else '' %}
+  {% set _is_yarim = 'yarim' in _out_wh %}
+  {% set _is_qiyom = _p.recipe and ('qiyom' in ((_p.recipe.name or '')|lower)) %}
+  {% if _completed %}
+  {% if _is_yarim and not _is_qiyom %}
+    {% set _sums.y = _sums.y + (_p.yarim_tayyor_kg|default(0)|float) %}
+  {% elif not _is_yarim %}
+    {% set _rn = (_p.recipe.name or '')|lower if _p.recipe else '' %}
+    {% set _kpu = 0.25 if ('250gr' in _rn or '250 gr' in _rn) else (0.4 if ('400gr' in _rn or '400 gr' in _rn) else (5.0 if ('5kg' in _rn or '5 kg' in _rn) else (4.0 if ('4kg' in _rn or '4 kg' in _rn) else (3.0 if ('3kg' in _rn or '3 kg' in _rn) else (2.0 if ('2kg' in _rn or '2 kg' in _rn) else (1.0 if ('1kg' in _rn or '1 kg' in _rn) else (_p.recipe.output_quantity if _p.recipe and _p.recipe.output_quantity else 1))))))) %}
+    {% set _sums.t = _sums.t + ((_p.quantity|default(0)|float) * _kpu) %}
+  {% endif %}
+  {% endif %}
+{% endfor %}
+{% set _display_total_t = _sums.t %}
+{% set _display_total_y = _sums.y %}
+{% endif %}
+<div class="container-fluid production-page production-orders-wrap">
+<div class="page-header d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+    <h4 class="mb-0"><i class="bi bi-clipboard-check"></i> Ishlab chiqarish buyurtmalari</h4>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+        {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar'] %}
+        <a href="/production/by-operator" class="btn btn-outline-primary btn-sm"><i class="bi bi-person-badge"></i> Operator bo'yicha</a>
+        <form method="post" action="/production/orders/fix-dates-from-numbers" class="d-inline" onsubmit="return confirm('Barcha ishlab chiqarish hujjatlarida sana hujjat raqamidan (PR-YYYYMMDD) o\'rnatiladi. Davom etasizmi?');">
+            <button type="submit" class="btn btn-outline-secondary btn-sm" title="Tasdiqni bekor qilib qayta tasdiqlaganda sana o\'zgargan hujjatlar uchun"><i class="bi bi-calendar-event"></i> Sanani tuzatish</button>
+        </form>
+        {% endif %}
+        <a href="/production/new" class="btn btn-success btn-sm"><i class="bi bi-plus-circle"></i> Yaratish</a>
+    </div>
+</div>
+
+<!-- Filtrlar -->
+<div class="card filter-card mb-3">
+    <div class="card-header py-2 px-3">
+        <span class="small text-muted"><i class="bi bi-funnel"></i> Filtrlar</span>
+    </div>
+    <div class="card-body pt-2 pb-3">
+        <form method="get" action="/production/orders" class="d-flex flex-wrap align-items-center gap-2 mb-3" id="productionOrdersFilterForm">
+            <label class="form-label mb-0 small text-muted">Sana:</label>
+            <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_from or '' }}" title="Dan">
+            <span class="small text-muted">—</span>
+            <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_to or '' }}" title="Gacha">
+            {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar'] %}
+            <label class="form-label mb-0 small text-muted ms-1">Operator:</label>
+            <select name="operator_id" class="form-select form-select-sm" style="width: auto; max-width: 200px;" onchange="this.form.submit()">
+                <option value="">Barchasi</option>
+                {% for emp in employees %}
+                <option value="{{ emp.id }}" {% if filter_operator_id == emp.id %}selected{% endif %}>{{ emp.full_name }}</option>
+                {% endfor %}
+            </select>
+            {% endif %}
+            <label class="form-label mb-0 small text-muted ms-1">Qidiruv:</label>
+            <input type="text" name="q" class="form-control form-control-sm" style="width: 160px;" value="{{ filter_q or '' }}" autocomplete="off" placeholder="Raqam, retsept...">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
+            <a href="/production/orders?clear=1" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+        </form>
+        <div class="d-flex gap-2 flex-wrap align-items-center" id="statusFilterWrap">
+            <button type="button" class="btn btn-sm btn-outline-secondary status-filter-btn active" data-status="all" onclick="filterStatus('all', this)">
+                Barchasi ({{ productions|length }})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-warning status-filter-btn" data-status="draft" onclick="filterStatus('draft', this)">
+                Kutilmoqda ({{ productions|selectattr('status', 'eq', 'draft')|list|length }})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-info status-filter-btn" data-status="in_progress" onclick="filterStatus('in_progress', this)">
+                Jarayonda ({{ productions|selectattr('status', 'eq', 'in_progress')|list|length }})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-success status-filter-btn" data-status="completed" onclick="filterStatus('completed', this)">
+                Yakunlangan ({{ productions|selectattr('status', 'eq', 'completed')|list|length }})
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-danger status-filter-btn" data-status="cancelled" onclick="filterStatus('cancelled', this)">
+                Bekor qilingan ({{ productions|selectattr('status', 'eq', 'cancelled')|list|length }})
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Jadval (desktop) -->
+<div class="card production-table-wrap">
+    <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span class="small fw-semibold"><i class="bi bi-list-ul"></i> Buyurtmalar</span>
+        <span class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="badge bg-secondary">{{ productions|length }} ta</span>
+            <span class="small text-muted">|</span>
+            <span class="small" title="Shu ro'yxatdagi barcha buyurtmalar bo'yicha jami tayyor mahsulot (kg)">Jami tayyor: <strong class="text-success">{{ "{:,.2f}".format(_display_total_t) }}</strong> kg</span>
+            <span class="small text-muted">|</span>
+            <span class="small" title="Shu ro'yxatdagi barcha buyurtmalar bo'yicha jami yarim tayyor / xom ashyo (kg)">Jami y.t.: <strong class="text-primary">{{ "{:,.2f}".format(_display_total_y) }}</strong> kg</span>
+        </span>
+        {% if current_user and current_user.role == 'admin' %}
+        <form id="bulkForm" method="post" class="d-flex align-items-center gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button type="submit" formaction="/production/orders/bulk-revert" class="btn btn-sm btn-outline-warning" title="Tanlangan yakunlangan buyurtmalar uchun tasdiqni bekor qilish">
+                <i class="bi bi-arrow-counterclockwise"></i> Tasdiqlashni bekor qilish
+            </button>
+            <button type="submit" formaction="/production/orders/bulk-complete" class="btn btn-sm btn-outline-success" title="Tanlangan kutilmoqda/jarayondagi buyurtmalarni yakunlash">
+                <i class="bi bi-check-all"></i> Tasdiqlash
+            </button>
+        </form>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+        <table class="table table-hover table-sm mb-0">
+            <thead class="table-light">
+                <tr>
+                    {% if current_user and current_user.role == 'admin' %}
+                    <th class="text-center" style="width: 36px;">
+                        <input type="checkbox" id="selectAllProd" class="form-check-input" title="Barchasini tanlash">
+                    </th>
+                    {% endif %}
+                    <th>Raqam</th>
+                    <th>Sana</th>
+                    <th>Retsept</th>
+                    <th class="text-end">Miqdor</th>
+                    <th class="text-end" title="Tayyor mahsulot (kg)">T.kg</th>
+                    <th class="text-end" title="Yarim tayyor / xom ashyo (kg)">Y.t.kg</th>
+                    <th>Bosqich</th>
+                    <th>Uskuna</th>
+                    <th>Operator</th>
+                    <th>1-ombor</th>
+                    <th>2-ombor</th>
+                    <th>Holat</th>
+                    <th class="amallar-cell">Amallar</th>
+                </tr>
+            </thead>
+            <tbody id="productionTable">
+                {% for prod in productions %}
+                <tr data-status="{{ prod.status }}">
+                    {% if current_user and current_user.role == 'admin' %}
+                    <td class="text-center">
+                        <input type="checkbox" form="bulkForm" name="prod_ids" value="{{ prod.id }}" class="form-check-input prod-row-cb">
+                    </td>
+                    {% endif %}
+                    <td><strong>{{ prod.number }}</strong></td>
+                    <td class="col-sana" title="{{ prod.date.strftime('%d.%m.%Y %H:%M') }}">{{ prod.date.strftime('%d.%m.%y %H:%M') }}</td>
+                    <td class="col-retsept" title="{{ prod.recipe.name if prod.recipe else '' }}">
+                        {% if prod.recipe %}
+                        <a href="/production/{{ prod.id }}/materials">{{ prod.recipe.name }}</a>
+                        {% else %}-{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% set unit_name = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
+                        {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
+                        {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+                        {% set qty_kg = prod.quantity * _kg_per_unit %}
+                        {% if (unit_name or '')|lower == 'kg' %}{{ "%.2f"|format(prod.quantity) }} kg{% else %}{{ "%.2f"|format(prod.quantity) }} {{ unit_name }}<br><small class="text-muted">({{ "%.2f"|format(qty_kg) }} kg)</small>{% endif %}
+                    </td>
+                    <td class="text-end">{% set _tkg = prod.output_kg|default(qty_kg) %}{% if _tkg %}{{ "%.2f"|format(_tkg) }}{% else %}-{% endif %}</td>
+                    <td class="text-end">{% set _ykg = prod.yarim_tayyor_kg|default(0) %}{% if _ykg %}{{ "%.2f"|format(_ykg) }}{% else %}-{% endif %}</td>
+                    <td>
+                        {% set cur = getattr(prod, 'current_stage', 1) or 1 %}
+                        {% set r_stages = (prod.recipe.stages|sort(attribute='stage_number')) if (prod.recipe and prod.recipe.stages) else [] %}
+                        {% set eff_max = (r_stages|map(attribute='stage_number')|list|max) if r_stages else 2 %}
+                        {% if r_stages %}
+                            {% for s in r_stages %}
+                                {% if s.stage_number < cur %}
+                                    <span class="badge bg-success me-1" title="{{ s.name }}">{{ s.stage_number }}</span>
+                                {% elif s.stage_number == cur and prod.status != 'completed' %}
+                                    <span class="badge bg-primary me-1" title="{{ s.name }}">{{ s.stage_number }}</span>
+                                {% elif s.stage_number == cur and prod.status == 'completed' %}
+                                    <span class="badge bg-success me-1">{{ s.stage_number }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary me-1">{{ s.stage_number }}</span>
+                                {% endif %}
+                            {% endfor %}
+                            <small class="d-block text-muted mt-1 bosqich-desc" title="{% for s in r_stages %}{% if s.stage_number == cur %}{{ s.name }}{% endif %}{% endfor %}">
+                                {% for s in r_stages %}{% if s.stage_number == cur %}{{ s.name }}{% endif %}{% endfor %}
+                            </small>
+                        {% else %}
+                            {% set default_max = 2 %}
+                            {% for sn in [1, 2] %}
+                                {% if sn < cur %}
+                                    <span class="badge bg-success me-1" title="{{ stage_names.get(sn, '') }}">{{ sn }}</span>
+                                {% elif sn == cur and prod.status != 'completed' %}
+                                    <span class="badge bg-primary me-1" title="{{ stage_names.get(sn, '') }}">{{ sn }}</span>
+                                {% elif sn == cur and prod.status == 'completed' %}
+                                    <span class="badge bg-success me-1">{{ sn }}</span>
+                                {% else %}
+                                    <span class="badge bg-secondary me-1">{{ sn }}</span>
+                                {% endif %}
+                            {% endfor %}
+                            <small class="d-block text-muted mt-1 bosqich-desc" title="{{ stage_names.get(cur, '') if stage_names else '' }}">{{ stage_names.get(cur, '') if stage_names else '' }}</small>
+                        {% endif %}
+                    </td>
+                    <td class="col-ombor" title="{{ prod.machine.name if prod.machine else '' }}">{{ prod.machine.name if prod.machine else '-' }}</td>
+                    <td style="max-width:90px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ prod.operator.full_name if prod.operator else (prod.user.full_name if prod.user else '') }}">{{ prod.operator.full_name if prod.operator else (prod.user.full_name if prod.user else '-') }}</td>
+                    <td class="col-ombor" title="{{ prod.warehouse.name if prod.warehouse else '' }}">
+                        {% if prod.warehouse %}{{ prod.warehouse.name }}{% else %}-{% endif %}
+                    </td>
+                    <td class="col-ombor" title="{{ prod.output_warehouse.name if prod.output_warehouse else (prod.warehouse.name if prod.warehouse else '') }}">
+                        {% if prod.output_warehouse %}{{ prod.output_warehouse.name }}{% else %}{{ prod.warehouse.name if prod.warehouse else '-' }}{% endif %}
+                    </td>
+                    <td>
+                        {% if prod.status == 'completed' %}
+                        <span class="badge bg-success">Yakunlangan</span>
+                        {% elif prod.status == 'in_progress' %}
+                        <span class="badge bg-info">Jarayonda</span>
+                        {% elif prod.status == 'draft' %}
+                        <span class="badge bg-warning">Kutilmoqda</span>
+                        {% else %}
+                        <span class="badge bg-danger">Bekor</span>
+                        {% endif %}
+                    </td>
+                    <td class="amallar-cell">
+                        {% if prod.status == 'draft' or prod.status == 'in_progress' %}
+                        <a href="/production/{{ prod.id }}/materials" class="btn btn-sm btn-outline-primary" title="Xom ashyoni tahrirlash">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="POST" action="/production/{{ prod.id }}/complete-stage" style="display: inline;" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                            <input type="hidden" name="stage_number" value="{{ [cur, eff_max]|min }}">
+                            <select name="machine_id" class="form-select form-select-sm d-inline-block w-auto" title="Uskuna">
+                                <option value="">— Uskuna —</option>
+                                {% for m in machines %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}
+                            </select>
+                            <select name="operator_id" class="form-select form-select-sm d-inline-block w-auto" title="Xodimga bog'langan foydalanuvchi avtomatik tanlanadi">
+                                <option value="">— Operator —</option>
+                                {% for e in employees %}
+                                <option value="{{ e.id }}" {% if current_user_employee_id and e.id == current_user_employee_id %}selected{% endif %}>{{ e.full_name }}{% if current_user_employee_id and e.id == current_user_employee_id %} (avtomatik){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-sm btn-success" title="Bosqichni yakunlash">
+                                <i class="bi bi-check-lg"></i> Bosqich
+                            </button>
+                        </form>
+                        <form method="POST" action="/production/{{ prod.id }}/complete" style="display: inline;" class="d-inline complete-form" title="Bir martada yakunlash (4 bosqichsiz)" data-prod-id="{{ prod.id }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                            <input type="hidden" name="operator_id" class="complete-operator-id">
+                            <button type="submit" class="btn btn-sm btn-outline-success">Yakunlash</button>
+                        </form>
+                        <form method="POST" action="/production/{{ prod.id }}/cancel" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Bekor qilish">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </form>
+                        {% elif prod.status == 'completed' %}
+                        <a href="/production/{{ prod.id }}/movements" class="btn btn-sm btn-outline-info" title="Ishlab chiqarish harakati tarixi (ombor chiqim/kirim)">
+                            <i class="bi bi-clock-history"></i>
+                        </a>
+                        {% if current_user and current_user.role == 'admin' %}
+                        <a href="/production/{{ prod.id }}/materials" class="btn btn-sm btn-outline-primary" title="Tahrirlash (ko'rish)">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <form method="POST" action="/production/{{ prod.id }}/revert" style="display: inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"
+                                onclick="return confirm('Tasdiqni bekor qilish — xom ashyo qaytadi, tayyor mahsulot olib tashlanadi. Davom etasizmi?');">
+                                <i class="bi bi-arrow-counterclockwise"></i>
+                            </button>
+                        </form>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                        {% if current_user and current_user.role == 'admin' %}
+                        <form method="POST" action="/production/{{ prod.id }}/delete" style="display: inline;" class="ms-1"
+                            onsubmit="return confirm('Buyurtmani butunlay o\'chirishni xohlaysizmi? Bu amalni qaytarib bo\'lmaydi.');">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ 14 if (current_user and current_user.role == 'admin') else 13 }}" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox fs-1"></i><br>
+                        Ishlab chiqarish buyurtmalari yo'q
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+    </div>
+</div>
+
+<!-- Mobil: kartochkalar -->
+<div class="production-orders-cards" id="productionCards">
+    <div class="alert alert-light border py-2 px-3 mb-2 small d-flex flex-wrap gap-2 align-items-center">
+        <span><strong>{{ productions|length }} ta</strong> buyurtma</span>
+        <span class="text-muted">|</span>
+        <span>Jami tayyor: <strong class="text-success">{{ "{:,.2f}".format(_display_total_t) }}</strong> kg</span>
+        <span class="text-muted">|</span>
+        <span>Jami y.t.: <strong class="text-primary">{{ "{:,.2f}".format(_display_total_y) }}</strong> kg</span>
+    </div>
+    {% for prod in productions %}
+    <div class="card production-order-card" data-status="{{ prod.status }}">
+        <div class="card-body">
+            {% set cur = getattr(prod, 'current_stage', 1) or 1 %}
+            {% set r_stages = (prod.recipe.stages|sort(attribute='stage_number')) if (prod.recipe and prod.recipe.stages) else [] %}
+            {% set eff_max = (r_stages|map(attribute='stage_number')|list|max) if r_stages else 2 %}
+            {% set unit_name = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
+            {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
+            {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+            {% set qty_kg = prod.quantity * _kg_per_unit %}
+            <div class="prod-row"><strong>{{ prod.number }}</strong> <span class="text-muted">{{ prod.date.strftime('%d.%m.%Y %H:%M') }}</span></div>
+            <div class="prod-row">
+                {% if prod.recipe %}<a href="/production/{{ prod.id }}/materials">{{ prod.recipe.name }}</a>{% else %}-{% endif %}
+                <strong>{{ "%.2f"|format(prod.quantity) }} {{ unit_name }}</strong>{% if unit_name|lower != 'kg' %}<span class="text-muted small">({{ "%.2f"|format(qty_kg) }} kg)</span>{% endif %}
+            </div>
+            <div class="prod-row text-muted small">
+                {% set _tkg = prod.output_kg|default(qty_kg) %}{% set _ykg = prod.yarim_tayyor_kg|default(0) %}
+                <span>Tayyor: <strong>{% if _tkg %}{{ "%.2f"|format(_tkg) }} kg{% else %}-{% endif %}</strong></span>
+                <span>Yarim tayyor: <strong>{% if _ykg %}{{ "%.2f"|format(_ykg) }} kg{% else %}-{% endif %}</strong></span>
+            </div>
+            <div class="prod-row">
+                {% if prod.status == 'completed' %}<span class="badge bg-success">Yakunlangan</span>
+                {% elif prod.status == 'in_progress' %}<span class="badge bg-info">Jarayonda</span>
+                {% elif prod.status == 'draft' %}<span class="badge bg-warning">Kutilmoqda</span>
+                {% else %}<span class="badge bg-danger">Bekor</span>{% endif %}
+                <span class="text-muted small">{{ prod.warehouse.name if prod.warehouse else '-' }}</span>
+                <span class="text-muted small">{{ prod.operator.full_name if prod.operator else (prod.user.full_name if prod.user else '-') }}</span>
+            </div>
+            <div class="prod-row prod-actions">
+                {% if prod.status == 'draft' or prod.status == 'in_progress' %}
+                <a href="/production/{{ prod.id }}/materials" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i> Tahrir</a>
+                <form method="POST" action="/production/{{ prod.id }}/complete-stage" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                    <input type="hidden" name="stage_number" value="{{ [cur, eff_max]|min }}">
+                    <select name="machine_id" class="form-select form-select-sm d-inline-block" title="Uskuna"><option value="">— Uskuna —</option>{% for m in machines %}<option value="{{ m.id }}">{{ m.name }}</option>{% endfor %}</select>
+                    <select name="operator_id" class="form-select form-select-sm d-inline-block" title="Operator">{% for e in employees %}<option value="{{ e.id }}" {% if current_user_employee_id and e.id == current_user_employee_id %}selected{% endif %}>{{ e.full_name }}</option>{% endfor %}</select>
+                    <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> Bosqich</button>
+                </form>
+                <form method="POST" action="/production/{{ prod.id }}/complete" class="d-inline complete-form" data-prod-id="{{ prod.id }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                    <input type="hidden" name="operator_id" class="complete-operator-id">
+                    <button type="submit" class="btn btn-sm btn-outline-success">Yakunlash</button>
+                </form>
+                <form method="POST" action="/production/{{ prod.id }}/cancel" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}"><button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i></button></form>
+                {% elif prod.status == 'completed' %}
+                <a href="/production/{{ prod.id }}/movements" class="btn btn-sm btn-outline-info" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
+                {% if current_user and current_user.role == 'admin' %}
+                <a href="/production/{{ prod.id }}/materials" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                <form method="POST" action="/production/{{ prod.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');"><button type="submit" class="btn btn-sm btn-outline-warning"><i class="bi bi-arrow-counterclockwise"></i></button></form>
+                {% endif %}
+                {% endif %}
+                {% if current_user and current_user.role == 'admin' %}
+                <form method="POST" action="/production/{{ prod.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirishni xohlaysizmi?');"><input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}"><button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button></form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-4"><i class="bi bi-inbox fs-1"></i><br>Ishlab chiqarish buyurtmalari yo'q</div>
+    {% endfor %}
+</div>
+
+<script>
+(function() {
+    var STORAGE_KEY = 'productionOrdersFilter';
+    var params = new URLSearchParams(window.location.search);
+    var hasClear = params.has('clear') || params.get('clear') === '1';
+    var hasDateFrom = params.has('date_from') || params.get('date_from');
+    var hasDateTo = params.has('date_to') || params.get('date_to');
+    if (hasClear) {
+        try { sessionStorage.removeItem(STORAGE_KEY); } catch (e) {}
+        if (window.location.search) {
+            var withoutClear = new URLSearchParams(window.location.search);
+            withoutClear.delete('clear');
+            var qs = withoutClear.toString();
+            window.location.replace('/production/orders' + (qs ? '?' + qs : ''));
+            return;
+        }
+    }
+    if (hasDateFrom || hasDateTo || params.get('operator_id') || params.get('q')) {
+        try {
+            var save = { date_from: params.get('date_from') || '', date_to: params.get('date_to') || '', operator_id: params.get('operator_id') || '', q: params.get('q') || '' };
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(save));
+        } catch (e) {}
+    } else {
+        // Xato (error/detail) bo'lsa sessionStorage redirect qilma — xabar o'qilishi kerak
+        var hasError = params.has('error') || params.has('detail');
+        if (!hasError) {
+            try {
+                var saved = sessionStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    var o = JSON.parse(saved);
+                    if (o && (o.date_from || o.date_to)) {
+                        var qs = [];
+                        if (o.date_from) qs.push('date_from=' + encodeURIComponent(o.date_from));
+                        if (o.date_to) qs.push('date_to=' + encodeURIComponent(o.date_to));
+                        if (o.operator_id) qs.push('operator_id=' + encodeURIComponent(o.operator_id));
+                        if (o.q) qs.push('q=' + encodeURIComponent(o.q));
+                        if (qs.length) {
+                            window.location.replace('/production/orders?' + qs.join('&'));
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+    }
+})();
+function filterStatus(status, btn) {
+    var rows = document.querySelectorAll('#productionTable tr[data-status]');
+    var cards = document.querySelectorAll('#productionCards .production-order-card');
+    rows.forEach(function(row) {
+        row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+    });
+    cards.forEach(function(card) {
+        card.style.display = (status === 'all' || card.dataset.status === status) ? '' : 'none';
+    });
+    document.querySelectorAll('.status-filter-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+}
+// Barchasini tanlash
+(function() {
+    var selectAll = document.getElementById('selectAllProd');
+    var checkboxes = document.querySelectorAll('.prod-row-cb');
+    if (selectAll && checkboxes.length) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        });
+        checkboxes.forEach(function(cb) {
+            cb.addEventListener('change', function() {
+                var checked = document.querySelectorAll('.prod-row-cb:checked').length;
+                selectAll.checked = (checked === checkboxes.length);
+            });
+        });
+    }
+})();
+// Yakunlash bosilganda shu qator/kartochkadagi operator tanlovidan qiymatni yuborish (oylik hisobda kg chiqishi uchun)
+document.querySelectorAll('.complete-form').forEach(function(form) {
+    form.addEventListener('submit', function() {
+        var row = form.closest('tr') || form.closest('.production-order-card');
+        var sel = row ? row.querySelector('select[name=operator_id]') : null;
+        var hid = form.querySelector('.complete-operator-id');
+        if (sel && hid) hid.value = sel.value || '';
+    });
+});
+
+// Amal bajargandan keyin sana/operator/q filtri qolishi uchun — formalarga yashirin filtrlarni qo'shish
+(function() {
+    var filterForm = document.getElementById('productionOrdersFilterForm');
+    if (!filterForm) return;
+    function appendFilterParams(form) {
+        if (!form || form.action.indexOf('/production/') === -1) return;
+        if (form.action.indexOf('/complete-stage') !== -1 || form.action.indexOf('/complete') !== -1 || form.action.indexOf('/revert') !== -1 ||
+            form.action.indexOf('/cancel') !== -1 || form.action.indexOf('/delete') !== -1) {
+            var names = ['date_from', 'date_to', 'operator_id', 'q'];
+            names.forEach(function(name) {
+                if (form.querySelector('input[name="redirect_' + name + '"]')) return;
+                var inp = filterForm.querySelector('[name="' + name + '"]');
+                var val = inp ? (inp.value || '').trim() : '';
+                var h = document.createElement('input');
+                h.type = 'hidden';
+                h.name = 'redirect_' + name;
+                h.value = val;
+                form.appendChild(h);
+            });
+        }
+    }
+    document.querySelectorAll('form[action*="/production/"]').forEach(function(form) {
+        form.addEventListener('submit', function() { appendFilterParams(form); }, false);
+    });
+    var bulkForm = document.getElementById('bulkForm');
+    if (bulkForm) {
+        bulkForm.addEventListener('submit', function() {
+            var names = ['date_from', 'date_to', 'operator_id', 'q'];
+            names.forEach(function(name) {
+                if (bulkForm.querySelector('input[name="redirect_' + name + '"]')) return;
+                var inp = filterForm.querySelector('[name="' + name + '"]');
+                var val = inp ? (inp.value || '').trim() : '';
+                var h = document.createElement('input');
+                h.type = 'hidden';
+                h.name = 'redirect_' + name;
+                h.value = val;
+                bulkForm.appendChild(h);
+            });
+        }, false);
+    }
+})();
+// Xato xabari bo'lsa sahifa ochilganda alert ko'rinishiga scroll qilish
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.has('error') || params.has('detail')) {
+        var el = document.getElementById('production-error-alert') || document.querySelector('.alert.alert-danger, .alert.alert-warning');
+        if (el) {
+            setTimeout(function() { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100);
+        }
+    }
+})();
+</script>
+</div>
+{% endblock %}

@@ -1,0 +1,436 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
+{% set source_costs = source_costs if source_costs is defined else {} %}
+<style>
+.form-1c { max-width: 900px; }
+.form-1c .form-row { display: flex; align-items: center; border-bottom: 1px solid #dee2e6; min-height: 32px; }
+.form-1c .form-row .label { width: 140px; flex-shrink: 0; padding: 4px 8px; font-size: 13px; color: #495057; }
+.form-1c .form-row .field { flex: 1; padding: 2px 4px; }
+.form-1c .form-row .field input, .form-1c .form-row .field select { border: 1px solid #ced4da; border-radius: 2px; padding: 4px 6px; font-size: 13px; height: 28px; }
+.combo-wrap { position: relative; }
+.combo-drop { position: absolute; left: 0; right: 0; top: 100%; z-index: 1000; max-height: 200px; overflow-y: auto; background: #fff; border: 1px solid #ced4da; box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+.combo-drop .combo-item { padding: 5px 8px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+.combo-drop .combo-item:hover { background: #e7f1ff; }
+.table-items { font-size: 13px; }
+.table-items th { background: #e9ecef; }
+.table-items td, .table-items th { padding: 4px 8px; vertical-align: middle; }
+.table-items input.form-control { height: 28px; padding: 2px 6px; }
+</style>
+
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <h5 class="mb-0">Ombordan omborga o'tkazish {% if transfer %}({{ transfer.number }}){% else %}(yaratish){% endif %}</h5>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            {% if not transfer or transfer.status != 'confirmed' %}
+            <button type="submit" form="docForm" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> {% if transfer and transfer.status == 'draft' %}Saqlash (qoralama){% else %}Saqlash{% endif %}</button>
+            {% if transfer and transfer.status == 'draft' %}
+            <button type="submit" form="docForm" name="submit_approval" value="1" class="btn btn-outline-primary btn-sm">Tasdiqlashga yuborish</button>
+            {% endif %}
+            {% if transfer and transfer.status == 'pending_approval' %}
+            <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm" id="confirmForm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlash — ombordagi qoldiqlar o\'zgaradi. Davom etasizmi?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
+            </form>
+            {% endif %}
+            {% endif %}
+            <a href="/warehouse/transfers" class="btn btn-outline-secondary btn-sm">Ro'yxat</a>
+            <a href="/warehouse/transfers" class="btn btn-outline-secondary btn-sm">Chiqish</a>
+        </div>
+    </div>
+    {% if request.query_params.get('saved') %}
+    <div class="alert alert-success py-2 small">Saqlandi.</div>
+    {% endif %}
+    {% if request.query_params.get('confirmed') %}
+    <div class="alert alert-success py-2 small">Hujjat tasdiqlandi. Omborda harakat bajarildi.</div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger py-2 small">
+        {{ request.query_params.get('error') }}
+        <div class="mt-2 pt-2 border-top border-danger border-opacity-25">
+            <strong>Nima qilish:</strong> Qayerdan omborda mavjud bo‘lmagan mahsulot qatorini <strong>×</strong> tugmasi bilan o‘chiring yoki <a href="/qoldiqlar/tovar/hujjat/new" class="alert-link">Qoldiqlar → Tovar qoldiq hujjati</a> orqali avval shu omborda qoldiq kiriting. Keyin «Saqlash» bosing va yana «Tasdiqlash»ni bosing.
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="form-1c bg-white border rounded p-0 mb-3">
+        <form method="post" action="{% if transfer and transfer.status != 'confirmed' %}/warehouse/transfers/{{ transfer.id }}/save{% elif transfer %}#{% else %}/warehouse/transfers/create{% endif %}" id="docForm" {% if transfer and transfer.status == 'confirmed' %}onsubmit="return false;"{% endif %}>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <div class="form-row">
+                <div class="label">№</div>
+                <div class="field">
+                    {% if transfer %}{{ transfer.number }}{% else %}— (saqlanganda beriladi){% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="label">Sana</div>
+                <div class="field">
+                    {% if transfer and transfer.status == 'confirmed' %}
+                    {{ transfer.date.strftime('%d.%m.%Y %H:%M') if transfer.date else '—' }}
+                    {% else %}
+                    <input type="datetime-local" name="doc_date" class="form-control w-100" value="{{ doc_date_value | default('') }}" required style="max-width: 280px;" step="60">
+                    {% endif %}
+                </div>
+            </div>
+            {% if transfer %}
+            <div class="form-row">
+                <div class="label">Holati</div>
+                <div class="field">
+                    {% if transfer.status == 'draft' %}
+                    <span class="badge bg-warning text-dark">Qoralama</span>
+                    {% elif transfer.status == 'pending_approval' %}
+                    <span class="badge bg-primary">Tasdiqlash kutilmoqda</span>
+                    {% elif transfer.status == 'confirmed' %}
+                    <span class="badge bg-success">Tasdiqlangan</span>
+                    {% if transfer.approved_by %}
+                    <small class="text-muted ms-2">({{ transfer.approved_by.full_name if transfer.approved_by else transfer.approved_by_user_id }} tomonidan tasdiqlangan{% if transfer.approved_at %} - {{ transfer.approved_at.strftime('%d.%m.%Y %H:%M') }}{% endif %})</small>
+                    {% endif %}
+                    {% else %}
+                    <span class="badge bg-secondary">{{ transfer.status }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            <div class="form-row">
+                <div class="label">Ombordan *</div>
+                <div class="field">
+                    {% if transfer and transfer.status == 'confirmed' %}
+                    <input type="text" class="form-control w-100" value="{{ transfer.from_warehouse.name if transfer.from_warehouse else '—' }}" readonly>
+                    <input type="hidden" name="from_warehouse_id" value="{{ transfer.from_warehouse_id }}">
+                    {% else %}
+                    <select name="from_warehouse_id" class="form-select w-100" required id="fromWh">
+                        <option value="">— Tanlang —</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}" {% if transfer and transfer.from_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="label">Omborga *</div>
+                <div class="field">
+                    {% if transfer and transfer.status == 'confirmed' %}
+                    <input type="text" class="form-control w-100" value="{{ transfer.to_warehouse.name if transfer.to_warehouse else '—' }}" readonly>
+                    <input type="hidden" name="to_warehouse_id" value="{{ transfer.to_warehouse_id }}">
+                    {% else %}
+                    <select name="to_warehouse_id" class="form-select w-100" required id="toWh">
+                        <option value="">— Tanlang —</option>
+                        {% for wh in warehouses %}
+                        <option value="{{ wh.id }}" {% if transfer and transfer.to_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                        {% endfor %}
+                    </select>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="label">Izoh</div>
+                <div class="field">
+                    {% if transfer and transfer.status == 'confirmed' %}
+                    <input type="text" class="form-control w-100" value="{{ transfer.note or '' }}" readonly>
+                    {% else %}
+                    <input type="text" name="note" class="form-control w-100" value="{{ transfer.note or '' }}" placeholder="Izoh">
+                    {% endif %}
+                </div>
+            </div>
+            <div class="p-2 border-top">
+                {% if transfer and transfer.from_warehouse and transfer.to_warehouse %}
+                <div class="alert alert-info py-2 small mb-2" role="alert">
+                    <strong>Bu hujjatda</strong> quyidagi mahsulotlar <strong>«Qayerdan»</strong> — <strong>{{ transfer.from_warehouse.name }}</strong> omboridan chiqariladi va <strong>«Qayerga»</strong> — <strong>{{ transfer.to_warehouse.name }}</strong> omboriga kiritiladi.
+                </div>
+                {% endif %}
+                <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+                    <strong class="small">Mahsulotlar</strong>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnLoadAllStock" style="display:none;" title="Ombordan tanlang">
+                        <i class="bi bi-box-arrow-in-down"></i> Barcha qoldiqlarni yuklash
+                    </button>
+                </div>
+                <table class="table table-items table-bordered mt-1" id="itemsTable">
+                    <thead>
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th>Mahsulot</th>
+                            <th style="width:140px">Miqdor (birlik)</th>
+                            {% if show_tannarx %}<th style="width:110px">Tannarx (so'm)</th><th style="width:120px">Summa (so'm)</th>{% endif %}
+                            {% if transfer and transfer.from_warehouse_id %}<th class="text-center" style="width:60px">Tarix</th>{% endif %}
+                            <th style="width:50px"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemsBody">
+                        {% if transfer and transfer.items %}
+                        {% for row in transfer.items %}
+                        {% set row_cost = source_costs.get(row.product_id) or (row.product.purchase_price if row.product else 0) %}
+                        {% set row_sum = (row.quantity or 0) * row_cost %}
+                        <tr class="item-row" data-cost="{{ row_cost }}">
+                            <td class="row-num">{{ loop.index }}</td>
+                            <td class="combo-wrap">
+                                {% if transfer.status == 'confirmed' %}
+                                <input type="text" class="form-control" value="{{ row.product.name if row.product else '' }}{% if row.product and row.product.code %} ({{ row.product.code }}){% endif %}" readonly>
+                                <input type="hidden" name="product_id_{{ loop.index }}" value="{{ row.product_id }}">
+                                {% else %}
+                                <input type="text" class="form-control combo-input" placeholder="Nom yoki kod (F4)" data-row="{{ loop.index }}" value="{{ row.product.name if row.product else '' }}{% if row.product and row.product.code %} ({{ row.product.code }}){% endif %}" autocomplete="off">
+                                <input type="hidden" name="product_id_{{ loop.index }}" value="{{ row.product_id }}">
+                                <div class="combo-drop" id="comboDrop{{ loop.index }}" style="display:none;"></div>
+                                {% endif %}
+                            </td>
+                            {% set _uc = (row.product.unit.code or '')|lower if (row.product and row.product.unit) else '' %}
+                            {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
+                            {% set _unit_name = (row.product.unit.name if (row.product and row.product.unit) else '') or '' %}
+                            {% set qty_val = (row.quantity|round(0)|int) if (row.quantity is not none and _is_dona) else (row.quantity if row.quantity is not none else "") %}
+                            {% set qty_fmt = "%.0f"|format(row.quantity|round(0)|int) if (row.quantity is not none and _is_dona) else ("%.3f"|format(row.quantity) if row.quantity is not none else "") %}
+                            <td class="d-flex align-items-center gap-1 flex-nowrap">
+                                {% if transfer.status == 'confirmed' %}
+                                <input type="text" class="form-control qty-input flex-grow-1" value="{{ qty_fmt }}" readonly>
+                                {% else %}
+                                <input type="text" name="quantity_{{ loop.index }}" class="form-control qty-input flex-grow-1" value="{{ qty_fmt }}" inputmode="{{ 'numeric' if _is_dona else 'decimal' }}">
+                                {% endif %}
+                                {% if _unit_name %}<span class="text-muted small text-nowrap">{{ _unit_name }}</span>{% endif %}
+                            </td>
+                            {% if show_tannarx %}
+                            <td class="cost-cell text-end">{{ "{:,.0f}".format(row_cost) }}</td>
+                            <td class="sum-cell text-end text-success">{{ "{:,.0f}".format(row_sum) }}</td>
+                            {% endif %}
+                            {% if transfer and transfer.from_warehouse_id %}
+                            <td class="text-center">
+                                <a href="/reports/stock/source?warehouse_id={{ transfer.from_warehouse_id }}&product_id={{ row.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
+                            </td>
+                            {% endif %}
+                            <td>
+                                {% if transfer.status != 'confirmed' %}
+                                <button type="button" class="btn btn-outline-danger btn-sm rm-row">&times;</button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr class="item-row">
+                            <td class="row-num">1</td>
+                            <td class="combo-wrap">
+                                <input type="text" class="form-control combo-input" placeholder="Nom yoki kod (F4)" data-row="1" autocomplete="off">
+                                <input type="hidden" name="product_id_1" value="">
+                                <div class="combo-drop" id="comboDrop1" style="display:none;"></div>
+                            </td>
+                            <td class="d-flex align-items-center gap-1 flex-nowrap"><input type="text" name="quantity_1" class="form-control qty-input flex-grow-1" value="" inputmode="decimal"><span class="unit-label text-muted small text-nowrap"></span></td>
+                            {% if show_tannarx %}<td class="cost-cell text-end">—</td><td class="sum-cell text-end">—</td>{% endif %}
+                            {% if transfer and transfer.from_warehouse_id %}<td></td>{% endif %}
+                            <td><button type="button" class="btn btn-outline-danger btn-sm rm-row">&times;</button></td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+                {% if not transfer or transfer.status != 'confirmed' %}
+                <button type="button" class="btn btn-success btn-sm mt-1" id="addRow"><i class="bi bi-plus"></i> Qator qo'shish</button>
+                {% endif %}
+            </div>
+            {% if transfer and transfer.status == 'confirmed' %}
+            <div class="form-row border-0 p-2">
+                <div class="label"></div>
+                <div class="field"><span class="text-muted small">Hujjat tasdiqlangan, tahrirlab bo'lmaydi</span></div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+</div>
+
+<script>
+(function() {
+    var showTannarx = {{ 'true' if show_tannarx else 'false' }};
+    var hasTarixColumn = {{ 'true' if (transfer and transfer.from_warehouse_id) else 'false' }};
+    var stockByWhProduct = {{ stock_by_warehouse_product | tojson | safe }};
+    var stockCostByWhProduct = {{ (stock_cost_by_warehouse_product or {}) | tojson | safe }};
+    var products = {{ products_list | tojson | safe }};
+    var fromWh = document.getElementById('fromWh');
+    var toWh = document.getElementById('toWh');
+    var itemsBody = document.getElementById('itemsBody');
+    var rowIndex = itemsBody.querySelectorAll('.item-row').length || 1;
+
+    function fmtNum(n) { return (Number(n) || 0).toLocaleString('ru-RU', { maximumFractionDigits: 0 }); }
+
+    function getProductUnit(pid) {
+        var p = products.find(function(x) { return String(x.id) === String(pid); });
+        return p ? { unit_name: p.unit_name || '', is_dona: !!p.is_dona } : { unit_name: '', is_dona: false };
+    }
+    function formatQtyByUnit(qty, isDona) {
+        if (qty === '' || qty == null) return '';
+        var n = parseFloat(qty);
+        if (isNaN(n)) return qty;
+        return isDona ? String(Math.round(n)) : (n % 1 === 0 ? String(n) : (Math.round(n * 1000) / 1000).toString());
+    }
+    function addRow(pid, pname, qty, cost, summa, unitName, isDona) {
+        rowIndex++;
+        var u = (typeof unitName !== 'undefined' && unitName !== null) ? { unit_name: unitName, is_dona: !!isDona } : (pid ? getProductUnit(pid) : { unit_name: '', is_dona: false });
+        var qtyDisplay = (qty !== '' && qty != null) ? formatQtyByUnit(qty, u.is_dona) : '';
+        var costVal = cost != null && cost !== '' ? (parseFloat(cost) || 0) : null;
+        var sumVal = summa != null && summa !== '' ? (parseFloat(summa) || 0) : null;
+        var costDisplay = costVal != null && !isNaN(costVal) ? fmtNum(costVal) : '—';
+        var sumDisplay = sumVal != null && !isNaN(sumVal) ? fmtNum(sumVal) : '—';
+        var tr = document.createElement('tr');
+        tr.className = 'item-row';
+        tr.setAttribute('data-unit-name', u.unit_name || '');
+        tr.setAttribute('data-is-dona', u.is_dona ? '1' : '0');
+        if (costVal != null && !isNaN(costVal)) tr.setAttribute('data-cost', costVal);
+        var costSumHtml = showTannarx ? ('<td class="cost-cell text-end">' + costDisplay + '</td><td class="sum-cell text-end text-success">' + sumDisplay + '</td>') : '';
+        var tarixTd = hasTarixColumn ? '<td></td>' : '';
+        var unitSpan = u.unit_name ? (' <span class="unit-label text-muted small text-nowrap">' + (u.unit_name || '') + '</span>') : '';
+        tr.innerHTML = '<td class="row-num">' + rowIndex + '</td>' +
+            '<td class="combo-wrap"><input type="text" class="form-control combo-input" placeholder="Nom yoki kod (F4)" data-row="' + rowIndex + '" autocomplete="off">' +
+            '<input type="hidden" name="product_id_' + rowIndex + '" value="' + (pid || '') + '">' +
+            '<div class="combo-drop" id="comboDrop' + rowIndex + '" style="display:none;"></div></td>' +
+            '<td class="d-flex align-items-center gap-1 flex-nowrap"><input type="text" name="quantity_' + rowIndex + '" class="form-control qty-input flex-grow-1" value="' + (qtyDisplay || '') + '" inputmode="' + (u.is_dona ? 'numeric' : 'decimal') + '">' + unitSpan + '</td>' +
+            costSumHtml +
+            tarixTd +
+            '<td><button type="button" class="btn btn-outline-danger btn-sm rm-row">&times;</button></td>';
+        itemsBody.appendChild(tr);
+        var comboInput = tr.querySelector('.combo-input');
+        if (comboInput && pname) comboInput.value = pname;
+        tr.querySelector('.rm-row').onclick = function() { tr.remove(); renum(); };
+        bindCombo(comboInput, rowIndex);
+        tr.querySelector('.qty-input').addEventListener('input', function() { updateRowSum(tr); });
+    }
+
+    function updateRowSum(tr) {
+        var qtyInput = tr.querySelector('.qty-input');
+        var costCell = tr.querySelector('.cost-cell');
+        var sumCell = tr.querySelector('.sum-cell');
+        var cost = parseFloat(tr.getAttribute('data-cost')) || 0;
+        var qty = parseFloat(qtyInput.value) || 0;
+        sumCell.textContent = cost > 0 ? fmtNum(cost * qty) : '—';
+    }
+
+    function renum() {
+        itemsBody.querySelectorAll('.item-row').forEach(function(r, i) {
+            r.querySelector('.row-num').textContent = i + 1;
+        });
+    }
+
+    function bindCombo(input, idx) {
+        if (!input || input._bound) return;
+        input._bound = true;
+        var hid = input.parentNode.querySelector('input[type=hidden]');
+        var drop = document.getElementById('comboDrop' + idx);
+        if (!drop) return;
+        function showList() {
+            var q = (input.value || '').trim().toLowerCase();
+            var fromId = fromWh.value;
+            var avail = fromId && stockByWhProduct[fromId] ? stockByWhProduct[fromId] : {};
+            var html = '';
+            products.forEach(function(p) {
+                if (avail[p.id] === undefined) return;
+                var name = (p.name + (p.code ? ' (' + p.code + ')' : '')).toLowerCase();
+                if (q && name.indexOf(q) === -1) return;
+                html += '<div class="combo-item" data-id="' + p.id + '" data-name="' + (p.name + (p.code ? ' (' + p.code + ')' : '')) + '">' + (p.name + (p.code ? ' (' + p.code + ')' : '')) + '</div>';
+            });
+            drop.innerHTML = html || '<div class="combo-item text-muted">Yo\'q</div>';
+            drop.style.display = 'block';
+            drop.querySelectorAll('.combo-item[data-id]').forEach(function(el) {
+                el.onclick = function() {
+                    var pid = this.dataset.id;
+                    hid.value = pid;
+                    input.value = this.dataset.name;
+                    var fromId = fromWh.value;
+                    var qty = (fromId && stockByWhProduct[fromId] && stockByWhProduct[fromId][pid] != null)
+                        ? stockByWhProduct[fromId][pid] : '';
+                    var cost = (fromId && stockCostByWhProduct[fromId] && stockCostByWhProduct[fromId][pid] != null)
+                        ? stockCostByWhProduct[fromId][pid] : 0;
+                    var u = getProductUnit(pid);
+                    var qtyStr = qty === '' ? '' : formatQtyByUnit(qty, u.is_dona);
+                    var row = input.closest('tr');
+                    if (row) {
+                        row.setAttribute('data-unit-name', u.unit_name || '');
+                        row.setAttribute('data-is-dona', u.is_dona ? '1' : '0');
+                        var qtyInput = row.querySelector('.qty-input');
+                        if (qtyInput) {
+                            qtyInput.value = qtyStr;
+                            qtyInput.setAttribute('inputmode', u.is_dona ? 'numeric' : 'decimal');
+                        }
+                        var unitLabel = row.querySelector('.unit-label');
+                        if (unitLabel) unitLabel.textContent = u.unit_name || '';
+                        row.setAttribute('data-cost', cost);
+                        var costCell = row.querySelector('.cost-cell');
+                        var sumCell = row.querySelector('.sum-cell');
+                        if (costCell) costCell.textContent = cost ? fmtNum(cost) : '—';
+                        if (sumCell) sumCell.textContent = (cost && qty) ? fmtNum(cost * parseFloat(qty)) : '—';
+                    }
+                    drop.style.display = 'none';
+                };
+            });
+        }
+        input.addEventListener('focus', function() { if (fromWh.value) showList(); });
+        input.addEventListener('input', showList);
+        input.addEventListener('keydown', function(e) { if (e.key === 'F4') { e.preventDefault(); showList(); } if (e.key === 'Escape') drop.style.display = 'none'; });
+        document.addEventListener('click', function(e) {
+            if (!input.contains(e.target) && !drop.contains(e.target)) drop.style.display = 'none';
+        });
+    }
+
+    document.getElementById('addRow').onclick = function() { addRow('', '', '', null, null); };
+    itemsBody.querySelectorAll('.item-row').forEach(function(tr) {
+        tr.querySelector('.rm-row').onclick = function() { tr.remove(); renum(); };
+        var inp = tr.querySelector('.combo-input');
+        if (inp) bindCombo(inp, inp.dataset.row);
+        var qtyInp = tr.querySelector('.qty-input');
+        if (qtyInp) qtyInp.addEventListener('input', function() { updateRowSum(tr); });
+    });
+
+    fromWh.addEventListener('change', function() {
+        if (toWh.value === fromWh.value) toWh.value = '';
+        document.getElementById('btnLoadAllStock').style.display = fromWh.value ? 'inline-block' : 'none';
+    });
+    toWh.addEventListener('change', function() { if (toWh.value === fromWh.value) toWh.value = ''; });
+
+    if (fromWh.value) document.getElementById('btnLoadAllStock').style.display = 'inline-block';
+
+    document.getElementById('btnLoadAllStock').onclick = function() {
+        var fromId = fromWh.value;
+        if (!fromId) return;
+        var avail = stockByWhProduct[fromId];
+        if (!avail || Object.keys(avail).length === 0) {
+            alert('Tanlangan omborda qoldiq yo\'q.');
+            return;
+        }
+        var costs = stockCostByWhProduct[fromId] || {};
+        itemsBody.querySelectorAll('.item-row').forEach(function(r) { r.remove(); });
+        rowIndex = 0;
+        var entries = [];
+        for (var pid in avail) {
+            if (!avail[pid] || avail[pid] <= 0) continue;
+            var p = products.find(function(x) { return String(x.id) === String(pid); });
+            var pname = p ? (p.name + (p.code ? ' (' + p.code + ')' : '')) : '';
+            var cost = costs[pid] != null ? costs[pid] : 0;
+            var qty = parseFloat(avail[pid]) || 0;
+            var unitName = p && p.unit_name ? p.unit_name : '';
+            var isDona = p && p.is_dona;
+            entries.push({ id: pid, name: pname, qty: avail[pid], cost: cost, summa: cost * qty, unitName: unitName, isDona: isDona });
+        }
+        entries.sort(function(a, b) { return (a.name || '').localeCompare(b.name || ''); });
+        entries.forEach(function(e) { addRow(e.id, e.name, e.qty, e.cost, e.summa, e.unitName, e.isDona); });
+        if (entries.length === 0) addRow('', '', '', null, null);
+        renum();
+    };
+
+    var btnConfirm = document.getElementById('btnConfirm');
+    if (btnConfirm) {
+        var confirmUrl = btnConfirm.getAttribute('data-confirm-url');
+        if (confirmUrl) {
+            btnConfirm.onclick = function() {
+                if (!confirm('Tasdiqlash — ombordan chiqarib, omborga yoziladi. Davom etasizmi?')) return;
+                var f = document.createElement('form');
+                f.method = 'post';
+                f.action = confirmUrl;
+                var meta = document.querySelector('meta[name="csrf-token"]');
+                if (meta && meta.getAttribute('content')) {
+                    var inp = document.createElement('input');
+                    inp.type = 'hidden';
+                    inp.name = 'csrf_token';
+                    inp.value = meta.getAttribute('content');
+                    f.appendChild(inp);
+                }
+                document.body.appendChild(f);
+                f.submit();
+            };
+        }
+    }
+})();
+</script>
+{% endblock %}

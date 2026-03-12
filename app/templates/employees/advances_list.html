@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('added') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Avans qo'shildi. Yangi qator jadvalning <strong>yuqori qismida</strong> bo'lishi kerak. Ko'rinmasa &laquo;Tozalash&raquo; tugmasini bosing yoki sahifani yangilang (F5).
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> Avans ro'yxatdan o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('edited') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-pencil"></i> Avans tahrirlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('confirmed') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Avans tasdiqlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('unconfirmed') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-x-circle"></i> Avans tasdiqi bekor qilindi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('bulk_unconfirmed') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-x-circle"></i> Tasdiq bekor qilindi: {{ request.query_params.get('bulk_unconfirmed') }} ta avans.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('bulk_confirmed') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Tasdiqlandi: {{ request.query_params.get('bulk_confirmed') }} ta avans.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('bulk_deleted') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> O'chirildi: {{ request.query_params.get('bulk_deleted') }} ta avans.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show py-2 small">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-cash-coin"></i> Avans berish</h5>
+        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-badge"></i> Xodimlar</a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">Yangi avans</div>
+        <div class="card-body">
+            {% if not cash_registers %}
+            <div class="alert alert-warning py-2 small mb-0">
+                <i class="bi bi-exclamation-triangle"></i> Avans berish uchun avval <a href="/finance">Moliya</a> bo'limida kamida bitta kassa qo'shilgan bo'lishi kerak.
+            </div>
+            {% else %}
+            <form method="post" action="/employees/advances/add" class="row g-2 align-items-end">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                <div class="col-md-2">
+                    <label class="form-label small">Xodim *</label>
+                    <select name="employee_id" class="form-select form-select-sm" required>
+                        <option value="">Tanlang...</option>
+                        {% for e in employees %}
+                        <option value="{{ e.id }}">{{ e.full_name }} ({{ e.code }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Kassa *</label>
+                    <select name="cash_register_id" class="form-select form-select-sm" required title="Avans qaysi kassadan beriladi">
+                        <option value="">Tanlang...</option>
+                        {% for c in cash_registers %}
+                        <option value="{{ c.id }}">{{ c.name or c.code or 'Kassa ' ~ c.id }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Summa (so'm) *</label>
+                    <input type="number" name="amount" class="form-control form-control-sm" step="1" min="1" placeholder="Summa" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Sana *</label>
+                    <input type="date" name="advance_date" class="form-control form-control-sm" value="{{ default_date or request.query_params.get('date', '') }}" required>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small">Izoh</label>
+                    <input type="text" name="note" class="form-control form-control-sm" placeholder="Izoh">
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                </div>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header py-2"><span class="small text-muted"><i class="bi bi-funnel"></i> Filtr</span></div>
+        <div class="card-body py-2">
+            <form method="get" action="/employees/advances" class="d-flex flex-wrap align-items-center gap-2">
+                <label class="form-label mb-0 small">Sana:</label>
+                <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_from or '' }}" title="Dan">
+                <span class="small text-muted">—</span>
+                <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_to or '' }}" title="Gacha">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
+                <a href="/employees/advances" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span>Avanslar ro'yxati</span>
+            <form id="advancesBulkForm" method="post" class="d-flex align-items-center gap-2">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                {% if filter_date_from %}<input type="hidden" name="date_from" value="{{ filter_date_from }}">{% endif %}
+                {% if filter_date_to %}<input type="hidden" name="date_to" value="{{ filter_date_to }}">{% endif %}
+                <button type="submit" formaction="/employees/advances/bulk-edit" class="btn btn-sm btn-outline-primary" title="Tanlangan tasdiqlanmagan avanslarni ketma-ket tahrirlash">
+                    <i class="bi bi-pencil-square"></i> Tahrirlash
+                </button>
+                <button type="submit" formaction="/employees/advances/bulk-unconfirm" class="btn btn-sm btn-outline-warning" title="Tanlangan tasdiqlangan avanslar uchun tasdiqni bekor qilish">
+                    <i class="bi bi-x-circle"></i> Tasdiqlashni bekor qilish
+                </button>
+                <button type="submit" formaction="/employees/advances/bulk-confirm" class="btn btn-sm btn-outline-success" title="Tanlangan tasdiqlanmagan avanslarni tasdiqlash">
+                    <i class="bi bi-check-circle"></i> Tasdiqlash
+                </button>
+                <button type="submit" formaction="/employees/advances/bulk-delete" class="btn btn-sm btn-outline-danger" onclick="return confirm('Tanlangan tasdiqlanmagan avanslarni o\'chirishni xohlaysizmi?');" title="Faqat tasdiqlanmagan (tasdiq bekor qilingan) avanslar o'chiriladi">
+                    <i class="bi bi-trash"></i> O'chirish
+                </button>
+            </form>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-center" style="width: 40px;">
+                                <input type="checkbox" class="form-check-input" id="advanceSelectAll" title="Barchasini tanlash">
+                            </th>
+                            <th>Sana</th>
+                            <th>Xodim</th>
+                            <th>Summa (so'm)</th>
+                            <th>Kassa</th>
+                            <th>Izoh</th>
+                            <th>Holat</th>
+                            <th width="140">Amallar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for a in advances %}
+                        <tr>
+                            <td class="text-center">
+                                <input type="checkbox" form="advancesBulkForm" name="advance_ids" value="{{ a.id }}" class="form-check-input advance-row-cb">
+                            </td>
+                            <td>{{ a.advance_date.strftime('%d.%m.%Y') }}</td>
+                            <td>{{ a.employee.full_name }} <small class="text-muted">({{ a.employee.code }})</small></td>
+                            <td class="text-success fw-bold">{{ "{:,.0f}".format(a.amount) }}</td>
+                            <td><small>{% if a.cash_register %}{{ a.cash_register.name or a.cash_register.code or '-' }}{% else %}-{% endif %}</small></td>
+                            <td><small>{{ a.note or '-' }}</small></td>
+                            <td>
+                                {% if a.confirmed_at %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Tasdiqlanmagan</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not a.confirmed_at %}
+                                <a href="/employees/advances/edit/{{ a.id }}" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="/employees/advances/confirm/{{ a.id }}" class="d-inline" onsubmit="return confirm('Ushbu avansni tasdiqlashni xohlaysizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                                </form>
+                                {% else %}
+                                <form method="post" action="/employees/advances/unconfirm/{{ a.id }}" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
+                                </form>
+                                {% endif %}
+                                {% if not a.confirmed_at %}
+                                <form method="post" action="/employees/advances/delete/{{ a.id }}" class="d-inline" onsubmit="return confirm('Ushbu avansni ro\'yxatdan o\'chirmoqchimisiz?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish (faqat tasdiqlanmagan)"><i class="bi bi-trash"></i></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="8" class="text-center text-muted py-4">Avanslar yo'q.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+(function() {
+    var selectAll = document.getElementById('advanceSelectAll');
+    var checkboxes = document.querySelectorAll('.advance-row-cb');
+    if (selectAll && checkboxes.length) {
+        selectAll.addEventListener('change', function() {
+            checkboxes.forEach(function(cb) { cb.checked = selectAll.checked; });
+        });
+    }
+})();
+</script>
+{% endblock %}

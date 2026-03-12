@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('success') == 'confirmed' %}
+    <div class="alert alert-success alert-dismissible fade show"><i class="bi bi-check-circle"></i> Harajat hujjati tasdiqlandi. Kassadan chiqim yozildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show"><i class="bi bi-exclamation-triangle"></i>
+        {% if request.query_params.get('error') == 'no_cash' %}Kassa tanlanmagan. Hujjatni ochib kassani tanlang.{% elif request.query_params.get('error') == 'save_error' %}Tasdiqlashda xatolik. Qayta urinib ko'ring.{% elif request.query_params.get('error') == 'duplicate' %}To'lov raqami takrorlandi. Qayta urinib ko'ring.{% elif request.query_params.get('error') == 'no_items' %}Hujjatda qator yo'q.{% elif request.query_params.get('error') == 'no_amount' %}Summa 0 yoki manfiy.{% elif request.query_params.get('error') == 'already_confirmed' %}Hujjat allaqachon tasdiqlangan.{% elif request.query_params.get('error') == 'no_user' %}Foydalanuvchi aniqlanmadi. Qayta kiring.{% else %}{{ request.query_params.get('error') }}{% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h4 class="mb-0"><i class="bi bi-journal-text"></i> Harajatlar jurnali</h4>
+        <div class="d-flex gap-2">
+            <a href="/finance" class="btn btn-outline-secondary btn-sm"><i class="bi bi-wallet2"></i> Moliya</a>
+            <a href="/finance/expense-types" class="btn btn-outline-primary btn-sm"><i class="bi bi-tags"></i> Harajat turlari</a>
+            <a href="/finance/harajat/hujjat/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
+            <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#addPaymentModal"><i class="bi bi-cash"></i> To'lov kiritish</button>
+        </div>
+    </div>
+
+    <!-- Bugungi chiqim -->
+    <div class="row g-2 mb-3">
+        <div class="col-md-4">
+            <div class="card border-danger">
+                <div class="card-body py-2">
+                    <p class="text-muted small mb-0">Bugungi chiqim</p>
+                    <h5 class="text-danger mb-0">{{ "{:,.0f}".format(stats.today_expense|default(0)) }} so'm</h5>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Harajat hujjatlari -->
+    <div class="card mb-4">
+        <div class="card-header py-2"><i class="bi bi-receipt"></i> Harajat hujjatlari</div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 harajat-table-compact">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="50">#</th>
+                            <th>Sana</th>
+                            <th>Kassadan</th>
+                            <th>Yo'nalishdan</th>
+                            <th>Bo'limdan</th>
+                            <th class="text-end">Jami summa (so'm)</th>
+                            <th>Holat</th>
+                            <th width="100"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in harajat_hujjatlari|default([]) %}
+                        <tr>
+                            <td>{% if row.is_purchase_expense_doc %}{{ row.number }}{% else %}{{ row.doc_id }}{% endif %}</td>
+                            <td>{{ row.date.strftime('%d.%m.%Y %H:%M') if row.date else '-' }}</td>
+                            <td><small>{{ row.cash_register.name if row.cash_register else '—' }}</small></td>
+                            <td><small>{{ row.direction.name if row.direction else '—' }}</small></td>
+                            <td><small>{{ row.department.name if row.department else '—' }}</small></td>
+                            <td class="text-end fw-bold">{{ "{:,.0f}".format(row.total_amount or 0) }}</td>
+                            <td>
+                                {% if row.is_purchase_expense_doc %}
+                                <span class="badge bg-info">Kirim xarajati</span>
+                                {% elif row.status == 'confirmed' %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                                {% else %}
+                                <span class="badge bg-secondary">Qoralama</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ row.url }}" class="btn btn-sm btn-outline-primary" title="Ochish">{% if row.is_purchase_expense_doc %}<i class="bi bi-box-arrow-up-right"></i>{% else %}<i class="bi bi-pencil"></i>{% endif %}</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                Harajat hujjatlari yo'q. <a href="/finance/harajat/hujjat/new">Yangi hujjat yaratish</a> yoki yuqoridan <strong>Yaratish</strong> tugmasini bosing.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Barcha chiqimlar (to'lovlar) -->
+    <div class="card">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-clock-history"></i> Barcha chiqimlar (to'lovlar)</span>
+            <form method="get" action="/finance/harajatlar" class="d-flex align-items-center gap-2">
+                <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_from or '' }}" title="Sana dan">
+                <span class="small text-muted">—</span>
+                <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_to or '' }}" title="Sana gacha">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
+                <a href="/finance/harajatlar" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+            </form>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0 harajat-table-compact">
+                <thead class="table-light">
+                    <tr>
+                        <th width="50">#</th>
+                        <th>Sana</th>
+                        <th>Kassa</th>
+                        <th>Kontragent</th>
+                        <th>Hujjat / Izoh</th>
+                        <th class="text-end">Summa</th>
+                        {% if current_user.role == 'admin' %}
+                        <th>Holat</th>
+                        <th width="200">Amallar</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if all_outflows is defined and all_outflows %}
+                        {% for row in all_outflows %}
+                        <tr class="{% if not row.is_purchase_expense and row.payment and (row.payment.status|default('confirmed', true)) == 'cancelled' %}table-secondary opacity-75{% endif %}">
+                            <td>{{ loop.index }}</td>
+                            <td>{{ row.date.strftime('%d.%m.%Y %H:%M') if row.date else '-' }}</td>
+                            <td><small>{% if row.cash_register %}{{ row.cash_register.name }}{% else %}—{% endif %}</small></td>
+                            <td>{{ row.partner.name if row.partner else '-' }}</td>
+                            <td>
+                                {% if row.is_purchase_expense and row.purchase_id %}
+                                    <a href="/purchases/edit/{{ row.purchase_id }}" target="_blank" title="Kirim hujjatini ochish">{{ row.description }}</a>
+                                {% else %}
+                                    {{ row.description }}
+                                {% endif %}
+                            </td>
+                            <td class="text-danger text-end fw-bold">-{{ "{:,.0f}".format(row.amount or 0) }}</td>
+                            {% if current_user.role == 'admin' %}
+                            <td>
+                                {% if row.is_purchase_expense %}
+                                    <span class="badge bg-info">Kirim xarajati</span>
+                                {% elif row.payment %}
+                                    {% set p_status = row.payment.status|default('confirmed', true) %}
+                                    {% if p_status == 'cancelled' %}
+                                        <span class="badge bg-secondary">Bekor qilindi</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Tasdiqlangan</span>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if row.is_purchase_expense and row.purchase_id %}
+                                    <a href="/purchases/edit/{{ row.purchase_id }}" class="btn btn-sm btn-outline-secondary" title="Kirim hujjati"><i class="bi bi-box-arrow-up-right"></i></a>
+                                {% elif row.payment %}
+                                    {% set p_status = row.payment.status|default('confirmed', true) %}
+                                    {% if p_status == 'cancelled' %}
+                                    <form method="post" action="/finance/payment/{{ row.payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassa balansiga qayta hisoblanadi.');">
+                                        <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                                    </form>
+                                    <a href="/finance/payment/{{ row.payment.id }}/edit" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                    <form method="post" action="/finance/payment/{{ row.payment.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu to\'lovni o\'chirmoqchimisiz?');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                    {% else %}
+                                    <form method="post" action="/finance/payment/{{ row.payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — kassa balansidan chiqariladi. Davom etasizmi?');">
+                                        <button type="submit" class="btn btn-sm btn-warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
+                                    </form>
+                                    {% endif %}
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    {% elif payments %}
+                        {% for payment in payments %}
+                        {% set p_status = payment.status|default('confirmed', true) %}
+                        <tr class="{% if p_status == 'cancelled' %}table-secondary opacity-75{% endif %}">
+                            <td>{{ loop.index }}</td>
+                            <td>{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '-' }}</td>
+                            <td><small>{% if payment.cash_register %}{{ payment.cash_register.name }}{% else %}-{% endif %}</small></td>
+                            <td>{{ payment.partner.name if payment.partner else '-' }}</td>
+                            <td>{{ payment.description or '-' }}</td>
+                            <td class="text-danger text-end fw-bold">-{{ "{:,.0f}".format(payment.amount or 0) }}</td>
+                            {% if current_user.role == 'admin' %}
+                            <td>
+                                {% if p_status == 'cancelled' %}
+                                    <span class="badge bg-secondary">Bekor qilindi</span>
+                                {% else %}
+                                    <span class="badge bg-success">Tasdiqlangan</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if p_status == 'cancelled' %}
+                                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassa balansiga qayta hisoblanadi.');">
+                                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                                </form>
+                                <a href="/finance/payment/{{ payment.id }}/edit" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu to\'lovni o\'chirmoqchimisiz?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                                {% else %}
+                                <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — kassa balansidan chiqariladi. Davom etasizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                            {% endif %}
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="{% if current_user.role == 'admin' %}8{% else %}6{% endif %}" class="text-center text-muted py-5">
+                                Hozircha chiqim to'lovlari yo'q
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<style>
+.harajat-table-compact th,
+.harajat-table-compact td { padding: 0.35rem 0.5rem; vertical-align: middle; }
+.harajat-table-compact th { font-weight: 600; font-size: 0.875rem; }
+.harajat-table-compact .badge { font-size: 0.75rem; }
+</style>
+
+<!-- To'lov kiritish modal -->
+<div class="modal fade" id="addPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form action="/finance/payment" method="POST">
+                <input type="hidden" name="type" value="expense">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-cash"></i> Chiqim kiritish</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="form-label">Summa *</label>
+                            <input type="number" class="form-control form-control-lg" name="amount" required step="1" min="1">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Kontragent</label>
+                            <select class="form-select" name="partner_id">
+                                <option value="">— Kimga (ixtiyoriy) —</option>
+                                {% for p in partners or [] %}
+                                <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted d-block">Oylik to'lovi uchun kontragent tanlanmaydi.</small>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Kassa *</label>
+                            <select class="form-select" name="cash_register_id">
+                                {% for cash in cash_registers %}
+                                <option value="{{ cash.id }}">{{ cash.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Izoh</label>
+                            <textarea class="form-control" name="description" rows="2" placeholder="Masalan: ofis xarajati"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

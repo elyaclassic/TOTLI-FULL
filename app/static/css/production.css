@@ -1,0 +1,150 @@
+/* Ishlab chiqarish moduli — barcha sahifalarda bir xil hajm va simmetriya */
+
+.production-page {
+    max-width: 1400px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+/* Sahifa sarlavhasi — barcha sahifalarda bir xil */
+.production-page .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.production-page .page-header h4 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.production-page .page-header .btn-group-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+/* Kartochkalar — bir xil header va body */
+.production-page .card {
+    border-radius: 0.375rem;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.production-page .card:last-child {
+    margin-bottom: 0;
+}
+
+.production-page .card .card-header {
+    padding: 0.625rem 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    background-color: #f8f9fa;
+    border-bottom: 1px solid rgba(0,0,0,.08);
+}
+
+.production-page .card .card-body {
+    padding: 1rem;
+}
+
+.production-page .card .card-body.p-0 {
+    padding: 0;
+}
+
+/* Stat-kartochkalar (asosiy sahifa) — bir xil balandlik va padding */
+.production-page .stat-card {
+    height: 100%;
+    min-height: 100px;
+    padding: 1rem;
+    border-radius: 0.375rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.production-page .stat-card p {
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+.production-page .stat-card h3 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+/* Jadval — bir xil cell padding */
+.production-page .table {
+    margin-bottom: 0;
+}
+
+.production-page .table thead th {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.production-page .table tbody td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    vertical-align: middle;
+}
+
+.production-page .table.table-sm thead th,
+.production-page .table.table-sm tbody td {
+    padding: 0.4rem 0.75rem;
+}
+
+/* Forma elementlari — bir xil oraliq */
+.production-page .form-label {
+    margin-bottom: 0.25rem;
+    font-size: 0.875rem;
+}
+
+.production-page .mb-3 {
+    margin-bottom: 1rem !important;
+}
+
+/* Qatorlar orasidagi bo'shliq */
+.production-page .row.g-3 {
+    --bs-gutter-x: 1rem;
+    --bs-gutter-y: 1rem;
+}
+
+.production-page .row + .row {
+    margin-top: 0;
+}
+
+/* Tezkor ishlab chiqarish va Oxirgi — bir xil kartochka balandligi (agar kerak bo'lsa) */
+.production-page .col-md-5 .card,
+.production-page .col-md-7 .card {
+    min-height: 0;
+}
+
+.production-page .col-md-5 .card .card-body,
+.production-page .col-md-7 .card .card-body {
+    min-height: 0;
+}
+
+/* Filtr qatori (buyurtmalar) */
+.production-page .filter-card .card-body {
+    padding: 0.75rem 1rem;
+}
+
+.production-page .filter-card .form-control-sm,
+.production-page .filter-card .form-select-sm {
+    min-width: 8rem;
+}
+
+/* Orqaga / Yaratish tugmalari */
+.production-page .btn-sm.mb-2 {
+    margin-bottom: 0.5rem !important;
+}

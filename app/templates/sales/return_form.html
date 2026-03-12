@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if error and error_detail %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    {{ error_detail }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0"><i class="bi bi-arrow-return-left"></i> Savdodan qaytarish</h4>
+        <a href="/sales/returns" class="btn btn-outline-secondary"><i class="bi bi-list"></i> Sotuvlar ro'yxati</a>
+    </div>
+    <div class="card mb-4">
+        <div class="card-header bg-light">
+            <strong>Sotuv:</strong> {{ order.number }} &nbsp;|&nbsp;
+            {{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }} &nbsp;|&nbsp;
+            {{ order.partner.name if order.partner else '-' }} &nbsp;|&nbsp;
+            {{ order.warehouse.name if order.warehouse else '-' }} &nbsp;|&nbsp;
+            <strong>{{ "{:,.0f}".format(order.total or 0) }} so'm</strong>
+        </div>
+    </div>
+    <form method="post" action="/sales/return/create" id="returnForm">
+        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+        <div class="card">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <span>Qaytarish miqdorini kiriting (har bir mahsulot uchun 0 dan sotilgan miqdorgacha)</span>
+                <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Qaytarishni tasdiqlash</button>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mahsulot</th>
+                                <th>Sotilgan miqdor</th>
+                                <th>Narx</th>
+                                <th>Summa</th>
+                                <th>Qaytarish miqdori</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in order.items %}
+                            {% set _uc = (item.product.unit.code or '')|lower if (item.product and item.product.unit) else '' %}
+                            {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
+                            {% set qty_display = "{:,.0f}".format((item.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(item.quantity or 0) %}
+                            {% set qty_max = (item.quantity or 0)|round(0)|int if _is_dona else item.quantity %}
+                            {% set step_attr = "1" if _is_dona else "0.01" %}
+                            <tr>
+                                <td>{{ item.product.name if item.product else '-' }}</td>
+                                <td>{{ qty_display }}</td>
+                                <td>{{ "{:,.0f}".format(item.price or 0) }} so'm</td>
+                                <td>{{ "{:,.0f}".format(item.total or 0) }} so'm</td>
+                                <td>
+                                    <input type="hidden" name="product_id" value="{{ item.product_id }}">
+                                    <input type="number" name="quantity_return" class="form-control form-control-sm" style="width: 120px;"
+                                           min="0" max="{{ qty_max }}" step="{{ step_attr }}" value="0"
+                                           placeholder="0">
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-muted text-center py-3">Ushbu sotuvda mahsulot yo'q.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% if order.items %}
+        <div class="mt-3">
+            <button type="submit" class="btn btn-success btn-lg"><i class="bi bi-check2-circle me-1"></i>Qaytarishni tasdiqlash</button>
+            <a href="/sales/returns" class="btn btn-outline-secondary ms-2">Bekor qilish</a>
+        </div>
+        {% endif %}
+    </form>
+</div>
+{% endblock %}

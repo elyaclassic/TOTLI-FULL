@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+.inventory-table input[type="number"] { width: 100%; min-width: 70px; }
+</style>
+<div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <a href="/inventory" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxat</a>
+            <h4 class="mb-0 mt-2"><i class="bi bi-clipboard-check"></i> {% if doc.number and doc.number.startswith('INV-PENDING') %}— (saqlanganda beriladi){% else %}{{ doc.number }}{% endif %} — tahrirlash</h4>
+            <p class="text-muted small mb-0">Ombor: <strong>{{ warehouse.name }}</strong> — hisobiy qoldiq va «Qoldiq tovarlarni yuklash» shu omborga tegishli.</p>
+        </div>
+    </div>
+
+    {% if request.query_params.get('message') %}
+    <div class="alert alert-info alert-dismissible fade show">{{ request.query_params.get('message') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show">{{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <form method="post" action="/inventory/{{ doc.id }}/load" class="d-inline">
+                    <button type="submit" class="btn btn-success"><i class="bi bi-download"></i> Qoldiq tovarlarni yuklash ({{ warehouse.name }})</button>
+                </form>
+                {% if products_to_add %}
+                <form method="post" action="/inventory/{{ doc.id }}/add-product" class="d-inline row g-2 align-items-end">
+                    <div class="col-auto">
+                        <select name="product_id" class="form-select form-select-sm" style="min-width: 220px;" required>
+                            <option value="">— Tovarni tanlang —</option>
+                            {% for p in products_to_add %}
+                            <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-auto">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> Qo'shish</button>
+                    </div>
+                </form>
+                {% endif %}
+                <form method="post" action="/inventory/{{ doc.id }}/remove-zero-balance" class="d-inline">
+                    <button type="submit" class="btn btn-outline-warning btn-sm" title="Ombordan o'tkazilgan (qoldig'i 0) tovarlarni ro'yxatdan olib tashlash"><i class="bi bi-trash"></i> 0 qoldiqli qatorlarni olib tashlash</button>
+                </form>
+                {% if doc.warehouse_id %}
+                <a href="/reports/stock/no-history?warehouse_id={{ doc.warehouse_id }}" class="btn btn-outline-info btn-sm" title="Bu omborda qoldigi bor lekin harakat tarixi yo'q mahsulotlar" target="_blank"><i class="bi bi-exclamation-triangle"></i> Tarixsiz qoldiqlar</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if products_data %}
+    <form method="post" action="/inventory/{{ doc.id }}/save" id="invForm">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-3 flex-wrap">
+                    <h5 class="mb-0">Jadval — hisobiy va haqiqiy qoldiq</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="form-label mb-0 small text-muted">Sana</label>
+                        <input type="datetime-local" name="doc_date" class="form-control form-control-sm" value="{{ doc_date_value | default('') }}" style="max-width: 200px;" step="60">
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" formaction="/inventory/{{ doc.id }}/save" class="btn btn-outline-primary"><i class="bi bi-save"></i> Saqlash (qoralama)</button>
+                    <button type="submit" formaction="/inventory/{{ doc.id }}/confirm" class="btn btn-success" onclick="return confirm('Tasdiqlashni xohlaysizmi? Ombordagi qoldiq yangilanadi.');"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover inventory-table mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>№</th>
+                                <th>Tovar</th>
+                                <th>Hisobiy qoldiq</th>
+                                <th>Haqiqiy qoldiq</th>
+                                <th>Farq</th>
+                                {% if show_tannarx %}<th>Tannarx</th><th>Sotuv narx</th>{% endif %}
+                                <th class="text-center" style="width: 90px;">Qayerdan</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in products_data %}
+                            {% set diff = (row.actual_quantity|default(0)|float) - (row.current_quantity|default(0)|float) %}
+                            <tr>
+                                <input type="hidden" name="item_id" value="{{ row.item_id }}">
+                                <td>{{ loop.index }}</td>
+                                <td><strong>{{ row.product_name }}</strong>{% if row.product_code %} <small class="text-muted">({{ row.product_code }})</small>{% endif %}</td>
+                                <td>{{ "{:,.3f}".format(row.current_quantity) }}</td>
+                                <td><input type="number" name="actual_quantity" value="{{ row.actual_quantity }}" step="any" min="0" class="form-control form-control-sm"></td>
+                                <td class="{% if diff > 0 %}text-success{% elif diff < 0 %}text-danger{% else %}text-muted{% endif %}">{{ "{:+,.3f}".format(diff) }}</td>
+                                {% if show_tannarx %}<td>{{ "{:,.0f}".format(row.cost_price) }}</td><td>{{ "{:,.0f}".format(row.sale_price) }}</td>{% endif %}
+                                <td class="text-center">
+                                    {% if doc.warehouse_id and row.product_id %}
+                                    <a href="/reports/stock/source?warehouse_id={{ doc.warehouse_id }}&product_id={{ row.product_id }}" class="btn btn-sm btn-outline-info" title="Bu omborda shu tovar qayerdan keldi — harakat tarixi" target="_blank"><i class="bi bi-clock-history"></i></a>
+                                    {% else %}—{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-light border">Jadval bo'sh. «Qoldiq tovarlarni yuklash» yoki «Tovarlarni tanlash» orqali to'ldiring.</div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('saved') %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Oylik yozuvlari saqlandi.
+        {% if expense_doc_id %}
+        Harajatlar jurnalida oylik to'lovi hujjati (qoralama) yaratildi. Kassadan chiqim yozish uchun hujjatni oching, kassani tekshiring va <strong>Tasdiqlash</strong> bosing.
+        <a href="/finance/harajat/hujjat/{{ expense_doc_id }}" class="alert-link ms-1 fw-bold">Hujjatni ochish →</a>
+        {% elif harajatlar_date_from and harajatlar_date_to %}
+        <a href="/finance/harajatlar?date_from={{ harajatlar_date_from }}&date_to={{ harajatlar_date_to }}" class="alert-link ms-1">Harajatlar jurnali</a>
+        {% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if no_cash_warn %}
+    <div class="alert alert-warning alert-dismissible fade show py-2 small">
+        <i class="bi bi-exclamation-triangle"></i> Oylik saqlandi. Kassadan chiqim yozish uchun kamida bitta faol kassa bo'lishi kerak.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show py-2 small">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0"><i class="bi bi-calculator"></i> Oylik hisoblash</h5>
+        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-badge"></i> Xodimlar</a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="get" action="/employees/salary" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Oy</label>
+                    <select name="month" class="form-select form-select-sm" style="width: auto;">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }} — {% if m == 1 %}Yanvar{% elif m == 2 %}Fevral{% elif m == 3 %}Mart{% elif m == 4 %}Aprel{% elif m == 5 %}May{% elif m == 6 %}Iyun{% elif m == 7 %}Iyul{% elif m == 8 %}Avgust{% elif m == 9 %}Sentabr{% elif m == 10 %}Oktabr{% elif m == 11 %}Noyabr{% else %}Dekabr{% endif %}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label small mb-0">Yil</label>
+                    <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" min="2020" max="2030" style="width: 90px;">
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <span>Oylik — {{ year }}-yil {{ month }}-oy</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0 salary-table-compact">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-start">Xodim F.I.O.</th>
+                            <th class="text-start">Lavozimi</th>
+                            <th class="text-start">Belgilangan ish haqi turi</th>
+                            <th class="text-end">Bo'lak</th>
+                            <th class="text-end">Oylik (asos)</th>
+                            <th class="text-end">Hisoblangan oylik</th>
+                            <th class="text-end">Bonus</th>
+                            <th class="text-end">Ushlab qolish</th>
+                            <th class="text-end">Avans</th>
+                            <th class="text-end">Jami</th>
+                            <th class="text-end">To'langan</th>
+                            <th class="text-center">Holat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in rows %}
+                        <tr>
+                            <td class="text-start">{{ row.employee.full_name }} <small class="text-muted">({{ row.employee.code }})</small></td>
+                            <td class="text-start">{{ row.employee.position or '—' }}</td>
+                            <td class="text-start">{% if row.employee.salary_type == 'oylik' %}Oylik{% elif row.employee.salary_type == 'soatlik' %}Soatlik{% elif row.employee.salary_type == "bo'lak" %}Bo'lak{% elif row.employee.salary_type == "bo'lak_oylik" %}Bo'lak + oylik{% else %}—{% endif %}</td>
+                            <td class="text-end{% if row.base_source == "bo'lak" %} text-success{% endif %}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0{% if row.base_source == "bo'lak" %} text-success{% endif %}" value="{{ '{:,.0f}'.format(row.piecework_amount) if row.piecework_amount else '—' }}">
+                            </td>
+                            <td class="text-end{% if row.base_source == "oylik" %} text-success{% endif %}">
+                                <input type="hidden" name="base_{{ row.employee.id }}" form="salaryForm" value="{{ row.calculated_base if row.calculated_base is not none else row.base_salary }}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0{% if row.base_source == "oylik" %} text-success{% endif %}" value="{{ '{:,.0f}'.format(row.base_salary) }}">
+                            </td>
+                            <td class="text-end">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.calculated_base) if row.calculated_base is not none else '—' }}">
+                                {% if row.calculated_base is not none %}
+                                <small class="text-muted d-block" title="Tabel bo'yicha ishlagan kunlar">{{ row.worked_days | default(0) }} / {{ row.days_in_month | default(0) }} kun</small>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">
+                                <input type="hidden" name="bonus_{{ row.employee.id }}" form="salaryForm" value="{{ row.bonus }}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.bonus) }}">
+                            </td>
+                            <td class="text-end">
+                                <input type="hidden" name="deduction_{{ row.employee.id }}" form="salaryForm" value="{{ row.deduction }}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.deduction) }}">
+                            </td>
+                            <td class="text-end">
+                                <input type="hidden" name="advance_{{ row.employee.id }}" form="salaryForm" value="{{ row.advance_deduction }}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.advance_deduction) }}">
+                            </td>
+                            <td class="text-end fw-bold jami-cell{% if row.total is defined and row.total < 0 %} text-danger{% endif %}" data-emp-id="{{ row.employee.id }}">{{ "{:,.0f}".format(row.total) }}</td>
+                            <td class="text-end{% if row.paid and row.paid != 0 %}{% if row.paid < 0 %} text-danger{% endif %}{% else %}{% if row.total is defined and row.total < 0 %} text-danger{% endif %}{% endif %}" title="Shu oyda to'langan summa">{% if row.paid and row.paid != 0 %}{{ "{:,.0f}".format(row.paid) }}{% else %}{{ "{:,.0f}".format(row.total) }}{% endif %}</td>
+                            <td class="text-center">
+                                <div class="d-flex flex-nowrap align-items-center justify-content-center gap-1">
+                                {% if row.status == 'paid' %}
+                                <span class="badge bg-success" title="To'langan"><i class="bi bi-check-circle-fill"></i></span>
+                                {% else %}
+                                <span class="badge bg-warning text-dark" title="Kutilmoqda"><i class="bi bi-clock"></i></span>
+                                <form method="post" action="/employees/salary/mark-paid/{{ row.employee.id }}" class="d-inline">
+                                    <input type="hidden" name="year" value="{{ year }}">
+                                    <input type="hidden" name="month" value="{{ month }}">
+                                    <input type="hidden" name="paid_amount" value="{{ row.total }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-success" title="To'langan deb belgilash"><i class="bi bi-check-circle-fill"></i></button>
+                                </form>
+                                {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="12" class="text-center text-muted py-4">Ishga qabul qilingan xodimlar yo'q yoki xodimlar ro'yxati bo'sh.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="card-footer">
+            <form id="salaryForm" method="post" action="/employees/salary/save">
+                <input type="hidden" name="year" value="{{ year }}">
+                <input type="hidden" name="month" value="{{ month }}">
+                {% if cash_registers %}
+                <div class="mb-2">
+                    <label class="form-label small mb-0">To'lov qilish kassasi</label>
+                    <select name="cash_register_id" class="form-select form-select-sm" style="max-width: 280px;">
+                        {% for cr in cash_registers %}
+                        <option value="{{ cr.id }}" {% if cash_register_id == cr.id or (not cash_register_id and loop.first) %}selected{% endif %}>{{ cr.name or 'Kassa ' ~ cr.id }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Saqlanganda Harajatlar jurnalida hujjat (qoralama) yaratiladi. Kassadan chiqim yozish uchun hujjatni oching va <strong>Tasdiqlash</strong> bosing.</small>
+                </div>
+                {% endif %}
+                <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Barcha o'zgarishlarni saqlash</button>
+            </form>
+        </div>
+    </div>
+</div>
+<style>
+.salary-table-compact th,
+.salary-table-compact td { padding: 0.25rem 0.35rem; vertical-align: middle; }
+.salary-table-compact th { font-weight: 600; }
+.salary-table-compact .form-control-sm { min-width: 4.5em; padding: 0.15rem 0.25rem; }
+/* Belgilangan ish haqi turi va Bo'lak ustunlari orasini qisqartir */
+.salary-table-compact th:nth-child(3),
+.salary-table-compact td:nth-child(3) { padding-right: 0.15rem; }
+.salary-table-compact th:nth-child(4),
+.salary-table-compact td:nth-child(4) { padding-left: 0.15rem; }
+/* Hisoblangan oylik va Bonus orasini qisqartir */
+.salary-table-compact th:nth-child(6),
+.salary-table-compact td:nth-child(6) { padding-right: 0.15rem; }
+.salary-table-compact th:nth-child(7),
+.salary-table-compact td:nth-child(7) { padding-left: 0.15rem; }
+/* Ushlab qolish va Avans orasini qisqartir */
+.salary-table-compact th:nth-child(8),
+.salary-table-compact td:nth-child(8) { padding-right: 0.15rem; }
+.salary-table-compact th:nth-child(9),
+.salary-table-compact td:nth-child(9) { padding-left: 0.15rem; }
+</style>
+<script>
+// Oylik (asos), Bonus, Ushlab qolish, Avans faqat o'qiladi — Jami backend da hisoblanadi, yangilash kerak emas.
+</script>
+{% endblock %}

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show"><i class="bi bi-exclamation-triangle"></i> {{ error }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if msg or removed %}
+<div class="alert alert-success alert-dismissible fade show"><i class="bi bi-check-circle"></i> {{ msg or "Noto'g'ri harakat olib tashlandi." }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+<div class="card mb-3">
+    <div class="card-body">
+        <a href="/reports/stock" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiq hisoboti</a>
+        <a href="/qoldiqlar/tarix" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-wallet2"></i> Qoldiqlar → Tarix</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <i class="bi bi-diagram-3"></i> Mahsulot harakati tarixi — qayerdan keldi / qayerga ketdi
+    </div>
+    <div class="card-body">
+        <p class="mb-2">
+            <strong>Ombor:</strong> {{ warehouse.name if warehouse else '-' }} &nbsp;|&nbsp;
+            <strong>Mahsulot:</strong> {{ product.name if product else '-' }} ({{ product.code or product.barcode or '-' }})
+        </p>
+        <p class="text-muted small mb-2">Jadvalda faqat <strong>shu mahsulot</strong> ({{ product.name if product else '-' }}) omborga kirgan yoki chiqqan harakatlar ko‘rsatiladi. «Ishlab chiqarish» qatori — shu mahsulotni tayyor mahsulot qilib chiqargan buyurtma (hujjatni «Ochish» orqali ko‘ring).</p>
+        <p class="text-muted small mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> <strong>«Hujjatda …»</strong> — ishlab chiqarishda retsept bo'yicha chiqish (masalan 16) va harakatda yozilgan miqdor (masalan +6) farq qilsa chiqadi; retsept o'zgartirilgandan keyin bo'lishi mumkin. Tasdiqni bekor qilingan buyurtmalar jadvalda ko'rsatilmaydi.</p>
+        <p class="text-success fw-bold mb-0 mt-2">Hozirgi qoldiq (Stock jadvalidagi yig‘indi): <strong>{% if is_dona %}{{ "{:,.0f}".format(current_qty|round(0)) }}{% else %}{{ "{:,.3f}".format(current_qty) }}{% endif %}</strong></p>
+        <p class="text-muted small mb-0 mt-2"><strong>Jadval:</strong> <strong>birinchi qator</strong> — birinchi harakat (masalan qoldiq tushuriladi), <strong>oxirgi qator</strong> — eng so'nggi harakat. «Qoldiq (harakatdan keyin)» — shu qatordagi harakatdan keyingi yig'indi qoldiq. Masalan: +3.400 (qoldiq tuzatish) keyin −6.800 (ombordan omborga) bo'lsa, oxirgi qatorda qoldiq 3.400 − 6.800 = <strong>−3.400</strong>.</p>
+        <p class="text-muted small mb-0">Agar «Hozirgi qoldiq» oxirgi qatordagi raqamdan farq qilsa, keyinroq boshqa harakatlar bo'lgan bo'lishi mumkin.</p>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover table-sm">
+            <thead class="table-light">
+                <tr>
+                    <th>Sana</th>
+                    <th>Hujjat turi</th>
+                    <th>Hujjat raqami</th>
+                    <th class="text-end">O'zgarish (+/−)</th>
+                    <th class="text-end">Qoldiq (harakatdan keyin)</th>
+                    <th>Hujjat</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if movements %}
+                    {% for m in movements %}
+                    <tr>
+                        <td>{{ m.date }}</td>
+                        <td>{{ m.document_type_label }}</td>
+                        <td><code>{{ m.document_number }}</code></td>
+                        <td class="text-end {% if m.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            {% if is_dona %}{{ "{:+,.0f}".format(m.quantity_change|round(0)) }}{% else %}{{ "{:+,.3f}".format(m.quantity_change) }}{% endif %}
+                        </td>
+                        <td class="text-end">{% if is_dona %}{{ "{:,.0f}".format(m.quantity_after|round(0)) }}{% else %}{{ "{:,.3f}".format(m.quantity_after) }}{% endif %}</td>
+                        <td>
+                            <a href="{{ m.document_url }}" target="_blank" class="btn btn-sm btn-outline-primary">Ochish</a>
+                            {% if m.get('wrong_warehouse') %}
+                            <br><span class="badge bg-warning text-dark mt-1" title="Bu hujjatda «{{ warehouse.name }}» ombori ko'rsatilmagan — hujjat boshqa ombor uchun. Noto'g'ri yozuvni tozalash tugmasi orqali olib tashlang."><i class="bi bi-exclamation-triangle"></i> Bu hujjatda bu ombor ko'rsatilmagan</span>
+                            {% if current_user and current_user.role == 'admin' and m.get('movement_id') %}
+                            <form method="post" action="/reports/stock/source/remove-movement" class="d-inline mt-1" onsubmit="return confirm('Ushbu noto\'g\'ri harakatni olib tashlash va qoldiqni qaytarishni xohlaysizmi?');">
+                                <input type="hidden" name="movement_id" value="{{ m.movement_id }}">
+                                <input type="hidden" name="warehouse_id" value="{{ warehouse.id }}">
+                                <input type="hidden" name="product_id" value="{{ product.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i> Noto'g'ri yozuvni tozalash</button>
+                            </form>
+                            {% endif %}
+                            {% endif %}
+                            {% if m.get('quantity_mismatch') %}
+                            <br><small class="text-warning" title="Hujjatda (retsept boʻyicha) {{ m.document_quantity|round(0) if is_dona else m.document_quantity }}, harakatda yozilgan {{ '{:+,.0f}'.format(m.quantity_change|round(0)) if is_dona else '{:+,.3f}'.format(m.quantity_change) }} — farq bor. Qoldiq har doim tasdiqlashdagi miqdorga asoslangan."><i class="bi bi-exclamation-triangle"></i> Hujjatda {{ m.document_quantity|round(0) if is_dona else "{:,.1f}".format(m.document_quantity) }}</small>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            Ushbu ombor va mahsulot uchun <code>StockMovement</code> yozuvlari topilmadi. Qoldiq eski tizimdan yoki importdan kiritilgan bo'lishi mumkin.
+                            <br><br>
+                            <a href="/reports/stock/no-history?warehouse_id={{ warehouse.id if warehouse else '' }}" class="btn btn-sm btn-outline-warning">Bu omborda barcha tarixsiz qoldiqlarni ko'rish</a>
+                        </td>
+                    </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

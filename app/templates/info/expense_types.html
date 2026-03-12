@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('added') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Harajat turi qo'shildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('updated') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Harajat turi yangilandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') == '1' %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> Harajat turi o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Harajat turlari</h5>
+            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>#</th>
+                            <th>Nomi</th>
+                            <th>Kategoriya</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for t in expense_types %}
+                        <tr>
+                            <td>{{ t.id }}</td>
+                            <td>{{ t.name or '—' }}</td>
+                            <td><span class="badge bg-secondary">{{ t.category or '—' }}</span></td>
+                            <td>
+                                <a href="#" class="btn btn-sm btn-outline-primary" title="Tahrirlash"
+                                    data-id="{{ t.id }}" data-name="{{ t.name or '' }}" data-category="{{ t.category or '' }}"
+                                    onclick="openEdit(this); return false;"><i class="bi bi-pencil"></i></a>
+                                <form method="post" action="/info/expense-types/delete/{{ t.id }}" class="d-inline" onsubmit="return confirm('Ushbu harajat turini o\'chirishni xohlaysizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" class="text-center text-muted py-4">
+                                Hozircha harajat turlari yo'q. <strong>Harajatlar jurnalida</strong> hujjat yaratishda harajat turini tanlash uchun yuqoridan <strong>Qo'shish</strong> tugmasini bosing (masalan: ish haqqi, ishxona harajati).
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Qo'shish modal -->
+<div class="modal fade" id="addModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" action="/info/expense-types/add">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-plus-circle"></i> Harajat turi qo'shish</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2 small">
+                    <div class="mb-2">
+                        <label class="form-label mb-0">Nomi *</label>
+                        <input type="text" class="form-control form-control-sm" name="name" placeholder="Masalan: ish haqqi, ishxona harajati" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-0">Kategoriya</label>
+                        <select class="form-select form-select-sm" name="category">
+                            <option value="">— Tanlash ixtiyoriy —</option>
+                            <option value="Ishlab chiqarish xarajatlari">Ishlab chiqarish xarajatlari</option>
+                            <option value="Ma'muriy xarajatlar">Ma'muriy xarajatlar</option>
+                            <option value="Boshqa">Boshqa</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Tahrirlash modal -->
+<div class="modal fade" id="editModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="post" id="editForm" action="">
+                <div class="modal-header py-2">
+                    <h6 class="modal-title"><i class="bi bi-pencil"></i> Harajat turini tahrirlash</h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body py-2 small">
+                    <div class="mb-2">
+                        <label class="form-label mb-0">Nomi *</label>
+                        <input type="text" class="form-control form-control-sm" name="name" id="editName" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label mb-0">Kategoriya</label>
+                        <select class="form-select form-select-sm" name="category" id="editCategory">
+                            <option value="">— Tanlash ixtiyoriy —</option>
+                            <option value="Ishlab chiqarish xarajatlari">Ishlab chiqarish xarajatlari</option>
+                            <option value="Ma'muriy xarajatlar">Ma'muriy xarajatlar</option>
+                            <option value="Boshqa">Boshqa</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+function openEdit(btn) {
+    var id = btn.getAttribute('data-id');
+    var name = btn.getAttribute('data-name');
+    var category = btn.getAttribute('data-category') || '';
+    document.getElementById('editForm').action = '/info/expense-types/edit/' + id;
+    document.getElementById('editName').value = name;
+    document.getElementById('editCategory').value = category;
+    new bootstrap.Modal(document.getElementById('editModal')).show();
+}
+</script>
+{% endblock %}

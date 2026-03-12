@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0"><i class="bi bi-pencil-square"></i> To'lovni tahrirlash — {{ payment.number }}</h4>
+    <a href="/finance" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Moliya</a>
+</div>
+
+{% if request.query_params.get('error') %}
+<div class="alert alert-warning">Turi, summa yoki kassa noto'g'ri.</div>
+{% endif %}
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" action="/finance/payment/{{ payment.id }}/edit">
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label">Turi *</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="type" id="type_income" value="income" {% if payment.type == 'income' %}checked{% endif %}>
+                        <label class="btn btn-outline-success" for="type_income">Kirim</label>
+                        <input type="radio" class="btn-check" name="type" id="type_expense" value="expense" {% if payment.type == 'expense' %}checked{% endif %}>
+                        <label class="btn btn-outline-danger" for="type_expense">Chiqim</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Summa *</label>
+                    <input type="number" class="form-control" name="amount" required step="1000" value="{{ payment.amount or 0 }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Kassa *</label>
+                    <select class="form-select" name="cash_register_id" required>
+                        {% for cash in cash_registers %}
+                        <option value="{{ cash.id }}" {% if payment.cash_register_id == cash.id %}selected{% endif %}>{{ cash.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 position-relative">
+                    <label class="form-label">Kontragent</label>
+                    <input type="hidden" name="partner_id" id="partnerId" value="{{ payment.partner_id or '' }}">
+                    <input type="text" class="form-control" id="partnerSearch" autocomplete="off"
+                           placeholder="Nomini yoki kodini yozib qidiring..."
+                           value="{% if payment.partner %}{{ payment.partner.name }}{% if payment.partner.code %} ({{ payment.partner.code }}){% endif %}{% endif %}">
+                    <div class="list-group position-absolute top-100 start-0 end-0 mt-1 shadow-sm border rounded" id="partnerDropdown" style="z-index: 1050; max-height: 280px; overflow-y: auto; display: none;"></div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Izoh</label>
+                    <textarea class="form-control" name="description" rows="2">{{ payment.description or '' }}</textarea>
+                </div>
+                <div class="col-12">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+                    <a href="/finance" class="btn btn-secondary">Bekor qilish</a>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="partners-data" style="display:none" aria-hidden="true">
+    {% for p in partners or [] %}
+    <span data-id="{{ p.id }}" data-label="{{ (p.name ~ (' (' ~ p.code ~ ')') if p.code else p.name)|e }}"></span>
+    {% endfor %}
+</div>
+
+<script>
+(function() {
+    var container = document.getElementById('partners-data');
+    var partners = [];
+    if (container) {
+        var spans = container.querySelectorAll('span[data-id][data-label]');
+        for (var i = 0; i < spans.length; i++) {
+            partners.push({ id: parseInt(spans[i].getAttribute('data-id'), 10), label: spans[i].getAttribute('data-label') || '' });
+        }
+    }
+    var searchInput = document.getElementById('partnerSearch');
+    var hiddenId = document.getElementById('partnerId');
+    var dropdown = document.getElementById('partnerDropdown');
+    if (!searchInput || !hiddenId || !dropdown) return;
+
+    function showDropdown(items) {
+        dropdown.innerHTML = '';
+        if (items.length === 0) {
+            dropdown.style.display = 'none';
+            return;
+        }
+        items.forEach(function(p) {
+            var a = document.createElement('a');
+            a.href = '#';
+            a.className = 'list-group-item list-group-item-action';
+            a.textContent = p.label;
+            a.dataset.id = String(p.id);
+            a.dataset.label = p.label;
+            a.addEventListener('click', function(e) {
+                e.preventDefault();
+                hiddenId.value = this.dataset.id;
+                searchInput.value = this.dataset.label;
+                dropdown.style.display = 'none';
+            });
+            dropdown.appendChild(a);
+        });
+        dropdown.style.display = 'block';
+    }
+
+    function filterPartners(q) {
+        q = (q || '').trim().toLowerCase();
+        if (q.length === 0) return partners.slice(0, 50);
+        return partners.filter(function(p) {
+            return p.label.toLowerCase().indexOf(q) !== -1;
+        }).slice(0, 50);
+    }
+
+    searchInput.addEventListener('input', function() {
+        if (this.value.trim() === '' && hiddenId.value) hiddenId.value = '';
+        showDropdown(filterPartners(this.value));
+    });
+    searchInput.addEventListener('focus', function() {
+        showDropdown(filterPartners(this.value));
+    });
+    searchInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') { dropdown.style.display = 'none'; }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (dropdown.style.display === 'block' && !searchInput.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.style.display = 'none';
+        }
+    });
+})();
+</script>
+{% endblock %}

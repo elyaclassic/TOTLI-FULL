@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid contract-page">
+    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
+        <a href="/employees/hiring-doc/{{ doc.id }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hujjatga</a>
+        <div class="d-flex gap-2">
+            <a href="/employees/hiring-doc/{{ doc.id }}/contract/export-word" class="btn btn-outline-success btn-sm" download><i class="bi bi-file-earmark-word"></i> Word ga eksport</a>
+            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                    <h5 class="mb-1"><i class="bi bi-file-earmark-text"></i> MEHNAT SHARTNOMASI</h5>
+                    <div class="small text-muted">
+                        Namuna: <a href="https://api-portal.gov.uz/uploads/b9c60181-2be3-1668-4b86-bde4709db4b9_media_.pdf" target="_blank" rel="noopener">api-portal.gov.uz (PDF)</a>
+                        va <a href="https://gov.uz/oz/advice/NaN/document/2234" target="_blank" rel="noopener">gov.uz tavsiyalar</a> asosida.
+                    </div>
+                </div>
+                <div class="text-end small">
+                    <div><strong>№</strong> {{ doc.number }}</div>
+                    <div><strong>Sana:</strong> {{ doc.doc_date.strftime('%d.%m.%Y') }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <div class="row g-2 mb-3 small">
+                <div class="col-md-6">
+                    <strong>Joy:</strong> ____________________________
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <strong>Korxona:</strong> {{ company_name }}
+                </div>
+            </div>
+
+            <p class="mb-2">
+                {{ company_name }} (keyingi o'rinlarda <strong>Ish beruvchi</strong>) va fuqaro
+                <strong>{{ doc.employee.full_name }}</strong> (keyingi o'rinlarda <strong>Xodim</strong>),
+                mazkur mehnat shartnomasini quyidagilar haqida tuzdilar.
+            </p>
+
+            <hr>
+
+            <h6 class="mb-2">1. UMUMIY QOIDALAR</h6>
+            <div class="small">
+                <p class="mb-1">
+                    <strong>1.1.</strong> Xodim {% if doc.hire_date %}{{ doc.hire_date.strftime('%d.%m.%Y') }}{% else %}________________{% endif %} sanadan boshlab
+                    <strong>{{ display_department }}</strong> bo'limida
+                    <strong>{{ doc.position or doc.employee.position or '________________' }}</strong> lavozimiga ishga qabul qilinadi.
+                </p>
+                <p class="mb-1">
+                    <strong>1.2.</strong> Xodimning ish joyi: <strong>{{ display_department }}</strong>.
+                </p>
+                <p class="mb-1">
+                    <strong>1.3.</strong> Mazkur shartnomaning amal qilish muddati:
+                    {% if doc.contract_type == 'fixed' %}
+                        <strong>muayyan muddatga</strong>
+                        {% if doc.contract_end_date %}({{ doc.contract_end_date.strftime('%d.%m.%Y') }} gacha){% endif %}.
+                    {% elif doc.contract_type == 'task' %}
+                        <strong>muayyan ishni bajarish davriga</strong>.
+                    {% else %}
+                        <strong>nomuayyan muddatga</strong>.
+                    {% endif %}
+                </p>
+                <p class="mb-1">
+                    <strong>1.4.</strong> Sinov muddati:
+                    {% if doc.probation %}{{ doc.probation }}{% else %}sinovsiz{% endif %}.
+                </p>
+                <p class="mb-0">
+                    <strong>1.5.</strong> Xodim lavozim yo'riqnomasi va amaldagi qonunchilikka muvofiq mehnat majburiyatlarini bajaradi.
+                </p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">2. TOMONLARNING HUQUQ VA MAJBURIYATLARI</h6>
+            <div class="small">
+                <p class="mb-1"><strong>2.1. Ish beruvchining majburiyatlari:</strong></p>
+                <ul class="mb-2">
+                    <li>Xodimga xavfsiz va samarali mehnat qilish uchun shart-sharoitlar yaratish.</li>
+                    <li>Ichki mehnat tartibi qoidalari va lavozim yo'riqnomasi bilan tanishtirish.</li>
+                    <li>Ish haqini o'z vaqtida to'lash.</li>
+                </ul>
+                <p class="mb-1"><strong>2.2. Xodimning majburiyatlari:</strong></p>
+                <ul class="mb-0">
+                    <li>Mehnat intizomi va ichki tartib qoidalariga rioya qilish.</li>
+                    <li>Ish beruvchining qonuniy topshiriqlarini o'z vaqtida va aniq bajarish.</li>
+                    <li>Mehnat muhofazasi va texnika xavfsizligi talablariga rioya qilish.</li>
+                </ul>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">3. ISH VAQTI VA DAM OLISH VAQTI</h6>
+            <div class="small">
+                <p class="mb-1"><strong>3.1.</strong> Ish kuni vaqti: 09:00 dan 18:00 gacha (to'liq ish kuni asosida).</p>
+                <p class="mb-1"><strong>3.2.</strong> Dam olish kunlari:
+                    {% if rest_days_display %}{{ rest_days_display }}{% else %}shanba va yakshanba{% endif %}.
+                </p>
+                <p class="mb-0"><strong>3.3.</strong> Qonunchilikda belgilangan tartibda dam olish/bayram kunlari ishga jalb etilishi mumkin.</p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">4. MEHNATGA HAQ TO'LASH</h6>
+            <div class="small">
+                <p class="mb-1">
+                    <strong>4.1.</strong> Ish haqi turi:
+                    {% if doc.salary_type == 'oylik' %}<strong>Oylik</strong>
+                    {% elif doc.salary_type == 'soatlik' %}<strong>Soatlik</strong>
+                    {% elif doc.salary_type == "bo'lak" %}<strong>Bo'lak</strong>
+                    {% elif doc.salary_type == "bo'lak_oylik" %}<strong>Bo'lak + oylik</strong>
+                    {% else %}<strong>________________</strong>{% endif %}.
+                </p>
+
+                {% if doc.salary_type == "bo'lak" or doc.salary_type == "bo'lak_oylik" %}
+                <div class="mb-2">
+                    <strong>Bo'lak ishlar va stavkalar:</strong>
+                    {% if selected_piecework_tasks and selected_piecework_tasks|length %}
+                    <ul class="mb-0">
+                        {% for t in selected_piecework_tasks %}
+                        <li>{{ t.name or t.code or t.id }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} so'm/{{ t.unit_name or 'birlik' }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <div>—</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <p class="mb-1"><strong>4.2.</strong> Mehnat haqi miqdori: <strong>{{ "{:,.0f}".format(doc.salary or 0) }}</strong> so'm.</p>
+                <p class="mb-0"><strong>4.3.</strong> Ish haqi har oyda kamida ikki marta to'lanadi.</p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">5. XIZMAT SAFARLARI</h6>
+            <div class="small">
+                <p class="mb-0"><strong>5.1.</strong> Ish zaruriyatiga ko'ra Xodim xizmat safariga yuborilishi mumkin. Xarajatlar amaldagi qonunchilikka muvofiq qoplanadi.</p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">6. MEHNAT SHARTNOMASINI BEKOR QILISH</h6>
+            <div class="small">
+                <p class="mb-0"><strong>6.1.</strong> Mehnat shartnomasi O'zbekiston Respublikasi Mehnat kodeksida belgilangan tartibda bekor qilinishi mumkin.</p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">7. MEHNAT NIZOLARI</h6>
+            <div class="small">
+                <p class="mb-0"><strong>7.1.</strong> Mehnat nizolari qonun hujjatlarida belgilangan tartibda hal qilinadi.</p>
+            </div>
+
+            <hr>
+
+            <h6 class="mb-2">8. TOMONLAR REKVIZITLARI VA IMZOLARI</h6>
+            <div class="row g-3 small">
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <div class="fw-bold mb-2">Ish beruvchi</div>
+                        <div><strong>Korxona:</strong> {{ company_name }}</div>
+                        <div><strong>Manzil:</strong> O'zbekiston Respublikasi, Qo'qon shahri, Jasorat ko'chasi, 52-uy</div>
+                        <div><strong>STIR:</strong> 311469106</div>
+                        <div><strong>Hisob raqam:</strong> 202088409071067110001</div>
+                        <div><strong>Bank:</strong> \"Asaka\" banki Qo'qon filiali</div>
+                        <div><strong>MFO:</strong> 00873</div>
+                        <div><strong>Rahbar:</strong> {{ employer_rep_name or 'Rahimov D.A.' }}</div>
+                        <div class="mt-3">Imzo: ______________________</div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="border rounded p-3 h-100">
+                        <div class="fw-bold mb-2">Xodim</div>
+                        <div><strong>F.I.O:</strong> {{ doc.employee.full_name }}</div>
+                        <div><strong>Kodi:</strong> {{ doc.employee.code or '—' }}</div>
+                        <div><strong>Telefon:</strong> {{ doc.employee.phone or '—' }}</div>
+                        <div><strong>Manzil:</strong> ____________________________</div>
+                        <div><strong>Pasport:</strong> ____________________________</div>
+                        <div class="mt-3">Imzo: ______________________</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<style>
+/* Ekranda markazda, A4 ga yaqin kenglik */
+.contract-page {
+    max-width: 800px;
+    margin: 0 auto;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 10mm;
+    }
+    .no-print, .sidebar, nav.sidebar, .btn, .navbar, header { display: none !important; }
+    body {
+        padding: 0 !important;
+        margin: 0 !important;
+        background: #fff !important;
+        width: 210mm !important;
+    }
+    .container-fluid {
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .contract-page {
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+    }
+    .card {
+        border: none !important;
+        box-shadow: none !important;
+    }
+}
+</style>
+{% endblock %}
+

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h4><i class="bi bi-clock-history"></i> Narx o'zgarishlari tarixi</h4>
+                <div class="d-flex gap-2">
+                    <a href="/info/prices" class="btn btn-outline-primary btn-sm"><i class="bi bi-currency-exchange"></i> Narxni o'rnatish</a>
+                    <a href="/info" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ma'lumotnomalar</a>
+                </div>
+            </div>
+            <p class="text-muted mb-0 small">Har bir narx saqlash hujjat sifatida yoziladi — avvalgi va yangi narxlar ko'rsatiladi.</p>
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-body py-2">
+            <form method="get" action="/info/prices/history" class="row g-2 align-items-end">
+                <div class="col-auto">
+                    <label class="form-label mb-0 small">Mahsulot</label>
+                    <select name="product_id" class="form-select form-select-sm" style="width: auto;">
+                        <option value="">— Barchasi —</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}" {% if request.query_params.get('product_id')|string == p.id|string %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <label class="form-label mb-0 small">Narx turi</label>
+                    <select name="price_type_id" class="form-select form-select-sm" style="width: auto;">
+                        <option value="">— Barchasi —</option>
+                        {% for pt in price_types %}
+                        <option value="{{ pt.id }}" {% if request.query_params.get('price_type_id')|string == pt.id|string %}selected{% endif %}>{{ pt.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-sm btn-primary">Filtrlash</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Hujjat raqami</th>
+                            <th>Sana / vaqt</th>
+                            <th>Mahsulot</th>
+                            <th>Narx turi</th>
+                            {% if show_tannarx %}<th class="text-end">Avvalgi tannarx</th><th class="text-end">Yangi tannarx</th>{% endif %}
+                            <th class="text-end">Avvalgi sotuv narxi</th>
+                            <th class="text-end">Yangi sotuv narxi</th>
+                            <th>Kim tomonidan</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for h in history %}
+                        <tr>
+                            <td><strong>{{ h.doc_number }}</strong></td>
+                            <td>{{ h.changed_at.strftime('%d.%m.%Y %H:%M') if h.changed_at else '—' }}</td>
+                            <td>{{ h.product.name if h.product else '—' }}</td>
+                            <td>{{ h.price_type.name if h.price_type else 'Umumiy' }}</td>
+                            {% if show_tannarx %}<td class="text-end">{{ "{:,.2f}".format(h.old_purchase_price or 0) }}</td><td class="text-end">{{ "{:,.2f}".format(h.new_purchase_price or 0) }}</td>{% endif %}
+                            <td class="text-end">{{ "{:,.0f}".format(h.old_sale_price or 0) }}</td>
+                            <td class="text-end fw-bold">{{ "{:,.0f}".format(h.new_sale_price or 0) }}</td>
+                            <td>{{ h.changed_by.full_name or h.changed_by.username if h.changed_by else '—' }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="{{ 9 if show_tannarx else 7 }}" class="text-center text-muted py-5">
+                                <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                Narx o'zgarishlari bo'yicha hujjatlar yo'q. <a href="/info/prices">Narxni o'rnatish</a> sahifasida narx saqlaganingizda shu yerda paydo bo'ladi.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
