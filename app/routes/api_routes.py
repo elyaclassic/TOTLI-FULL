@@ -21,7 +21,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, get_current_user
 from app.utils.notifications import get_unread_count, get_user_notifications
-from app.utils.auth import create_session_token, get_user_from_token, verify_password
+from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
 from app.logging_config import get_logger
 
 logger = get_logger("api_routes")
@@ -205,20 +205,25 @@ async def unified_login(
                 logger.warning(f"User '{username}' faol emas")
                 return {"success": False, "error": f"Foydalanuvchi '{username}' faol emas"}
             if verify_password(password, user.password_hash):
-                logger.info(f"User login successful: id={user.id}, role={user.role}, username={user.username}")
-                token = create_session_token(user.id, user.role)
-                redirect_type = "web" if user.role in ["admin", "manager", "production", "qadoqlash"] else "pwa"
+                # SHA256/oddiy matn → bcrypt: login da yangilash
+                if is_legacy_hash(user.password_hash):
+                    user.password_hash = hash_password(password)
+                    db.commit()
+                role = (user.role or "").strip() or "user"
+                logger.info(f"User login successful: id={user.id}, role={role}, username={user.username}")
+                token = create_session_token(user.id, role)
+                redirect_type = "web" if role in ["admin", "manager", "production", "qadoqlash"] else "pwa"
                 response_data = {
                     "success": True,
-                    "role": user.role,
+                    "role": role,
                     "redirect": redirect_type,
-                    "redirect_url": _role_dashboard_url(user.role),
+                    "redirect_url": _role_dashboard_url(role),
                     "token": token,
                     "user": {
                         "id": user.id,
                         "username": user.username,
-                        "full_name": user.full_name,
-                        "role": user.role,
+                        "full_name": (user.full_name or "") or (user.username or ""),
+                        "role": role,
                     },
                 }
                 # PWA uchun user ma'lumotlarini agent/driver formatida ham qaytarish
@@ -226,10 +231,10 @@ async def unified_login(
                     response_data["agent"] = {
                         "id": user.id,
                         "code": user.username,
-                        "full_name": user.full_name,
+                        "full_name": (user.full_name or "") or user.username,
                         "phone": user.phone or "",
                     }
-                logger.info(f"User login response: redirect={redirect_type}, role={user.role}")
+                logger.info(f"User login response: redirect={redirect_type}, role={role}")
                 return response_data
             else:
                 # Parol noto'g'ri, lekin foydalanuvchi topildi

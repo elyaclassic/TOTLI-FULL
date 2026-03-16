@@ -1,0 +1,29 @@
+# TOTLI HOLVA - Nginx HTTPS reverse proxy (namuna)
+# /etc/nginx/sites-available/totli ga nusxalang va symlink qiling.
+# SSL sertifikat: certbot --nginx -d totli.example.com
+
+server {
+    listen 80;
+    server_name totli.example.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name totli.example.com;
+
+    ssl_certificate /etc/letsencrypt/live/totli.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/totli.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /static {
+        alias /path/to/TOTLI_BI/app/static;
+    }
+}

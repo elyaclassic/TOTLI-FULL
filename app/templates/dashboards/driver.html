@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Haydovchi dashboard - TOTLI HOLVA{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h2><i class="bi bi-truck"></i> Haydovchi dashboard</h2>
+    <p class="text-muted">{{ driver_name }} - Bugungi faoliyat</p>
+
+    <div class="row mb-4">
+        <div class="col-md-4 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Tashriflar</h6>
+                    <h3 id="visitsCount">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Tugallangan</h6>
+                    <h3 id="completedCount">0</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <h6 class="text-muted">Savdo nuqtalari</h6>
+                    <h3 id="partnersCount">0</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white">
+            <h5 class="mb-0"><i class="bi bi-shop"></i> Savdo nuqtalari</h5>
+        </div>
+        <div class="card-body">
+            <div id="partnersList">Yuklanmoqda...</div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a href="/map" class="btn btn-success"><i class="bi bi-geo-alt"></i> Xaritani ko'rish</a>
+    </div>
+</div>
+
+<script>
+(function() {
+    const token = {{ (driver_token or '') | tojson }};
+    if (!token) {
+        document.getElementById('partnersList').innerHTML = '<p class="text-muted">Token topilmadi. Qayta kiring.</p>';
+        return;
+    }
+    async function load() {
+        try {
+            const r = await fetch('/api/driver/partners?token=' + encodeURIComponent(token));
+            const d = await r.json();
+            if (d.success && d.partners) {
+                document.getElementById('partnersCount').textContent = d.partners.length;
+                document.getElementById('partnersList').innerHTML = d.partners.length
+                    ? d.partners.slice(0, 20).map(p => `
+                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div><strong>${p.name}</strong><br><small class="text-muted">${p.address || ''}</small></div>
+                            <span class="${(p.balance || 0) >= 0 ? 'text-success' : 'text-danger'}">${(p.balance || 0).toLocaleString()} сум</span>
+                        </div>
+                    `).join('') + (d.partners.length > 20 ? '<p class="text-muted mt-2">... va yana ' + (d.partners.length - 20) + ' ta</p>' : '')
+                    : '<p class="text-muted">Savdo nuqtalari yo\'q</p>';
+            } else {
+                document.getElementById('partnersList').innerHTML = '<p class="text-muted">Ma\'lumot yuklanmadi</p>';
+            }
+        } catch (e) {
+            document.getElementById('partnersList').innerHTML = '<p class="text-danger">Xato: ' + e.message + '</p>';
+        }
+    }
+    load();
+})();
+</script>
+{% endblock %}

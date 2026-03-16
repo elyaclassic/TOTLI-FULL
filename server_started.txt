@@ -1,2 +1,2 @@
-main.py: D:\TOTLI BI\main.py
-cwd: D:\TOTLI BI
+main.py: d:\TOTLI BI\main.py
+cwd: d:\TOTLI BI

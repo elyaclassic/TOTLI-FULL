@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#017449">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <link rel="manifest" href="/static/pwa/manifest.json">
+    <title>TOTLI HOLVA - Haydovchi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary: #017449;
+            --secondary: #02a86b;
+            --danger: #dc3545;
+            --success: #28a745;
+        }
+
+        body {
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding-bottom: 80px;
+        }
+
+        .navbar-driver {
+            background: var(--primary) !important;
+            color: white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .navbar-driver .btn-link {
+            color: white !important;
+        }
+
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 300px;
+            height: 100vh;
+            background: white;
+            box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
+            transition: left 0.3s ease;
+            z-index: 1050;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar.active {
+            left: 0;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            background: var(--primary);
+            color: white;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .sidebar-menu {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .sidebar-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 20px;
+            color: #333;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .sidebar-item:hover {
+            background: #f0f0f0;
+            color: var(--primary);
+        }
+
+        .sidebar-item i {
+            font-size: 20px;
+            width: 28px;
+            margin-right: 12px;
+            color: #666;
+        }
+
+        .sidebar-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1040;
+            display: none;
+        }
+
+        .sidebar-overlay.active {
+            display: block;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .main-tabs {
+            display: flex;
+            background: var(--primary);
+            color: white;
+            padding: 0 10px;
+        }
+
+        .main-tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .main-tab.active {
+            border-bottom: 3px solid white;
+            font-weight: bold;
+        }
+
+        .main-tab:not(.active) {
+            opacity: 0.8;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+        }
+
+        .empty-state i {
+            font-size: 64px;
+            color: #ccc;
+            margin-bottom: 16px;
+        }
+
+        .fab-sync {
+            position: fixed;
+            bottom: 90px;
+            right: 20px;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--primary);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 12px rgba(1, 116, 73, 0.4);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .trade-point-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .trade-point-item:last-child {
+            border-bottom: none;
+        }
+
+        .trade-point-icon {
+            width: 48px;
+            height: 48px;
+            background: #f0f0f0;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 14px;
+            font-size: 22px;
+            color: #6c757d;
+        }
+
+        .trade-point-info {
+            flex: 1;
+        }
+
+        .trade-point-name {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .trade-point-detail {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .amount-positive {
+            color: var(--success);
+        }
+
+        .amount-negative {
+            color: var(--danger);
+        }
+
+        .btn-show-map {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 14px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            width: 100%;
+            margin-top: 16px;
+        }
+
+        .btn-show-map:hover {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: white;
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+        }
+
+        .bottom-nav .nav-link {
+            text-align: center;
+            padding: 10px;
+            color: #6c757d;
+            font-size: 12px;
+        }
+
+        .bottom-nav .nav-link.active {
+            color: var(--primary);
+        }
+
+        .bottom-nav .nav-link i {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .spin { animation: spin 1s linear infinite; }
+    </style>
+</head>
+
+<body>
+    <!-- Sidebar -->
+    <div id="sidebar" class="sidebar">
+        <div class="sidebar-header">
+            <div class="avatar-circle">
+                <i class="bi bi-person-fill"></i>
+            </div>
+            <div class="flex-grow-1">
+                <h6 class="mb-0" id="sidebarDriverName">Haydovchi</h6>
+                <small class="opacity-75">Yetkazib beruvchi</small>
+            </div>
+            <button class="btn btn-link text-white p-0" onclick="closeSidebar()">
+                <i class="bi bi-x-lg fs-4"></i>
+            </button>
+        </div>
+
+        <div class="sidebar-menu">
+            <a href="#" class="sidebar-item" onclick="showPage('tradePointsPage'); closeSidebar();">
+                <i class="bi bi-shop"></i>
+                <span>Savdo nuqtalari</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('unfinishedOrdersPage'); closeSidebar();">
+                <i class="bi bi-truck"></i>
+                <span>Yakunlanmagan buyurtmalar</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('debtorsPage'); closeSidebar();">
+                <i class="bi bi-people"></i>
+                <span>Qarzdorlar</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('paymentHistoryPage'); closeSidebar();">
+                <i class="bi bi-wallet2"></i>
+                <span>To'lovlar tarixi</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('orderHistoryPage'); closeSidebar();">
+                <i class="bi bi-clock-history"></i>
+                <span>Buyurtmalar tarixi</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('goodsOnBoardPage'); closeSidebar();">
+                <i class="bi bi-box-seam"></i>
+                <span>Bordagi mahsulotlar</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('kpiPage'); closeSidebar();">
+                <i class="bi bi-trophy"></i>
+                <span>KPI</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('knowledgeBasePage'); closeSidebar();">
+                <i class="bi bi-question-circle"></i>
+                <span>Bilimlar bazasi</span>
+            </a>
+            <a href="#" class="sidebar-item" onclick="showPage('settingsPage'); closeSidebar();">
+                <i class="bi bi-gear"></i>
+                <span>Sozlamalar</span>
+            </a>
+            <a href="#" class="sidebar-item text-danger" onclick="logout(); closeSidebar();">
+                <i class="bi bi-box-arrow-right"></i>
+                <span>Chiqish</span>
+            </a>
+        </div>
+
+        <div class="sidebar-footer p-3 border-top">
+            <small class="text-muted">Joriy versiya: 2.1.29</small>
+        </div>
+    </div>
+
+    <div id="sidebarOverlay" class="sidebar-overlay" onclick="closeSidebar()"></div>
+
+    <!-- Navbar -->
+    <nav class="navbar navbar-driver">
+        <div class="container-fluid">
+            <button class="btn btn-link text-white" onclick="openSidebar()">
+                <i class="bi bi-list fs-4"></i>
+            </button>
+            <span class="navbar-brand mb-0 h6 text-white">Bosh sahifa</span>
+            <div>
+                <button class="btn btn-link text-white p-1" onclick="alert('QR skaner')">
+                    <i class="bi bi-qr-code-scan"></i>
+                </button>
+                <button class="btn btn-link text-white p-1" onclick="alert('Xarita')">
+                    <i class="bi bi-map"></i>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="container-fluid p-0">
+        <!-- Dashboard Page -->
+        <div id="dashboardPage" class="page active">
+            <div class="main-tabs">
+                <div class="main-tab active" onclick="setMainTab('visits')">
+                    Tashriflar (<span id="visitsCount">0</span>)
+                </div>
+                <div class="main-tab" onclick="setMainTab('completed')">
+                    Tugallangan (<span id="completedCount">0</span>)
+                </div>
+                <div class="main-tab" onclick="setMainTab('totals')">
+                    Natijalar
+                </div>
+            </div>
+
+            <div id="visitsTabContent" class="tab-content">
+                <div class="empty-state">
+                    <i class="bi bi-tree"></i>
+                    <p class="mb-1 fw-semibold">Bugungi yuklar yo'q</p>
+                    <p class="text-muted small">Sinxronlash orqali yangi ma'lumotlarni ko'ring</p>
+                </div>
+            </div>
+
+            <div id="completedTabContent" class="tab-content" style="display:none;">
+                <div class="empty-state">
+                    <i class="bi bi-check2-circle"></i>
+                    <p class="mb-1 fw-semibold">Tugallangan buyurtmalar yo'q</p>
+                </div>
+            </div>
+
+            <div id="totalsTabContent" class="tab-content" style="display:none;">
+                <div class="content-card p-4">
+                    <h6 class="text-muted mb-3">Bugungi natijalar</h6>
+                    <div class="row text-center">
+                        <div class="col-6 mb-3">
+                            <div class="text-primary fs-4" id="totalDeliveries">0</div>
+                            <small class="text-muted">Yetkazilgan</small>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <div class="text-success fs-4" id="totalAmount">0</div>
+                            <small class="text-muted">Jami summa</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade Points Page -->
+        <div id="tradePointsPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Savdo nuqtalari</span>
+                    <div>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-search"></i></button>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-filter"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-card p-3">
+                <div class="mb-3">
+                    <h6 class="text-muted mb-1">Umumiy balans</h6>
+                    <h5 id="totalBalance" class="amount-negative">0 сум</h5>
+                </div>
+                <div id="tradePointsList"></div>
+                <button class="btn btn-show-map">KARTANI KO'RSATISH</button>
+            </div>
+        </div>
+
+        <!-- Unfinished Orders Page -->
+        <div id="unfinishedOrdersPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Yakunlanmagan buyurtmalar</span>
+                    <div>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-filter"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="empty-state">
+                <i class="bi bi-emoji-smile"></i>
+                <p class="mb-0">Yakunlanmagan buyurtmalar yo'q :)</p>
+            </div>
+        </div>
+
+        <!-- Debtors Page -->
+        <div id="debtorsPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Qarzdorlar</span>
+                    <div>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-search"></i></button>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-filter"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-card p-3">
+                <div id="debtorsList"></div>
+                <div class="mt-3 pt-3 border-top">
+                    <small class="text-muted">Barcha buyurtmalar bo'yicha qarz:</small>
+                    <h5 id="totalDebt" class="amount-negative">0</h5>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment History Page -->
+        <div id="paymentHistoryPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">To'lovlar tarixi</span>
+                    <div>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-search"></i></button>
+                        <button class="btn btn-link text-white p-1"><i class="bi bi-filter"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div class="content-card p-3">
+                <div class="mb-3">
+                    <small class="text-muted">Davr:</small>
+                    <span id="paymentPeriod">14 dekabr — 14 mart</span>
+                </div>
+                <div id="paymentHistoryList"></div>
+                <div class="mt-3 pt-3 border-top d-flex justify-content-between">
+                    <span class="fw-semibold">Jami:</span>
+                    <span id="paymentTotal" class="amount-positive">0 сум</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Order History Page -->
+        <div id="orderHistoryPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Buyurtmalar tarixi</span>
+                </div>
+            </div>
+            <div class="content-card p-3">
+                <div id="orderHistoryList"></div>
+            </div>
+        </div>
+
+        <!-- Goods on Board Page -->
+        <div id="goodsOnBoardPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Bordagi mahsulotlar</span>
+                </div>
+            </div>
+            <div class="empty-state">
+                <p class="text-muted">Bordagi mahsulotlar ro'yxati</p>
+            </div>
+        </div>
+
+        <!-- KPI Page -->
+        <div id="kpiPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">KPI</span>
+                </div>
+            </div>
+            <div class="content-card p-4">
+                <p class="text-muted">KPI natijalari</p>
+            </div>
+        </div>
+
+        <!-- Knowledge Base Page -->
+        <div id="knowledgeBasePage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Bilimlar bazasi</span>
+                </div>
+            </div>
+            <div class="content-card p-4">
+                <p class="text-muted">Bilimlar bazasi</p>
+            </div>
+        </div>
+
+        <!-- Settings Page -->
+        <div id="settingsPage" class="page">
+            <div class="navbar navbar-driver">
+                <div class="container-fluid">
+                    <button class="btn btn-link text-white" onclick="showPage('dashboardPage')">
+                        <i class="bi bi-arrow-left"></i>
+                    </button>
+                    <span class="navbar-brand mb-0 h6 text-white">Sozlamalar</span>
+                </div>
+            </div>
+            <div class="content-card p-0">
+                <div class="list-group list-group-flush">
+                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between">
+                        <span>O'zbek</span>
+                        <span class="text-muted">Til</span>
+                    </a>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Kategoriyalar bo'yicha guruhlash</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="groupByCategory">
+                        </div>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Kategoriyalar bo'yicha guruhlash</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="groupBySubcategory">
+                        </div>
+                    </div>
+                    <a href="#" class="list-group-item list-group-item-action d-flex justify-content-between">
+                        <span>Miqdor kiritish turi</span>
+                        <span class="text-muted">></span>
+                    </a>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Xarita klaster</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="mapCluster">
+                        </div>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Avtomatik marshrut yaratish</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRoute">
+                        </div>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        <span>Chekda logotip bilan chop etish</span>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="printLogo">
+                        </div>
+                    </div>
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <i class="bi bi-box-arrow-up-right me-2"></i>
+                        Tizim sozlamalari
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action">
+                        Log yuborish
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FAB Sync -->
+    <button class="fab-sync" onclick="doSync()" title="Sinxronlash">
+        <i class="bi bi-arrow-repeat"></i>
+    </button>
+
+    <!-- Bottom Nav -->
+    <nav class="bottom-nav navbar navbar-expand">
+        <div class="container-fluid justify-content-around">
+            <a class="nav-link" href="#" onclick="showPage('dashboardPage')">
+                <i class="bi bi-house"></i>
+                Bosh sahifa
+            </a>
+        </div>
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/pwa/js/api.js"></script>
+    <script src="/static/pwa/js/driver_dashboard.js"></script>
+</body>
+
+</html>

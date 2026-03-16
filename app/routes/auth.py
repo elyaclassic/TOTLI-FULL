@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core import templates
 from app.models.database import get_db, User
 from app.deps import get_current_user
-from app.utils.auth import verify_password, create_session_token
+from app.utils.auth import verify_password, create_session_token, hash_password, is_legacy_hash
 
 router = APIRouter(tags=["auth"])
 
@@ -72,6 +72,10 @@ async def login(
                 "request": request,
                 "error": "Sizning hisobingiz faol emas. Administrator bilan bog'laning.",
             })
+        # SHA256/oddiy matn → bcrypt: login muvaffaqiyatli bo'lganda yangilash
+        if is_legacy_hash(user.password_hash):
+            user.password_hash = hash_password(password)
+            db.commit()
         token = create_session_token(user.id, user.username)
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
         redirect_url = _redirect_after_login(user)

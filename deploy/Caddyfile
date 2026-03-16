@@ -1,0 +1,14 @@
+# TOTLI HOLVA - HTTPS reverse proxy (Caddy)
+# Caddy o'rnatish: https://caddyserver.com/docs/install
+# Ishlatish: caddy run --config deploy/Caddyfile
+#
+# Sertifikat avtomatik (Let's Encrypt). Domen kerak.
+# Lokal test: https://localhost yoki domeningiz
+
+# Domeningizni yozing (masalan: totli.example.com)
+totli.example.com {
+    reverse_proxy localhost:8080
+}
+
+# Faqat HTTP (localhost test uchun):
+# localhost:8080 ga reverse proxy emas, to'g'ridan-to'g'ri uvicorn ishlatiladi.

@@ -1,15 +1,15 @@
 
-# --- Importlar (faqat main.py da ishlatiladiganlar) ---
-
+# --- Importlar ---
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, Response, JSONResponse
-from datetime import datetime
 import uvicorn
 import os
 import traceback
-from app.models.database import init_db, SessionLocal, User
-from app.utils.auth import get_user_from_token, generate_csrf_token, verify_csrf_token
+from datetime import datetime
+from app.constants import HTML_404, HTML_500
+from app.middleware import global_safe_middleware_impl, csrf_middleware_impl, auth_middleware_impl
+from app.models.database import init_db, SessionLocal
 from app.utils.db_schema import ensure_cash_opening_balance_column, ensure_payments_status_column
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
@@ -60,235 +60,45 @@ app.include_router(admin_routes.router)
 # ==========================================
 # 404 – sahifa topilmadi (HTML)
 # ==========================================
-_HTML_404 = """
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>404 - Sahifa topilmadi - TOTLI HOLVA</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light d-flex align-items-center justify-content-center min-vh-100">
-    <div class="text-center p-5">
-        <h1 class="display-1 text-muted">404</h1>
-        <h2 class="text-secondary">Sahifa topilmadi</h2>
-        <p class="lead text-muted">So'ralgan sahifa mavjud emas yoki ko'chirilgan.</p>
-        <a href="/" class="btn btn-success mt-3">Bosh sahifaga</a>
-        <a href="/login" class="btn btn-outline-secondary mt-3 ms-2">Kirish</a>
-    </div>
-</body>
-</html>
-"""
-
-_HTML_500 = """
-<!DOCTYPE html>
-<html lang="uz">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>500 - Server xatosi - TOTLI HOLVA</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light d-flex align-items-center justify-content-center min-vh-100">
-    <div class="text-center p-5">
-        <h1 class="display-1 text-danger">500</h1>
-        <h2 class="text-secondary">Server xatosi</h2>
-        <p class="lead text-muted">Iltimos, keyinroq urinib ko'ring yoki administrator bilan bog'laning.</p>
-        <a href="/" class="btn btn-success mt-3">Bosh sahifaga</a>
-        <a href="/login" class="btn btn-outline-secondary mt-3 ms-2">Kirish</a>
-    </div>
-</body>
-</html>
-"""
-
-
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
-    """404 – sahifa topilmadi (HTML)."""
-    return HTMLResponse(content=_HTML_404, status_code=404)
+    return HTMLResponse(content=HTML_404, status_code=404)
 
 
 # ==========================================
-# GLOBAL FALLBACK - istalgan xatoda 500 o'rniga login (HTML)
+# MIDDLEWARE (impl — app/middleware.py)
 # ==========================================
 @app.middleware("http")
 async def global_safe_middleware(request: Request, call_next):
-    try:
-        response = await call_next(request)
-        try:
-            response.headers["X-Server-Source"] = "pwp"
-        except Exception:
-            pass
-        return response
-    except (KeyboardInterrupt, SystemExit):
-        raise
-    except BaseException as e:
-        tb = traceback.format_exc()
-        traceback.print_exc()
-        for _dir in [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]:
-            try:
-                if _dir:
-                    log_path = os.path.join(_dir, "server_error.log")
-                    with open(log_path, "a", encoding="utf-8") as f:
-                        f.write("\n--- [global_safe] %s ---\n%s\n" % (datetime.now().isoformat(), tb))
-                    break
-            except Exception:
-                continue
-        try:
-            path = (getattr(request, "url", None) and getattr(request.url, "path", None)) or getattr(request, "path", None) or "/"
-        except Exception:
-            path = "/"
-        if path == "/login" or path == "/favicon.ico":
-            r = JSONResponse(status_code=500, content={"detail": "Server xatosi"})
-        else:
-            try:
-                accept = getattr(request, "headers", None) and (request.headers.get("accept") or "")
-            except Exception:
-                accept = ""
-            if "text/html" in (accept or ""):
-                # 500 sahifasini ko'rsatamiz, session o'chirilmaydi (logout hissi bermaslik)
-                r = HTMLResponse(content=_HTML_500, status_code=500)
-            else:
-                r = JSONResponse(status_code=500, content={"detail": "Server xatosi"})
-        try:
-            r.headers["X-Server-Source"] = "pwp"
-        except Exception:
-            pass
-        return r
+    return await global_safe_middleware_impl(request, call_next)
 
 
-# ==========================================
-# CSRF MIDDLEWARE - POST/PUT/DELETE so'rovlarni himoya qilish
-# ==========================================
 @app.middleware("http")
 async def csrf_middleware(request: Request, call_next):
     try:
-        return await _csrf_middleware_impl(request, call_next)
+        return await csrf_middleware_impl(request, call_next)
     except (KeyboardInterrupt, SystemExit):
         raise
-    except Exception as e:
-        import traceback
+    except Exception:
         traceback.print_exc()
         return await call_next(request)
 
 
-async def _csrf_middleware_impl(request: Request, call_next):
-    from urllib.parse import parse_qs
-    from starlette.requests import Request as StarletteRequest
-
-    try:
-        path = (getattr(request, "url", None) and getattr(request.url, "path", None)) or getattr(request, "path", None) or "/"
-    except Exception:
-        path = "/"
-    method = (getattr(request, "method", None) or "GET")
-    if not isinstance(method, str):
-        method = "GET"
-    method = method.upper()
-    # GET, HEAD, OPTIONS da CSRF tekshiruvi yo'q
-    if method in ("GET", "HEAD", "OPTIONS"):
-        token = request.cookies.get("csrf_token")
-        if not token:
-            token = generate_csrf_token()
-        try:
-            setattr(request.state, "csrf_token", token)
-        except Exception:
-            pass
-        response = await call_next(request)
-        if not request.cookies.get("csrf_token"):
-            response.set_cookie("csrf_token", token, path="/", httponly=False, samesite="lax", max_age=86400 * 7)
-        return response
-
-    # Himoyalanmaydigan yo'llar (API login, static, PWA location)
-    if path in ("/login", "/api/agent/login", "/api/driver/login") or path.startswith("/static"):
-        try:
-            setattr(request.state, "csrf_token", request.cookies.get("csrf_token") or generate_csrf_token())
-        except Exception:
-            pass
-        return await call_next(request)
-
-    # Cookie dan yoki yangi token
-    token = request.cookies.get("csrf_token")
-    if not token:
-        token = generate_csrf_token()
-    try:
-        setattr(request.state, "csrf_token", token)
-    except Exception:
-        pass
-
-    # POST/PUT/PATCH/DELETE da token tekshirish
-    received_token = request.headers.get("X-CSRF-Token")
-    content_type = request.headers.get("content-type", "")
-    if not received_token and "application/x-www-form-urlencoded" in content_type:
-        body = await request.body()
-        parsed = parse_qs(body.decode("utf-8", errors="replace"))
-        received_token = (parsed.get("csrf_token") or [None])[0]
-        async def receive():
-            return {"type": "http.request", "body": body}
-        request = StarletteRequest(request.scope, receive)
-        try:
-            setattr(request.state, "csrf_token", token)
-        except Exception:
-            pass
-    elif "multipart/form-data" in content_type and not received_token:
-        body = await request.body()
-        # multipart dan csrf_token ni qidirish (name="csrf_token" dan keyingi qiymat)
-        idx = body.find(b'name="csrf_token"')
-        if idx != -1:
-            start = body.find(b"\r\n\r\n", idx) + 4
-            end = body.find(b"\r\n", start)
-            if start != 3 and end != -1:
-                received_token = body[start:end].decode("utf-8", errors="replace")
-        async def receive():
-            return {"type": "http.request", "body": body}
-        request = StarletteRequest(request.scope, receive)
-        try:
-            setattr(request.state, "csrf_token", token)
-        except Exception:
-            pass
-
-    if not verify_csrf_token(received_token, token):
-        if "text/html" in request.headers.get("accept", ""):
-            return RedirectResponse(url=f"/?error=csrf", status_code=303)
-        return JSONResponse(status_code=403, content={"detail": "CSRF token noto'g'ri yoki yo'q"})
-
-    response = await call_next(request)
-    if not request.cookies.get("csrf_token"):
-        response.set_cookie("csrf_token", token, path="/", httponly=False, samesite="lax", max_age=86400 * 7)
-    return response
-
-
-# ==========================================
-# AUTH MIDDLEWARE - barcha sahifa va API ni himoyalash
-# ==========================================
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
     try:
-        return await _auth_middleware_impl(request, call_next)
+        return await auth_middleware_impl(request, call_next)
     except (KeyboardInterrupt, SystemExit):
         raise
-    except BaseException as e:
-        # ExceptionGroup va boshqa BaseException (traceback brauzerga chiqmasin)
+    except BaseException:
         tb = traceback.format_exc()
         traceback.print_exc()
-        for _dir in [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]:
-            try:
-                if _dir:
-                    with open(os.path.join(_dir, "server_error.log"), "a", encoding="utf-8") as f:
-                        f.write("\n--- [auth_middleware] %s ---\n%s\n" % (datetime.now().isoformat(), tb))
-                    break
-            except Exception:
-                continue
-        try:
-            path = (getattr(request, "url", None) and getattr(request.url, "path", None)) or getattr(request, "path", None) or "/"
-        except Exception:
-            path = "/"
+        from app.middleware import _write_error_log
+        _write_error_log(tb, "auth_middleware")
+        path = (getattr(request, "url", None) and getattr(request.url, "path", None)) or getattr(request, "path", None) or "/"
         if path == "/login" or path == "/favicon.ico":
             return JSONResponse(status_code=500, content={"detail": "Server xatosi"})
-        try:
-            accept = (request.headers.get("accept") or "") if getattr(request, "headers", None) else ""
-        except Exception:
-            accept = ""
+        accept = (request.headers.get("accept") or "") if getattr(request, "headers", None) else ""
         if "text/html" in accept:
             resp = RedirectResponse(url="/login?error=please_retry", status_code=303)
             try:
@@ -299,50 +109,8 @@ async def auth_middleware(request: Request, call_next):
         return JSONResponse(status_code=500, content={"detail": "Server xatosi"})
 
 
-async def _auth_middleware_impl(request: Request, call_next):
-    path = (getattr(request, "url", None) and getattr(request.url, "path", None)) or getattr(request, "path", "/") or "/"
-    method = (getattr(request, "method", None) or "GET").upper() if isinstance(getattr(request, "method", None), str) else "GET"
-    # Login, logout, static, favicon, ping - himoya kerak emas
-    if path in ("/login", "/logout", "/favicon.ico", "/ping"):
-        return await call_next(request)
-    if path.startswith("/static"):
-        return await call_next(request)
-    # Mobil/PWA agent va haydovchi API (alohida token bilan)
-    if path in ("/api/agent/login", "/api/driver/login"):
-        return await call_next(request)
-    if (path == "/api/agent/location" or path == "/api/driver/location") and method == "POST":
-        return await call_next(request)
-    if path in ("/api/agent/orders", "/api/agent/partners"):
-        return await call_next(request)
-    # Session tekshiruvi
-    token = request.cookies.get("session_token")
-    if not token:
-        if path.startswith("/api/"):
-            return JSONResponse(status_code=401, content={"detail": "Login talab qilindi"})
-        return RedirectResponse(url="/login", status_code=303)
-    user_data = get_user_from_token(token)
-    if not user_data:
-        if path.startswith("/api/"):
-            return JSONResponse(status_code=401, content={"detail": "Session muddati tugadi"})
-        resp = RedirectResponse(url="/login", status_code=303)
-        resp.delete_cookie("session_token")
-        return resp
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.id == user_data["user_id"]).first()
-        if not user or not user.is_active:
-            if path.startswith("/api/"):
-                return JSONResponse(status_code=401, content={"detail": "Foydalanuvchi faol emas"})
-            resp = RedirectResponse(url="/login", status_code=303)
-            resp.delete_cookie("session_token")
-            return resp
-        return await call_next(request)
-    finally:
-        db.close()
-
-
 # ==========================================
-# AUTENTIFIKATSIYA — app.routes.auth da
+# Exception handlers
 # ==========================================
 
 @app.exception_handler(403)
