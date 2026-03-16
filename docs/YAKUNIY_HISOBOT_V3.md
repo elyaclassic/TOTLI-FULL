@@ -60,7 +60,7 @@
 **Login:**
 ```
 Username: admin
-Password: admin123
+Password: (.env ADMIN_DEFAULT_PASSWORD yoki default — xavfsizlik uchun repoda ko‘rsatilmaydi)
 ```
 
 ---
@@ -186,9 +186,9 @@ Password: admin123
 
 ### 🔐 Kirish:
 ```
-URL: http://10.243.45.144:8080/login
+URL: http://localhost:8080/login (yoki server manzili)
 Username: admin
-Password: admin123
+Password: (.env ADMIN_DEFAULT_PASSWORD yoki default — xavfsizlik uchun repoda ko‘rsatilmaydi)
 ```
 
 ### 📊 Progress:
@@ -204,7 +204,7 @@ Password: admin123
 ## 💡 TAVSIYALAR
 
 ### Hozir Qilish:
-1. ✅ Tizimga kiring (`admin` / `admin123`)
+1. ✅ Tizimga kiring (admin / parol .env dan)
 2. ✅ Haqiqiy ma'lumotlarni kiriting:
    - O'lchov birliklari
    - Kategoriyalar
