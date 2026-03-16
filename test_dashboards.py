@@ -1,3 +1,4 @@
+import os
 import requests
 
 # Create session
@@ -5,9 +6,10 @@ s = requests.Session()
 
 # Login
 print("Logging in...")
+_login_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
 login_response = s.post('http://localhost:8080/login', data={
     'username': 'admin',
-    'password': 'admin123'
+    'password': _login_pwd
 })
 print(f"Login status: {login_response.status_code}")
 

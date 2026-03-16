@@ -2,6 +2,7 @@
 # TOTLI HOLVA - Namunaviy ma'lumotlarni o'chirish
 # ============================================
 
+import os
 from app.models.database import (
     engine, SessionLocal, Base,
     User, Category, Unit, Warehouse, Product, CashRegister, Partner, Employee,
@@ -125,9 +126,10 @@ def clear_sample_data():
         print("9️⃣  Haydovchilar")
         print("🔟 Retseptlar")
         print()
+        _pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
         print("💡 Admin foydalanuvchi saqlab qolindi:")
         print("   Username: admin")
-        print("   Password: admin123")
+        print("   Password:", _pwd)
         print()
         
     except Exception as e:

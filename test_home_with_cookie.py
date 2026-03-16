@@ -1,12 +1,14 @@
 """
 Test home page with cookie
 """
+import os
 import urllib.request
 import urllib.parse
 
 # Avval login qilamiz
 login_url = "http://127.0.0.1:8080/login"
-login_data = urllib.parse.urlencode({"username": "admin", "password": "admin123"}).encode()
+_login_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+login_data = urllib.parse.urlencode({"username": "admin", "password": _login_pwd}).encode()
 
 print("=" * 60)
 print("1. LOGIN TEST")

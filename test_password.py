@@ -1,6 +1,7 @@
 """
 Parolni tekshirish
 """
+import os
 from app.utils.auth import hash_password, verify_password
 from app.models.database import get_db, User
 
@@ -17,7 +18,7 @@ print(f"Is Active: {admin.is_active}")
 print()
 
 # Parolni tekshirish
-test_password = "admin123"
+test_password = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
 test_hash = hash_password(test_password)
 
 print("=" * 60)

@@ -1,12 +1,13 @@
 """
 Login endpointini test qilish
 """
+import os
 import requests
 
 url = "http://10.243.45.144:8080/login"
 data = {
     "username": "admin",
-    "password": "admin123"
+    "password": os.getenv("TEST_ADMIN_PASSWORD", "admin123")
 }
 
 print("=" * 60)

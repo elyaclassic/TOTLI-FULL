@@ -1,11 +1,13 @@
 """
 Login test - oddiy HTTP so'rov
 """
+import os
 import urllib.request
 import urllib.parse
 
 url = "http://127.0.0.1:8080/login"
-data = urllib.parse.urlencode({"username": "admin", "password": "admin123"}).encode()
+_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+data = urllib.parse.urlencode({"username": "admin", "password": _pwd}).encode()
 
 print("=" * 60)
 print("LOGIN TEST")
