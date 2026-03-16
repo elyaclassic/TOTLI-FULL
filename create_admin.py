@@ -1,6 +1,8 @@
 """
-Admin foydalanuvchini yaratish
+Admin foydalanuvchini yaratish.
+Parol: .env da ADMIN_DEFAULT_PASSWORD yoki default (faqat dev).
 """
+import os
 from app.models.database import get_db, User, init_db
 from app.utils.auth import hash_password
 
@@ -18,10 +20,11 @@ if admin:
     print(f"Username: {admin.username}")
     print(f"Is Active: {admin.is_active}")
 else:
-    # Admin yaratish
+    # Parol: .env dan ADMIN_DEFAULT_PASSWORD yoki dev uchun default
+    admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
     admin = User(
         username="admin",
-        password_hash=hash_password("admin123"),
+        password_hash=hash_password(admin_password),
         full_name="Administrator",
         role="admin",
         is_active=True
@@ -30,6 +33,6 @@ else:
     db.commit()
     print("[OK] Admin foydalanuvchisi yaratildi!")
     print("Username: admin")
-    print("Password: admin123")
+    print("Password: ( .env ADMIN_DEFAULT_PASSWORD yoki default )")
 
 db.close()

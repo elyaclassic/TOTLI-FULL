@@ -10,6 +10,7 @@ from app.models.database import (
 )
 from app.utils.auth import hash_password
 from datetime import datetime, timedelta
+import os
 import random
 
 def init_data():
@@ -37,11 +38,12 @@ def init_data():
         db.query(User).filter(User.username != "admin").delete()  # faqat admin qoldiriladi
         db.commit()
         print("✅ Barcha namunaviy ma'lumotlar o'chirildi!")
-        # Foydalanuvchi (admin)
+        # Foydalanuvchi (admin) — parol .env ADMIN_DEFAULT_PASSWORD yoki default
         if not db.query(User).filter(User.username == "admin").first():
+            admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
             admin = User(
                 username="admin",
-                password_hash=hash_password("admin123"),
+                password_hash=hash_password(admin_password),
                 full_name="Administrator",
                 role="admin"
             )

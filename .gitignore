@@ -47,10 +47,19 @@ desktop.ini
 # Logs
 *.log
 debug_*.log
+server_error.log
 
 # Environment variables
 .env
 .env.local
+.env.*.local
+
+# Xavfsizlik va keraksiz binariyalar (Git ga kirmasin)
+*.pem
+*.key
+*.exe
+*.zip
+!requirements*.zip
 
 # Temporary files
 *.tmp
