@@ -1827,25 +1827,30 @@
                 var _lastId = 0;
                 var _token = Session.getToken() || '';
 
-                function playSound(isHigh) {
+                function playSound(title, isHigh) {
+                    try {
+                        if (window.speechSynthesis) {
+                            window.speechSynthesis.cancel();
+                            var u = new SpeechSynthesisUtterance(title || (isHigh ? 'Yangi bildirishnoma' : 'Bildirishnoma'));
+                            u.lang = 'ru-RU'; u.rate = 0.95; u.pitch = 1.1; u.volume = 1.0;
+                            window.speechSynthesis.speak(u);
+                            return;
+                        }
+                    } catch(e) {}
                     try {
                         var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                        function beep(freq, start, dur, vol) {
-                            var o = ctx.createOscillator(), g = ctx.createGain();
-                            o.connect(g); g.connect(ctx.destination);
-                            o.frequency.value = freq; o.type = 'sine';
-                            g.gain.setValueAtTime(vol || 0.4, ctx.currentTime + start);
-                            g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
-                            o.start(ctx.currentTime + start); o.stop(ctx.currentTime + start + dur);
-                        }
-                        if (isHigh) { beep(880,0,.15,.5); beep(880,.2,.15,.5); beep(1100,.4,.25,.6); }
-                        else { beep(600, 0, .2, .3); }
-                    } catch(e) {}
+                        var o = ctx.createOscillator(), g = ctx.createGain();
+                        o.connect(g); g.connect(ctx.destination);
+                        o.frequency.value = isHigh ? 880 : 600;
+                        g.gain.setValueAtTime(0.4, ctx.currentTime);
+                        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+                        o.start(); o.stop(ctx.currentTime + 0.3);
+                    } catch(e2) {}
                 }
 
                 function showPwaToast(title, message, priority, url) {
                     var isHigh = priority === 'high';
-                    playSound(isHigh);
+                    playSound(title, isHigh);
                     var container = document.getElementById('pwa-notif-container');
                     if (!container) {
                         container = document.createElement('div');
