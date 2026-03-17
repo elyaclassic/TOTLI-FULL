@@ -950,29 +950,35 @@
         var _lastNotifId = 0;
         var _container = document.getElementById('notif-toast-container');
 
+        // Bildirishnoma sarlavhasiga mos ovoz fayli
+        var _soundMap = {
+            'Qiyom tayyorlash kerak':              '/static/sounds/qiyom.mp3',
+            'Kesish va qadoqlash kerak':           '/static/sounds/kesish.mp3',
+            'Qiyom tayyor \u2014 kesish va qadoqlash navbati': '/static/sounds/qiyom_tayyor.mp3',
+            'Kesish tugadi \u2014 qadoqlash navbati':          '/static/sounds/kesish_tayyor.mp3',
+            'Ishlab chiqarish tayyor':             '/static/sounds/tayyor.mp3',
+        };
+
         function playNotifSound(title, isHigh) {
+            var src = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.mp3' : null);
+            if (src) {
+                var a = new Audio(src);
+                a.volume = 1.0;
+                a.play().catch(function() { _tts(title, isHigh); });
+                return;
+            }
+            _tts(title, isHigh);
+        }
+
+        function _tts(title, isHigh) {
             try {
                 if (window.speechSynthesis) {
                     window.speechSynthesis.cancel();
-                    var u = new SpeechSynthesisUtterance(title || (isHigh ? 'Yangi bildirishnoma' : 'Bildirishnoma'));
-                    u.lang = 'ru-RU';   // O'zbek tili yo'q — rus ovozi o'zbek so'zlarni ham o'qiydi
-                    u.rate = 0.95;
-                    u.pitch = 1.1;
-                    u.volume = 1.0;
+                    var u = new SpeechSynthesisUtterance(title || 'Bildirishnoma');
+                    u.lang = 'ru-RU'; u.rate = 0.95; u.pitch = 1.1; u.volume = 1.0;
                     window.speechSynthesis.speak(u);
-                    return;
                 }
             } catch(e) {}
-            // Fallback: oddiy beep
-            try {
-                var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                var o = ctx.createOscillator(), g = ctx.createGain();
-                o.connect(g); g.connect(ctx.destination);
-                o.frequency.value = isHigh ? 880 : 600;
-                g.gain.setValueAtTime(0.4, ctx.currentTime);
-                g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
-                o.start(); o.stop(ctx.currentTime + 0.3);
-            } catch(e2) {}
         }
 
         function showToast(title, message, priority, url) {
