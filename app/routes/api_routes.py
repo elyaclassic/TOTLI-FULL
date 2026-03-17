@@ -551,6 +551,7 @@ async def api_notifications_unread(
             "title": n.title or "",
             "message": n.message or "",
             "priority": n.priority or "normal",
+            "action_url": n.action_url or None,
         }
     return {"unread_count": count, "last": last}
 

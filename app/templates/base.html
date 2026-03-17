@@ -474,6 +474,12 @@
                     <i class="bi bi-gear-wide-connected"></i> Ishlab chiqarish buyurtmalari
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat">
+                    <i class="bi bi-chat-dots"></i> Chat
+                    <span id="chatUnreadBadge" class="badge bg-danger ms-auto d-none"></span>
+                </a>
+            </li>
 
             {% elif full_menu %}
             <!-- MA'LUMOTLAR (Reference Data) -->
@@ -845,6 +851,7 @@
             <li class="nav-item"><a class="nav-link" href="/agents"><i class="bi bi-person-walking"></i> Agentlar</a></li>
             <li class="nav-item"><a class="nav-link" href="/delivery"><i class="bi bi-truck"></i> Yetkazish</a></li>
             <li class="nav-item"><a class="nav-link" href="/map"><i class="bi bi-geo-alt"></i> Xarita</a></li>
+            <li class="nav-item"><a class="nav-link" href="/chat"><i class="bi bi-chat-dots"></i> Chat <span id="chatUnreadBadge" class="badge bg-danger ms-auto d-none"></span></a></li>
             {% endif %}
         </ul>
 
@@ -911,6 +918,106 @@
     {% block extra_js %}{% endblock %}
 
     <script>
+        // Chat unread badge (polling)
+        (function(){
+            function setBadge(n){
+                var el = document.getElementById('chatUnreadBadge');
+                if (!el) return;
+                if (!n || n <= 0) { el.classList.add('d-none'); el.textContent = ''; return; }
+                el.classList.remove('d-none');
+                el.textContent = String(n);
+            }
+            function refresh(){
+                fetch('/chat/api/unread-count', { credentials: 'same-origin' })
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){ setBadge((d && d.unread) ? d.unread : 0); })
+                    .catch(function(){});
+            }
+            refresh();
+            setInterval(refresh, 15000);
+        })();
+    </script>
+
+    <!-- Bildirishnomalar polling + toast -->
+    <div id="notif-toast-container" style="position:fixed;top:70px;right:20px;z-index:9999;max-width:360px;"></div>
+    <script>
+    (function(){
+        var _lastNotifId = 0;
+        var _container = document.getElementById('notif-toast-container');
+
+        function showToast(title, message, priority, url) {
+            if (!_container) return;
+            var isHigh = priority === 'high';
+            var toast = document.createElement('div');
+            toast.style.cssText = [
+                'background:' + (isHigh ? '#fff3cd' : '#fff'),
+                'border:2px solid ' + (isHigh ? '#ffc107' : '#0d6efd'),
+                'border-radius:10px',
+                'box-shadow:0 4px 16px rgba(0,0,0,.18)',
+                'padding:14px 16px 12px',
+                'margin-bottom:10px',
+                'cursor:pointer',
+                'animation:slideIn .3s ease',
+            ].join(';');
+            toast.innerHTML =
+                '<div style="font-weight:700;font-size:.95rem;margin-bottom:4px">' +
+                    (isHigh ? '🔔 ' : '') + title.replace(/</g,'&lt;') +
+                '</div>' +
+                '<div style="font-size:.85rem;color:#444">' + message.replace(/</g,'&lt;') + '</div>' +
+                '<div style="text-align:right;margin-top:8px">' +
+                    '<small style="color:#888">Yopish uchun bosing</small>' +
+                '</div>';
+            if (url) {
+                toast.addEventListener('click', function(){ window.location.href = url; });
+            } else {
+                toast.addEventListener('click', function(){ _container.removeChild(toast); });
+            }
+            _container.appendChild(toast);
+
+            // Browser Notification API (faqat ruxsat bo'lsa)
+            if (isHigh && window.Notification && Notification.permission === 'granted') {
+                new Notification(title, { body: message, icon: '/static/images/logo.png' });
+            }
+
+            // 8 soniyadan keyin avtomatik yopiladi
+            setTimeout(function(){
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 8000);
+        }
+
+        function pollNotifications(){
+            fetch('/notifications/unread', { credentials: 'same-origin' })
+                .then(function(r){ return r.ok ? r.json() : null; })
+                .then(function(d){
+                    if (!d || !d.last) return;
+                    var n = d.last;
+                    if (n.id && n.id > _lastNotifId) {
+                        _lastNotifId = n.id;
+                        showToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
+                    }
+                })
+                .catch(function(){});
+        }
+
+        // Browser notification ruxsati so'rash (foydalanuvchi birinchi harakatda)
+        document.addEventListener('click', function(){
+            if (window.Notification && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+        }, { once: true });
+
+        // CSS animatsiyasi
+        var style = document.createElement('style');
+        style.textContent = '@keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}';
+        document.head.appendChild(style);
+
+        // Har 20 soniyada tekshirish
+        setTimeout(pollNotifications, 3000);
+        setInterval(pollNotifications, 20000);
+    })();
+    </script>
+
+    <script>
         // CSRF: barcha formalarga token qo'shish
         (function () {
             var meta = document.querySelector('meta[name="csrf-token"]');
@@ -964,7 +1071,9 @@
         document.addEventListener('DOMContentLoaded', function () {
             var mainContent = document.querySelector('.main-content');
             if (!mainContent) return;
-            var alerts = mainContent.querySelectorAll('.alert');
+            // Faqat yopiladigan (dismissible) alertlar avtomatik yopilsin.
+            // Bosh sahifadagi "Bildirishnomalar" blokidagi alert-kartalar doim ko'rinib turishi kerak.
+            var alerts = mainContent.querySelectorAll('.alert.alert-dismissible');
             alerts.forEach(function (el) {
                 setTimeout(function () {
                     var closeBtn = el.querySelector('[data-bs-dismiss="alert"]');

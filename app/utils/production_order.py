@@ -42,39 +42,122 @@ def get_product_stock_in_warehouse(db: Session, warehouse_id: int, product_id: i
     return float(stock.quantity if stock else 0.0)
 
 
+def _get_users_by_role(db: Session, *roles: str):
+    """Berilgan rollar bo'yicha faol foydalanuvchilarni qaytaradi."""
+    return db.query(User).filter(
+        User.is_active == True,
+        User.role.in_(list(roles)),
+    ).all()
+
+
 def notify_operator_semi_finished_available(
     db: Session,
     order_number: str,
     order_id: int,
     product_name: str,
 ):
+    """Eski nom — orqaga moslik uchun saqlandi. notify_cutting_packing_operators ni chaqiradi."""
+    notify_cutting_packing_operators(db, order_number, order_id, product_name)
+
+
+def notify_qiyom_operators(
+    db: Session,
+    order_number: str,
+    order_id: int,
+    product_name: str,
+):
     """
-    Yarim tayyor omborda mahsulot bor ekanini operatorlar (ishlab chiqarish bo'limi) ga bildirish.
-    Ovozli push uchun priority='high' ishlatiladi.
+    Yarim tayyor omborda mahsulot yetarli emas —
+    qiyom operatorlariga (role='production') bildirish.
     """
-    production_department = db.query(Department).filter(
-        func.lower(Department.name).contains("ishlab") |
-        func.lower(Department.name).contains("chiqarish") |
-        func.lower(Department.code).contains("prod")
-    ).first()
-    if production_department:
-        users = db.query(User).filter(
-            User.department_id == production_department.id,
-            User.is_active == True,
-        ).all()
-    else:
-        users = db.query(User).filter(User.is_active == True).limit(10).all()
+    users = _get_users_by_role(db, "production")
     for user in users:
         create_notification(
             db=db,
-            title="📦 Yarim tayyor omborda mahsulot bor",
-            message=f"Sotuv {order_number} uchun «{product_name}» yarim tayyor omborda mavjud. Tashlab bering.",
+            title="Qiyom tayyorlash kerak",
+            message=(
+                f"Sotuv {order_number} uchun «{product_name}» "
+                f"yarim tayyor omborda yetarli emas. Qiyom tayyorlang."
+            ),
+            notification_type="warning",
+            user_id=user.id,
+            priority="high",
+            action_url="/production",
+            related_entity_type="order",
+            related_entity_id=order_id,
+        )
+
+
+def notify_cutting_packing_operators(
+    db: Session,
+    order_number: str,
+    order_id: int,
+    product_name: str,
+):
+    """
+    Yarim tayyor omborda mahsulot yetarli —
+    kesuvchi (role='production') va qadoqlovchilarga (role='qadoqlash') bildirish.
+    """
+    users = _get_users_by_role(db, "production", "qadoqlash")
+    for user in users:
+        create_notification(
+            db=db,
+            title="Kesish va qadoqlash kerak",
+            message=(
+                f"Sotuv {order_number} uchun «{product_name}» "
+                f"yarim tayyor omborda mavjud. Kesib qadoqlang."
+            ),
             notification_type="info",
             user_id=user.id,
             priority="high",
             action_url=f"/sales/edit/{order_id}",
             related_entity_type="order",
             related_entity_id=order_id,
+        )
+
+
+def notify_next_stage_operators(db: Session, production, completed_stage: int):
+    """
+    Bosqich yakunlanganda keyingi bosqich operatorlarini xabardor qilish:
+      - Bosqich 1 yoki 2 (qiyom) tugasa  → kesuvchi + qadoqlovchi
+      - Bosqich 3 (kesish) tugasa         → faqat qadoqlovchi
+      - Bosqich 4+ (oxirgi)               → bu funksiya chaqirilmaydi
+    """
+    recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
+    product_name = "Mahsulot"
+    if recipe and recipe.product_id:
+        p = db.query(Product).filter(Product.id == recipe.product_id).first()
+        if p:
+            product_name = p.name or product_name
+
+    if completed_stage <= 2:
+        users = _get_users_by_role(db, "production", "qadoqlash")
+        title = "Qiyom tayyor — kesish va qadoqlash navbati"
+        message = (
+            f"«{product_name}» qiyom bosqichi yakunlandi. "
+            f"Kesish va qadoqlashni boshlang. (#{production.number})"
+        )
+    elif completed_stage == 3:
+        users = _get_users_by_role(db, "qadoqlash")
+        title = "Kesish tugadi — qadoqlash navbati"
+        message = (
+            f"«{product_name}» kesish yakunlandi. "
+            f"Qadoqlashni boshlang. (#{production.number})"
+        )
+    else:
+        return
+
+    for user in users:
+        create_notification(
+            db=db,
+            title=title,
+            message=message,
+            notification_type="info",
+            user_id=user.id,
+            priority="high",
+            action_url="/production/orders",
+            related_entity_type="production",
+            related_entity_id=production.id,
         )
 
 

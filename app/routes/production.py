@@ -34,7 +34,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin, get_current_user
 from app.utils.notifications import check_low_stock_and_notify
-from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe
+from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
 
 router = APIRouter(prefix="/production", tags=["production"])
@@ -1375,6 +1375,8 @@ async def complete_production_stage(
         production.current_stage = stage_number + 1
         production.status = "in_progress"
         db.commit()
+        # Bosqich tugagach keyingi bosqich operatorlarini xabardor qilish
+        notify_next_stage_operators(db, production, stage_number)
         return RedirectResponse(url="/production/orders", status_code=303)
     err = _do_complete_production_stock(db, production, recipe)
     if err:
@@ -1383,6 +1385,7 @@ async def complete_production_stage(
     production.current_stage = max_stage
     db.commit()
     check_low_stock_and_notify(db)
+    # Oxirgi bosqich (qadoqlash) tugadi — admin va menejerga bildirish
     notify_managers_production_ready(db, production)
     return RedirectResponse(url="/production", status_code=303)
 

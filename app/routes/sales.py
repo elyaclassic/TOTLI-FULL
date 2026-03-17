@@ -47,7 +47,8 @@ from app.utils.production_order import (
     create_production_from_order,
     get_semi_finished_warehouse,
     get_product_stock_in_warehouse,
-    notify_operator_semi_finished_available,
+    notify_qiyom_operators,
+    notify_cutting_packing_operators,
 )
 from app.utils.db_schema import ensure_orders_payment_due_date_column, ensure_order_item_warehouse_id_column
 from app.services.stock_service import create_stock_movement
@@ -449,15 +450,21 @@ async def sales_confirm(
             if semi_warehouse:
                 semi_available = get_product_stock_in_warehouse(db, semi_warehouse.id, item.product_id)
             if semi_available >= 1 and semi_available >= item.quantity:
-                # Yarim tayyor omborda bor — operatorga ovozli push (high priority bildirishnoma)
-                notify_operator_semi_finished_available(
+                # Yarim tayyor omborda yetarli — kesuvchi + qadoqlovchiga bildirish
+                notify_cutting_packing_operators(
                     db=db,
                     order_number=order.number,
                     order_id=order.id,
                     product_name=(item.product.name if item.product else "Mahsulot"),
                 )
                 continue
-            # Yarim tayyor omborda ham yo'q — buyurtma (ishlab chiqarish) ga kiritamiz
+            # Yarim tayyor omborda ham yetarli emas — qiyom operatoriga bildirish
+            notify_qiyom_operators(
+                db=db,
+                order_number=order.number,
+                order_id=order.id,
+                product_name=(item.product.name if item.product else "Mahsulot"),
+            )
             insufficient_items.append({
                 "product": item.product,
                 "required": item.quantity,
