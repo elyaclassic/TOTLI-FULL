@@ -488,10 +488,8 @@ async def sales_confirm(
             )
         except Exception as e:
             db.rollback()
-            import traceback
-            traceback.print_exc()
             return RedirectResponse(
-                url=f"/sales/edit/{order_id}?error=production&detail=" + quote(f"Ishlab chiqarish yaratishda xatolik: {str(e)}"),
+                url=f"/sales/edit/{order_id}?error=production&detail=" + quote("Ishlab chiqarish yaratishda xatolik yuz berdi"),
                 status_code=303,
             )
     
@@ -988,6 +986,10 @@ async def sales_pos_complete(
         discount_amount = float(form.get("discount_amount") or 0)
     except (ValueError, TypeError):
         pass
+    if discount_percent < 0 or discount_percent > 100:
+        discount_percent = 0.0
+    if discount_amount < 0 or discount_amount > total_order:
+        discount_amount = 0.0
     discount_sum = (total_order * discount_percent / 100.0) + discount_amount
     if discount_sum > total_order:
         discount_sum = total_order
@@ -1009,11 +1011,12 @@ async def sales_pos_complete(
                 order.payment_due_date = (datetime.now() + timedelta(days=7)).date()
         else:
             order.payment_due_date = (datetime.now() + timedelta(days=7)).date()
+    # with_for_update() — bir vaqtda 2 so'rov bir xil zaxirani olishini oldini olish
     for pid, qty in items_for_stock:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == order.warehouse_id,
             Stock.product_id == pid
-        ).first()
+        ).with_for_update().first()
         if not stock or (stock.quantity or 0) < qty:
             prod = db.query(Product).filter(Product.id == pid).first()
             name = prod.name if prod else f"#{pid}"

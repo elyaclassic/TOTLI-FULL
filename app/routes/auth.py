@@ -50,8 +50,8 @@ async def login_page(request: Request, current_user: Optional[User] = Depends(ge
 @router.post("/login")
 async def login(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(..., max_length=100),
+    password: str = Form(..., max_length=256),
     db: Session = Depends(get_db),
 ):
     try:

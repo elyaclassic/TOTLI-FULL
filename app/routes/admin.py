@@ -25,7 +25,7 @@ async def admin_backup(request: Request, current_user: User = Depends(require_ad
         return RedirectResponse(url="/?backup=ok", status_code=303)
     except FileNotFoundError as e:
         logger.warning("Backup: %s", e)
-        return JSONResponse(status_code=404, content={"ok": False, "error": str(e)})
+        return JSONResponse(status_code=404, content={"ok": False, "error": "Backup fayli topilmadi"})
     except Exception as e:
         logger.exception("Backup xatosi: %s", e)
-        return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
+        return JSONResponse(status_code=500, content={"ok": False, "error": "Backup bajarishda xatolik"})

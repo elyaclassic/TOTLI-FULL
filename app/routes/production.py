@@ -356,12 +356,26 @@ async def production_index_page(
             recent_productions_result = db.execute(text(recent_sql), recent_params).fetchall()
             
             # Production obyektlarini yaratish (faqat mavjud ustunlar bilan)
+            # DB driver ba'zida date/datetime ni str qaytaradi — shablon strftime uchun datetime kerak
+            def _ensure_datetime(v):
+                if v is None:
+                    return None
+                if isinstance(v, datetime):
+                    return v
+                if isinstance(v, str):
+                    s = (v or "").strip()
+                    for fmt, size in [("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%dT%H:%M:%S", 19), ("%Y-%m-%d", 10)]:
+                        try:
+                            return datetime.strptime(s[:size], fmt)
+                        except (ValueError, TypeError):
+                            continue
+                return None
             recent_productions_raw = []
             for row in recent_productions_result:
                 prod = Production()
                 prod.id = row.id
                 prod.number = row.number
-                prod.date = row.date
+                prod.date = _ensure_datetime(row.date)
                 prod.recipe_id = row.recipe_id
                 prod.warehouse_id = row.warehouse_id
                 prod.output_warehouse_id = row.output_warehouse_id
@@ -415,12 +429,12 @@ async def production_index_page(
             recent_productions = []
             print(f"Recent productions query error: {e}")
             import traceback
-            traceback.print_exc()
+            pass  # logged above
     
     except Exception as e:
         import traceback
         error_msg = str(e)
-        traceback.print_exc()
+        pass  # logged above
         print(f"Production index page error: {error_msg}")
     
     # Operator / ishlab chiqarish / qadoqlash kabi foydalanuvchilarga Retseptlar bloki ko'rinmasin (faqat o'zining oxirgi ishlab chiqarishlari ko'rinadi)
@@ -444,7 +458,7 @@ async def production_index_page(
     except Exception as template_error:
         import traceback
         error_msg = str(template_error)
-        traceback.print_exc()
+        pass  # logged above
         # Xavfsiz fallback
         resp = templates.TemplateResponse("production/index.html", {
             "request": request,
@@ -1221,7 +1235,7 @@ async def production_create_get():
 async def create_production(
     request: Request,
     recipe_id: int = Form(...),
-    warehouse_id: int = Form(...),
+    warehouse_id: Optional[int] = Form(None),
     output_warehouse_id: Optional[int] = Form(None),
     quantity: float = Form(...),
     note: str = Form(""),
@@ -1230,6 +1244,9 @@ async def create_production(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Ombor tanlanmasa, FastAPI 422 JSON qaytarib yubormasdan foydalanuvchini orqaga qaytaramiz.
+    if warehouse_id is None:
+        return RedirectResponse(url="/production?error=warehouse", status_code=303)
     if output_warehouse_id is None:
         output_warehouse_id = warehouse_id
     recipe = db.query(Recipe).options(joinedload(Recipe.stages)).filter(Recipe.id == recipe_id).first()

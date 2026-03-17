@@ -105,7 +105,7 @@ async def warehouse_list(
             # Database da max_stage yoki boshqa ustunlar yo'q bo'lishi mumkin - e'tiborsiz qoldiramiz
             print(f"Production query error (warehouse {s.warehouse_id}, product {s.product_id}): {prod_error}")
             import traceback
-            traceback.print_exc()
+            pass  # logged above
         adj_docs = (
             db.query(StockAdjustmentDoc)
             .join(StockAdjustmentDocItem, StockAdjustmentDoc.id == StockAdjustmentDocItem.doc_id)
@@ -312,7 +312,7 @@ async def warehouse_import(
                 detail += f". Ombor topilmadi: {sample}"
         return RedirectResponse(url="/warehouse?success=import&detail=" + quote(detail), status_code=303)
     except Exception as e:
-        traceback.print_exc()
+        pass  # logged above
         return RedirectResponse(url="/warehouse?error=import&detail=" + quote(str(e)[:200]), status_code=303)
 
 

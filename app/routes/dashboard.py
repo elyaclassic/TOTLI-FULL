@@ -824,7 +824,7 @@ async def production_dashboard(request: Request, db: Session = Depends(get_db), 
     except Exception as e:
         print(f"Today production query error: {e}")
         import traceback
-        traceback.print_exc()
+        pass  # logged above
         today_production = 0
     
     # Daily plan (placeholder - could be from a Plan table)

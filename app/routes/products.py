@@ -26,7 +26,7 @@ product_check_router = APIRouter(prefix="/product-check", tags=["products"])
 
 
 @router.get("/barcode/{product_id}")
-async def product_barcode(product_id: int, download: int = 0, db: Session = Depends(get_db)):
+async def product_barcode(product_id: int, download: int = 0, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product or not product.barcode:
         return HTMLResponse("<h3>Shtixkod topilmadi</h3>", status_code=404)
@@ -491,12 +491,17 @@ async def product_upload_image(
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
     if image and image.filename:
-        ext = image.filename.split(".")[-1]
+        ext = image.filename.rsplit(".", 1)[-1].lower()
+        if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
+            raise HTTPException(status_code=400, detail="Faqat rasm fayllari qabul qilinadi: jpg, jpeg, png, gif, webp")
+        contents = await image.read()
+        if len(contents) > 5 * 1024 * 1024:  # 5 MB
+            raise HTTPException(status_code=400, detail="Rasm hajmi 5 MB dan oshmasligi kerak")
         image_filename = f"{product.code}.{ext}"
         image_path = os.path.join("app", "static", "images", "products", image_filename)
         os.makedirs(os.path.dirname(image_path), exist_ok=True)
         with open(image_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+            buffer.write(contents)
         product.image = image_filename
         db.commit()
     return RedirectResponse(url="/products", status_code=303)

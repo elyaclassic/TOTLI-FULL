@@ -211,7 +211,7 @@ async def startup():
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)
     try:
-        for _dir in [os.path.dirname(_mp), os.getcwd(), r"C:\Users\ELYOR\.cursor\worktrees\business_system\pwp"]:
+        for _dir in [os.path.dirname(_mp), os.getcwd()]:
             if _dir:
                 with open(os.path.join(_dir, "server_started.txt"), "w", encoding="utf-8") as f:
                     f.write("main.py: %s\ncwd: %s\n" % (_mp, os.getcwd()))

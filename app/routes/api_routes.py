@@ -183,8 +183,8 @@ def _get_phone_variants(phone: str) -> list:
 @router.post("/login")
 async def unified_login(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(..., max_length=100),
+    password: str = Form(..., max_length=256),
     db: Session = Depends(get_db),
 ):
     """Birlashtirilgan login: User (admin/manager/production) yoki Agent/Driver"""

@@ -26,13 +26,13 @@
         {% set lng = agent.locations[0].longitude %}
         {% set battery = agent.locations[0].battery %}
         myMap.geoObjects.add(new ymaps.Placemark([{{ lat }}, {{ lng }}], {
-        balloonContent: '<b>{{ agent.full_name }}</b><br><small>{{ agent.region or "N/A" }}</small><br>Battery: {{ battery }}%'
+        balloonContent: '<b>' + {{ agent.full_name | tojson }} + '</b><br><small>' + {{ (agent.region or 'N/A') | tojson }} + '</small><br>Battery: {{ battery }}%'
     }, {
         preset: 'islands#circleIcon',
         iconColor: '#0d6efd'
     }));
     allCoords.push([{{ lat }}, {{ lng }}]);
-    console.log('Added agent: {{ agent.full_name }}');
+    console.log('Added agent marker');
     {% endif %}
     {% endfor %}
 
@@ -42,13 +42,13 @@
     {% set lat = driver.locations[0].latitude %}
     {% set lng = driver.locations[0].longitude %}
     myMap.geoObjects.add(new ymaps.Placemark([{{ lat }}, {{ lng }}], {
-        balloonContent: '<b>{{ driver.full_name }}</b><br><small>{{ driver.vehicle_number }}</small>'
+        balloonContent: '<b>' + {{ driver.full_name | tojson }} + '</b><br><small>' + {{ (driver.vehicle_number or '') | tojson }} + '</small>'
     }, {
         preset: 'islands#circleIcon',
         iconColor: '#0dcaf0'
     }));
     allCoords.push([{{ lat }}, {{ lng }}]);
-    console.log('Added driver: {{ driver.full_name }}');
+    console.log('Added driver marker');
     {% endif %}
     {% endfor %}
 
@@ -57,7 +57,7 @@
     {% set lat = ploc.latitude %}
     {% set lng = ploc.longitude %}
     myMap.geoObjects.add(new ymaps.Placemark([{{ lat }}, {{ lng }}], {
-        balloonContent: '<b>Mijoz #{{ ploc.partner_id }}</b><br><small>{{ ploc.address or "N/A" }}</small>'
+        balloonContent: '<b>Mijoz #{{ ploc.partner_id }}</b><br><small>' + {{ (ploc.address or 'N/A') | tojson }} + '</small>'
     }, {
         preset: 'islands#circleIcon',
         iconColor: '#198754'

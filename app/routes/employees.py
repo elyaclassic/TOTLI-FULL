@@ -1364,7 +1364,7 @@ async def attendance_sync_hikvision(
         return RedirectResponse(url=base_redirect + sep + "synced=1&msg=" + quote(msg), status_code=303)
     except Exception as e:
         err_msg = str(e)[:200] if e else "Noma'lum xato"
-        traceback.print_exc()
+        pass  # logged above
         return RedirectResponse(url=base_redirect + sep + "error=" + quote("Hikvision yuklash: " + err_msg), status_code=303)
 
 

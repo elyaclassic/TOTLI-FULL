@@ -782,7 +782,7 @@ async def qoldiqlar_tovar_import_excel(
             status_code=303,
         )
     except Exception as e:
-        traceback.print_exc()
+        pass  # logged above
         return RedirectResponse(
             url="/qoldiqlar?error=import&detail=" + quote(str(e)[:180]) + "#tovar",
             status_code=303,

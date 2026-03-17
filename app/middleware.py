@@ -44,7 +44,7 @@ async def global_safe_middleware_impl(request: Request, call_next):
         raise
     except BaseException as e:
         tb = traceback.format_exc()
-        traceback.print_exc()
+        pass  # logged above
         _write_error_log(tb, "global_safe")
         path = _get_path(request)
         if path == "/login" or path == "/favicon.ico":
