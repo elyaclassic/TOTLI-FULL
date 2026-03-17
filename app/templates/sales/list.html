@@ -101,6 +101,13 @@
                                 <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('Ushbu bekor qilingan sotuvni o\'chirmoqchimisiz?');">
                                     <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                 </form>
+                                {% elif order.status == 'waiting_production' and current_user and (current_user.role or '')|lower == 'admin' %}
+                                <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Ishlab chiqarish kutish bekor qilinadi. Davom etasizmi?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                </form>
+                                <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('Ushbu sotuvni o\'chirmoqchimisiz?');">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>

@@ -59,6 +59,15 @@
                             <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
                         </form>
                         {% endif %}
+                        {% elif order.status == 'waiting_production' %}
+                        {% if current_user and current_user.role == 'admin' %}
+                        <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Ishlab chiqarish kutish bekor qilinadi va sotuv qoralamaga qaytadi. Davom etasizmi?');">
+                            <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                        </form>
+                        <form method="POST" action="/sales/delete/{{ order.id }}" style="display: inline;" onsubmit="return confirm('Ushbu sotuvni o\'chirmoqchimisiz?');">
+                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                        </form>
+                        {% endif %}
                         {% elif order.status == 'completed' %}
                         <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Nakladnoy</a>
                         {% if current_user and current_user.role == 'admin' %}

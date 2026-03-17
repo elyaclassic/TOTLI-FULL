@@ -544,6 +544,11 @@ async def sales_revert(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    if order.status == "waiting_production":
+        # Ombor hisobdan chiqarilmagan — faqat draft ga qaytarish
+        order.status = "draft"
+        db.commit()
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
     if order.status != "completed":
         return RedirectResponse(
             url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),
@@ -601,7 +606,7 @@ async def sales_delete(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
-    if order.status not in ("draft", "cancelled"):
+    if order.status not in ("draft", "cancelled", "waiting_production"):
         return RedirectResponse(
             url="/sales?error=delete&detail=" + quote("Faqat qoralama yoki bekor qilingan sotuvni o'chirish mumkin. Avval tasdiqni bekor qiling."),
             status_code=303,
