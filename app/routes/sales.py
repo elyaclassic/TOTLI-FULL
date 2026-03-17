@@ -33,6 +33,14 @@ from app.models.database import (
     CashRegister,
 )
 from app.deps import require_auth, require_admin
+
+
+def _check_order_access(order: Order, current_user: User):
+    """Admin/manager — hamma buyurtma, boshqalar — faqat o'ziniki."""
+    if current_user.role in ("admin", "manager"):
+        return
+    if order.user_id and order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.production_order import (
@@ -224,13 +232,17 @@ async def sales_create(
     quantities = []
     for q in quantities_raw:
         try:
-            quantities.append(float(q))
+            val = float(q)
+            if 0 < val < 1_000_000:
+                quantities.append(val)
         except (ValueError, TypeError):
             pass
     prices = []
     for p in prices_raw:
         try:
-            prices.append(float(p))
+            val = float(p)
+            if 0 <= val < 1_000_000_000:
+                prices.append(val)
         except (ValueError, TypeError):
             pass
     warehouse_ids = []
@@ -290,6 +302,7 @@ async def sales_edit(
     ).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    _check_order_access(order, current_user)
     products = db.query(Product).filter(
         Product.type.in_(["tayyor", "yarim_tayyor"]),
         Product.is_active == True,
@@ -330,6 +343,7 @@ async def sales_add_item(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    _check_order_access(order, current_user)
     if order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
     price = 0
@@ -360,6 +374,7 @@ async def sales_add_items(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    _check_order_access(order, current_user)
     if order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
     form = await request.form()
@@ -369,13 +384,17 @@ async def sales_add_items(
     quantities = []
     for q in quantities_raw:
         try:
-            quantities.append(float(q))
+            val = float(q)
+            if 0 < val < 1_000_000:
+                quantities.append(val)
         except (ValueError, TypeError):
             pass
     prices = []
     for p in prices_raw:
         try:
-            prices.append(float(p))
+            val = float(p)
+            if 0 <= val < 1_000_000_000:
+                prices.append(val)
         except (ValueError, TypeError):
             pass
     for i in range(min(len(product_ids), len(quantities))):
@@ -409,9 +428,10 @@ async def sales_confirm(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    _check_order_access(order, current_user)
     if order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
-    
+
     # Qoldiq tekshiruvi va yetarli bo'lmagan mahsulotlarni yig'ish
     # Agar tanlangan omborda qoldiq 0 yoki <1 bo'lsa, avval yarim tayyor omborni tekshiramiz
     insufficient_items = []
@@ -500,6 +520,7 @@ async def sales_delete_item(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order or order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+    _check_order_access(order, current_user)
     item = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
     if item:
         order.total = (order.total or 0) - (item.total or 0)
@@ -538,6 +559,7 @@ async def sales_revert(
 
 @router.get("/{order_id}/nakladnoy", response_class=HTMLResponse)
 async def sales_nakladnoy(
+    request: Request,
     order_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
@@ -686,7 +708,11 @@ async def sales_pos(
         if cat_ids:
             for c in db.query(Category).filter(Category.id.in_(cat_ids)).order_by(Category.name).all():
                 pos_categories.append({"id": c.id, "name": c.name or c.code or ""})
-    pos_all_categories = pos_categories
+    # Dropdown uchun barcha kategoriyalar (omborda qoldiq bo'lmasa ham)
+    pos_all_categories = [
+        {"id": c.id, "name": c.name or c.code or ""} for c in
+        db.query(Category).order_by(Category.name).all()
+    ]
     success = request.query_params.get("success")
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
@@ -876,7 +902,7 @@ async def sales_pos_complete(
         return RedirectResponse(url="/?error=pos_access", status_code=303)
     form = await request.form()
     payment_type = (form.get("payment_type") or "").strip().lower()
-    if payment_type not in ("naqd", "plastik", "click", "terminal"):
+    if payment_type not in ("naqd", "plastik", "click", "terminal", "split"):
         return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
     warehouse = _get_pos_warehouse_for_user(db, current_user)
     wh_id_form = form.get("warehouse_id")
@@ -1018,27 +1044,76 @@ async def sales_pos_complete(
         department_id = getattr(warehouse, "department_id", None) if warehouse else None
         if not department_id and current_user:
             department_id = getattr(current_user, "department_id", None)
-        cash_register = _get_pos_cash_register(db, payment_type, department_id)
-        if cash_register and (order.total or 0) > 0:
+        def _map_pay_type(pt: str) -> str:
+            pt = (pt or "").strip().lower()
+            if pt == "naqd":
+                return "cash"
+            if pt == "click":
+                return "click"
+            if pt == "terminal":
+                return "terminal"
+            return "card"
+
+        total_to_pay = float(order.total or 0)
+        if total_to_pay > 0:
+            parts = None
+            if payment_type == "split":
+                raw = (form.get("payment_splits") or "").strip()
+                try:
+                    parts = json.loads(raw) if raw else None
+                except Exception:
+                    parts = None
+                if not isinstance(parts, list) or not parts:
+                    return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
+                cleaned = []
+                sum_parts = 0.0
+                allowed = ("naqd", "plastik", "click", "terminal")
+                for p in parts:
+                    if not isinstance(p, dict):
+                        continue
+                    t = (p.get("type") or "").strip().lower()
+                    if t not in allowed:
+                        continue
+                    try:
+                        amt = float(p.get("amount") or 0)
+                    except (ValueError, TypeError):
+                        amt = 0.0
+                    if amt <= 0:
+                        continue
+                    cleaned.append({"type": t, "amount": amt})
+                    sum_parts += amt
+                if not cleaned or abs(sum_parts - total_to_pay) >= 0.01:
+                    return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
+                parts = cleaned
+            else:
+                parts = [{"type": payment_type, "amount": total_to_pay}]
+
             today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
             pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
-            pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{pay_count + 1:04d}"
-            pay_type = "cash" if payment_type == "naqd" else ("click" if payment_type == "click" else ("terminal" if payment_type == "terminal" else "card"))
-            db.add(Payment(
-                number=pay_number,
-                type="income",
-                cash_register_id=cash_register.id,
-                partner_id=order.partner_id,
-                order_id=order.id,
-                amount=order.total,
-                payment_type=pay_type,
-                category="sale",
-                description=f"POS sotuv {order.number}",
-                user_id=current_user.id if current_user else None,
-            ))
-            if getattr(cash_register, "balance", None) is not None:
-                cash_register.balance = (cash_register.balance or 0) + (order.total or 0)
-                db.commit()
+            seq = pay_count + 1
+            for part in parts:
+                pt = part["type"]
+                amt = float(part["amount"] or 0)
+                cash_register = _get_pos_cash_register(db, pt, department_id)
+                if not cash_register:
+                    return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
+                pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{seq:04d}"
+                seq += 1
+                db.add(Payment(
+                    number=pay_number,
+                    type="income",
+                    cash_register_id=cash_register.id,
+                    partner_id=order.partner_id,
+                    order_id=order.id,
+                    amount=amt,
+                    payment_type=_map_pay_type(pt),
+                    category="sale",
+                    description=f"POS sotuv {order.number}",
+                    user_id=current_user.id if current_user else None,
+                ))
+                if getattr(cash_register, "balance", None) is not None:
+                    cash_register.balance = (cash_register.balance or 0) + amt
+            db.commit()
     else:
         partner.balance = (partner.balance or 0) + (order.total or 0)
         db.commit()

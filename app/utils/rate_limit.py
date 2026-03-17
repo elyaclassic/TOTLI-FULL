@@ -87,3 +87,26 @@ def record_success(request):
     ip = _get_ip(request)
     with _lock:
         _attempts.pop(ip, None)
+
+
+# --- Public API rate limiter (daqiqada max 60 so'rov) ---
+_api_lock = threading.Lock()
+API_RATE_LIMIT = 60          # Daqiqada
+API_RATE_WINDOW = 60         # Soniya
+# { ip: {"count": int, "window_start": datetime} }
+_api_requests: dict = {}
+
+
+def check_api_rate_limit(request) -> bool:
+    """Public API uchun rate limit.
+    True qaytarsa — limit oshib ketgan (429 qaytarish kerak).
+    """
+    ip = _get_ip(request)
+    now = datetime.now()
+    with _api_lock:
+        data = _api_requests.get(ip)
+        if not data or (now - data["window_start"]).total_seconds() >= API_RATE_WINDOW:
+            _api_requests[ip] = {"count": 1, "window_start": now}
+            return False
+        data["count"] += 1
+        return data["count"] > API_RATE_LIMIT

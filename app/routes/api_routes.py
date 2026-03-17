@@ -22,7 +22,8 @@ from app.models.database import (
 from app.deps import require_auth, get_current_user
 from app.utils.notifications import get_unread_count, get_user_notifications
 from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
-from app.utils.rate_limit import is_blocked, record_failure, record_success
+from app.utils.rate_limit import is_blocked, record_failure, record_success, check_api_rate_limit
+from fastapi.responses import JSONResponse as _JSONResponse
 from app.logging_config import get_logger
 
 logger = get_logger("api_routes")
@@ -37,7 +38,9 @@ async def pwa_config():
 
 
 @router.get("/stats")
-async def api_stats(db: Session = Depends(get_db)):
+async def api_stats(request: Request, db: Session = Depends(get_db)):
+    if check_api_rate_limit(request):
+        return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     today = datetime.now().date()
     today_sales = db.query(Order).filter(Order.type == "sale", Order.date >= today).all()
     cash = db.query(CashRegister).first()
@@ -51,19 +54,25 @@ async def api_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/products")
-async def api_products(db: Session = Depends(get_db)):
+async def api_products(request: Request, db: Session = Depends(get_db)):
+    if check_api_rate_limit(request):
+        return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     products = db.query(Product).filter(Product.is_active == True).all()
     return [{"id": p.id, "name": p.name, "code": p.code, "price": p.sale_price} for p in products]
 
 
 @router.get("/partners")
-async def api_partners(db: Session = Depends(get_db)):
+async def api_partners(request: Request, db: Session = Depends(get_db)):
+    if check_api_rate_limit(request):
+        return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     partners = db.query(Partner).filter(Partner.is_active == True).all()
     return [{"id": p.id, "name": p.name, "balance": p.balance} for p in partners]
 
 
 @router.get("/agents/locations")
-async def get_agents_locations(db: Session = Depends(get_db)):
+async def get_agents_locations(request: Request, db: Session = Depends(get_db)):
+    if check_api_rate_limit(request):
+        return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     result = []
     for agent in agents:
@@ -87,7 +96,9 @@ async def get_agents_locations(db: Session = Depends(get_db)):
 
 
 @router.get("/drivers/locations")
-async def get_drivers_locations(db: Session = Depends(get_db)):
+async def get_drivers_locations(request: Request, db: Session = Depends(get_db)):
+    if check_api_rate_limit(request):
+        return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     result = []
     for driver in drivers:
