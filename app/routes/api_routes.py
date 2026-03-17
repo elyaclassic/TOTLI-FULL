@@ -185,8 +185,8 @@ async def unified_login(
             return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
         username = username.strip()
         password = password.strip()
-        
-        logger.info(f"Login attempt: username='{username}', password_length={len(password)}")
+        _safe_username = username.replace("\n", "").replace("\r", "")
+        logger.info(f"Login attempt: username='{_safe_username}', password_length={len(password)}")
         
         # Telefon raqami bo'lishi mumkin - normalize qilamiz
         # Agar username raqamlar yoki + bilan boshlansa, telefon raqami deb hisoblaymiz
@@ -359,7 +359,7 @@ async def unified_login(
         import traceback
         error_detail = traceback.format_exc()
         logger.error(f"Login error: {error_detail}")
-        return {"success": False, "error": f"Server xatosi: {str(e)}"}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.post("/agent/login")
@@ -391,7 +391,7 @@ async def agent_login(
             "token": token,
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.post("/driver/login")
@@ -428,7 +428,7 @@ async def driver_login(
             "token": token,
         }
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.post("/agent/orders")
@@ -439,7 +439,7 @@ async def agent_orders(token: str, db: Session = Depends(get_db)):
             return {"success": False, "error": "Invalid token"}
         return {"success": True, "orders": []}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.get("/agent/partners")
@@ -464,7 +464,7 @@ async def agent_partners(token: str = None, db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Agent partners error: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.get("/agent/visits")
@@ -488,7 +488,7 @@ async def agent_visits(token: str = None, db: Session = Depends(get_db)):
         }
     except Exception as e:
         logger.error(f"Agent visits error: {e}")
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.post("/agent/location")
@@ -519,7 +519,7 @@ async def agent_location_update(
         return {"success": True, "location_id": location.id}
     except Exception as e:
         db.rollback()
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.get("/notifications/unread")
@@ -570,4 +570,4 @@ async def driver_location_update(
         return {"success": True, "location_id": location.id}
     except Exception as e:
         db.rollback()
-        return {"success": False, "error": str(e)}
+        return {"success": False, "error": "Server xatosi"}

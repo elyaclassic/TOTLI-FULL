@@ -18,13 +18,15 @@ from app.models.database import (
     Partner,
     PartnerLocation,
     Order,
+    User,
 )
+from app.deps import require_admin, require_admin_or_manager
 
 router = APIRouter(tags=["delivery"])
 
 
 @router.get("/delivery", response_class=HTMLResponse)
-async def delivery_list(request: Request, db: Session = Depends(get_db)):
+async def delivery_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     drivers = db.query(Driver).all()
     today = datetime.now().date()
     for driver in drivers:
@@ -60,6 +62,7 @@ async def driver_add(
     vehicle_type: str = Form(""),
     telegram_id: str = Form(""),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     last_driver = db.query(Driver).order_by(Driver.id.desc()).first()
     code = f"DR{str((last_driver.id if last_driver else 0) + 1).zfill(3)}"
@@ -82,6 +85,7 @@ async def driver_detail(
     request: Request,
     driver_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
 ):
     driver = db.query(Driver).filter(Driver.id == driver_id).first()
     if not driver:
@@ -110,7 +114,7 @@ async def driver_detail(
 
 
 @router.get("/map", response_class=HTMLResponse)
-async def map_view(request: Request, db: Session = Depends(get_db)):
+async def map_view(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     agent_markers = []
     for agent in agents:
@@ -187,7 +191,7 @@ async def map_view(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/supervisor", response_class=HTMLResponse)
-async def supervisor_dashboard(request: Request, db: Session = Depends(get_db)):
+async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     today = datetime.now().date()
     total_agents = db.query(Agent).filter(Agent.is_active == True).count()
     active_agents = 0
@@ -261,6 +265,7 @@ async def add_driver(
     vehicle_number: str = Form(None),
     telegram_id: str = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     last_driver = db.query(Driver).order_by(Driver.id.desc()).first()
     code = f"DR{str((last_driver.id if last_driver else 0) + 1).zfill(3)}"
@@ -286,6 +291,7 @@ async def add_delivery_order(
     delivery_address: str = Form(...),
     notes: str = Form(None),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
 ):
     delivery = Delivery(
         driver_id=driver_id,

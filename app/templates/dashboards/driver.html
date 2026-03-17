@@ -50,6 +50,9 @@
 
 <script>
 (function() {
+    function escHtml(str) {
+        return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
     const token = {{ (driver_token or '') | tojson }};
     if (!token) {
         document.getElementById('partnersList').innerHTML = '<p class="text-muted">Token topilmadi. Qayta kiring.</p>';
@@ -61,19 +64,28 @@
             const d = await r.json();
             if (d.success && d.partners) {
                 document.getElementById('partnersCount').textContent = d.partners.length;
-                document.getElementById('partnersList').innerHTML = d.partners.length
-                    ? d.partners.slice(0, 20).map(p => `
-                        <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-                            <div><strong>${p.name}</strong><br><small class="text-muted">${p.address || ''}</small></div>
-                            <span class="${(p.balance || 0) >= 0 ? 'text-success' : 'text-danger'}">${(p.balance || 0).toLocaleString()} сум</span>
-                        </div>
-                    `).join('') + (d.partners.length > 20 ? '<p class="text-muted mt-2">... va yana ' + (d.partners.length - 20) + ' ta</p>' : '')
-                    : '<p class="text-muted">Savdo nuqtalari yo\'q</p>';
+                const list = document.getElementById('partnersList');
+                if (d.partners.length) {
+                    const items = d.partners.slice(0, 20).map(p => {
+                        const balance = p.balance || 0;
+                        const cls = balance >= 0 ? 'text-success' : 'text-danger';
+                        return `<div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                            <div><strong>${escHtml(p.name)}</strong><br><small class="text-muted">${escHtml(p.address)}</small></div>
+                            <span class="${cls}">${balance.toLocaleString()} сум</span>
+                        </div>`;
+                    });
+                    if (d.partners.length > 20) {
+                        items.push(`<p class="text-muted mt-2">... va yana ${d.partners.length - 20} ta</p>`);
+                    }
+                    list.innerHTML = items.join('');
+                } else {
+                    list.innerHTML = '<p class="text-muted">Savdo nuqtalari yo\'q</p>';
+                }
             } else {
                 document.getElementById('partnersList').innerHTML = '<p class="text-muted">Ma\'lumot yuklanmadi</p>';
             }
         } catch (e) {
-            document.getElementById('partnersList').innerHTML = '<p class="text-danger">Xato: ' + e.message + '</p>';
+            document.getElementById('partnersList').innerHTML = '<p class="text-danger">Yuklashda xatolik yuz berdi</p>';
         }
     }
     load();

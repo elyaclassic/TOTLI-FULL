@@ -21,7 +21,7 @@ async def admin_backup(request: Request, current_user: User = Depends(require_ad
         cleanup_old_backups(keep_count=30)
         logger.info("Backup yaratildi: %s", path)
         if request.query_params.get("json") == "1":
-            return JSONResponse(content={"ok": True, "path": path})
+            return JSONResponse(content={"ok": True})
         return RedirectResponse(url="/?backup=ok", status_code=303)
     except FileNotFoundError as e:
         logger.warning("Backup: %s", e)

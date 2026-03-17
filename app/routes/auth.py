@@ -87,7 +87,7 @@ async def login(
             user.password_hash = hash_password(password)
             db.commit()
         record_success(request)
-        token = create_session_token(user.id, user.username)
+        token = create_session_token(user.id, user.role or "user")
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
         redirect_url = _redirect_after_login(user)
         resp = RedirectResponse(url=redirect_url, status_code=303)
@@ -97,14 +97,14 @@ async def login(
             path="/",
             httponly=True,
             max_age=86400,
-            samesite="lax",
+            samesite="strict",
             secure=use_https,
         )
         return resp
     except Exception as e:
         return templates.TemplateResponse("login.html", {
             "request": request,
-            "error": f"Tizimda xatolik: {str(e)}",
+            "error": "Tizimda xatolik yuz berdi. Qayta urinib ko'ring.",
         })
 
 
@@ -112,7 +112,7 @@ def _do_logout_response():
     """Session cookie o'chiriladi va /login ga yo'naltiriladi."""
     use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
     resp = RedirectResponse(url="/login", status_code=303)
-    resp.delete_cookie("session_token", path="/", samesite="lax", secure=use_https, httponly=True)
+    resp.delete_cookie("session_token", path="/", samesite="strict", secure=use_https, httponly=True)
     return resp
 
 

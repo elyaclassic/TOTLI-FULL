@@ -40,3 +40,14 @@ def require_admin(current_user: Optional[User] = Depends(get_current_user)) -> U
         from fastapi import HTTPException
         raise HTTPException(status_code=403, detail="Faqat administrator uchun ruxsat")
     return current_user
+
+
+def require_admin_or_manager(current_user: Optional[User] = Depends(get_current_user)) -> User:
+    """Admin yoki menejer"""
+    if not current_user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Login talab qilindi")
+    if current_user.role not in ("admin", "manager"):
+        from fastapi import HTTPException
+        raise HTTPException(status_code=403, detail="Faqat administrator yoki menejer uchun ruxsat")
+    return current_user

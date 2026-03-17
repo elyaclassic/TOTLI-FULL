@@ -13,13 +13,25 @@ _lock = threading.Lock()
 _attempts: dict = {}
 
 
+import os
+
+# Ishonchli proxy IP lari (masalan: "10.0.0.1,10.0.0.2")
+_TRUSTED_PROXIES = set(
+    ip.strip() for ip in os.getenv("TRUSTED_PROXY_IPS", "").split(",") if ip.strip()
+)
+
+
 def _get_ip(request) -> str:
-    """Haqiqiy IP ni olish (proxy orqali ham ishlaydi)."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
+    """Haqiqiy IP ni olish.
+    X-Forwarded-For faqat TRUSTED_PROXY_IPS da ko'rsatilgan proxylardan kelsa ishoniladi.
+    """
     client = getattr(request, "client", None)
-    return client.host if client else "unknown"
+    real_ip = client.host if client else "unknown"
+    if _TRUSTED_PROXIES and real_ip in _TRUSTED_PROXIES:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return real_ip
 
 
 def _cleanup():
