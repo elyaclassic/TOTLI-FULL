@@ -434,7 +434,7 @@
         {% set pos_fullscreen = sotuvchi_menu and page_title == 'Sotuv oynasi' %}
 
         <ul class="nav flex-column mt-3">
-            {% if user_role in ['admin', 'manager', 'menejer'] %}
+            {% if user_role == 'admin' %}
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Bosh sahifa' %}active{% endif %}" href="/">
                     <i class="bi bi-house-door"></i> Bosh sahifa
@@ -443,12 +443,7 @@
             {% endif %}
 
             {% if manager_sidebar %}
-            <!-- Menejer: bosh sahifa + sotuv, ombor, buyurtmalar, ishlab chiqarish buyurtmalari -->
-            <li class="nav-item">
-                <a class="nav-link {% if page_title == 'Bosh sahifa' %}active{% endif %}" href="/">
-                    <i class="bi bi-house-door"></i> Bosh sahifa
-                </a>
-            </li>
+            <!-- Menejer: sotuv, ombor, buyurtmalar, ishlab chiqarish buyurtmalari (Bosh sahifa yo'q) -->
             <li class="nav-item">
                 <a class="nav-link {% if 'Sotuv oynasi' in (page_title or '') %}active{% endif %}" href="/sales/pos">
                     <i class="bi bi-cart-check"></i> Sotuv oynasi
@@ -952,15 +947,15 @@
 
         // Bildirishnoma sarlavhasiga mos ovoz fayli
         var _soundMap = {
-            'Qiyom tayyorlash kerak':              '/static/sounds/qiyom.mp3',
-            'Kesish va qadoqlash kerak':           '/static/sounds/kesish.mp3',
-            'Qiyom tayyor \u2014 kesish va qadoqlash navbati': '/static/sounds/qiyom_tayyor.mp3',
-            'Kesish tugadi \u2014 qadoqlash navbati':          '/static/sounds/kesish_tayyor.mp3',
-            'Ishlab chiqarish tayyor':             '/static/sounds/tayyor.mp3',
+            'Qiyom tayyorlash kerak':              '/static/sounds/qiyom.wav',
+            'Kesish va qadoqlash kerak':           '/static/sounds/kesish.wav',
+            'Qiyom tayyor \u2014 kesish va qadoqlash navbati': '/static/sounds/qiyom_tayyor.wav',
+            'Kesish tugadi \u2014 qadoqlash navbati':          '/static/sounds/kesish_tayyor.wav',
+            'Ishlab chiqarish tayyor':             '/static/sounds/tayyor.wav',
         };
 
         function playNotifSound(title, isHigh) {
-            var src = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.mp3' : null);
+            var src = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.wav' : null);
             if (src) {
                 var a = new Audio(src);
                 a.volume = 1.0;
