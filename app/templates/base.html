@@ -985,14 +985,23 @@
             }, 8000);
         }
 
+        function markRead(id){
+            var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+            fetch('/api/notifications/' + id + '/read', {
+                method: 'POST', credentials: 'same-origin',
+                headers: {'X-CSRF-Token': csrfToken}
+            }).catch(function(){});
+        }
+
         function pollNotifications(){
-            fetch('/notifications/unread', { credentials: 'same-origin' })
+            fetch('/api/notifications/unread', { credentials: 'same-origin' })
                 .then(function(r){ return r.ok ? r.json() : null; })
                 .then(function(d){
                     if (!d || !d.last) return;
                     var n = d.last;
                     if (n.id && n.id > _lastNotifId) {
                         _lastNotifId = n.id;
+                        markRead(n.id);
                         showToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
                     }
                 })

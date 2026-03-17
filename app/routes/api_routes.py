@@ -20,7 +20,7 @@ from app.models.database import (
     User,
 )
 from app.deps import require_auth, get_current_user
-from app.utils.notifications import get_unread_count, get_user_notifications
+from app.utils.notifications import get_unread_count, get_user_notifications, mark_as_read
 from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
 from app.utils.rate_limit import is_blocked, record_failure, record_success, check_api_rate_limit
 from fastapi.responses import JSONResponse as _JSONResponse
@@ -554,6 +554,19 @@ async def api_notifications_unread(
             "action_url": n.action_url or None,
         }
     return {"unread_count": count, "last": last}
+
+
+@router.post("/notifications/{notification_id}/read")
+async def api_notification_mark_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Bildirishnomani o'qilgan deb belgilash."""
+    if not current_user:
+        return {"ok": False}
+    mark_as_read(db, notification_id)
+    return {"ok": True}
 
 
 @router.post("/driver/location")
