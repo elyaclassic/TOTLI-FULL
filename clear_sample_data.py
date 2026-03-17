@@ -126,7 +126,9 @@ def clear_sample_data():
         print("9️⃣  Haydovchilar")
         print("🔟 Retseptlar")
         print()
-        _pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+        _pwd = os.getenv("TEST_ADMIN_PASSWORD")
+        if not _pwd:
+            raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
         print("💡 Admin foydalanuvchi saqlab qolindi:")
         print("   Username: admin")
         print("   Password:", _pwd)

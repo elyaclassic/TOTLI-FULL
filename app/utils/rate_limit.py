@@ -1,0 +1,77 @@
+"""
+Login brute-force himoyasi — IP bo'yicha urinishlar soni chegaralanadi.
+"""
+import threading
+from datetime import datetime, timedelta
+
+# 5 ta muvaffaqiyatsiz urinishdan keyin 15 daqiqa bloklash
+MAX_ATTEMPTS = 5
+LOCKOUT_MINUTES = 15
+
+_lock = threading.Lock()
+# { ip: {"count": int, "locked_until": datetime | None} }
+_attempts: dict = {}
+
+
+def _get_ip(request) -> str:
+    """Haqiqiy IP ni olish (proxy orqali ham ishlaydi)."""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    client = getattr(request, "client", None)
+    return client.host if client else "unknown"
+
+
+def _cleanup():
+    """Muddati o'tgan yozuvlarni o'chirish (memory leak oldini olish)."""
+    now = datetime.now()
+    expired = [
+        ip for ip, data in _attempts.items()
+        if data["locked_until"] is not None and data["locked_until"] < now
+        and data["count"] < MAX_ATTEMPTS
+    ]
+    # Faqat lock muddati o'tgan va count sifirlanishi kerak bo'lganlarni o'chirish
+    to_delete = [
+        ip for ip, data in _attempts.items()
+        if data["locked_until"] is not None and data["locked_until"] < now
+    ]
+    for ip in to_delete:
+        del _attempts[ip]
+
+
+def is_blocked(request) -> tuple[bool, int]:
+    """
+    IP bloklangan bo'lsa (True, qolgan_soniyalar) qaytaradi.
+    Bloklangmagan bo'lsa (False, 0) qaytaradi.
+    """
+    ip = _get_ip(request)
+    with _lock:
+        _cleanup()
+        data = _attempts.get(ip)
+        if not data:
+            return False, 0
+        if data["locked_until"] and datetime.now() < data["locked_until"]:
+            remaining = int((data["locked_until"] - datetime.now()).total_seconds())
+            return True, remaining
+        return False, 0
+
+
+def record_failure(request):
+    """Muvaffaqiyatsiz login — urinish qayd etiladi, kerak bo'lsa bloklash."""
+    ip = _get_ip(request)
+    with _lock:
+        data = _attempts.setdefault(ip, {"count": 0, "locked_until": None})
+        # Oldingi lock muddati o'tgan bo'lsa — sifirla
+        if data["locked_until"] and datetime.now() >= data["locked_until"]:
+            data["count"] = 0
+            data["locked_until"] = None
+        data["count"] += 1
+        if data["count"] >= MAX_ATTEMPTS:
+            data["locked_until"] = datetime.now() + timedelta(minutes=LOCKOUT_MINUTES)
+
+
+def record_success(request):
+    """Muvaffaqiyatli login — IP uchun hisoblagichni sifirla."""
+    ip = _get_ip(request)
+    with _lock:
+        _attempts.pop(ip, None)

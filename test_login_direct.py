@@ -6,7 +6,9 @@ from fastapi.testclient import TestClient
 from main import app
 
 client = TestClient(app)
-_test_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+_test_pwd = os.getenv("TEST_ADMIN_PASSWORD")
+if not _test_pwd:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
 
 print("=" * 60)
 print("LOGIN ENDPOINT TEST")

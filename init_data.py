@@ -40,7 +40,9 @@ def init_data():
         print("✅ Barcha namunaviy ma'lumotlar o'chirildi!")
         # Foydalanuvchi (admin) — parol .env ADMIN_DEFAULT_PASSWORD yoki default
         if not db.query(User).filter(User.username == "admin").first():
-            admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+            admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD")
+            if not admin_password:
+                raise RuntimeError("ADMIN_DEFAULT_PASSWORD environment o'zgaruvchisi o'rnatilmagan! .env fayliga qo'shing.")
             admin = User(
                 username="admin",
                 password_hash=hash_password(admin_password),

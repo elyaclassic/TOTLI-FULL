@@ -11,6 +11,7 @@ from app.core import templates
 from app.models.database import get_db, User
 from app.deps import get_current_user
 from app.utils.auth import verify_password, create_session_token, hash_password, is_legacy_hash
+from app.utils.rate_limit import is_blocked, record_failure, record_success
 
 router = APIRouter(tags=["auth"])
 
@@ -54,6 +55,14 @@ async def login(
     db: Session = Depends(get_db),
 ):
     try:
+        blocked, remaining = is_blocked(request)
+        if blocked:
+            minutes = remaining // 60
+            seconds = remaining % 60
+            return templates.TemplateResponse("login.html", {
+                "request": request,
+                "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring.",
+            })
         username = (username or "").strip()
         password = (password or "").strip()
         if not username or not password:
@@ -63,6 +72,7 @@ async def login(
             })
         user = db.query(User).filter(User.username == username).first()
         if not user or not verify_password(password, user.password_hash):
+            record_failure(request)
             return templates.TemplateResponse("login.html", {
                 "request": request,
                 "error": "Login yoki parol noto'g'ri!",
@@ -76,6 +86,7 @@ async def login(
         if is_legacy_hash(user.password_hash):
             user.password_hash = hash_password(password)
             db.commit()
+        record_success(request)
         token = create_session_token(user.id, user.username)
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
         redirect_url = _redirect_after_login(user)

@@ -221,5 +221,6 @@ async def startup():
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    _dev_mode = os.getenv("DEV_MODE", "").lower() in ("1", "true", "yes")
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=_dev_mode)
 

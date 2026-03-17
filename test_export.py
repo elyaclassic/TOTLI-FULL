@@ -9,7 +9,9 @@ s = requests.Session()
 
 # Login
 print("🔐 Logging in...")
-_login_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+_login_pwd = os.getenv("TEST_ADMIN_PASSWORD")
+if not _login_pwd:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
 login_response = s.post('http://localhost:8080/login', data={
     'username': 'admin',
     'password': _login_pwd

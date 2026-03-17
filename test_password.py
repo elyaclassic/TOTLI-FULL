@@ -18,7 +18,9 @@ print(f"Is Active: {admin.is_active}")
 print()
 
 # Parolni tekshirish
-test_password = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+test_password = os.getenv("TEST_ADMIN_PASSWORD")
+if not test_password:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
 test_hash = hash_password(test_password)
 
 print("=" * 60)

@@ -20,8 +20,12 @@ if admin:
     print(f"Username: {admin.username}")
     print(f"Is Active: {admin.is_active}")
 else:
-    # Parol: .env dan ADMIN_DEFAULT_PASSWORD yoki dev uchun default
-    admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+    admin_password = os.getenv("ADMIN_DEFAULT_PASSWORD")
+    if not admin_password:
+        print("[XATO] ADMIN_DEFAULT_PASSWORD environment o'zgaruvchisi o'rnatilmagan!")
+        print("  .env fayliga qo'shing: ADMIN_DEFAULT_PASSWORD=kuchli_parol")
+        db.close()
+        raise SystemExit(1)
     admin = User(
         username="admin",
         password_hash=hash_password(admin_password),
@@ -33,6 +37,6 @@ else:
     db.commit()
     print("[OK] Admin foydalanuvchisi yaratildi!")
     print("Username: admin")
-    print("Password: ( .env ADMIN_DEFAULT_PASSWORD yoki default )")
+    print("Password: (ADMIN_DEFAULT_PASSWORD dan olindi)")
 
 db.close()

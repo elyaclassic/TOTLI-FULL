@@ -7,7 +7,9 @@ import urllib.parse
 
 # Avval login qilamiz
 login_url = "http://127.0.0.1:8080/login"
-_login_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+_login_pwd = os.getenv("TEST_ADMIN_PASSWORD")
+if not _login_pwd:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
 login_data = urllib.parse.urlencode({"username": "admin", "password": _login_pwd}).encode()
 
 print("=" * 60)

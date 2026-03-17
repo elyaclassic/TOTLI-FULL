@@ -3,7 +3,7 @@ API — stats, products, partners, agent/driver login va location (PWA/mobil).
 """
 import os
 from datetime import datetime
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
@@ -22,6 +22,7 @@ from app.models.database import (
 from app.deps import require_auth, get_current_user
 from app.utils.notifications import get_unread_count, get_user_notifications
 from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
+from app.utils.rate_limit import is_blocked, record_failure, record_success
 from app.logging_config import get_logger
 
 logger = get_logger("api_routes")
@@ -170,12 +171,18 @@ def _get_phone_variants(phone: str) -> list:
 
 @router.post("/login")
 async def unified_login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
     """Birlashtirilgan login: User (admin/manager/production) yoki Agent/Driver"""
     try:
+        blocked, remaining = is_blocked(request)
+        if blocked:
+            minutes = remaining // 60
+            seconds = remaining % 60
+            return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
         username = username.strip()
         password = password.strip()
         
@@ -234,10 +241,12 @@ async def unified_login(
                         "full_name": (user.full_name or "") or user.username,
                         "phone": user.phone or "",
                     }
+                record_success(request)
                 logger.info(f"User login response: redirect={redirect_type}, role={role}")
                 return response_data
             else:
                 # Parol noto'g'ri, lekin foydalanuvchi topildi
+                record_failure(request)
                 logger.warning(f"User '{username}' parol noto'g'ri")
                 return {"success": False, "error": "Parol noto'g'ri"}
         
@@ -265,10 +274,7 @@ async def unified_login(
             password_variants = _get_phone_variants(password) if password else []
             
             # Debug: telefon raqami variantlarini ko'rsatish
-            logger.info(f"Agent found: id={agent.id}, phone={agent.phone}, is_active={agent.is_active}")
-            logger.info(f"Username variants: {phone_variants}")
-            logger.info(f"Agent phone variants: {agent_phone_variants}")
-            logger.info(f"Password variants: {password_variants}")
+            logger.info(f"Agent found: id={agent.id}, is_active={agent.is_active}")
             
             # Parol tekshiruvi: parol yoki uning variantlari agent telefon raqami yoki uning variantlari bilan mos kelishi kerak
             password_match = (
@@ -279,6 +285,7 @@ async def unified_login(
             )
             
             if password_match:
+                record_success(request)
                 logger.info(f"Agent login successful: id={agent.id}, phone={agent.phone}")
                 token = create_session_token(agent.id, "agent")
                 return {
@@ -294,8 +301,9 @@ async def unified_login(
                     },
                 }
             else:
-                logger.warning(f"Agent login failed: password mismatch. Agent phone={agent.phone}, entered password='{password}'")
-                return {"success": False, "error": f"Parol noto'g'ri (Agent uchun parol telefon raqami bo'lishi kerak: {agent.phone}). Siz kiritgan parol: '{password}'"}
+                record_failure(request)
+                logger.warning(f"Agent login failed: password mismatch. Agent id={agent.id}")
+                return {"success": False, "error": "Parol noto'g'ri"}
         
         # 3. Driver jadvalidan qidirish - telefon raqami bilan
         if is_phone and phone_variants:
@@ -324,6 +332,7 @@ async def unified_login(
             )
             
             if password_match:
+                record_success(request)
                 token = create_session_token(driver.id, "driver")
                 return {
                     "success": True,
@@ -339,10 +348,13 @@ async def unified_login(
                     },
                 }
             else:
-                return {"success": False, "error": f"Parol noto'g'ri (Haydovchi uchun parol telefon raqami bo'lishi kerak: {driver.phone}). Siz kiritgan parol: '{password}'"}
-        
+                record_failure(request)
+                logger.warning(f"Driver login failed: password mismatch. Driver id={driver.id}")
+                return {"success": False, "error": "Parol noto'g'ri"}
+
+        record_failure(request)
         logger.warning(f"Login failed: username '{username}' not found in User, Agent, or Driver tables")
-        return {"success": False, "error": f"Login '{username}' topilmadi. Tekshiring: telefon raqami to'g'ri formatda (+998901234567) yoki username to'g'ri kiritilgan"}
+        return {"success": False, "error": "Login yoki parol noto'g'ri"}
     except Exception as e:
         import traceback
         error_detail = traceback.format_exc()
@@ -352,17 +364,26 @@ async def unified_login(
 
 @router.post("/agent/login")
 async def agent_login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
     """Eski API - backward compatibility"""
     try:
+        blocked, remaining = is_blocked(request)
+        if blocked:
+            minutes = remaining // 60
+            seconds = remaining % 60
+            return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
         agent = db.query(Agent).filter(Agent.phone == username).first()
         if not agent or not agent.is_active:
+            record_failure(request)
             return {"success": False, "error": "Agent topilmadi yoki faol emas"}
         if password != agent.phone:
+            record_failure(request)
             return {"success": False, "error": "Parol noto'g'ri"}
+        record_success(request)
         token = create_session_token(agent.id, "agent")
         return {
             "success": True,
@@ -375,16 +396,25 @@ async def agent_login(
 
 @router.post("/driver/login")
 async def driver_login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
     try:
+        blocked, remaining = is_blocked(request)
+        if blocked:
+            minutes = remaining // 60
+            seconds = remaining % 60
+            return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
         driver = db.query(Driver).filter(Driver.phone == username).first()
         if not driver or not driver.is_active:
+            record_failure(request)
             return {"success": False, "error": "Haydovchi topilmadi yoki faol emas"}
         if password != driver.phone:
+            record_failure(request)
             return {"success": False, "error": "Parol noto'g'ri"}
+        record_success(request)
         token = create_session_token(driver.id, "driver")
         return {
             "success": True,
@@ -472,7 +502,11 @@ async def agent_location_update(
 ):
     try:
         user_data = get_user_from_token(token)
-        agent_id = user_data.get("user_id", 1) if user_data else 1
+        if not user_data or user_data.get("user_type") != "agent":
+            return {"success": False, "error": "Invalid token"}
+        agent_id = user_data.get("user_id")
+        if not agent_id:
+            return {"success": False, "error": "Invalid token"}
         location = AgentLocation(
             agent_id=agent_id,
             latitude=latitude,

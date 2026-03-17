@@ -6,7 +6,9 @@ import urllib.request
 import urllib.parse
 
 url = "http://127.0.0.1:8080/login"
-_pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+_pwd = os.getenv("TEST_ADMIN_PASSWORD")
+if not _pwd:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
 data = urllib.parse.urlencode({"username": "admin", "password": _pwd}).encode()
 
 print("=" * 60)

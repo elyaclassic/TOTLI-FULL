@@ -923,7 +923,7 @@
                     formData.append('longitude', position.coords.longitude);
                     formData.append('accuracy', position.coords.accuracy);
                     formData.append('battery', 100);
-                    formData.append('token', 'test_token');
+                    formData.append('token', Session.getToken() || '');
 
                     const response = await fetch('/api/agent/location', {
                         method: 'POST',
@@ -943,7 +943,8 @@
             async function loadCustomers() {
                 try {
                     // Get token from session
-                    const token = Session.getToken() || 'test_token';
+                    const token = Session.getToken();
+                    if (!token) { window.location.href = '/static/pwa/login.html'; return; }
 
                     // Load from API
                     const response = await fetch(`/api/agent/partners?token=${encodeURIComponent(token)}`);
@@ -1035,7 +1036,7 @@
                     formData.append('partner_id', currentCustomerId);
                     formData.append('latitude', position.coords.latitude);
                     formData.append('longitude', position.coords.longitude);
-                    formData.append('token', 'test_token');
+                    formData.append('token', Session.getToken() || '');
 
                     const response = await fetch('/api/agent/visit/checkin', {
                         method: 'POST',
@@ -1075,7 +1076,7 @@
                     const formData = new FormData();
                     formData.append('visit_id', visitId);
                     formData.append('notes', '');
-                    formData.append('token', 'test_token');
+                    formData.append('token', Session.getToken() || '');
 
                     const response = await fetch('/api/agent/visit/checkout', {
                         method: 'POST',
@@ -1226,7 +1227,8 @@
 
                 try {
                     // Get token from session
-                    const token = Session.getToken() || 'test_token';
+                    const token = Session.getToken();
+                    if (!token) { window.location.href = '/static/pwa/login.html'; return; }
 
                     // Save to API
                     const formData = new FormData();
@@ -1305,7 +1307,8 @@
                         const accuracy = position.coords.accuracy;
 
                         // Get token from session
-                        const token = Session.getToken() || 'test_token';
+                        const token = Session.getToken();
+                    if (!token) { window.location.href = '/static/pwa/login.html'; return; }
 
                         // Save visit to API
                         const formData = new FormData();
@@ -1354,7 +1357,9 @@
 
             async function loadVisits() {
                 try {
-                    const response = await fetch('/api/agent/visits?token=test_token');
+                    const _visitToken = Session.getToken();
+                    if (!_visitToken) { window.location.href = '/static/pwa/login.html'; return; }
+                    const response = await fetch(`/api/agent/visits?token=${encodeURIComponent(_visitToken)}`);
                     const result = await response.json();
 
                     if (result.success && result.visits) {
@@ -1384,7 +1389,8 @@
 
             async function loadDashboardStats() {
                 // Get token from session
-                const token = Session.getToken() || 'test_token';
+                const token = Session.getToken();
+                    if (!token) { window.location.href = '/static/pwa/login.html'; return; }
 
                 // Load visit count
                 try {
@@ -1455,7 +1461,8 @@
                         document.getElementById('gpsAccuracy').textContent = accuracy.toFixed(0);
 
                         // Get token from session
-                        const token = Session.getToken() || 'test_token';
+                        const token = Session.getToken();
+                    if (!token) { window.location.href = '/static/pwa/login.html'; return; }
 
                         // Send to server
                         const formData = new FormData();

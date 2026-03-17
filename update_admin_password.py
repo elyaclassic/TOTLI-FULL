@@ -8,7 +8,11 @@ from app.utils.auth import hash_password
 def update_admin_password():
     """Admin parolini hash qilish"""
     db = next(get_db())
-    new_pwd = os.getenv("ADMIN_DEFAULT_PASSWORD", "admin123")
+    new_pwd = os.getenv("ADMIN_DEFAULT_PASSWORD")
+    if not new_pwd:
+        print("Xato: ADMIN_DEFAULT_PASSWORD environment o'zgaruvchisi o'rnatilmagan!")
+        print("  .env fayliga qo'shing: ADMIN_DEFAULT_PASSWORD=kuchli_parol")
+        return
 
     # Admin foydalanuvchisini topish
     admin = db.query(User).filter(User.username == "admin").first()

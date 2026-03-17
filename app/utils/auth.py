@@ -38,7 +38,9 @@ def is_legacy_hash(hashed_password: str) -> bool:
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Parolni tekshirish (bcrypt, keyin eski SHA256, keyin oddiy matn - migratsiya)"""
+    """Parolni tekshirish (bcrypt yoki eski SHA256 — migratsiya uchun).
+    Plaintext parollar qabul qilinmaydi: migrations/migrate_plaintext_passwords.py ni ishlatib migrasiya qiling.
+    """
     if not hashed_password:
         return False
     if hashed_password.startswith("$2") or hashed_password.startswith("$2a") or hashed_password.startswith("$2b"):
@@ -49,8 +51,8 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
             return False
     if len(hashed_password) == 64 and all(c in "0123456789abcdef" for c in hashed_password.lower()):
         return _legacy_hash(plain_password) == hashed_password
-    # Eski tizimda parol hash qilinmagan saqlangan (migratsiya - keyin bcrypt ga yangilang)
-    return plain_password == hashed_password
+    # Noma'lum format — ruxsat yo'q
+    return False
 
 
 def create_session_token(user_id: int, user_type: str = "user") -> str:

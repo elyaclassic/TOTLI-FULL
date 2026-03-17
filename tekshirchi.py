@@ -43,7 +43,9 @@ def production_sahifasi():
     cj = http.cookiejar.CookieJar()
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
     try:
-        _pwd = os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+        _pwd = os.getenv("TEST_ADMIN_PASSWORD")
+        if not _pwd:
+            raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
         data = urllib.parse.urlencode({"username": "admin", "password": _pwd}).encode()
         req = urllib.request.Request(f"{BASE}/login", data=data, method="POST")
         req.add_header("Content-Type", "application/x-www-form-urlencoded")

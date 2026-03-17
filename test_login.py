@@ -4,10 +4,14 @@ Login endpointini test qilish
 import os
 import requests
 
+_test_pwd = os.getenv("TEST_ADMIN_PASSWORD")
+if not _test_pwd:
+    raise SystemExit("[XATO] TEST_ADMIN_PASSWORD .env da o'rnatilmagan!")
+
 url = "http://10.243.45.144:8080/login"
 data = {
     "username": "admin",
-    "password": os.getenv("TEST_ADMIN_PASSWORD", "admin123")
+    "password": _test_pwd,
 }
 
 print("=" * 60)
