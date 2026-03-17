@@ -1824,7 +1824,8 @@
 
             // ===== Bildirishnomalar polling (har 20 soniya) =====
             (function(){
-                var _lastId = 0;
+                var _PWA_NOTIF_KEY = 'totli_last_notif_id';
+                var _lastId = parseInt(localStorage.getItem(_PWA_NOTIF_KEY) || '0', 10);
                 var _token = Session.getToken() || '';
 
                 var _sndMap = {
@@ -1891,6 +1892,7 @@
                             var n = d.last;
                             if (n.id && n.id > _lastId) {
                                 _lastId = n.id;
+                                localStorage.setItem(_PWA_NOTIF_KEY, _lastId);
                                 fetch('/api/notifications/' + n.id + '/read?token=' + encodeURIComponent(_token), { method: 'POST' }).catch(function(){});
                                 showPwaToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
                             }

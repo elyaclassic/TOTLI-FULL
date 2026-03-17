@@ -942,7 +942,8 @@
     <div id="notif-toast-container" style="position:fixed;top:70px;right:20px;z-index:9999;max-width:360px;"></div>
     <script>
     (function(){
-        var _lastNotifId = 0;
+        var _STORAGE_KEY = 'totli_last_notif_id';
+        var _lastNotifId = parseInt(localStorage.getItem(_STORAGE_KEY) || '0', 10);
         var _container = document.getElementById('notif-toast-container');
 
         // AudioContext — bir marta klikda ochiladi, keyin har doim ishlaydi
@@ -1065,6 +1066,7 @@
                     var n = d.last;
                     if (n.id && n.id > _lastNotifId) {
                         _lastNotifId = n.id;
+                        localStorage.setItem(_STORAGE_KEY, _lastNotifId);
                         markRead(n.id);
                         showToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
                     }
