@@ -945,9 +945,37 @@
         var _lastNotifId = 0;
         var _container = document.getElementById('notif-toast-container');
 
+        function playNotifSound(isHigh) {
+            try {
+                var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                function beep(freq, start, duration, vol) {
+                    var o = ctx.createOscillator();
+                    var g = ctx.createGain();
+                    o.connect(g);
+                    g.connect(ctx.destination);
+                    o.frequency.value = freq;
+                    o.type = 'sine';
+                    g.gain.setValueAtTime(vol || 0.4, ctx.currentTime + start);
+                    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + duration);
+                    o.start(ctx.currentTime + start);
+                    o.stop(ctx.currentTime + start + duration);
+                }
+                if (isHigh) {
+                    // Yuqori ustuvorlik: 3 ta qisqa signal
+                    beep(880, 0.0, 0.15, 0.5);
+                    beep(880, 0.2, 0.15, 0.5);
+                    beep(1100, 0.4, 0.25, 0.6);
+                } else {
+                    // Oddiy: 1 ta past signal
+                    beep(600, 0.0, 0.2, 0.3);
+                }
+            } catch(e) {}
+        }
+
         function showToast(title, message, priority, url) {
             if (!_container) return;
             var isHigh = priority === 'high';
+            playNotifSound(isHigh);
             var toast = document.createElement('div');
             toast.style.cssText = [
                 'background:' + (isHigh ? '#fff3cd' : '#fff'),
