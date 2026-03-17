@@ -535,14 +535,21 @@ async def agent_location_update(
 
 @router.get("/notifications/unread")
 async def api_notifications_unread(
+    token: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """O'qilmagan bildirishnomalar soni va oxirgisi (ovozli push / UI uchun)."""
-    if not current_user:
+    """O'qilmagan bildirishnomalar soni va oxirgisi (cookie yoki ?token= orqali)."""
+    user = current_user
+    # PWA token orqali (cookie bo'lmasa)
+    if not user and token:
+        user_data = get_user_from_token(token)
+        if user_data:
+            user = db.query(User).filter(User.id == user_data["user_id"], User.is_active == True).first()
+    if not user:
         return {"unread_count": 0, "last": None}
-    count = get_unread_count(db, current_user.id)
-    last_list = get_user_notifications(db, current_user.id, unread_only=True, limit=1)
+    count = get_unread_count(db, user.id)
+    last_list = get_user_notifications(db, user.id, unread_only=True, limit=1)
     last = None
     if last_list:
         n = last_list[0]
@@ -559,11 +566,17 @@ async def api_notifications_unread(
 @router.post("/notifications/{notification_id}/read")
 async def api_notification_mark_read(
     notification_id: int,
+    token: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Bildirishnomani o'qilgan deb belgilash."""
-    if not current_user:
+    """Bildirishnomani o'qilgan deb belgilash (cookie yoki ?token=)."""
+    user = current_user
+    if not user and token:
+        user_data = get_user_from_token(token)
+        if user_data:
+            user = db.query(User).filter(User.id == user_data["user_id"], User.is_active == True).first()
+    if not user:
         return {"ok": False}
     mark_as_read(db, notification_id)
     return {"ok": True}

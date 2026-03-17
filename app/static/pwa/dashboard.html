@@ -1821,6 +1821,59 @@
             sendLocation();
             loadDashboardStats(); // Load visit count on startup
             loadCustomers(); // Load customers from API
+
+            // ===== Bildirishnomalar polling (har 20 soniya) =====
+            (function(){
+                var _lastId = 0;
+                var _token = Session.getToken() || '';
+
+                function showPwaToast(title, message, priority, url) {
+                    var isHigh = priority === 'high';
+                    var container = document.getElementById('pwa-notif-container');
+                    if (!container) {
+                        container = document.createElement('div');
+                        container.id = 'pwa-notif-container';
+                        container.style.cssText = 'position:fixed;top:70px;right:12px;z-index:9999;max-width:320px;';
+                        document.body.appendChild(container);
+                    }
+                    var toast = document.createElement('div');
+                    toast.style.cssText = 'background:' + (isHigh ? '#fff3cd' : '#fff') + ';border:2px solid ' + (isHigh ? '#ffc107' : '#017449') + ';border-radius:10px;box-shadow:0 4px 16px rgba(0,0,0,.2);padding:12px 14px;margin-bottom:8px;cursor:pointer;';
+                    toast.innerHTML = '<div style="font-weight:700;font-size:.9rem">' + (isHigh ? '🔔 ' : '') + title + '</div><div style="font-size:.82rem;color:#444;margin-top:4px">' + message + '</div>';
+                    if (url) {
+                        toast.addEventListener('click', function(){ window.location.href = url; });
+                    } else {
+                        toast.addEventListener('click', function(){ container.removeChild(toast); });
+                    }
+                    container.appendChild(toast);
+                    if (isHigh && window.Notification && Notification.permission === 'granted') {
+                        new Notification(title, { body: message });
+                    }
+                    setTimeout(function(){ if (toast.parentNode) toast.parentNode.removeChild(toast); }, 8000);
+                }
+
+                function pollNotif(){
+                    if (!_token) return;
+                    fetch('/api/notifications/unread?token=' + encodeURIComponent(_token))
+                        .then(function(r){ return r.ok ? r.json() : null; })
+                        .then(function(d){
+                            if (!d || !d.last) return;
+                            var n = d.last;
+                            if (n.id && n.id > _lastId) {
+                                _lastId = n.id;
+                                fetch('/api/notifications/' + n.id + '/read?token=' + encodeURIComponent(_token), { method: 'POST' }).catch(function(){});
+                                showPwaToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
+                            }
+                        })
+                        .catch(function(){});
+                }
+
+                if (window.Notification && Notification.permission === 'default') {
+                    Notification.requestPermission();
+                }
+
+                setTimeout(pollNotif, 3000);
+                setInterval(pollNotif, 20000);
+            })();
         </script>
 </body>
 

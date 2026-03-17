@@ -68,9 +68,9 @@ def notify_qiyom_operators(
 ):
     """
     Yarim tayyor omborda mahsulot yetarli emas —
-    qiyom operatorlariga (role='production') bildirish.
+    qiyom operatorlariga bildirish.
     """
-    users = _get_users_by_role(db, "production")
+    users = _get_users_by_role(db, "production", "operator", "rahbar", "raxbar")
     for user in users:
         create_notification(
             db=db,
@@ -96,9 +96,9 @@ def notify_cutting_packing_operators(
 ):
     """
     Yarim tayyor omborda mahsulot yetarli —
-    kesuvchi (role='production') va qadoqlovchilarga (role='qadoqlash') bildirish.
+    kesuvchi va qadoqlovchilarga bildirish.
     """
-    users = _get_users_by_role(db, "production", "qadoqlash")
+    users = _get_users_by_role(db, "production", "qadoqlash", "operator", "rahbar", "raxbar")
     for user in users:
         create_notification(
             db=db,
@@ -131,14 +131,14 @@ def notify_next_stage_operators(db: Session, production, completed_stage: int):
             product_name = p.name or product_name
 
     if completed_stage <= 2:
-        users = _get_users_by_role(db, "production", "qadoqlash")
+        users = _get_users_by_role(db, "production", "qadoqlash", "operator", "rahbar", "raxbar")
         title = "Qiyom tayyor — kesish va qadoqlash navbati"
         message = (
             f"«{product_name}» qiyom bosqichi yakunlandi. "
             f"Kesish va qadoqlashni boshlang. (#{production.number})"
         )
     elif completed_stage == 3:
-        users = _get_users_by_role(db, "qadoqlash")
+        users = _get_users_by_role(db, "qadoqlash", "operator", "rahbar", "raxbar")
         title = "Kesish tugadi — qadoqlash navbati"
         message = (
             f"«{product_name}» kesish yakunlandi. "
