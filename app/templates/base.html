@@ -945,7 +945,10 @@
         var _lastNotifId = 0;
         var _container = document.getElementById('notif-toast-container');
 
-        // Bildirishnoma sarlavhasiga mos ovoz fayli
+        // AudioContext — bir marta klikda ochiladi, keyin har doim ishlaydi
+        var _actx = null;
+        var _bufCache = {};
+
         var _soundMap = {
             'Qiyom tayyorlash kerak':              '/static/sounds/qiyom.wav',
             'Kesish va qadoqlash kerak':           '/static/sounds/kesish.wav',
@@ -954,12 +957,41 @@
             'Ishlab chiqarish tayyor':             '/static/sounds/tayyor.wav',
         };
 
+        function _getActx() {
+            if (!_actx) _actx = new (window.AudioContext || window.webkitAudioContext)();
+            if (_actx.state === 'suspended') _actx.resume();
+            return _actx;
+        }
+
+        function _playBuffer(url) {
+            var ctx = _getActx();
+            if (_bufCache[url]) {
+                var src = ctx.createBufferSource();
+                src.buffer = _bufCache[url];
+                src.connect(ctx.destination);
+                src.start(0);
+                return;
+            }
+            fetch(url).then(function(r){ return r.arrayBuffer(); })
+                .then(function(ab){ return ctx.decodeAudioData(ab); })
+                .then(function(buf){
+                    _bufCache[url] = buf;
+                    var src = ctx.createBufferSource();
+                    src.buffer = buf;
+                    src.connect(ctx.destination);
+                    src.start(0);
+                }).catch(function(){ _tts('Bildirishnoma', true); });
+        }
+
         function playNotifSound(title, isHigh) {
-            var src = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.wav' : null);
-            if (src) {
-                var a = new Audio(src);
-                a.volume = 1.0;
-                a.play().catch(function() { _tts(title, isHigh); });
+            var url = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.wav' : null);
+            if (url && _actx) {
+                _playBuffer(url);
+                return;
+            }
+            if (url) {
+                // AudioContext hali ochilmagan — TTS fallback
+                _tts(title, isHigh);
                 return;
             }
             _tts(title, isHigh);
@@ -1040,21 +1072,23 @@
                 .catch(function(){});
         }
 
-        // Birinchi klik: audio qulfini ochish + notification ruxsati
-        var _audioUnlocked = false;
+        // Birinchi klik: AudioContext ochish + ovoz fayllarni oldindan yuklash
         document.addEventListener('click', function(){
-            if (!_audioUnlocked) {
-                _audioUnlocked = true;
-                // Brauzer audio blokini olib tashlash uchun jim audio ijro etiladi
-                try {
-                    var ctx = new (window.AudioContext || window.webkitAudioContext)();
-                    var buf = ctx.createBuffer(1, 1, 22050);
-                    var src = ctx.createBufferSource();
-                    src.buffer = buf;
-                    src.connect(ctx.destination);
-                    src.start(0);
-                } catch(e) {}
-            }
+            try {
+                _actx = new (window.AudioContext || window.webkitAudioContext)();
+                // Jim audio — qulfni ochish
+                var buf = _actx.createBuffer(1, 1, 22050);
+                var s = _actx.createBufferSource();
+                s.buffer = buf; s.connect(_actx.destination); s.start(0);
+                // Barcha ovoz fayllarni oldindan yuklash (cache)
+                Object.values(_soundMap).forEach(function(url){
+                    if (_bufCache[url]) return;
+                    fetch(url).then(function(r){ return r.arrayBuffer(); })
+                        .then(function(ab){ return _actx.decodeAudioData(ab); })
+                        .then(function(b){ _bufCache[url] = b; })
+                        .catch(function(){});
+                });
+            } catch(e) {}
             if (window.Notification && Notification.permission === 'default') {
                 Notification.requestPermission();
             }
