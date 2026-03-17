@@ -106,8 +106,7 @@
                         </td>
                         <td>
                             <a href="/warehouse/transfers/{{ t.id }}" class="btn btn-outline-primary btn-sm">Ochish</a>
-                            {% if t.status == 'pending_approval' %}
-                            {# Bo'lim foydalanuvchisi tasdiqlashi mumkin #}
+                            {% if t.status != 'confirmed' %}
                             <form method="post" action="/warehouse/transfers/{{ t.id }}/confirm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlash — ombordagi qoldiqlar o\'zgaradi. Davom etasizmi?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                                 <button type="submit" class="btn btn-success btn-sm" title="Tasdiqlash"><i class="bi bi-check-lg"></i> Tasdiqlash</button>

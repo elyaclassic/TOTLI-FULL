@@ -179,7 +179,7 @@ async def qoldiqlar_tarix(
             "selected_warehouse_id": None,
             "movements": [],
             "page_title": "Qoldiqlar — Mahsulot harakati tarixi",
-            "error_message": str(e),
+            "error_message": "Ma'lumotlarni yuklashda xatolik yuz berdi",
         }, status_code=500)
 
 
@@ -784,7 +784,7 @@ async def qoldiqlar_tovar_import_excel(
     except Exception as e:
         pass  # logged above
         return RedirectResponse(
-            url="/qoldiqlar?error=import&detail=" + quote(str(e)[:180]) + "#tovar",
+            url="/qoldiqlar?error=import&detail=" + quote("Import xatoligi. Fayl formatini tekshiring.") + "#tovar",
             status_code=303,
         )
 

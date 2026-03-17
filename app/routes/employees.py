@@ -37,11 +37,19 @@ async def employees_list(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
     show_dismissed: bool = False,
+    birthday_today: bool = False,
 ):
     """Xodimlar ro'yxati — odatiy holda faqat faol xodimlar."""
     q = db.query(Employee).order_by(Employee.full_name)
     if not show_dismissed:
         q = q.filter(Employee.is_active == True)
+    if birthday_today:
+        # SQLite: tug'ilgan kunni oy-kun bo'yicha filtrlash
+        try:
+            md = datetime.now().strftime("%m-%d")
+            q = q.filter(func.strftime("%m-%d", Employee.birth_date) == md)
+        except Exception:
+            pass
     employees = q.all()
     piecework_tasks = db.query(PieceworkTask).filter(PieceworkTask.is_active == True).order_by(PieceworkTask.name).all()
     departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
@@ -55,6 +63,7 @@ async def employees_list(
         "current_user": current_user,
         "page_title": "Xodimlar",
         "show_dismissed": show_dismissed,
+        "birthday_today": birthday_today,
     })
 
 
@@ -73,6 +82,8 @@ async def employee_add(
     current_user: User = Depends(require_auth),
 ):
     """Xodim qo'shish. Kod bo'sh qolsa saqlashda avtomatik yaratiladi (EMP-<id>)."""
+    if salary < 0:
+        raise HTTPException(status_code=400, detail="Maosh manfiy bo'lishi mumkin emas")
     import uuid
     code_val = (code or "").strip()
     if not code_val:
@@ -139,6 +150,8 @@ async def employee_update(
     current_user: User = Depends(require_auth),
 ):
     """Xodim ma'lumotlarini yangilash. Kod bo'sh qolsa avtomatik EMP-<id> qo'yiladi."""
+    if salary < 0:
+        raise HTTPException(status_code=400, detail="Maosh manfiy bo'lishi mumkin emas")
     from urllib.parse import quote
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
@@ -438,6 +451,8 @@ async def employment_doc_create(
     current_user: User = Depends(require_auth),
 ):
     """Ishga qabul hujjati yaratish (O'zR Mehnat kodeksi, gov.uz tamoyillari asosida). Har bir xodim faqat bir marta ishga qabul qilinadi."""
+    if salary < 0:
+        raise HTTPException(status_code=400, detail="Maosh manfiy bo'lishi mumkin emas")
     from urllib.parse import quote
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
@@ -988,6 +1003,8 @@ async def employment_doc_edit_save(
     current_user: User = Depends(require_admin),
 ):
     """Ishga qabul hujjatini saqlash (tahrirlash) — faqat tasdiqlanmagan hujjatni tahrirlash mumkin."""
+    if salary < 0:
+        raise HTTPException(status_code=400, detail="Maosh manfiy bo'lishi mumkin emas")
     from urllib.parse import quote
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
@@ -1151,7 +1168,7 @@ async def employees_import_from_hikvision_preview(
             )
         persons = api.get_person_list()
     except Exception as e:
-        return RedirectResponse(url="/employees?error=" + quote("Hikvision: " + str(e)[:150]), status_code=303)
+        return RedirectResponse(url="/employees?error=" + quote("Hikvision bilan bog'lashda xatolik"), status_code=303)
     return templates.TemplateResponse("employees/hikvision_import_preview.html", {
         "request": request,
         "persons": persons or [],
@@ -1204,12 +1221,12 @@ async def employees_import_from_hikvision(
         imported = result.get("imported", 0)
         updated = result.get("updated", 0)
         if err_list:
-            msg = f"Qo'shildi: {imported}, yangilandi: {updated}. Xato: " + "; ".join(str(e) for e in err_list[:3])
+            msg = f"Qo'shildi: {imported}, yangilandi: {updated}. Xato: {len(err_list)} ta."
             return RedirectResponse(url="/employees?warning=" + quote(msg), status_code=303)
         msg = f"Qo'shildi: {imported}, yangilandi: {updated}."
         return RedirectResponse(url="/employees?imported=1&msg=" + quote(msg), status_code=303)
-    except Exception as e:
-        return RedirectResponse(url="/employees?error=" + quote("Hikvision: " + str(e)[:150]), status_code=303)
+    except Exception:
+        return RedirectResponse(url="/employees?error=" + quote("Hikvision import xatoligi"), status_code=303)
 
 
 # ==========================================
@@ -1359,13 +1376,9 @@ async def attendance_sync_hikvision(
         events_count = result.get("events_count", 0)
         imported = result.get("imported", 0)
         msg = f"Hodisa: {events_count} ta, yuklangan: {imported} ta. Xato: {len(err_list)} ta."
-        if err_list:
-            msg += " " + "; ".join(str(e) for e in err_list[:3])
         return RedirectResponse(url=base_redirect + sep + "synced=1&msg=" + quote(msg), status_code=303)
-    except Exception as e:
-        err_msg = str(e)[:200] if e else "Noma'lum xato"
-        pass  # logged above
-        return RedirectResponse(url=base_redirect + sep + "error=" + quote("Hikvision yuklash: " + err_msg), status_code=303)
+    except Exception:
+        return RedirectResponse(url=base_redirect + sep + "error=" + quote("Hikvision yuklash xatoligi"), status_code=303)
 
 
 def _parse_time(s: str):
@@ -1969,8 +1982,7 @@ async def employee_advance_add(
         db.commit()
     except Exception as e:
         db.rollback()
-        err_msg = str(e).replace("'", " ").replace("%", "")[:200]
-        return RedirectResponse(url="/advances?error=" + quote(f"Saqlash xatosi: {err_msg}"), status_code=303)
+        return RedirectResponse(url="/advances?error=" + quote("Avansni saqlashda xatolik yuz berdi"), status_code=303)
     # Filtrsiz qaytamiz — ro'yxat sana bo'yicha kamayishda, yangi avans birinchi qatorda
     return RedirectResponse(url="/advances?added=1", status_code=303)
 

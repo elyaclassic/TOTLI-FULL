@@ -7,13 +7,14 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core import templates
-from app.models.database import get_db, Agent, AgentLocation, Visit
+from app.models.database import get_db, Agent, AgentLocation, Visit, User
+from app.deps import require_auth, require_admin
 
 router = APIRouter(tags=["agents"])
 
 
 @router.get("/agents", response_class=HTMLResponse)
-async def agents_list(request: Request, db: Session = Depends(get_db)):
+async def agents_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     agents = db.query(Agent).all()
     today = datetime.now().date()
     for agent in agents:
@@ -29,6 +30,7 @@ async def agents_list(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("agents/list.html", {
         "request": request,
         "agents": agents,
+        "current_user": current_user,
         "page_title": "Agentlar",
     })
 
@@ -41,6 +43,7 @@ async def agent_add(
     region: str = Form(""),
     telegram_id: str = Form(""),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     last_agent = db.query(Agent).order_by(Agent.id.desc()).first()
     code = f"AG{str((last_agent.id if last_agent else 0) + 1).zfill(3)}"
@@ -62,6 +65,7 @@ async def agent_detail(
     request: Request,
     agent_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
 ):
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
@@ -85,5 +89,6 @@ async def agent_detail(
         "agent": agent,
         "locations": locations,
         "visits": visits,
+        "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
     })

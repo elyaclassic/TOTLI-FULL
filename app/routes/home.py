@@ -102,7 +102,7 @@ async def home(
         birthday_today_count = 0
         overdue_debts_count = 0
         if not error:
-            error = f"Statistika yuklanmadi: {str(e)}"
+            error = "Statistika yuklanmadi"
     return templates.TemplateResponse("index.html", {
         "request": request,
         "stats": stats,

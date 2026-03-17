@@ -241,6 +241,7 @@ async def warehouse_import(
             prod_key = str(int(float(raw_prod))) if raw_prod is not None and isinstance(raw_prod, (int, float)) and float(raw_prod) == int(float(raw_prod)) else str(raw_prod or "").strip()
             try:
                 qty = float(row[2]) if len(row) > 2 and row[2] is not None else 0
+                qty = max(0, qty)
             except (TypeError, ValueError):
                 qty = 0
             tannarx = None
@@ -313,7 +314,7 @@ async def warehouse_import(
         return RedirectResponse(url="/warehouse?success=import&detail=" + quote(detail), status_code=303)
     except Exception as e:
         pass  # logged above
-        return RedirectResponse(url="/warehouse?error=import&detail=" + quote(str(e)[:200]), status_code=303)
+        return RedirectResponse(url="/warehouse?error=import&detail=" + quote("Import xatoligi. Fayl formatini tekshiring."), status_code=303)
 
 
 @router.get("/transfers", response_class=HTMLResponse)
@@ -1047,7 +1048,7 @@ async def inventory_save_draft(
         import logging
         logging.getLogger(__name__).exception("inventory save error doc_id=%s: %s", doc_id, e)
         return RedirectResponse(
-            url=f"/inventory/{doc_id}/edit?error=" + quote(f"Saqlashda xatolik: {str(e)}"),
+            url=f"/inventory/{doc_id}/edit?error=" + quote("Saqlashda xatolik yuz berdi"),
             status_code=303,
         )
 

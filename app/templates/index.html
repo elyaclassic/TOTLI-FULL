@@ -190,18 +190,24 @@
                 <i class="bi bi-bell"></i> Bildirishnomalar
             </div>
             <div class="card-body">
-                <div class="alert alert-warning mb-2">
-                    <i class="bi bi-exclamation-triangle"></i>
-                    <small>Kam qolgan tovarlar: <strong>{{ low_stock_count|default(0) }}</strong></small>
-                </div>
-                <div class="alert alert-info mb-2">
-                    <i class="bi bi-info-circle"></i>
-                    <small>Bugun tug'ilgan kunlar: <strong>{{ birthday_today_count|default(0) }}</strong></small>
-                </div>
-                <div class="alert alert-danger mb-0">
-                    <i class="bi bi-clock"></i>
-                    <small>Muddati o'tgan qarzlar (7+ kun): <strong>{{ overdue_debts_count|default(0) }}</strong></small>
-                </div>
+                <a href="/reports/stock?low=1" class="text-decoration-none">
+                    <div class="alert alert-warning mb-2" style="cursor:pointer;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <small>Kam qolgan tovarlar: <strong>{{ low_stock_count|default(0) }}</strong></small>
+                    </div>
+                </a>
+                <a href="/employees?birthday_today=1" class="text-decoration-none">
+                    <div class="alert alert-info mb-2" style="cursor:pointer;">
+                        <i class="bi bi-info-circle"></i>
+                        <small>Bugun tug'ilgan kunlar: <strong>{{ birthday_today_count|default(0) }}</strong></small>
+                    </div>
+                </a>
+                <a href="/reports/debts?overdue_days=7" class="text-decoration-none">
+                    <div class="alert alert-danger mb-0" style="cursor:pointer;">
+                        <i class="bi bi-clock"></i>
+                        <small>Muddati o'tgan qarzlar (7+ kun): <strong>{{ overdue_debts_count|default(0) }}</strong></small>
+                    </div>
+                </a>
             </div>
         </div>
 

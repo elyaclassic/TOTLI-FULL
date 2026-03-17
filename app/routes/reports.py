@@ -4,6 +4,7 @@ Hisobotlar — savdo, qoldiq, qarzdorlik va Excel export.
 import io
 import json
 from datetime import datetime, timedelta
+from typing import Optional
 from fastapi import APIRouter, Request, Depends, File, Form, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -175,6 +176,7 @@ async def report_stock(
     request: Request,
     warehouse_id: str = None,
     report_date: str = None,
+    low: int = None,
     merged: int = None,
     cleared: int = None,
     recalculated: int = None,
@@ -201,6 +203,18 @@ async def report_stock(
     else:
         values = _stock_report_filtered(db, wh_id)
     stocks = [{"warehouse": v["warehouse"], "product": v["product"], "quantity": v["quantity"]} for v in values]
+    if low:
+        filtered = []
+        for v in stocks:
+            try:
+                qty = float(v.get("quantity") or 0)
+                p = v.get("product")
+                min_s = float(getattr(p, "min_stock", 0) or 0) if p else 0
+                if qty <= min_s:
+                    filtered.append(v)
+            except Exception:
+                continue
+        stocks = filtered
     total_sum = 0.0
     for v in stocks:
         qty = float(v.get("quantity") or 0)
@@ -223,6 +237,7 @@ async def report_stock(
         "page_title": "Qoldiq hisoboti",
         "current_user": current_user,
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
+        "only_low": 1 if low else 0,
     })
 
 
@@ -1190,10 +1205,34 @@ async def report_employees(request: Request, db: Session = Depends(get_db), curr
 
 
 @router.get("/debts", response_class=HTMLResponse)
-async def report_debts(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+async def report_debts(
+    request: Request,
+    overdue_days: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    debtors = db.query(Partner).filter(Partner.balance != 0).all()
+    q = db.query(Partner).filter(Partner.balance != 0)
+    if overdue_days and int(overdue_days) > 0:
+        cutoff = datetime.now() - timedelta(days=int(overdue_days))
+        overdue_partner_ids = (
+            db.query(Order.partner_id)
+            .filter(
+                Order.type == "sale",
+                Order.debt > 0,
+                Order.created_at < cutoff,
+                Order.partner_id.isnot(None),
+            )
+            .distinct()
+            .all()
+        )
+        ids = [r[0] for r in overdue_partner_ids if r and r[0]]
+        if ids:
+            q = q.filter(Partner.id.in_(ids))
+        else:
+            q = q.filter(Partner.id == -1)
+    debtors = q.all()
     total_debt = sum(p.balance for p in debtors if p.balance > 0)
     total_credit = sum(abs(p.balance) for p in debtors if p.balance < 0)
     return templates.TemplateResponse("reports/debts.html", {

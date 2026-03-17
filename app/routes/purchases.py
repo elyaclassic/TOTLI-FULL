@@ -199,7 +199,12 @@ async def purchase_add_item(
     quantity: float = Form(...),
     price: float = Form(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
 ):
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miqdor musbat bo'lishi kerak")
+    if price < 0:
+        raise HTTPException(status_code=400, detail="Narx manfiy bo'lishi mumkin emas")
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
@@ -441,8 +446,8 @@ async def get_product_price_api(
             use_average=True  # O'rtacha tannarxni ishlatish
         )
         return JSONResponse({"price": price})
-    except Exception as e:
-        return JSONResponse({"price": 0, "error": str(e)}, status_code=500)
+    except Exception:
+        return JSONResponse({"price": 0, "error": "Narxni olishda xatolik"}, status_code=500)
 
 
 @router.post("/{purchase_id}/delete")

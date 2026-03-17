@@ -135,6 +135,69 @@ class User(Base):
 
 
 # ==========================================
+# CHAT (User↔User DM, Admin↔User Support)
+# ==========================================
+
+class ChatThread(Base):
+    __tablename__ = "chat_threads"
+    __table_args__ = (
+        # direct: user1_id/user2_id kombinatsiyasi unik (user1_id < user2_id sifatida saqlanadi)
+        UniqueConstraint("type", "user1_id", "user2_id", name="uq_chat_direct_pair"),
+        # support: bitta user uchun bitta support thread
+        UniqueConstraint("type", "support_user_id", name="uq_chat_support_user"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String(20), default="direct")  # direct | support
+    created_at = Column(DateTime, default=datetime.now)
+    created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # direct uchun
+    user1_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user2_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    # support uchun (murojaat qilgan user)
+    support_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    created_by = relationship("User", foreign_keys=[created_by_id], lazy="select")
+    user1 = relationship("User", foreign_keys=[user1_id], lazy="select")
+    user2 = relationship("User", foreign_keys=[user2_id], lazy="select")
+    support_user = relationship("User", foreign_keys=[support_user_id], lazy="select")
+
+    participants = relationship("ChatParticipant", back_populates="thread", cascade="all, delete-orphan")
+    messages = relationship("ChatMessage", back_populates="thread", cascade="all, delete-orphan")
+
+
+class ChatParticipant(Base):
+    __tablename__ = "chat_participants"
+    __table_args__ = (UniqueConstraint("thread_id", "user_id", name="uq_chat_participant"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(Integer, ForeignKey("chat_threads.id"), index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    role = Column(String(20), default="member")  # member | admin (support)
+    last_read_at = Column(DateTime, nullable=True)
+    unread_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+
+    thread = relationship("ChatThread", back_populates="participants")
+    user = relationship("User")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(Integer, ForeignKey("chat_threads.id"), index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), index=True)
+    body = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, index=True)
+
+    thread = relationship("ChatThread", back_populates="messages")
+    sender = relationship("User")
+
+
+# ==========================================
 # TOVARLAR VA XOM ASHYO
 # ==========================================
 

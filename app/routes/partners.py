@@ -9,7 +9,7 @@ import openpyxl
 
 from app.core import templates
 from app.models.database import get_db, User, Partner, Order, Purchase
-from app.deps import require_auth
+from app.deps import require_auth, require_admin
 
 router = APIRouter(prefix="/partners", tags=["partners"])
 
@@ -50,7 +50,12 @@ async def partner_add(
     credit_limit: float = Form(0),
     discount_percent: float = Form(0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
+    if credit_limit < 0:
+        raise HTTPException(status_code=400, detail="Kredit limit manfiy bo'lishi mumkin emas")
+    if discount_percent < 0 or discount_percent > 100:
+        raise HTTPException(status_code=400, detail="Chegirma 0-100 oralig'ida bo'lishi kerak")
     existing_by_name = db.query(Partner).filter(Partner.name == name).first()
     if existing_by_name:
         raise HTTPException(status_code=400, detail=f"'{name}' nomli kontragent allaqachon mavjud!")
@@ -82,7 +87,12 @@ async def partner_edit(
     credit_limit: float = Form(0),
     discount_percent: float = Form(0),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
+    if credit_limit < 0:
+        raise HTTPException(status_code=400, detail="Kredit limit manfiy bo'lishi mumkin emas")
+    if discount_percent < 0 or discount_percent > 100:
+        raise HTTPException(status_code=400, detail="Chegirma 0-100 oralig'ida bo'lishi kerak")
     partner = db.query(Partner).filter(Partner.id == partner_id).first()
     if not partner:
         raise HTTPException(status_code=404, detail="Kontragent topilmadi")
@@ -107,6 +117,7 @@ async def partner_edit(
 async def partner_delete(
     partner_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
     partner = db.query(Partner).filter(Partner.id == partner_id).first()
     if not partner:

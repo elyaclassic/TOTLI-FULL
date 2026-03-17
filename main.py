@@ -25,6 +25,7 @@ from app.routes import purchases as purchases_routes
 from app.routes import partners as partners_routes
 from app.routes import employees as employees_routes
 from app.routes import production as production_routes
+from app.routes import chat as chat_routes
 from app.routes import api_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
@@ -51,6 +52,7 @@ app.include_router(purchases_routes.router)
 app.include_router(partners_routes.router)
 app.include_router(employees_routes.router)
 app.include_router(production_routes.router)
+app.include_router(chat_routes.router)
 app.include_router(api_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)

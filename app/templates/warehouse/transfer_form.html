@@ -25,10 +25,7 @@
         <div class="d-flex align-items-center gap-2 flex-wrap">
             {% if not transfer or transfer.status != 'confirmed' %}
             <button type="submit" form="docForm" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> {% if transfer and transfer.status == 'draft' %}Saqlash (qoralama){% else %}Saqlash{% endif %}</button>
-            {% if transfer and transfer.status == 'draft' %}
-            <button type="submit" form="docForm" name="submit_approval" value="1" class="btn btn-outline-primary btn-sm">Tasdiqlashga yuborish</button>
-            {% endif %}
-            {% if transfer and transfer.status == 'pending_approval' %}
+            {% if transfer and transfer.status in ('draft', 'pending_approval') %}
             <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm" id="confirmForm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlash — ombordagi qoldiqlar o\'zgaradi. Davom etasizmi?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Tasdiqlash</button>

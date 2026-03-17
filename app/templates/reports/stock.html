@@ -67,6 +67,8 @@
                     <th>Tovar nomi</th>
                     <th>Ombor</th>
                     <th>Qoldiq</th>
+                    <th>Min</th>
+                    <th>Kamligi</th>
                     <th>O'lchov</th>
                     <th>Tannarx</th>
                     <th>Summa</th>
@@ -89,6 +91,15 @@
                         </td>
                         <td>{{ stock.warehouse.name }}</td>
                         <td class="fw-bold">{{ "{:,.0f}".format((stock.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.quantity) }}</td>
+                        <td class="text-muted">{{ "{:,.0f}".format((stock.product.min_stock or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.product.min_stock or 0) }}</td>
+                        <td class="fw-semibold {% if stock.quantity <= stock.product.min_stock %}text-danger{% else %}text-muted{% endif %}">
+                            {% set _def = (stock.product.min_stock or 0) - (stock.quantity or 0) %}
+                            {% if _def > 0 %}
+                                {{ "{:,.0f}".format((_def)|round(0)|int) if _is_dona else "{:,.3f}".format(_def) }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td>{{ stock.product.unit.code if stock.product.unit else '-' }}</td>
                         <td>{{ "{:,.0f}".format(stock.product.purchase_price or 0) }}</td>
                         <td class="text-success">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price or 0)) }}</td>
@@ -99,7 +110,7 @@
                     {% endfor %}
                 {% else %}
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-5">
+                        <td colspan="11" class="text-center text-muted py-5">
                             <i class="bi bi-boxes fs-1 d-block mb-2"></i>
                             Qoldiqlar topilmadi
                         </td>
