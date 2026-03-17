@@ -375,30 +375,41 @@ async def production_index_page(
                 recent_productions_raw.append(prod)
             
             from app.models.database import Unit
+
+            # N+1 muammosini hal qilish: barcha bog'liq ma'lumotlarni bitta so'rovda yuklash
+            recipe_ids = [p.recipe_id for p in recent_productions_raw if p.recipe_id]
+            recipes_map = {}
+            product_ids = []
+            if recipe_ids:
+                recipes = db.query(Recipe).filter(Recipe.id.in_(recipe_ids)).all()
+                recipes_map = {r.id: r for r in recipes}
+                product_ids = [r.product_id for r in recipes if r.product_id]
+
+            products_map = {}
+            unit_ids = []
+            if product_ids:
+                products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+                products_map = {p.id: p for p in products}
+                unit_ids = [p.unit_id for p in products if p.unit_id]
+
+            units_map = {}
+            if unit_ids:
+                units = db.query(Unit).filter(Unit.id.in_(unit_ids)).all()
+                units_map = {u.id: u for u in units}
+
             recent_productions = []
             for prod in recent_productions_raw:
                 try:
-                    # Recipe ni yuklash (lazy loading muammosini oldini olish)
-                    if prod.recipe_id:
-                        recipe = db.query(Recipe).filter(Recipe.id == prod.recipe_id).first()
-                        if recipe:
-                            # Product ni yuklash
-                            if recipe.product_id:
-                                product = db.query(Product).filter(Product.id == recipe.product_id).first()
-                                if product:
-                                    # Unit ni yuklash
-                                    if product.unit_id:
-                                        unit = db.query(Unit).filter(Unit.id == product.unit_id).first()
-                                        if unit:
-                                            product.unit = unit
-                                    recipe.product = product
-                            # Recipe ni Production ga biriktirish
-                            prod.recipe = recipe
+                    recipe = recipes_map.get(prod.recipe_id) if prod.recipe_id else None
+                    if recipe:
+                        product = products_map.get(recipe.product_id) if recipe.product_id else None
+                        if product:
+                            product.unit = units_map.get(product.unit_id) if product.unit_id else None
+                            recipe.product = product
+                        prod.recipe = recipe
                     recent_productions.append(prod)
                 except Exception as prod_error:
                     print(f"Production {prod.id if hasattr(prod, 'id') else 'unknown'} yuklashda xatolik: {prod_error}")
-                    import traceback
-                    traceback.print_exc()
                     continue
         except Exception as e:
             recent_productions = []
