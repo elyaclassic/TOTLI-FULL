@@ -12,6 +12,9 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text, func
 
 from app.core import templates
+from app.logging_config import get_logger
+
+logger = get_logger("production")
 from app.models.database import (
     get_db,
     User,
@@ -253,7 +256,7 @@ async def production_index_page(
         try:
             warehouses = get_warehouses_for_user(db, current_user)
         except Exception as e:
-            print(f"Warehouses query error: {e}")
+            logger.warning("Warehouses query error: %s", e)
             warehouses = []
         
         # Recipes
@@ -272,17 +275,17 @@ async def production_index_page(
                         recipe.product = product
                     recipes.append(recipe)
                 except Exception as recipe_error:
-                    print(f"Recipe {recipe.id} yuklashda xatolik: {recipe_error}")
+                    logger.warning("Recipe %s yuklashda xatolik: %s", recipe.id, recipe_error)
                     recipes.append(recipe)
         except Exception as e:
-            print(f"Recipes query error: {e}")
+            logger.warning("Recipes query error: %s", e)
             recipes = []
         
         # Total recipes
         try:
             total_recipes = db.query(Recipe).filter(Recipe.is_active == True).count()
         except Exception as e:
-            print(f"Total recipes count error: {e}")
+            logger.warning("Total recipes count error: %s", e)
             total_recipes = len(recipes)
         
         today = datetime.now().date()
@@ -317,7 +320,7 @@ async def production_index_page(
                     today_quantity += float(row.quantity or 0) * (kg_per if kg_per and kg_per > 0 else 1.0)
         except Exception as e:
             today_quantity = 0
-            print(f"Today productions query error: {e}")
+            logger.warning("Today productions query error: %s", e)
         
         # Kutilmoqdagi buyurtmalar — operator bo'lsa faqat o'zining
         try:
@@ -331,7 +334,7 @@ async def production_index_page(
             pending_productions = pending_count or 0
         except Exception as e:
             pending_productions = 0
-            print(f"Pending productions query error: {e}")
+            logger.warning("Pending productions query error: %s", e)
         
         # Oxirgi ishlab chiqarishlar — operator bo'lsa faqat o'zi ishlab chiqarganlari
         try:
@@ -423,19 +426,15 @@ async def production_index_page(
                         prod.recipe = recipe
                     recent_productions.append(prod)
                 except Exception as prod_error:
-                    print(f"Production {prod.id if hasattr(prod, 'id') else 'unknown'} yuklashda xatolik: {prod_error}")
+                    logger.warning("Production %s yuklashda xatolik: %s", getattr(prod, 'id', 'unknown'), prod_error)
                     continue
         except Exception as e:
             recent_productions = []
-            print(f"Recent productions query error: {e}")
-            import traceback
-            pass  # logged above
-    
+            logger.exception("Recent productions query error: %s", e)
+
     except Exception as e:
-        import traceback
         error_msg = str(e)
-        pass  # logged above
-        print(f"Production index page error: {error_msg}")
+        logger.exception("Production index page error: %s", error_msg)
     
     # Operator / ishlab chiqarish / qadoqlash kabi foydalanuvchilarga Retseptlar bloki ko'rinmasin (faqat o'zining oxirgi ishlab chiqarishlari ko'rinadi)
     show_recipes_section = not filter_by_operator
@@ -516,7 +515,7 @@ async def production_recipe_detail(
     request: Request,
     recipe_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_auth),
 ):
     recipe = (
         db.query(Recipe)
@@ -562,7 +561,10 @@ async def add_recipe(
     output_quantity: float = Form(1),
     description: str = Form(""),
     db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
 ):
+    if output_quantity <= 0:
+        raise HTTPException(status_code=400, detail="Chiqish miqdori 0 dan katta bo'lishi kerak")
     recipe = Recipe(
         name=name,
         product_id=product_id,
@@ -947,6 +949,19 @@ async def production_save_materials(
     return RedirectResponse(url="/production/orders", status_code=303)
 
 
+def _parse_optional_int(value) -> Optional[int]:
+    """Query/form dan kelgan bo'sh string yoki noto'g'ri qiymatni None qilib, haqiqiy sonlarni int qaytaradi."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    try:
+        return int(float(s))
+    except (ValueError, TypeError):
+        return None
+
+
 @router.get("/orders", response_class=HTMLResponse)
 async def production_orders(
     request: Request,
@@ -956,11 +971,12 @@ async def production_orders(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     recipe: Optional[str] = None,
-    operator_id: Optional[int] = None,
+    operator_id: Optional[str] = None,
 ):
     from urllib.parse import unquote
     from sqlalchemy import func
     from datetime import datetime
+    operator_id = _parse_optional_int(operator_id)
     q = (
         db.query(Production)
         .options(

@@ -4,7 +4,7 @@ Hisobotlar — savdo, qoldiq, qarzdorlik va Excel export.
 import io
 import json
 from datetime import datetime, timedelta
-from fastapi import APIRouter, Request, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Request, Depends, File, Form, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_
@@ -15,8 +15,15 @@ from app.core import templates
 from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice
 from app.deps import get_current_user, require_auth, require_admin
 from app.utils.user_scope import get_warehouses_for_user
+from app.utils.rate_limit import check_api_rate_limit
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def _check_export_rate_limit(request: Request):
+    """Export endpointlar uchun rate limit (daqiqada max 60)."""
+    if check_api_rate_limit(request):
+        raise HTTPException(status_code=429, detail="Juda ko'p so'rov. Biroz kuting.")
 
 
 def get_allowed_report_types(user: User) -> list:
@@ -113,11 +120,13 @@ async def report_sales(
 
 @router.get("/sales/export")
 async def report_sales_export(
+    request: Request,
     start_date: str = None,
     end_date: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     if not start_date:
@@ -936,11 +945,13 @@ def _stock_report_filtered(db: Session, wh_id: int = None):
 
 @router.get("/stock/export")
 async def report_stock_export(
+    request: Request,
     warehouse_id: str = None,
     report_date: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     wh_id = None
@@ -1196,7 +1207,8 @@ async def report_debts(request: Request, db: Session = Depends(get_db), current_
 
 
 @router.get("/debts/export")
-async def report_debts_export(db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+async def report_debts_export(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     debtors = db.query(Partner).filter(Partner.balance != 0).order_by(Partner.name).all()
@@ -1431,6 +1443,7 @@ async def report_partner_reconciliation(
 
 @router.get("/partner-reconciliation/export")
 async def report_partner_reconciliation_export(
+    request: Request,
     partner_id: int = None,
     date_from: str = None,
     date_to: str = None,
@@ -1438,6 +1451,7 @@ async def report_partner_reconciliation_export(
     current_user: User = Depends(require_auth),
 ):
     """Kontragent solishtirish hisobotini Excelga eksport."""
+    _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/reports", status_code=303)
     if not partner_id:
