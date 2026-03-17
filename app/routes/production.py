@@ -585,6 +585,8 @@ async def add_recipe_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miqdor musbat bo'lishi kerak")
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
@@ -635,6 +637,8 @@ async def edit_recipe_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    if quantity <= 0:
+        raise HTTPException(status_code=400, detail="Miqdor musbat bo'lishi kerak")
     item = db.query(RecipeItem).filter(
         RecipeItem.id == item_id,
         RecipeItem.recipe_id == recipe_id,
@@ -1263,6 +1267,8 @@ async def create_production(
     # Ombor tanlanmasa, FastAPI 422 JSON qaytarib yubormasdan foydalanuvchini orqaga qaytaramiz.
     if warehouse_id is None:
         return RedirectResponse(url="/production?error=warehouse", status_code=303)
+    if quantity <= 0:
+        return RedirectResponse(url="/production?error=quantity", status_code=303)
     if output_warehouse_id is None:
         output_warehouse_id = warehouse_id
     recipe = db.query(Recipe).options(joinedload(Recipe.stages)).filter(Recipe.id == recipe_id).first()

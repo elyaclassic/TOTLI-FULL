@@ -38,7 +38,9 @@ async def pwa_config():
 
 
 @router.get("/stats")
-async def api_stats(request: Request, db: Session = Depends(get_db)):
+async def api_stats(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user:
+        return _JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     today = datetime.now().date()
@@ -54,7 +56,9 @@ async def api_stats(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/products")
-async def api_products(request: Request, db: Session = Depends(get_db)):
+async def api_products(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user:
+        return _JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     products = db.query(Product).filter(Product.is_active == True).all()
@@ -62,7 +66,9 @@ async def api_products(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/partners")
-async def api_partners(request: Request, db: Session = Depends(get_db)):
+async def api_partners(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user:
+        return _JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     partners = db.query(Partner).filter(Partner.is_active == True).all()
@@ -70,7 +76,9 @@ async def api_partners(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/agents/locations")
-async def get_agents_locations(request: Request, db: Session = Depends(get_db)):
+async def get_agents_locations(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user:
+        return _JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     agents = db.query(Agent).filter(Agent.is_active == True).all()
@@ -96,7 +104,9 @@ async def get_agents_locations(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/drivers/locations")
-async def get_drivers_locations(request: Request, db: Session = Depends(get_db)):
+async def get_drivers_locations(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    if not current_user:
+        return _JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return _JSONResponse(status_code=429, content={"error": "Too Many Requests"})
     drivers = db.query(Driver).filter(Driver.is_active == True).all()

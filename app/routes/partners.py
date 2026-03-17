@@ -181,6 +181,10 @@ async def import_partners(
     current_user: User = Depends(require_auth),
 ):
     contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Fayl hajmi 5MB dan oshmasligi kerak")
+    if contents[:2] != b"PK":
+        raise HTTPException(status_code=400, detail="Fayl .xlsx formati bo'lishi kerak")
     wb = openpyxl.load_workbook(io.BytesIO(contents))
     ws = wb.active
     rows = list(ws.iter_rows(min_row=2, values_only=True))

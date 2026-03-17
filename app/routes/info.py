@@ -659,6 +659,8 @@ async def info_prices_edit(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    if purchase_price < 0 or sale_price < 0:
+        raise HTTPException(status_code=400, detail="Narx manfiy bo'lishi mumkin emas")
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
@@ -1403,6 +1405,8 @@ async def info_piecework_tasks_add(
     current_user: User = Depends(require_auth),
 ):
     """Bo'lak ish qo'shish"""
+    if price_per_unit < 0:
+        raise HTTPException(status_code=400, detail="Narx manfiy bo'lishi mumkin emas")
     code = (code or "").strip() or None
     if code and db.query(PieceworkTask).filter(PieceworkTask.code == code).first():
         raise HTTPException(status_code=400, detail=f"'{code}' kodli bo'lak ish allaqachon mavjud!")
@@ -1428,6 +1432,8 @@ async def info_piecework_tasks_edit(
     current_user: User = Depends(require_auth),
 ):
     """Bo'lak ishni tahrirlash"""
+    if price_per_unit < 0:
+        raise HTTPException(status_code=400, detail="Narx manfiy bo'lishi mumkin emas")
     task = db.query(PieceworkTask).filter(PieceworkTask.id == task_id).first()
     if not task:
         raise HTTPException(status_code=404, detail="Bo'lak ish topilmadi")

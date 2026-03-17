@@ -146,6 +146,8 @@ async def import_products(
         contents = await file.read()
         if not contents:
             return RedirectResponse(url="/products?error=import&detail=" + quote("Fayl bo'sh"), status_code=303)
+        if len(contents) > 5 * 1024 * 1024:
+            return RedirectResponse(url="/products?error=import&detail=" + quote("Fayl hajmi 5MB dan oshmasligi kerak"), status_code=303)
         if contents[:2] != b"PK":
             return RedirectResponse(
                 url="/products?error=import&detail=" + quote("Fayl .xlsx formati bo'lishi kerak (Excel 2007+)."),
@@ -226,11 +228,8 @@ async def import_products(
             url="/products?error=import&detail=" + quote("Fayl .xlsx formati bo'lishi kerak."),
             status_code=303,
         )
-    except Exception as e:
-        err_msg = str(e)[:200]
-        if "zip" in err_msg.lower() or "not a zip" in err_msg.lower():
-            err_msg = "Fayl .xlsx formati bo'lishi kerak."
-        return RedirectResponse(url="/products?error=import&detail=" + quote(err_msg), status_code=303)
+    except Exception:
+        return RedirectResponse(url="/products?error=import&detail=" + quote("Import xatoligi. Fayl .xlsx formati bo'lishi kerak."), status_code=303)
 
 
 @router.get("", response_class=HTMLResponse)

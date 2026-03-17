@@ -31,8 +31,6 @@ from app.utils.user_scope import get_warehouses_for_user
 from app.utils.product_price import get_suggested_price
 from fastapi.responses import JSONResponse
 from fastapi import Query
-from app.utils.product_price import get_suggested_price
-from fastapi.responses import JSONResponse
 
 router = APIRouter(prefix="/purchases", tags=["purchases"])
 

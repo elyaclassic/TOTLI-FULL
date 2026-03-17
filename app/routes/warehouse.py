@@ -228,6 +228,10 @@ async def warehouse_import(
         contents = await file.read()
         if not contents:
             return RedirectResponse(url="/warehouse?error=import&detail=" + quote("Fayl bo'sh"), status_code=303)
+        if len(contents) > 5 * 1024 * 1024:
+            return RedirectResponse(url="/warehouse?error=import&detail=" + quote("Fayl hajmi 5MB dan oshmasligi kerak"), status_code=303)
+        if contents[:2] != b"PK":
+            return RedirectResponse(url="/warehouse?error=import&detail=" + quote("Fayl .xlsx formati bo'lishi kerak"), status_code=303)
         wb = openpyxl.load_workbook(io.BytesIO(contents), read_only=False, data_only=True)
         ws = wb.active
         rows = list(ws.iter_rows(min_row=2, values_only=True))
@@ -326,7 +330,8 @@ async def warehouse_transfers_list(
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     transfers = db.query(WarehouseTransfer).order_by(WarehouseTransfer.date.desc()).limit(200).all()
-    if getattr(current_user, "role", None) == "manager":
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    if role in ("manager", "menejer", "sotuvchi"):
         wh_ids = [w.id for w in _warehouses_for_user(db, current_user)]
         if wh_ids:
             transfers = [t for t in transfers if (t.from_warehouse_id in wh_ids or t.to_warehouse_id in wh_ids)]
