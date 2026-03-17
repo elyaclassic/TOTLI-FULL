@@ -1072,17 +1072,15 @@
                 .catch(function(){});
         }
 
-        // Birinchi klik: AudioContext ochish + ovoz fayllarni oldindan yuklash
-        document.addEventListener('click', function(){
+        // Birinchi ISTALGAN harakat: AudioContext ochish + ovoz fayllarni yuklash
+        function _unlockAudio() {
+            if (_actx) return;
             try {
                 _actx = new (window.AudioContext || window.webkitAudioContext)();
-                // Jim audio — qulfni ochish
                 var buf = _actx.createBuffer(1, 1, 22050);
                 var s = _actx.createBufferSource();
                 s.buffer = buf; s.connect(_actx.destination); s.start(0);
-                // Barcha ovoz fayllarni oldindan yuklash (cache)
                 Object.values(_soundMap).forEach(function(url){
-                    if (_bufCache[url]) return;
                     fetch(url).then(function(r){ return r.arrayBuffer(); })
                         .then(function(ab){ return _actx.decodeAudioData(ab); })
                         .then(function(b){ _bufCache[url] = b; })
@@ -1092,7 +1090,11 @@
             if (window.Notification && Notification.permission === 'default') {
                 Notification.requestPermission();
             }
-        }, { once: true });
+        }
+        // Klik, klaviatura, touch, sichqoncha — biri ishga tushganda ochiladi
+        ['click','keydown','touchstart','mousedown','scroll'].forEach(function(ev){
+            document.addEventListener(ev, _unlockAudio, { once: true, passive: true });
+        });
 
         // CSS animatsiyasi
         var style = document.createElement('style');
