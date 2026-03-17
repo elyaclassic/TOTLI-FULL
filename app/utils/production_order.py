@@ -528,7 +528,7 @@ def notify_managers_production_ready(db: Session, production) -> None:
     for user in managers:
         create_notification(
             db=db,
-            title="✅ Ishlab chiqarish tayyor",
+            title="Ishlab chiqarish tayyor",
             message=f"Buyurtma {order_number} uchun «{product_name}» tayyorlandi. Ishlab chiqarish raqami: {production.number}",
             notification_type="success",
             user_id=user.id,

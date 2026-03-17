@@ -1040,8 +1040,21 @@
                 .catch(function(){});
         }
 
-        // Browser notification ruxsati so'rash (foydalanuvchi birinchi harakatda)
+        // Birinchi klik: audio qulfini ochish + notification ruxsati
+        var _audioUnlocked = false;
         document.addEventListener('click', function(){
+            if (!_audioUnlocked) {
+                _audioUnlocked = true;
+                // Brauzer audio blokini olib tashlash uchun jim audio ijro etiladi
+                try {
+                    var ctx = new (window.AudioContext || window.webkitAudioContext)();
+                    var buf = ctx.createBuffer(1, 1, 22050);
+                    var src = ctx.createBufferSource();
+                    src.buffer = buf;
+                    src.connect(ctx.destination);
+                    src.start(0);
+                } catch(e) {}
+            }
             if (window.Notification && Notification.permission === 'default') {
                 Notification.requestPermission();
             }
