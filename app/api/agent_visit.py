@@ -17,17 +17,15 @@ async def agent_visit_start(
     token: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    """Agent tashrif boshlash"""
+    """Agent tashrif boshlash — token orqali agent_id tekshiriladi."""
     try:
-        # TEMPORARY TEST MODE - bypass token validation
-        agent_id = 1  # Hardcoded for testing
-        
-        # Get agent_id from token (commented out for now)
-        # user_data = get_user_from_token(token)
-        # if not user_data or user_data.get('user_type') != 'agent':
-        #     return {"success": False, "error": "Invalid token"}
-        # agent_id = user_data.get('user_id')
-        
+        user_data = get_user_from_token(token)
+        if not user_data or user_data.get("user_type") != "agent":
+            return {"success": False, "error": "Invalid token"}
+        agent_id = user_data.get("user_id")
+        if not agent_id:
+            return {"success": False, "error": "Invalid token"}
+
         # Create visit record
         visit = Visit(
             agent_id=agent_id,

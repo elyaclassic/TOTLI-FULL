@@ -66,7 +66,7 @@
                 <a href="/production/recipes/{{ recipe.id }}{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-pencil"></i> Tahrirlash
                 </a>
-                <button class="btn btn-sm btn-success" onclick="quickProduce({{ recipe.id }}, '{{ recipe.name }}')">
+                <button class="btn btn-sm btn-success" onclick='quickProduce({{ recipe.id }}, {{ (recipe.name or '')|tojson }}, {{ recipe.default_warehouse_id or 'null' }}, {{ recipe.default_output_warehouse_id or 'null' }})'>
                     <i class="bi bi-play-fill"></i> Ishlab chiqarish
                 </button>
                 {% if current_user and current_user.role == 'admin' %}
@@ -157,7 +157,7 @@
                         {% if not wh_list %}
                         <div class="alert alert-warning py-2 mb-0"><small><i class="bi bi-exclamation-triangle"></i> <a href="/info/warehouses">Ma'lumotnomalar → Omborlar</a> orqali ombor qo'shing.</small></div>
                         {% endif %}
-                        <select class="form-select" name="warehouse_id" required {% if not wh_list %}disabled{% endif %}>
+                        <select class="form-select" name="warehouse_id" id="modalWarehouseId" required {% if not wh_list %}disabled{% endif %}>
                             <option value="">Tanlang...</option>
                             {% for wh in wh_list %}
                             <option value="{{ wh.id }}">{{ wh.name }}</option>
@@ -166,7 +166,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">2-ombor: Yarim tayyor ombori</label>
-                        <select class="form-select" name="output_warehouse_id" required {% if not wh_list %}disabled{% endif %}>
+                        <select class="form-select" name="output_warehouse_id" id="modalOutputWarehouseId" required {% if not wh_list %}disabled{% endif %}>
                             <option value="">Tanlang...</option>
                             {% for wh in wh_list %}
                             <option value="{{ wh.id }}">{{ wh.name }}</option>
@@ -202,9 +202,34 @@
         if (el && el.getAttribute('data-json')) recipeProducts = JSON.parse(el.getAttribute('data-json'));
     } catch (e) { console.warn('recipeProducts parse:', e); }
 
-    function quickProduce(recipeId, recipeName) {
+    function _optionExists(sel, val) {
+        if (!sel || val == null || val === '') return false;
+        var v = String(val);
+        for (var i = 0; i < sel.options.length; i++) { if (String(sel.options[i].value) === v) return true; }
+        return false;
+    }
+    function _pickWarehouseByPattern(sel, pattern) {
+        if (!sel || !sel.options || sel.options.length < 2) return '';
+        for (var i = 1; i < sel.options.length; i++) {
+            var opt = sel.options[i];
+            var text = (opt.text || opt.innerText || '').trim();
+            if (pattern.test(text)) return opt.value;
+        }
+        return '';
+    }
+    function quickProduce(recipeId, recipeName, defaultWhId, defaultWhOutId) {
         document.getElementById('recipeIdInput').value = recipeId;
-        document.getElementById('recipeName').textContent = recipeName;
+        document.getElementById('recipeName').textContent = recipeName || '';
+        var selWh = document.getElementById('modalWarehouseId');
+        var selWhOut = document.getElementById('modalOutputWarehouseId');
+        if (selWh) {
+            var whVal = (defaultWhId != null && defaultWhId !== '' && _optionExists(selWh, defaultWhId)) ? String(defaultWhId) : _pickWarehouseByPattern(selWh, /xom|raw|asosiy|material|sklad/i);
+            selWh.value = whVal || (defaultWhId != null && defaultWhId !== '' ? String(defaultWhId) : '');
+        }
+        if (selWhOut) {
+            var whOutVal = (defaultWhOutId != null && defaultWhOutId !== '' && _optionExists(selWhOut, defaultWhOutId)) ? String(defaultWhOutId) : _pickWarehouseByPattern(selWhOut, /yarim|tayyor|semi|finished|chiqish|output/i);
+            selWhOut.value = whOutVal || (defaultWhOutId != null && defaultWhOutId !== '' ? String(defaultWhOutId) : '');
+        }
         var modal = new bootstrap.Modal(document.getElementById('quickProduceModal'));
         modal.show();
     }

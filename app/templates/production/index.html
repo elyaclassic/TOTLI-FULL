@@ -13,6 +13,17 @@
     </div>
 </div>
 
+{% if error %}
+<div class="alert alert-danger py-2">
+    <small>{{ error }}</small>
+</div>
+{% endif %}
+{% if request and request.query_params and request.query_params.get('error') == 'warehouse' %}
+<div class="alert alert-warning py-2">
+    <small><i class="bi bi-exclamation-triangle"></i> Ombor tanlanmagan. Tezkor ishlab chiqarish uchun 1- va 2-omborni tanlang.</small>
+</div>
+{% endif %}
+
 <!-- Statistika -->
 <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
@@ -136,7 +147,7 @@
                     {% for recipe in recipes[:5] %}
                     <li class="list-group-item d-flex justify-content-between">
                         <span>{{ recipe.name }}</span>
-                        <span class="badge bg-primary">{{ recipe.items|length }} xom ashyo</span>
+                        <span class="badge bg-primary">{{ (recipe.items|default([]))|length }} xom ashyo</span>
                     </li>
                     {% else %}
                     <li class="list-group-item text-center text-muted">Retseptlar yo'q</li>
@@ -178,9 +189,12 @@
                             </td>
                             <td>
                                 {% set _unit = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
-                                {{ "%.1f"|format(prod.quantity or 0) }} {{ _unit }}{% if _unit|lower != 'kg' and prod.recipe and prod.recipe.output_quantity %} <span class="text-muted small">({{ "%.1f"|format(prod.quantity * (prod.recipe.output_quantity or 1)) }} kg)</span>{% endif %}
+                                {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
+                                {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+                                {% set qty_kg = (prod.quantity or 0) * _kg_per_unit %}
+                                {% if (_unit or 'kg')|lower == 'kg' %}{{ "%.1f"|format(prod.quantity or 0) }} kg{% else %}{{ "%.1f"|format(prod.quantity or 0) }} {{ _unit }} <span class="text-muted small">({{ "%.2f"|format(qty_kg) }} kg)</span>{% endif %}
                             </td>
-                            <td>{{ prod.date.strftime('%d.%m.%Y %H:%M') if prod.date else '-' }}</td>
+                            <td>{% if prod.date %}{% if prod.date is string %}{{ prod.date[:16] }}{% else %}{{ prod.date.strftime('%d.%m.%Y %H:%M') }}{% endif %}{% else %}-{% endif %}</td>
                             <td>
                                 {% if prod.status == 'completed' %}
                                 <span class="badge bg-success">Yakunlandi</span>
@@ -392,9 +406,31 @@ window.quickRecipes = [
             quickRecipeId.value = r.id;
             quickRecipeSearch.value = r.name;
             if (quickQuantityUnit) quickQuantityUnit.textContent = r.unit || 'kg';
-            if (quickWh && r.wh) quickWh.value = r.wh;
-            if (quickWhOut && r.whOut) quickWhOut.value = r.whOut;
+            // 1-ombor: retseptdagi default yoki nomiga qarab (xom ashyo)
+            if (quickWh) {
+                var whVal = (r.wh && _optionExists(quickWh, r.wh)) ? r.wh : _pickWarehouseByPattern(quickWh, /xom|raw|asosiy|material|sklad/i);
+                quickWh.value = whVal || (r.wh || '');
+            }
+            // 2-ombor: retseptdagi default yoki nomiga qarab (yarim tayyor)
+            if (quickWhOut) {
+                var whOutVal = (r.whOut && _optionExists(quickWhOut, r.whOut)) ? r.whOut : _pickWarehouseByPattern(quickWhOut, /yarim|tayyor|semi|finished|chiqish|output/i);
+                quickWhOut.value = whOutVal || (r.whOut || '');
+            }
             quickRecipeDropdown.style.display = 'none';
+        }
+        function _optionExists(sel, val) {
+            if (!sel || !val) return false;
+            for (var i = 0; i < sel.options.length; i++) { if (String(sel.options[i].value) === String(val)) return true; }
+            return false;
+        }
+        function _pickWarehouseByPattern(sel, pattern) {
+            if (!sel || !sel.options || sel.options.length < 2) return '';
+            for (var i = 1; i < sel.options.length; i++) {
+                var opt = sel.options[i];
+                var text = (opt.text || opt.innerText || '').trim();
+                if (pattern.test(text)) return opt.value;
+            }
+            return '';
         }
         function normForSearch(s) {
             if (!s) return '';
@@ -474,6 +510,16 @@ window.quickRecipes = [
             if (!quickRecipeId || !quickRecipeId.value) {
                 e.preventDefault();
                 if (quickRecipeSearch) { quickRecipeSearch.focus(); quickRecipeSearch.select(); }
+                return false;
+            }
+            if (quickWh && !quickWh.value) {
+                e.preventDefault();
+                quickWh.focus();
+                return false;
+            }
+            if (quickWhOut && !quickWhOut.value) {
+                e.preventDefault();
+                quickWhOut.focus();
                 return false;
             }
         });

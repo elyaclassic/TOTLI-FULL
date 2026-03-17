@@ -53,7 +53,7 @@
             <h1 class="pos-title mb-0"><i class="bi bi-cart-check-fill me-2"></i>Sotuv oynasi</h1>
         </div>
         <div class="d-flex align-items-center gap-2">
-        <a href="/purchases?from=pos" class="btn btn-outline-success btn-sm" title="Kirim hujjatlari ro'yxati — o'zingiz kiritganlar"><i class="bi bi-box-arrow-in-down me-1"></i>Tovar kirimi</a>
+        {# POS headerda "Tovar kirimi" tugmasi olib tashlandi #}
         {% if pos_user_warehouses %}
         <div class="pos-warehouses-compact d-flex align-items-center gap-2">
             <label class="small text-muted mb-0">Ombor:</label>
@@ -234,15 +234,6 @@
                             </table>
                         </div>
                         <p class="text-muted small text-center mb-3" id="posCartEmpty">Savat bo'sh. Tovarga bosing yoki barkod skanerlang.</p>
-                        <div class="pos-payment-pills mt-3 mb-3">
-                            <span class="d-block small text-muted mb-2">To'lov turi</span>
-                            <div class="d-flex gap-2 flex-wrap">
-                                <button type="button" class="btn btn-sm pos-payment-pill" data-payment="naqd" id="posSidebarNaqd"><i class="bi bi-cash-stack me-1"></i>Naqd</button>
-                                <button type="button" class="btn btn-sm pos-payment-pill" data-payment="plastik" id="posSidebarPlastik"><i class="bi bi-credit-card me-1"></i>Plastik</button>
-                                <button type="button" class="btn btn-sm pos-payment-pill" data-payment="click" id="posSidebarClick"><i class="bi bi-phone me-1"></i>Click</button>
-                                <button type="button" class="btn btn-sm pos-payment-pill" data-payment="terminal" id="posSidebarTerminal"><i class="bi bi-upc-scan me-1"></i>Terminal</button>
-                            </div>
-                        </div>
                         <div class="pos-partner-discount mb-3">
                             <label class="form-label small text-muted mb-1">Kontragent</label>
                             <select name="partner_id" id="posPartnerSelect" class="form-select form-select-sm">
@@ -286,6 +277,9 @@
                         </div>
                         <button type="button" class="btn btn-sm w-100 mb-2 pos-btn-clear" id="posBtnClearCart" style="display:none;"><i class="bi bi-trash me-1"></i> Savatni tozalash</button>
                         <button type="button" class="btn w-100 pos-btn-sotuv py-3" id="posBtnSotuv" disabled><i class="bi bi-cash-coin me-2"></i>Sotuv <small class="opacity-75">(F2)</small></button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2 pos-more-actions-btn" id="posMoreActionsBtn" style="display:none;">
+                            <i class="bi bi-grid-3x3-gap me-1"></i>Qo‘shimcha tugmalar
+                        </button>
                         <div class="pos-extra-actions mt-3 pt-3 border-top border-secondary border-opacity-25">
                             <div class="row g-2">
                                 <div class="col-4"><a href="/purchases?from=pos" class="btn btn-sm w-100 pos-action-pill text-decoration-none" title="Kirim hujjatlari — Yaratish orqali yangi kirim"><i class="bi bi-box-arrow-in-down me-1"></i>Tovar kirimi</a></div>
@@ -343,26 +337,55 @@
 
     <!-- To'lov turi modali -->
     <div class="modal fade pos-payment-modal" id="posPaymentModal" tabindex="-1" aria-labelledby="posPaymentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-sm">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-sm pos-payment-dialog">
             <div class="modal-content pos-payment-content">
                 <div class="modal-header pos-payment-header">
                     <h5 class="modal-title mb-0" id="posPaymentModalLabel"><i class="bi bi-wallet2 me-2"></i>To'lov turi</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body pos-payment-body py-4 px-4">
-                    <p class="text-center mb-4 opacity-75 small"><kbd class="pos-kbd">1</kbd> Naqd &nbsp; <kbd class="pos-kbd">2</kbd> Plastik &nbsp; <kbd class="pos-kbd">3</kbd> Click &nbsp; <kbd class="pos-kbd">4</kbd> Terminal</p>
-                    <div class="d-grid gap-3">
-                        <button type="button" class="btn btn-lg py-3 pos-payment-btn pos-payment-naqd" data-payment="naqd" id="posPaymentNaqd">
-                            <i class="bi bi-cash-stack me-2 fs-5"></i> Naqd
-                        </button>
-                        <button type="button" class="btn btn-lg py-3 pos-payment-btn pos-payment-plastik" data-payment="plastik" id="posPaymentPlastik">
-                            <i class="bi bi-credit-card me-2 fs-5"></i> Plastik
-                        </button>
-                        <button type="button" class="btn btn-lg py-3 pos-payment-btn pos-payment-click" data-payment="click" id="posPaymentClick">
-                            <i class="bi bi-phone me-2 fs-5"></i> Click
-                        </button>
-                        <button type="button" class="btn btn-lg py-3 pos-payment-btn pos-payment-terminal" data-payment="terminal" id="posPaymentTerminal">
-                            <i class="bi bi-upc-scan me-2 fs-5"></i> Terminal
+                <div class="modal-body pos-payment-body py-3 px-3">
+                    <p class="text-center mb-3 opacity-75 small">
+                        <kbd class="pos-kbd">1</kbd> Naqd &nbsp; <kbd class="pos-kbd">2</kbd> Plastik &nbsp;
+                        <kbd class="pos-kbd">3</kbd> Click &nbsp; <kbd class="pos-kbd">4</kbd> Terminal
+                    </p>
+                    <div id="posSplitPanel" class="pos-split-panel">
+                        <div class="pos-split-hint small text-muted mb-2">
+                            Jami: <strong><span id="posSplitTotal">0</span> so'm</strong> &nbsp; | &nbsp;
+                            Kiritildi: <strong><span id="posSplitSum">0</span> so'm</strong> &nbsp; | &nbsp;
+                            Qoldiq: <strong><span id="posSplitRemain">0</span> so'm</strong>
+                        </div>
+                        <div class="row g-2">
+                            <div class="col-12">
+                                <label class="form-label small mb-1">Naqd</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitNaqd" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitNaqd" min="0" step="1" value="0" inputmode="numeric">
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small mb-1">Plastik</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitPlastik" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitPlastik" min="0" step="1" value="0" inputmode="numeric">
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small mb-1">Click</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitClick" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitClick" min="0" step="1" value="0" inputmode="numeric">
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <label class="form-label small mb-1">Terminal</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitTerminal" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitTerminal" min="0" step="1" value="0" inputmode="numeric">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-success btn-sm w-100 mt-2" id="posSplitConfirm" disabled>
+                            <i class="bi bi-check2-circle me-1"></i>Tasdiqlash
                         </button>
                     </div>
                 </div>
@@ -760,13 +783,11 @@
     paymentTypeInput.id = 'posPaymentTypeInput';
     if (form) form.appendChild(paymentTypeInput);
 
-    document.querySelectorAll('.pos-payment-pill').forEach(function(pill) {
-        pill.addEventListener('click', function() {
-            document.querySelectorAll('.pos-payment-pill').forEach(function(p) { p.classList.remove('active'); });
-            this.classList.add('active');
-            if (paymentTypeInput) paymentTypeInput.value = this.getAttribute('data-payment') || '';
-        });
-    });
+    var paymentSplitsInput = document.createElement('input');
+    paymentSplitsInput.type = 'hidden';
+    paymentSplitsInput.name = 'payment_splits';
+    paymentSplitsInput.id = 'posPaymentSplitsInput';
+    if (form) form.appendChild(paymentSplitsInput);
 
     if (btnSotuv) {
         btnSotuv.addEventListener('click', function() {
@@ -780,13 +801,8 @@
                 doPayment('naqd');
                 return;
             }
-            var p = paymentTypeInput ? paymentTypeInput.value : '';
-            if (p && ['naqd', 'plastik', 'click', 'terminal'].indexOf(p) !== -1) {
-                doPayment(p);
-            } else {
-                var modal = bootstrap.Modal.getOrCreateInstance(paymentModal);
-                modal.show();
-            }
+            var modal = bootstrap.Modal.getOrCreateInstance(paymentModal);
+            modal.show();
         });
     }
 
@@ -799,9 +815,113 @@
 
     function doPayment(payment) {
         if (paymentTypeInput) paymentTypeInput.value = payment;
+        if (paymentSplitsInput) paymentSplitsInput.value = '';
         try { sessionStorage.removeItem(POS_CART_KEY); } catch (e) {}
         form.submit();
     }
+
+    function parseMoneyText(text) {
+        if (!text) return 0;
+        var s = String(text).replace(/\s+/g, '').replace(/,/g, '');
+        s = s.replace(/[^\d.\-]/g, '');
+        var v = parseFloat(s);
+        return isNaN(v) ? 0 : v;
+    }
+    function getTotalFinal() {
+        var el = document.getElementById('posCartTotalFinal');
+        return parseMoneyText(el ? el.textContent : '0');
+    }
+
+    var splitPanel = document.getElementById('posSplitPanel');
+    var splitTotalEl = document.getElementById('posSplitTotal');
+    var splitSumEl = document.getElementById('posSplitSum');
+    var splitRemainEl = document.getElementById('posSplitRemain');
+    var splitConfirm = document.getElementById('posSplitConfirm');
+    var splitInputs = [
+        { key: 'naqd', el: document.getElementById('posSplitNaqd') },
+        { key: 'plastik', el: document.getElementById('posSplitPlastik') },
+        { key: 'click', el: document.getElementById('posSplitClick') },
+        { key: 'terminal', el: document.getElementById('posSplitTerminal') },
+    ];
+    function normalizeAmtInput(inp) {
+        if (!inp) return 0;
+        var v = parseFloat(inp.value || '0');
+        if (isNaN(v) || v < 0) v = 0;
+        inp.value = v;
+        return v;
+    }
+    function updateSplitSummary() {
+        if (!splitTotalEl || !splitSumEl || !splitRemainEl) return;
+        var total = getTotalFinal();
+        var sum = 0;
+        splitInputs.forEach(function(x) { sum += normalizeAmtInput(x.el); });
+        var remain = total - sum;
+        splitTotalEl.textContent = total.toLocaleString('ru-RU');
+        splitSumEl.textContent = sum.toLocaleString('ru-RU');
+        splitRemainEl.textContent = remain.toLocaleString('ru-RU');
+        var ok = Math.abs(remain) < 0.01 && total > 0;
+        if (splitConfirm) splitConfirm.disabled = !ok;
+    }
+    if (splitInputs) {
+        splitInputs.forEach(function(x) {
+            if (x.el) {
+                x.el.addEventListener('input', updateSplitSummary);
+                x.el.addEventListener('change', updateSplitSummary);
+            }
+        });
+    }
+    if (paymentModal) {
+        paymentModal.addEventListener('show.bs.modal', function() {
+            if (splitPanel) splitPanel.style.display = '';
+            splitInputs.forEach(function(x) { if (x.el) x.el.value = '0'; });
+            updateSplitSummary();
+        });
+    }
+    if (splitConfirm) {
+        splitConfirm.addEventListener('click', function() {
+            var total = getTotalFinal();
+            var parts = [];
+            var sum = 0;
+            splitInputs.forEach(function(x) {
+                var amt = normalizeAmtInput(x.el);
+                if (amt > 0) {
+                    parts.push({ type: x.key, amount: amt });
+                    sum += amt;
+                }
+            });
+            if (!parts.length) { alert('Hech bo‘lmaganda bitta summa kiriting.'); return; }
+            if (Math.abs(total - sum) >= 0.01) { alert('Kiritilgan summalar yig‘indisi Jami bilan teng bo‘lishi kerak.'); return; }
+            if (paymentTypeInput) paymentTypeInput.value = 'split';
+            if (paymentSplitsInput) paymentSplitsInput.value = JSON.stringify(parts);
+            try { sessionStorage.removeItem(POS_CART_KEY); } catch (e) {}
+            form.submit();
+        });
+    }
+
+    /* Split inputlarda Enter bosilsa form yuborilmasin */
+    splitInputs.forEach(function(x) {
+        if (!x.el) return;
+        x.el.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') { e.preventDefault(); }
+        });
+    });
+
+    /* Qoldiq summani tez to'ldirish ( + tugma ) */
+    document.querySelectorAll('.pos-split-fill').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var targetId = this.getAttribute('data-target');
+            var inp = targetId ? document.getElementById(targetId) : null;
+            if (!inp) return;
+            var total = getTotalFinal();
+            var sum = 0;
+            splitInputs.forEach(function(x) { sum += normalizeAmtInput(x.el); });
+            var remain = total - sum;
+            if (remain < 0) remain = 0;
+            inp.value = (normalizeAmtInput(inp) + remain);
+            updateSplitSummary();
+            try { inp.focus(); inp.select && inp.select(); } catch (e) {}
+        });
+    });
 
     document.querySelectorAll('.pos-payment-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
@@ -812,10 +932,24 @@
 
     if (paymentModal) {
         paymentModal.addEventListener('keydown', function(e) {
+            var t = e && e.target;
+            var tag = t && t.tagName ? String(t.tagName).toLowerCase() : '';
+            if (tag === 'input' || tag === 'textarea' || tag === 'select' || (t && t.isContentEditable)) {
+                return; /* input ichida raqam yozganda hotkey ishlamasin */
+            }
             if (e.key === '1') { e.preventDefault(); doPayment('naqd'); }
             if (e.key === '2') { e.preventDefault(); doPayment('plastik'); }
             if (e.key === '3') { e.preventDefault(); doPayment('click'); }
             if (e.key === '4') { e.preventDefault(); doPayment('terminal'); }
+        });
+    }
+
+    /* 1024x768: qo'shimcha tugmalarni ochib-yopish */
+    var moreActionsBtn = document.getElementById('posMoreActionsBtn');
+    var extraActions = document.querySelector('.pos-extra-actions');
+    if (moreActionsBtn && extraActions) {
+        moreActionsBtn.addEventListener('click', function() {
+            extraActions.classList.toggle('is-open');
         });
     }
 
@@ -1046,13 +1180,13 @@
     font-variant-numeric: tabular-nums;
 }
 
-.pos-premium .pos-container { max-width: 1600px; margin: 0 auto; padding: 1.5rem 1rem 1rem; }
+.pos-premium .pos-container { max-width: 1280px; margin: 0 auto; padding: 1rem 0.75rem 0.75rem; }
 
 /* Header */
 .pos-premium .pos-header { margin-bottom: 1.5rem; padding-bottom: 1rem; padding-top: 0.25rem; border-bottom: 1px solid var(--pos-border); }
 .pos-premium .pos-btn-exit { white-space: nowrap; }
 .pos-premium .pos-title {
-    font-size: 1.65rem;
+    font-size: 1.35rem;
     font-weight: 700;
     color: #1a1d21;
     letter-spacing: -0.02em;
@@ -1119,12 +1253,12 @@
 .pos-premium .pos-card-header {
     background: linear-gradient(180deg, #fafbfc 0%, #f0f2f5 100%);
     border-bottom: 1px solid var(--pos-border);
-    padding: 0.85rem 1.25rem;
+    padding: 0.7rem 1rem;
     font-weight: 600;
     color: #2c3e50;
 }
-.pos-premium .pos-card-title { font-size: 0.95rem; }
-.pos-premium .pos-card-body { padding: 1.25rem; background: var(--pos-card-bg); }
+.pos-premium .pos-card-title { font-size: 0.9rem; }
+.pos-premium .pos-card-body { padding: 1rem; background: var(--pos-card-bg); }
 .pos-premium .pos-input-search,
 .pos-premium .pos-input-barcode {
     border-radius: var(--pos-radius-sm);
@@ -1148,7 +1282,7 @@
     box-shadow: var(--pos-shadow-hover);
     border-color: rgba(13,107,75,0.25);
 }
-.pos-premium .pos-product-image-wrap { height: 160px; min-height: 160px; border-radius: var(--pos-radius-sm); overflow: hidden; background: #f8f9fb; display: flex; align-items: center; justify-content: center; }
+.pos-premium .pos-product-image-wrap { height: 120px; min-height: 120px; border-radius: var(--pos-radius-sm); overflow: hidden; background: #f8f9fb; display: flex; align-items: center; justify-content: center; }
 .pos-premium .pos-product-img {
     width: 100%;
     height: 100%;
@@ -1172,7 +1306,7 @@
 /* Cart */
 .pos-premium .pos-card-cart { border-radius: var(--pos-radius); }
 .pos-premium .pos-cart-header { background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-primary-dark) 100%); color: #fff; border: none; }
-.pos-premium .pos-cart-body { padding: 1.25rem; }
+.pos-premium .pos-cart-body { padding: 1rem; }
 .pos-premium .pos-cart-table thead th {
     font-size: 0.75rem;
     font-weight: 600;
@@ -1220,6 +1354,7 @@
 }
 
 /* Payment modal */
+.pos-premium .pos-payment-dialog { max-width: 360px; }
 .pos-premium .pos-payment-modal .modal-content {
     border-radius: var(--pos-radius);
     border: none;
@@ -1243,7 +1378,7 @@
 .pos-premium .pos-payment-btn {
     border-radius: var(--pos-radius-sm);
     font-weight: 600;
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     border: 2px solid transparent;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -1378,6 +1513,152 @@
     background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-primary-dark) 100%);
     border-color: transparent;
     color: #fff;
+}
+
+/* ---------- 1024x768 (kiosk) uchun ixcham ko'rinish ---------- */
+@media (max-width: 1024px), (max-height: 768px) {
+    html, body { height: 100%; }
+    body { overflow: hidden; }
+    .sidebar { display: none !important; }
+    .main-content { margin-left: 0 !important; }
+    .main-content { height: 100vh; overflow: hidden; padding: 8px !important; }
+    /* Kichik ekranda yuqoridagi fullscreen banner joy yemasin */
+    .pos-fullscreen-prompt { display: none !important; }
+    .pos-premium .pos-container { max-width: 100%; padding: 0.75rem 0.5rem 0.5rem; }
+    .pos-premium .pos-header { margin-bottom: 0.75rem; padding-bottom: 0.6rem; }
+    .pos-premium .pos-title { font-size: 1.15rem; }
+    .pos-premium .pos-card-header { padding: 0.5rem 0.75rem; }
+    .pos-premium .pos-card-body { padding: 0.85rem; }
+    .pos-premium .pos-product-image-wrap { height: 95px; min-height: 95px; }
+    .pos-premium .pos-product-name { font-size: 0.82rem; }
+    .pos-premium .pos-product-price { font-size: 0.9rem; }
+    .pos-premium .pos-cart-body { padding: 0.55rem; }
+    .pos-premium .pos-total-label { font-size: 0.82rem; }
+    .pos-premium .pos-total-value { font-size: 0.95rem; }
+    .pos-premium .pos-btn-sotuv { font-size: 0.88rem; padding-top: 0.6rem !important; padding-bottom: 0.6rem !important; }
+
+    /* Savat panelini ixchamlashtirish */
+    .pos-premium .pos-kassir { padding: 0.28rem 0.45rem; font-size: 0.75rem; }
+    .pos-premium .pos-cart-table thead th {
+        font-size: 0.62rem;
+        padding: 0.35rem 0.25rem;
+    }
+    .pos-premium .pos-cart-table tbody td {
+        font-size: 0.68rem;
+        padding: 0.3rem 0.25rem;
+    }
+    /* Mahsulot nomi ustuni — yanada kichikroq */
+    .pos-premium .pos-cart-table tbody td:first-child {
+        font-size: 0.64rem;
+        line-height: 1.15;
+    }
+    .pos-premium .pos-cart-table input.form-control-sm {
+        font-size: 0.74rem;
+        padding: 0.15rem 0.28rem;
+    }
+    .pos-premium .pos-cart-table .input-group-sm > .btn,
+    .pos-premium .pos-cart-table .input-group-sm > .form-control {
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+    }
+    /* Miqdor +/- tugmalari kichik, o'rtadagi qiymat to'liq ko'rinsin */
+    .pos-premium .pos-cart-table .input-group-sm {
+        width: 88px !important;
+        flex-wrap: nowrap;
+        align-items: stretch;
+    }
+    .pos-premium .pos-cart-table .input-group-sm > .btn {
+        min-width: 22px;
+        max-width: 22px;
+        padding: 0;
+        font-size: 0.7rem;
+        line-height: 1;
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 24px;
+    }
+    .pos-premium .pos-cart-table .input-group-sm > .form-control {
+        min-width: 44px;
+        width: auto;
+        flex: 1 1 auto;
+        padding: 0;
+        font-size: 0.75rem;
+        text-align: center;
+        height: 24px;
+    }
+    /* Miqdor inputidagi ↑↓ spinnerlarni yashirish */
+    .pos-premium .pos-cart-table input[type="number"]::-webkit-outer-spin-button,
+    .pos-premium .pos-cart-table input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    .pos-premium .pos-cart-table input[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+    .pos-premium .pos-payment-pills .pos-payment-pill {
+        font-size: 0.7rem;
+        min-width: 74px;
+        padding: 0.25rem 0.35rem;
+    }
+    .pos-premium .pos-partner-discount .form-label { font-size: 0.7rem; margin-bottom: 0.15rem; }
+    .pos-premium .pos-partner-discount .form-select,
+    .pos-premium .pos-partner-discount .form-control {
+        font-size: 0.74rem;
+        padding: 0.18rem 0.35rem;
+    }
+    .pos-premium .pos-btn-clear { font-size: 0.74rem; padding: 0.25rem 0.4rem; margin-bottom: 0.35rem !important; }
+    .pos-premium .pos-summary .pos-total-row { padding: 0.6rem 0; }
+    .pos-premium .pos-payment-pills .small { font-size: 0.72rem; }
+    .pos-premium .pos-extra-actions { margin-top: 0.6rem !important; padding-top: 0.6rem !important; }
+    .pos-premium .pos-extra-actions .row.g-2 { --bs-gutter-y: 0.35rem; --bs-gutter-x: 0.35rem; }
+
+    /* Sahifa scroll bo'lmasin: chap/o'ng kartalar ichidan scroll bo'lsin */
+    .pos-premium { height: 100%; overflow: hidden; }
+    .pos-premium .pos-container { height: 100%; display: flex; flex-direction: column; }
+    .pos-premium #posForm { flex: 1 1 auto; min-height: 0; }
+    .pos-premium #posForm > .row { height: 100%; --bs-gutter-x: 0.6rem; --bs-gutter-y: 0.6rem; }
+    .pos-premium #posForm > .row > [class*="col-"] { height: 100%; }
+    .pos-premium .pos-card-products,
+    .pos-premium .pos-card-cart { height: 100%; display: flex; flex-direction: column; }
+    .pos-premium .pos-card-products .pos-card-body,
+    .pos-premium .pos-card-cart .pos-cart-body { overflow: auto; min-height: 0; }
+    .pos-premium .pos-card-cart.sticky-top { position: static; top: auto; }
+
+    /* Inputlar balandligi ixchamroq */
+    .pos-premium .pos-input-search,
+    .pos-premium .pos-input-barcode,
+    .pos-premium #posCategoryFilter { height: 30px; }
+
+    /* Qo'shimcha tugmalar blokini ixchamroq qilish */
+    .pos-premium .pos-extra-actions .pos-action-pill { font-size: 0.72rem; padding: 0.4rem 0.35rem; }
+
+    /* 1024x768 da joyni tejash: qo'shimcha tugmalar collapsible */
+    .pos-premium .pos-more-actions-btn { display: block !important; }
+    .pos-premium .pos-extra-actions { display: none !important; }
+    .pos-premium .pos-extra-actions.is-open { display: block !important; }
+
+    /* Eng keraklisi (Jami + Sotuv) doim ko'rinsin */
+    .pos-premium #posSummaryBlock {
+        position: sticky;
+        bottom: 56px;
+        background: var(--pos-card-bg);
+        padding-top: 0.35rem;
+        z-index: 5;
+    }
+    .pos-premium #posBtnClearCart {
+        position: sticky;
+        bottom: 44px;
+        z-index: 6;
+        background: var(--pos-card-bg);
+    }
+    .pos-premium #posBtnSotuv {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+    }
 }
 </style>
 {% endblock %}

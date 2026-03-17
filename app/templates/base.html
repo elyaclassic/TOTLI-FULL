@@ -424,8 +424,9 @@
                 style="color: #FFB50D; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-top: 5px; font-weight: 700;">SWEETS</span>
         </div>
 
-        {% set user_role = current_user.role if current_user else 'user' %}
-        {% set full_menu = user_role in ['admin', 'manager', 'user'] %}
+        {% set user_role = ((current_user.role if current_user else '')|string|lower) or 'user' %}
+        {% set manager_sidebar = user_role in ['manager', 'menejer'] %}
+        {% set full_menu = user_role in ['admin', 'user'] and not manager_sidebar %}
         {% set agent_menu = user_role in ['agent', 'driver'] %}
         {% set production_menu = user_role == 'production' %}
         {% set qadoqlash_menu = user_role == 'qadoqlash' %}
@@ -433,7 +434,7 @@
         {% set pos_fullscreen = sotuvchi_menu and page_title == 'Sotuv oynasi' %}
 
         <ul class="nav flex-column mt-3">
-            {% if user_role in ['admin', 'manager'] %}
+            {% if user_role in ['admin', 'manager', 'menejer'] %}
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Bosh sahifa' %}active{% endif %}" href="/">
                     <i class="bi bi-house-door"></i> Bosh sahifa
@@ -441,7 +442,40 @@
             </li>
             {% endif %}
 
-            {% if full_menu %}
+            {% if manager_sidebar %}
+            <!-- Menejer: faqat sotuv, ombor, buyurtmalar, ishlab chiqarish buyurtmalari -->
+            <li class="nav-item">
+                <a class="nav-link {% if 'Sotuv oynasi' in (page_title or '') %}active{% endif %}" href="/sales/pos">
+                    <i class="bi bi-cart-check"></i> Sotuv oynasi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Sotuvlar' or (page_title and 'Sotuv' in page_title and 'oynasi' not in page_title) %}active{% endif %}" href="/sales">
+                    <i class="bi bi-cart3"></i> Sotuvlar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title and 'ombor' in page_title|lower and 'harakat' in page_title|lower or (page_title and 'Tovar kirimi' in page_title) %}active{% endif %}" href="/warehouse/movement">
+                    <i class="bi bi-arrow-left-right"></i> Ombordan omborga tovar kirimi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Savdodan qaytarish' in (page_title or '') %}active{% endif %}" href="/sales/returns">
+                    <i class="bi bi-arrow-return-left"></i> Savdodan qaytarish
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Buyurtma' in (page_title or '') or 'Yetkazish' in (page_title or '') %}active{% endif %}" href="/delivery">
+                    <i class="bi bi-truck"></i> Buyurtmalar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title and 'Ishlab chiqarish' in page_title and 'buyurtma' in page_title|lower %}active{% endif %}" href="/production/orders">
+                    <i class="bi bi-gear-wide-connected"></i> Ishlab chiqarish buyurtmalari
+                </a>
+            </li>
+
+            {% elif full_menu %}
             <!-- MA'LUMOTLAR (Reference Data) -->
             <li class="nav-item mt-2">
                 <small class="text-light opacity-50 px-3">MA'LUMOTLAR</small>
