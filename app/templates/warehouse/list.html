@@ -2,18 +2,33 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-12">
-            <h4 class="mb-0"><i class="bi bi-box-seam"></i> Qaysi omborda nima bor</h4>
+
+    <!-- Page header -->
+    <div class="page-header mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-box-seam"></i> Ombor qoldiqlari</h4>
             <p class="text-muted mb-0 small">Omborlar va ulardagi mahsulot qoldiqlari</p>
         </div>
+        <div class="d-flex flex-wrap gap-2">
+            <a href="/warehouse/movement" class="top-btn"><i class="bi bi-arrow-left-right"></i> Ombordan omborga</a>
+            <a href="/warehouse/export" class="top-btn"><i class="bi bi-download"></i> Excel</a>
+            <a href="/warehouse/template" class="top-btn"><i class="bi bi-file-earmark-excel"></i> Andoza</a>
+            <button type="button" class="top-btn" data-bs-toggle="modal" data-bs-target="#importExcelModal">
+                <i class="bi bi-upload"></i> Yuklash
+            </button>
+            <button class="top-btn" data-bs-toggle="modal" data-bs-target="#addWarehouseModal">
+                <i class="bi bi-plus-circle"></i> Yangi ombor
+            </button>
+        </div>
     </div>
+
+    <!-- Alerts -->
     {% if request.query_params.get('success') == 'import' and request.query_params.get('detail') %}
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         <i class="bi bi-check-circle"></i> {{ request.query_params.get('detail') }}
         {% if request.query_params.get('doc_id') and request.query_params.get('doc_number') %}
         <br><small class="d-block mt-2">
-            <i class="bi bi-file-earmark-text"></i> Hujjat yaratildi: 
+            <i class="bi bi-file-earmark-text"></i> Hujjat yaratildi:
             <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link fw-bold">{{ request.query_params.get('doc_number') }}</a>
             - <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link">Hujjatni ochish</a>
         </small>
@@ -28,10 +43,30 @@
     </div>
     {% endif %}
 
-    <!-- Hujjatlar ro'yxati — mahsulotlar hujjat ichida ko'riladi -->
-    <div class="card mb-4">
-        <div class="card-header bg-primary text-white">
-            <i class="bi bi-file-earmark-text"></i> Hujjatlar ro'yxati
+    <!-- Mini-stat cards -->
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <div class="mini-stat">
+            <div class="num">{{ warehouses|length }}</div>
+            <div class="lbl"><i class="bi bi-building"></i> Omborlar</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num">{{ stocks|length }}</div>
+            <div class="lbl"><i class="bi bi-boxes"></i> Qoldiqlar</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num">{{ qoldiq_docs|length }}</div>
+            <div class="lbl"><i class="bi bi-file-earmark-text"></i> Qoldiq hujjatlar</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num">{{ purchase_docs|length }}</div>
+            <div class="lbl"><i class="bi bi-file-earmark-arrow-down"></i> Kirim hujjatlar</div>
+        </div>
+    </div>
+
+    <!-- Hujjatlar ro'yxati -->
+    <div class="data-table mb-4">
+        <div class="card-header">
+            <span><i class="bi bi-file-earmark-text"></i> Hujjatlar ro'yxati</span>
         </div>
         <div class="card-body p-0">
             <p class="text-muted small px-3 pt-2 mb-0">Hujjatni oching — uning ichida mahsulotlar ro'yxati chiqadi.</p>
@@ -46,16 +81,22 @@
             <div class="tab-content p-3" id="docsTabContent">
                 <div class="tab-pane fade show active" id="qoldiq-docs">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light"><tr><th>#</th><th>Hujjat raqami</th><th>Sana</th><th>Holat</th><th>Qatorlar</th><th></th></tr></thead>
+                        <thead><tr><th>#</th><th>Hujjat raqami</th><th>Sana</th><th>Holat</th><th>Qatorlar</th><th></th></tr></thead>
                         <tbody>
                             {% for doc in qoldiq_docs %}
                             <tr>
-                                <td>{{ loop.index }}</td>
+                                <td class="muted-cell">{{ loop.index }}</td>
                                 <td><strong>{{ doc.number }}</strong></td>
-                                <td>{{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '—' }}</td>
-                                <td>{% if doc.status == 'confirmed' %}<span class="badge bg-success">Tasdiqlangan</span>{% else %}<span class="badge bg-warning text-dark">Qoralama</span>{% endif %}</td>
-                                <td>{{ doc.items|length }} ta</td>
-                                <td><a href="/qoldiqlar/tovar/hujjat/{{ doc.id }}" class="btn btn-sm btn-outline-primary">Hujjatni ochish <i class="bi bi-box-arrow-up-right"></i></a></td>
+                                <td class="muted-cell">{{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '—' }}</td>
+                                <td>
+                                    {% if doc.status == 'confirmed' %}
+                                    <span class="badge-done">Tasdiqlangan</span>
+                                    {% else %}
+                                    <span class="badge-draft">Qoralama</span>
+                                    {% endif %}
+                                </td>
+                                <td class="num-cell">{{ doc.items|length }} ta</td>
+                                <td><a href="/qoldiqlar/tovar/hujjat/{{ doc.id }}" class="btn-act" title="Hujjatni ochish"><i class="bi bi-box-arrow-up-right"></i></a></td>
                             </tr>
                             {% else %}
                             <tr><td colspan="6" class="text-center text-muted py-3">Tovar qoldiq hujjati yo'q. <a href="/qoldiqlar">Qoldiqlar</a> bo'limida yangi hujjat yarating.</td></tr>
@@ -65,16 +106,22 @@
                 </div>
                 <div class="tab-pane fade" id="kirim-docs">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light"><tr><th>#</th><th>Hujjat raqami</th><th>Sana</th><th>Ombor</th><th>Holat</th><th></th></tr></thead>
+                        <thead><tr><th>#</th><th>Hujjat raqami</th><th>Sana</th><th>Ombor</th><th>Holat</th><th></th></tr></thead>
                         <tbody>
                             {% for doc in purchase_docs %}
                             <tr>
-                                <td>{{ loop.index }}</td>
+                                <td class="muted-cell">{{ loop.index }}</td>
                                 <td><strong>{{ doc.number }}</strong></td>
-                                <td>{{ doc.date.strftime('%d.%m.%Y') if doc.date else '—' }}</td>
+                                <td class="muted-cell">{{ doc.date.strftime('%d.%m.%Y') if doc.date else '—' }}</td>
                                 <td>{{ doc.warehouse.name if doc.warehouse else '—' }}</td>
-                                <td>{% if doc.status == 'confirmed' %}<span class="badge bg-success">Tasdiqlangan</span>{% else %}<span class="badge bg-secondary">Qoralama</span>{% endif %}</td>
-                                <td><a href="/purchases/edit/{{ doc.id }}" class="btn btn-sm btn-outline-primary">Hujjatni ochish <i class="bi bi-box-arrow-up-right"></i></a></td>
+                                <td>
+                                    {% if doc.status == 'confirmed' %}
+                                    <span class="badge-done">Tasdiqlangan</span>
+                                    {% else %}
+                                    <span class="badge-draft">Qoralama</span>
+                                    {% endif %}
+                                </td>
+                                <td><a href="/purchases/edit/{{ doc.id }}" class="btn-act" title="Hujjatni ochish"><i class="bi bi-box-arrow-up-right"></i></a></td>
                             </tr>
                             {% else %}
                             <tr><td colspan="6" class="text-center text-muted py-3">Tovar kirim hujjati yo'q.</td></tr>
@@ -86,10 +133,10 @@
         </div>
     </div>
 
-    <!-- Ombor bo'yicha (qaysi omborda nima bor) -->
-    <div class="card mb-4">
-        <div class="card-header bg-light">
-            <i class="bi bi-building"></i> Ombor bo'yicha qoldiqlar
+    <!-- Ombor bo'yicha qoldiqlar -->
+    <div class="data-table mb-4">
+        <div class="card-header">
+            <span><i class="bi bi-building"></i> Ombor bo'yicha qoldiqlar</span>
         </div>
         <div class="card-body p-0">
             {% if warehouses %}
@@ -107,7 +154,7 @@
                     <div id="wh-{{ wh.id }}" class="accordion-collapse collapse" data-bs-parent="#warehouseAccordion">
                         <div class="accordion-body p-0">
                             <table class="table table-sm table-hover mb-0">
-                                <thead class="table-light">
+                                <thead>
                                     <tr>
                                         <th>#</th>
                                         <th>Mahsulot</th>
@@ -122,16 +169,16 @@
                                     {% if wh_stocks %}
                                         {% for stock in wh_stocks %}
                                         <tr class="{% if stock.product and stock.quantity <= stock.product.min_stock %}table-warning{% endif %}">
-                                            <td>{{ loop.index }}</td>
+                                            <td class="muted-cell">{{ loop.index }}</td>
                                             <td>
                                                 <strong>{{ stock.product.name if stock.product else '-' }}</strong>
                                                 {% if stock.product and (stock.product.barcode or stock.product.code) %}
                                                 <br><small class="text-muted"><code>{{ stock.product.barcode or stock.product.code }}</code></small>
                                                 {% endif %}
                                             </td>
-                                            <td class="fw-bold">{{ "{:,.3f}".format(stock.quantity) }}</td>
-                                            <td>{{ "{:,.0f}".format(stock.product.purchase_price if stock.product else 0) }} so'm</td>
-                                            <td class="text-success">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price if stock.product else 0)) }} so'm</td>
+                                            <td class="num-cell">{{ "{:,.3f}".format(stock.quantity) }}</td>
+                                            <td class="num-cell">{{ "{:,.0f}".format(stock.product.purchase_price if stock.product else 0) }} so'm</td>
+                                            <td class="sum-cell">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price if stock.product else 0)) }} so'm</td>
                                             <td>
                                                 {% if stock_sources and stock.id in stock_sources and stock_sources[stock.id] %}
                                                     {% for num, url, d in stock_sources[stock.id] %}
@@ -144,7 +191,7 @@
                                             {% if current_user and current_user.role == 'admin' %}
                                             <td>
                                                 <form action="/warehouse/stock/{{ stock.id }}/zero" method="post" class="d-inline" onsubmit="return confirm('Ushbu qoldiqni nolga tushirishni xohlaysizmi?');">
-                                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Qoldiqni nolga tushirish"><i class="bi bi-dash-circle"></i></button>
+                                                    <button type="submit" class="btn-act danger" title="Qoldiqni nolga tushirish"><i class="bi bi-dash-circle"></i></button>
                                                 </form>
                                             </td>
                                             {% endif %}
@@ -167,24 +214,13 @@
     </div>
 
     <!-- Barcha qoldiqlar jadvali -->
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div class="data-table">
+        <div class="card-header">
             <span><i class="bi bi-boxes"></i> Barcha ombor qoldiqlari (umumiy jadval)</span>
-            <div class="d-flex flex-wrap gap-1 align-items-center">
-                <a href="/warehouse/movement" class="btn btn-outline-info btn-sm"><i class="bi bi-arrow-left-right"></i> Ombordan omborga</a>
-                <a href="/warehouse/export" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Excel</a>
-                <a href="/warehouse/template" class="btn btn-outline-secondary btn-sm"><i class="bi bi-file-earmark-excel"></i> Andoza</a>
-                <button type="button" class="btn btn-outline-success btn-sm" data-bs-toggle="modal" data-bs-target="#importExcelModal">
-                    <i class="bi bi-upload"></i> Exceldan yuklash
-                </button>
-                <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addWarehouseModal">
-                    <i class="bi bi-plus-circle"></i> Yangi ombor
-                </button>
-            </div>
         </div>
         <div class="card-body p-0">
-            <table class="table table-hover">
-                <thead class="table-light">
+            <table class="table table-hover mb-0">
+                <thead>
                     <tr>
                         <th>#</th>
                         <th>Tovar</th>
@@ -200,7 +236,7 @@
                     {% if stocks %}
                         {% for stock in stocks %}
                         <tr class="{% if stock.product and stock.quantity <= stock.product.min_stock %}table-warning{% endif %}">
-                            <td>{{ loop.index }}</td>
+                            <td class="muted-cell">{{ loop.index }}</td>
                             <td>
                                 <strong>{{ stock.product.name if stock.product else '-' }}</strong>
                                 {% if stock.product and (stock.product.barcode or stock.product.code) %}
@@ -208,9 +244,9 @@
                                 {% endif %}
                             </td>
                             <td>{{ stock.warehouse.name if stock.warehouse else '-' }}</td>
-                            <td class="fw-bold">{{ "{:,.3f}".format(stock.quantity) }}</td>
-                            <td>{{ "{:,.0f}".format(stock.product.purchase_price if stock.product else 0) }} so'm</td>
-                            <td class="text-success">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price if stock.product else 0)) }} so'm</td>
+                            <td class="num-cell">{{ "{:,.3f}".format(stock.quantity) }}</td>
+                            <td class="num-cell">{{ "{:,.0f}".format(stock.product.purchase_price if stock.product else 0) }} so'm</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price if stock.product else 0)) }} so'm</td>
                             <td>
                                 {% if stock_sources and stock.id in stock_sources and stock_sources[stock.id] %}
                                     {% for num, url, d in stock_sources[stock.id] %}
@@ -223,7 +259,7 @@
                             {% if current_user and current_user.role == 'admin' %}
                             <td>
                                 <form action="/warehouse/stock/{{ stock.id }}/zero" method="post" class="d-inline" onsubmit="return confirm('Ushbu qoldiqni nolga tushirishni xohlaysizmi?');">
-                                    <button type="submit" class="btn btn-outline-danger btn-sm" title="Qoldiqni nolga tushirish"><i class="bi bi-dash-circle"></i></button>
+                                    <button type="submit" class="btn-act danger" title="Qoldiqni nolga tushirish"><i class="bi bi-dash-circle"></i></button>
                                 </form>
                             </td>
                             {% endif %}
@@ -241,6 +277,7 @@
             </table>
         </div>
     </div>
+
 </div>
 
 <!-- Exceldan yuklash modal -->

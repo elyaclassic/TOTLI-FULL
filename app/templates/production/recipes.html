@@ -2,98 +2,126 @@
 
 {% block content %}
 <div class="container-fluid">
-<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-    <h4 class="mb-0"><i class="bi bi-journal-text"></i> Retseptlar</h4>
-    <div class="d-flex align-items-center gap-2">
-        <form method="get" action="/production/recipes" class="d-flex gap-1" style="min-width: 220px;">
-            <input type="search" name="q" value="{{ search_q or '' }}" class="form-control form-control-sm" placeholder="Retsept nomi bo'yicha qidirish..." autocomplete="off">
-            <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-search"></i></button>
+
+    <!-- Page header -->
+    <div class="page-header mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-journal-text"></i> Retseptlar</h4>
+            <p class="text-muted mb-0 small">Ishlab chiqarish retseptlari ro'yxati</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="top-btn" data-bs-toggle="modal" data-bs-target="#addRecipeModal">
+                <i class="bi bi-plus-circle"></i> Yaratish
+            </button>
+        </div>
+    </div>
+
+    <!-- Alerts -->
+    {% if request.query_params.get('error') == 'delete' and request.query_params.get('detail') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('detail') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('success') == 'deleted' %}
+    <div class="alert alert-success alert-dismissible fade show" role="alert">
+        <i class="bi bi-check-circle"></i> Retsept muvaffaqiyatli o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Mini-stat cards -->
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <div class="mini-stat">
+            <div class="num">{{ recipes|length }}</div>
+            <div class="lbl"><i class="bi bi-journal-text"></i> Jami retseptlar</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num">{{ recipes|selectattr('is_active')|list|length }}</div>
+            <div class="lbl"><i class="bi bi-check-circle"></i> Faol retseptlar</div>
+        </div>
+    </div>
+
+    <!-- Filter card -->
+    <div class="filter-card mb-3">
+        <form method="get" action="/production/recipes" class="d-flex flex-wrap gap-2 align-items-end">
+            <div class="search-wrap">
+                <i class="bi bi-search"></i>
+                <input type="search" name="q" value="{{ search_q or '' }}" class="form-control" placeholder="Retsept nomi bo'yicha qidirish..." autocomplete="off">
+            </div>
+            <button type="submit" class="btn btn-outline-primary btn-sm px-3">Qidirish</button>
+            {% if search_q %}
+            <a href="/production/recipes" class="btn btn-outline-secondary btn-sm">Tozalash</a>
+            {% endif %}
         </form>
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addRecipeModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
     </div>
-</div>
 
-{% if request.query_params.get('error') == 'delete' and request.query_params.get('detail') %}
-<div class="alert alert-danger alert-dismissible fade show" role="alert">
-    <i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('detail') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-
-{% if request.query_params.get('success') == 'deleted' %}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-    <i class="bi bi-check-circle"></i> Retsept muvaffaqiyatli o'chirildi.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-
-<div class="row g-3">
-    {% for recipe in recipes %}
-    <div class="col-md-4">
-        <div class="card h-100">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <strong>{{ recipe.name }}</strong>
-                {% if recipe.is_active %}
-                <span class="badge bg-success">Faol</span>
-                {% else %}
-                <span class="badge bg-secondary">Nofaol</span>
-                {% endif %}
-            </div>
-            <div class="card-body">
-                {% set _out_unit = (recipe.product.unit.name or recipe.product.unit.code if recipe.product and recipe.product.unit else 'kg') %}
-                <p class="text-muted mb-2">
-                    <i class="bi bi-box"></i> Chiqish: {{ recipe.output_quantity }} {{ _out_unit }}
-                </p>
-
-                <h6>Tarkibi:</h6>
-                <ul class="list-unstyled mb-3">
-                    {% for item in recipe.items %}
-                    {% set _item_unit = (item.product.unit.name or item.product.unit.code if item.product and item.product.unit else 'kg') %}
-                    <li class="d-flex justify-content-between border-bottom py-1">
-                        <span>{{ item.product.name if item.product else 'Noma\'lum' }}</span>
-                        <span class="text-muted">{{ item.quantity }} {{ _item_unit }}</span>
-                    </li>
+    <!-- Recipes grid -->
+    <div class="row g-3">
+        {% for recipe in recipes %}
+        <div class="col-md-4">
+            <div class="data-table h-100" style="display:flex; flex-direction:column;">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <strong>{{ recipe.name }}</strong>
+                    {% if recipe.is_active %}
+                    <span class="badge-active">Faol</span>
                     {% else %}
-                    <li class="text-muted">Tarkib bo'sh</li>
-                    {% endfor %}
-                </ul>
-
-                {% if recipe.description %}
-                <p class="small text-muted">{{ recipe.description }}</p>
-                {% endif %}
-            </div>
-            <div class="card-footer">
-                <a href="/production/recipes/{{ recipe.id }}{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="btn btn-sm btn-outline-primary">
-                    <i class="bi bi-pencil"></i> Tahrirlash
-                </a>
-                <button class="btn btn-sm btn-success" onclick='quickProduce({{ recipe.id }}, {{ (recipe.name or '')|tojson }}, {{ recipe.default_warehouse_id or 'null' }}, {{ recipe.default_output_warehouse_id or 'null' }})'>
-                    <i class="bi bi-play-fill"></i> Ishlab chiqarish
-                </button>
-                {% if current_user and current_user.role == 'admin' %}
-                <form method="POST" action="/production/recipes/{{ recipe.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu retseptni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi.');">
-                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger">
-                        <i class="bi bi-trash"></i> O'chirish
+                    <span class="badge-inactive">Nofaol</span>
+                    {% endif %}
+                </div>
+                <div class="card-body" style="flex:1;">
+                    {% set _out_unit = (recipe.product.unit.name or recipe.product.unit.code if recipe.product and recipe.product.unit else 'kg') %}
+                    <p class="text-muted mb-2">
+                        <i class="bi bi-box"></i> Chiqish: {{ recipe.output_quantity }} {{ _out_unit }}
+                    </p>
+                    <h6>Tarkibi:</h6>
+                    <ul class="list-unstyled mb-3">
+                        {% for item in recipe.items %}
+                        {% set _item_unit = (item.product.unit.name or item.product.unit.code if item.product and item.product.unit else 'kg') %}
+                        <li class="d-flex justify-content-between border-bottom py-1">
+                            <span>{{ item.product.name if item.product else 'Noma\'lum' }}</span>
+                            <span class="text-muted">{{ item.quantity }} {{ _item_unit }}</span>
+                        </li>
+                        {% else %}
+                        <li class="text-muted">Tarkib bo'sh</li>
+                        {% endfor %}
+                    </ul>
+                    {% if recipe.description %}
+                    <p class="small text-muted">{{ recipe.description }}</p>
+                    {% endif %}
+                </div>
+                <div class="card-footer d-flex flex-wrap gap-2">
+                    <a href="/production/recipes/{{ recipe.id }}{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil"></i> Tahrirlash
+                    </a>
+                    <button class="btn btn-sm btn-success" onclick='quickProduce({{ recipe.id }}, {{ (recipe.name or "")|tojson }}, {{ recipe.default_warehouse_id or "null" }}, {{ recipe.default_output_warehouse_id or "null" }})'>
+                        <i class="bi bi-play-fill"></i> Ishlab chiqarish
                     </button>
-                </form>
-                {% endif %}
+                    {% if current_user and current_user.role == 'admin' %}
+                    <form method="POST" action="/production/recipes/{{ recipe.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu retseptni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi.');">
+                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                    </form>
+                    {% endif %}
+                </div>
             </div>
         </div>
-    </div>
-    {% else %}
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body text-center py-5">
-                <i class="bi bi-journal-x" style="font-size: 4rem; color: #ccc;"></i>
-                <h5 class="mt-3 text-muted">Retseptlar yo'q</h5>
-                <p class="text-muted">Yangi retsept qo'shish uchun tugmani bosing</p>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRecipeModal">
-                    <i class="bi bi-plus"></i> Yangi retsept
-                </button>
+        {% else %}
+        <div class="col-12">
+            <div class="data-table">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-journal-x" style="font-size: 4rem; color: #ccc;"></i>
+                    <h5 class="mt-3 text-muted">Retseptlar yo'q</h5>
+                    <p class="text-muted">Yangi retsept qo'shish uchun tugmani bosing</p>
+                    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addRecipeModal">
+                        <i class="bi bi-plus"></i> Yangi retsept
+                    </button>
+                </div>
             </div>
         </div>
+        {% endfor %}
     </div>
-    {% endfor %}
+
 </div>
 
 <!-- Yangi retsept modal -->
@@ -123,8 +151,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Chiqish miqdori (<span id="outputQuantityUnit">kg</span>)</label>
-                        <input type="number" class="form-control" name="output_quantity" value="1" step="0.1" min="0.1"
-                            required>
+                        <input type="number" class="form-control" name="output_quantity" value="1" step="0.1" min="0.1" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Izoh</label>
@@ -175,8 +202,7 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Miqdori (kg)</label>
-                        <input type="number" class="form-control" name="quantity" value="10" step="0.1" min="0.1"
-                            required>
+                        <input type="number" class="form-control" name="quantity" value="10" step="0.1" min="0.1" required>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Izoh</label>
@@ -314,5 +340,4 @@
         }
     })();
 </script>
-</div>
 {% endblock %}

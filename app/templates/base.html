@@ -396,6 +396,174 @@
         }
     </style>
 
+    <!-- Global UI stillar — barcha sahifalar uchun -->
+    <style>
+        /* ===== FILTER CARD ===== */
+        .filter-card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.07);
+            padding: 16px 20px;
+            margin-bottom: 16px;
+        }
+        .filter-card .form-control,
+        .filter-card .form-select {
+            border-radius: 10px;
+            font-size: 13px;
+            border-color: #ddd;
+        }
+        .filter-card .form-label {
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: #444;
+        }
+
+        /* ===== PAGE HEADER ===== */
+        .page-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .page-header h4, .page-header h5 {
+            margin: 0;
+            font-weight: 700;
+            font-size: 1.15rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ===== DATA TABLE ===== */
+        .data-table {
+            border: none;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0,0,0,.08);
+            overflow: hidden;
+        }
+        .data-table .card-header {
+            background: #fff;
+            border-bottom: 1px solid #e9ecef;
+            padding: 12px 16px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .data-table .table thead th {
+            background: #f8f9fa;
+            font-size: 11.5px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .4px;
+            color: #555;
+            border-bottom: 2px solid #e9ecef;
+            white-space: nowrap;
+            padding: 10px 12px;
+            position: sticky;
+            top: 0;
+            z-index: 5;
+        }
+        .data-table .table tbody td {
+            padding: 9px 12px;
+            vertical-align: middle;
+            font-size: 13px;
+            border-bottom: 1px solid #f1f3f5;
+        }
+        .data-table .table tbody tr:last-child td { border-bottom: none; }
+        .data-table .table tbody tr:hover td { background: #f8fbff; }
+
+        /* ===== STATUS BADGES ===== */
+        .badge-draft    { background: #fff3cd; color: #856404; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .badge-done     { background: #d1fae5; color: #065f46; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .badge-cancelled{ background: #fee2e2; color: #991b1b; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .badge-waiting  { background: #dbeafe; color: #1e40af; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .badge-active   { background: #d1fae5; color: #065f46; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+        .badge-inactive { background: #f3f4f6; color: #6b7280; border-radius: 8px; padding: 3px 9px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+
+        /* ===== ACTION BUTTONS ===== */
+        .btn-act {
+            width: 30px; height: 30px;
+            border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            border: 1px solid #dee2e6;
+            background: white; color: #555;
+            transition: all .15s;
+            text-decoration: none;
+            font-size: 13px;
+            padding: 0;
+        }
+        .btn-act:hover { background: #017449; color: white; border-color: #017449; }
+        .btn-act.danger:hover { background: #dc3545; color: white; border-color: #dc3545; }
+        .btn-act.warning:hover { background: #ffc107; color: #333; border-color: #ffc107; }
+
+        /* ===== TOP BUTTONS ===== */
+        .top-btn {
+            border-radius: 10px;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* ===== SEARCH WRAP ===== */
+        .search-wrap { position: relative; }
+        .search-wrap input {
+            padding-left: 34px;
+            border-radius: 10px;
+            border: 1px solid #ddd;
+            font-size: 13px;
+        }
+        .search-wrap .bi-search {
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #aaa;
+            pointer-events: none;
+        }
+
+        /* ===== STAT MINI CARDS ===== */
+        .mini-stat {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.06);
+            padding: 14px 18px;
+        }
+        .mini-stat .num { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+        .mini-stat .lbl { font-size: 12px; color: #666; margin-top: 3px; }
+
+        /* ===== AMOUNT / NUMBER CELLS ===== */
+        .num-cell { font-weight: 700; color: #1a73e8; font-size: 13px; }
+        .sum-cell { font-weight: 600; color: #2e7d32; font-size: 13px; }
+        .muted-cell { font-size: 12px; color: #888; }
+
+        /* ===== GLOBAL TABLE (non .data-table context) ===== */
+        .table thead th {
+            font-size: 12px;
+            font-weight: 700;
+            color: #555;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            white-space: nowrap;
+        }
+        .table tbody td {
+            font-size: 13px;
+            vertical-align: middle;
+        }
+        .table-hover tbody tr:hover { background-color: #f8fbff !important; }
+
+        /* ===== CARD GLOBAL ===== */
+        .card { border: none; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.07); }
+        .card-header { background: #fff; border-bottom: 1px solid #e9ecef; font-weight: 600; border-radius: 14px 14px 0 0 !important; }
+    </style>
+
     {% block extra_css %}{% endblock %}
     {% set sotuvchi_no_sidebar = (current_user.role if current_user else '') == 'sotuvchi' %}
     {% set production_no_sidebar = (current_user.role if current_user else '')|lower in ['production', 'qadoqlash', 'rahbar', 'raxbar', 'operator'] %}
@@ -720,6 +888,12 @@
                     <i class="bi bi-binoculars"></i> Supervayzer
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat">
+                    <i class="bi bi-chat-dots"></i> Chat
+                    <span id="chatUnreadBadge" class="badge bg-danger ms-auto d-none"></span>
+                </a>
+            </li>
 
             {% elif agent_menu %}
             <!-- Agent uchun qisqa menyu -->
@@ -751,6 +925,12 @@
             <li class="nav-item">
                 <a class="nav-link {% if 'Supervayzer' in page_title %}active{% endif %}" href="/supervisor">
                     <i class="bi bi-binoculars"></i> Supervayzer
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat/support">
+                    <i class="bi bi-chat-dots"></i> Chat
+                    <span id="chatUnreadBadge" class="badge bg-danger ms-auto d-none"></span>
                 </a>
             </li>
 
@@ -946,7 +1126,7 @@
         var _lastNotifId = parseInt(localStorage.getItem(_STORAGE_KEY) || '0', 10);
         var _container = document.getElementById('notif-toast-container');
 
-        // AudioContext — bir marta klikda ochiladi, keyin har doim ishlaydi
+        // AudioContext — faqat haqiqiy foydalanuvchi harakatida yaratiladi
         var _actx = null;
         var _bufCache = {};
 
@@ -959,13 +1139,14 @@
         };
 
         function _getActx() {
-            if (!_actx) _actx = new (window.AudioContext || window.webkitAudioContext)();
-            if (_actx.state === 'suspended') _actx.resume();
+            if (!_actx) return null;
+            if (_actx.state === 'suspended') { try { _actx.resume(); } catch(e){} }
             return _actx;
         }
 
         function _playBuffer(url) {
             var ctx = _getActx();
+            if (!ctx) return;
             if (_bufCache[url]) {
                 var src = ctx.createBufferSource();
                 src.buffer = _bufCache[url];
@@ -1074,14 +1255,12 @@
                 .catch(function(){});
         }
 
-        // Birinchi ISTALGAN harakat: AudioContext ochish + ovoz fayllarni yuklash
-        function _unlockAudio() {
+        // Faqat HAQIQIY foydalanuvchi harakati: AudioContext yaratish + ovoz fayllarni yuklash
+        function _unlockAudio(e) {
+            if (e && e.isTrusted === false) return;
             if (_actx) return;
             try {
                 _actx = new (window.AudioContext || window.webkitAudioContext)();
-                var buf = _actx.createBuffer(1, 1, 22050);
-                var s = _actx.createBufferSource();
-                s.buffer = buf; s.connect(_actx.destination); s.start(0);
                 Object.values(_soundMap).forEach(function(url){
                     fetch(url).then(function(r){ return r.arrayBuffer(); })
                         .then(function(ab){ return _actx.decodeAudioData(ab); })

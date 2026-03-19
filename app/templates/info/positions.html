@@ -1,56 +1,56 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-briefcase"></i> Lavozimlar</h5>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPositionModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Kod</th>
-                            <th>Nomi</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                <tbody>
-                    {% if positions %}
-                    {% for position in positions %}
-                    <tr>
-                        <td>{{ position.id }}</td>
-                        <td><code>{{ position.code }}</code></td>
-                        <td><strong>{{ position.name }}</strong></td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary" title="Tahrirlash"
-                                data-id="{{ position.id }}" data-code="{{ position.code }}"
-                                data-name="{{ position.name }}" onclick="editPosition(this)">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" title="O'chirish" data-id="{{ position.id }}"
-                                data-name="{{ position.name }}" onclick="deletePosition(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% else %}
-                    <tr>
-                        <td colspan="4" class="text-center text-muted py-5">
-                            <i class="bi bi-briefcase fs-1 d-block mb-2"></i>
-                            Hozircha lavozimlar yo'q<br>
-                            <small>Yuqoridagi Yaratish tugmasini bosing</small>
-                        </td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
-            </div>
-        </div>
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-briefcase"></i> Lavozimlar</h5>
+    <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addPositionModal">
+        <i class="bi bi-plus-circle"></i> Yaratish
+    </button>
+</div>
+
+<div class="card data-table">
+    <div class="card-header"><span class="fw-bold">Lavozimlar ro'yxati</span></div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Kod</th>
+                    <th>Nomi</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if positions %}
+                {% for position in positions %}
+                <tr>
+                    <td>{{ position.id }}</td>
+                    <td><code>{{ position.code }}</code></td>
+                    <td><strong>{{ position.name }}</strong></td>
+                    <td>
+                        <button class="btn-act" title="Tahrirlash"
+                            data-id="{{ position.id }}" data-code="{{ position.code }}"
+                            data-name="{{ position.name }}" onclick="editPosition(this)">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-act danger" title="O'chirish" data-id="{{ position.id }}"
+                            data-name="{{ position.name }}" onclick="deletePosition(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-5">
+                        <i class="bi bi-briefcase fs-1 d-block mb-2"></i>
+                        Hozircha lavozimlar yo'q<br>
+                        <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -60,7 +60,7 @@
         <div class="modal-content">
             <form id="addPositionForm">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi lavozim</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi lavozim</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">
@@ -89,7 +89,7 @@
         <div class="modal-content">
             <form id="editPositionForm" method="POST">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Lavozimni tahrirlash</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Lavozimni tahrirlash</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">

@@ -31,6 +31,8 @@ from app.models.database import (
     Category,
     PosDraft,
     CashRegister,
+    ExpenseType,
+    StockMovement,
 )
 from app.deps import require_auth, require_admin
 
@@ -115,6 +117,8 @@ async def sales_list(
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
+    info = request.query_params.get("info")
+    info_detail = unquote(request.query_params.get("detail", "") or "") if info else ""
     sort_by_val = sort_col if sort_col in ("number", "date", "partner", "warehouse", "total", "status") else "date"
     from urllib.parse import urlencode
     filter_params = urlencode({
@@ -314,11 +318,15 @@ async def sales_edit(
         product_prices_by_type = {pp.product_id: pp.sale_price for pp in pps}
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
+    info = request.query_params.get("info")
+    info_detail = unquote(request.query_params.get("detail", "") or "") if info else ""
     foyda_zarar = 0
     for item in order.items:
         cost = (item.product.purchase_price or 0) if item.product else 0
         foyda_zarar += (item.quantity or 0) * ((item.price or 0) - cost)
-    show_foyda_zarar = current_user and getattr(current_user, "role", None) in ("admin", "manager", "rahbar", "raxbar")
+    role = (getattr(current_user, "role", None) or "").strip().lower() if current_user else ""
+    # Foyda/Zarar faqat admin yoki rahbar/raxbar ko'radi
+    show_foyda_zarar = bool(role in ("admin", "rahbar", "raxbar"))
     return templates.TemplateResponse("sales/edit.html", {
         "request": request,
         "order": order,
@@ -328,6 +336,8 @@ async def sales_edit(
         "page_title": f"Sotuv: {order.number}",
         "error": error,
         "error_detail": error_detail,
+        "info": info,
+        "info_detail": info_detail,
         "foyda_zarar": foyda_zarar,
         "show_foyda_zarar": show_foyda_zarar,
     })
@@ -474,20 +484,42 @@ async def sales_confirm(
     # Agar yetarli bo'lmagan mahsulotlar bo'lsa, ishlab chiqarishga yo'naltirish
     if insufficient_items:
         try:
-            productions = create_production_from_order(
+            # Yetmayotgan mahsulotlar ro'yxati (foydalanuvchiga ko'rsatish uchun)
+            parts = []
+            for it in insufficient_items:
+                p = it.get("product")
+                name = (getattr(p, "name", None) or "Mahsulot")
+                req = float(it.get("required") or 0)
+                avail = float(it.get("available") or 0)
+                lack = max(req - avail, 0.0)
+                parts.append(f"{name}: kerak {req:g}, mavjud {avail:g}, yetmaydi {lack:g}")
+            detail_list = "; ".join(parts[:12]) + ("; ..." if len(parts) > 12 else "")
+
+            productions, missing = create_production_from_order(
                 db=db,
                 order=order,
                 insufficient_items=insufficient_items,
                 current_user=current_user
             )
-            # Buyurtma statusini "waiting_production" ga o'zgartirish (yoki "draft" da qoldirish)
-            # order.status = "waiting_production"  # Agar bunday status bo'lsa
+            if not productions:
+                db.rollback()
+                msg = "Ishlab chiqarish buyurtmasi yaratilmadi."
+                if missing:
+                    msg += " Retsept topilmadi: " + ", ".join(missing[:10]) + ("…" if len(missing) > 10 else "")
+                return RedirectResponse(
+                    url=f"/sales/edit/{order_id}?error=production&detail=" + quote(msg),
+                    status_code=303,
+                )
+
+            # Production yaratilsa — buyurtma ishlab chiqarishni kutmoqda
+            order.status = "waiting_production"
             db.commit()
             
             # Xabar bilan qaytish
             production_numbers = ", ".join([p.number for p in productions])
             return RedirectResponse(
                 url=f"/sales/edit/{order_id}?info=production&detail=" + quote(
+                    f"Yetmayotganlar: {detail_list}. "
                     f"Ishlab chiqarish buyurtmalari yaratildi: {production_numbers}. "
                     f"Mahsulotlar tayyor bo'lgach, buyurtma tasdiqlanadi."
                 ),
@@ -510,6 +542,13 @@ async def sales_confirm(
         if stock:
             stock.quantity -= item.quantity
     order.status = "completed"
+    # Qarzdorlikni hisoblash
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))
+    # Partner balansini yangilash
+    if order.partner_id and order.debt > 0:
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+        if partner:
+            partner.balance = (partner.balance or 0) + order.debt
     db.commit()
     check_low_stock_and_notify(db)
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
@@ -544,12 +583,13 @@ async def sales_revert(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
-    if order.status == "waiting_production":
+    status = (getattr(order, "status", None) or "").strip().lower()
+    if status == "waiting_production":
         # Ombor hisobdan chiqarilmagan — faqat draft ga qaytarish
         order.status = "draft"
         db.commit()
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
-    if order.status != "completed":
+    if status != "completed":
         return RedirectResponse(
             url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),
             status_code=303,
@@ -741,6 +781,8 @@ async def sales_pos(
     if pos_partners and default_partner_id is not None:
         if not any(p.id == default_partner_id for p in pos_partners):
             default_partner_id = pos_partners[0].id if pos_partners else None
+    # Harajat turlari (POS expense modal uchun)
+    pos_expense_types = db.query(ExpenseType).order_by(ExpenseType.name).all()
     return templates.TemplateResponse("sales/pos.html", {
         "request": request,
         "page_title": "Sotuv oynasi",
@@ -756,6 +798,7 @@ async def sales_pos(
         "pos_all_categories": pos_all_categories,
         "pos_partners": pos_partners,
         "default_partner_id": default_partner_id,
+        "pos_expense_types": pos_expense_types,
         "success": success,
         "error": error,
         "error_detail": error_detail,
@@ -1588,3 +1631,97 @@ async def sales_return_confirm(
     doc.status = "completed"
     db.commit()
     return RedirectResponse(url="/sales/return/document/" + doc.number + "?confirmed=1", status_code=303)
+
+
+# ==================== POS: Ta'minotchiga to'lov ====================
+@router.post("/pos/pay-supplier")
+async def pos_pay_supplier(
+    request: Request,
+    partner_id: int = Form(...),
+    amount: float = Form(...),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuvchi o'z kassasidan ta'minotchiga to'lov qiladi."""
+    if amount <= 0:
+        return RedirectResponse(url="/sales/pos?error=payment&detail=Summa+noto'g'ri", status_code=303)
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not partner:
+        return RedirectResponse(url="/sales/pos?error=payment&detail=Kontragent+topilmadi", status_code=303)
+    # Sotuvchining kassasini topish
+    department_id = getattr(current_user, "department_id", None)
+    cash_register = _get_pos_cash_register(db, "naqd", department_id)
+    if not cash_register:
+        return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
+    # To'lov yaratish (chiqim)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
+    pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{(pay_count + 1):04d}"
+    db.add(Payment(
+        number=pay_number,
+        type="expense",
+        cash_register_id=cash_register.id,
+        partner_id=partner_id,
+        amount=amount,
+        payment_type="naqd",
+        category="supplier_payment",
+        description=note or f"Ta'minotchiga to'lov: {partner.name}",
+        user_id=current_user.id,
+    ))
+    # Kassa balansini kamaytirish
+    if getattr(cash_register, "balance", None) is not None:
+        cash_register.balance = (cash_register.balance or 0) - amount
+    # Partner balansini yangilash (qarzni kamaytirish)
+    if partner.balance is not None:
+        partner.balance = (partner.balance or 0) + amount  # balance < 0 — biz qarz, + qo'shsak kamayadi
+    db.commit()
+    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"To'lov: {partner.name} ga {amount:,.0f} so'm"), status_code=303)
+
+
+# ==================== POS: Harajat yozish ====================
+@router.post("/pos/expense")
+async def pos_expense(
+    request: Request,
+    expense_type: str = Form(...),
+    amount: float = Form(...),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuvchi o'z kassasidan harajat yozadi."""
+    if amount <= 0:
+        return RedirectResponse(url="/sales/pos?error=payment&detail=Summa+noto'g'ri", status_code=303)
+    # Harajat turi
+    expense_type_name = "Boshqa"
+    if expense_type != "other":
+        et = db.query(ExpenseType).filter(ExpenseType.id == int(expense_type)).first()
+        if et:
+            expense_type_name = et.name
+    # Sotuvchining kassasini topish
+    department_id = getattr(current_user, "department_id", None)
+    cash_register = _get_pos_cash_register(db, "naqd", department_id)
+    if not cash_register:
+        return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
+    # To'lov yaratish (chiqim — harajat)
+    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
+    pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{(pay_count + 1):04d}"
+    description = f"Harajat: {expense_type_name}"
+    if note:
+        description += f" — {note}"
+    db.add(Payment(
+        number=pay_number,
+        type="expense",
+        cash_register_id=cash_register.id,
+        amount=amount,
+        payment_type="naqd",
+        category="expense",
+        description=description,
+        user_id=current_user.id,
+    ))
+    # Kassa balansini kamaytirish
+    if getattr(cash_register, "balance", None) is not None:
+        cash_register.balance = (cash_register.balance or 0) - amount
+    db.commit()
+    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"Harajat: {expense_type_name} — {amount:,.0f} so'm"), status_code=303)

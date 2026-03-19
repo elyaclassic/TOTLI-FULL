@@ -60,6 +60,15 @@ async def agent_add(
     return RedirectResponse(url="/agents", status_code=303)
 
 
+@router.get("/agent", response_class=HTMLResponse)
+async def agent_app(request: Request):
+    """Mobile agent app — token auth done client-side via localStorage."""
+    return templates.TemplateResponse("agents/app.html", {
+        "request": request,
+        "page_title": "Agent App",
+    })
+
+
 @router.get("/agents/{agent_id}", response_class=HTMLResponse)
 async def agent_detail(
     request: Request,

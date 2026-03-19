@@ -11,8 +11,8 @@
         display: none !important;
         background: white !important;
         border: 1px solid #dee2e6 !important;
-        border-radius: 0.25rem !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
     }
     .product_search_results.show {
         display: block !important;
@@ -24,94 +24,133 @@
 </style>
 <div class="container-fluid">
     {% if error == "stock" and error_detail %}
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
         <strong>Omborda yetarli mahsulot yo'q.</strong> {{ error_detail }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
+    {% if error == "production" and error_detail %}
+    <div class="alert alert-warning alert-dismissible fade show py-2" role="alert">
+        <strong>Ishlab chiqarish yaratilmadi.</strong> {{ error_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if info == "production" and info_detail %}
+    <div class="alert alert-info alert-dismissible fade show py-2" role="alert">
+        <strong>Ishlab chiqarishga yuborildi.</strong> {{ info_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
     {% if error == "revert" and error_detail %}
-    <div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <div class="alert alert-warning alert-dismissible fade show py-2" role="alert">
         <strong>Tasdiqni bekor qilish mumkin emas.</strong> {{ error_detail }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="row mb-3">
-        <div class="col-12 d-flex align-items-center gap-2 flex-wrap">
-            <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasi</a>
-            <a href="/sales" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0">
+            <i class="bi bi-receipt text-primary"></i>
+            {{ order.number }}
+            {% if order.status == 'draft' %}<span class="badge-draft ms-2">Qoralama</span>
+            {% elif order.status == 'completed' %}<span class="badge-done ms-2">Bajarildi</span>
+            {% elif order.status == 'waiting_production' %}<span class="badge-waiting ms-2">Ishlab chiqarishda</span>
+            {% elif order.status == 'cancelled' %}<span class="badge-cancelled ms-2">Bekor</span>{% endif %}
+        </h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/sales/pos" class="top-btn btn btn-outline-primary"><i class="bi bi-cart-check"></i> Sotuv oynasi</a>
+            <a href="/sales" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
         </div>
     </div>
 
-    <div class="row">
+    <div class="row g-3">
         <div class="col-md-8">
-            <div class="card mb-3">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ order.number }}</h5>
-                    <div>
+            <div class="card data-table mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <span class="fw-bold"><i class="bi bi-basket2 text-primary"></i> Buyurtma tafsilotlari</span>
+                    <div class="d-flex gap-2 flex-wrap">
                         {% if order.status == 'draft' %}
                         <form method="POST" action="/sales/{{ order.id }}/confirm" style="display: inline;">
-                            <button type="submit" class="btn btn-success btn-sm" onclick="return confirm('Sotuvni tasdiqlaysizmi?');">
+                            <button type="submit" class="top-btn btn btn-success" onclick="return confirm('Sotuvni tasdiqlaysizmi?');">
                                 <i class="bi bi-check-circle"></i> Tasdiqlash
                             </button>
                         </form>
-                        {% if current_user and current_user.role == 'admin' %}
+                        {% if current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/delete/{{ order.id }}" style="display: inline;" onsubmit="return confirm('Sotuvni o\'chirmoqchimisiz?');">
-                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                            <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
                         </form>
                         {% endif %}
-                        {% elif order.status == 'waiting_production' %}
-                        {% if current_user and current_user.role == 'admin' %}
+                        {% elif (order.status or '')|lower == 'waiting_production' %}
+                        {% if current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Ishlab chiqarish kutish bekor qilinadi va sotuv qoralamaga qaytadi. Davom etasizmi?');">
-                            <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                            <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
                         </form>
                         <form method="POST" action="/sales/delete/{{ order.id }}" style="display: inline;" onsubmit="return confirm('Ushbu sotuvni o\'chirmoqchimisiz?');">
-                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                            <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
                         </form>
                         {% endif %}
-                        {% elif order.status == 'completed' %}
-                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Nakladnoy</a>
-                        {% if current_user and current_user.role == 'admin' %}
+                        {% elif (order.status or '')|lower == 'completed' %}
+                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> Nakladnoy</a>
+                        {% if current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
-                            <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                            <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
                         </form>
                         {% endif %}
-                        {% elif order.status == 'cancelled' and current_user and current_user.role == 'admin' %}
+                        {% elif (order.status or '')|lower == 'cancelled' and current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/delete/{{ order.id }}" style="display: inline;" onsubmit="return confirm('Ushbu bekor qilingan sotuvni o\'chirmoqchimisiz?');">
-                            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                            <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
                         </form>
                         {% endif %}
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="row mb-3">
-                        <div class="col-md-4"><strong>Mijoz:</strong> {{ order.partner.name if order.partner else '-' }}</div>
-                        <div class="col-md-4"><strong>Ombor:</strong> {{ order.warehouse.name if order.warehouse else '-' }}</div>
-                        <div class="col-md-4"><strong>Narx turi:</strong> {{ order.price_type.name if order.price_type_id and order.price_type else '-' }}</div>
+                <div class="card-body" style="border-bottom:1px solid #f1f3f5;">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Mijoz</div>
+                            <div style="font-size:14px;font-weight:600;">{{ order.partner.name if order.partner else '—' }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Ombor</div>
+                            <div style="font-size:14px;font-weight:600;">{{ order.warehouse.name if order.warehouse else '—' }}</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Narx turi</div>
+                            <div style="font-size:14px;font-weight:600;">{{ order.price_type.name if order.price_type_id and order.price_type else '—' }}</div>
+                        </div>
                     </div>
-                    <h6 class="mb-3">Mahsulotlar</h6>
+                </div>
+                <div class="card-body p-0">
                     {% if order.items %}
                     <div class="table-responsive">
-                        <table class="table table-sm">
+                        <table class="table mb-0">
                             <thead>
-                                <tr><th>№</th><th>Mahsulot</th><th>Miqdor</th><th>Narx</th><th>Summa</th>{% if order.warehouse_id and current_user and current_user.role == 'admin' %}<th class="text-center">Tarix</th>{% endif %}{% if order.status == 'draft' %}<th></th>{% endif %}</tr>
+                                <tr>
+                                    <th>№</th>
+                                    <th>Mahsulot</th>
+                                    <th class="text-end">Miqdor</th>
+                                    <th class="text-end">Narx</th>
+                                    <th class="text-end">Summa</th>
+                                    {% if order.warehouse_id and current_user and current_user.role == 'admin' %}<th class="text-center">Tarix</th>{% endif %}
+                                    {% if order.status == 'draft' %}<th></th>{% endif %}
+                                </tr>
                             </thead>
                             <tbody>
                                 {% for item in order.items %}
                                 <tr>
-                                    <td>{{ loop.index }}</td>
-                                    <td>{{ item.product.name if item.product else '-' }}</td>
-                                    <td>{{ "{:,.3f}".format(item.quantity or 0) }}</td>
-                                    <td>{{ "{:,.0f}".format(item.price) }} so'm</td>
-                                    <td><strong>{{ "{:,.0f}".format(item.total) }} so'm</strong></td>
+                                    <td class="muted-cell">{{ loop.index }}</td>
+                                    <td>{{ item.product.name if item.product else '—' }}</td>
+                                    <td class="text-end num-cell">{{ "{:,.3f}".format(item.quantity or 0) }}</td>
+                                    <td class="text-end muted-cell">{{ "{:,.0f}".format(item.price) }} so'm</td>
+                                    <td class="text-end sum-cell">{{ "{:,.0f}".format(item.total) }} so'm</td>
                                     {% if order.warehouse_id and current_user and current_user.role == 'admin' %}
                                     <td class="text-center">
-                                        <a href="/reports/stock/source?warehouse_id={{ order.warehouse_id }}&product_id={{ item.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
+                                        <a href="/reports/stock/source?warehouse_id={{ order.warehouse_id }}&product_id={{ item.product_id }}" class="btn-act" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
                                     </td>
                                     {% endif %}
                                     {% if order.status == 'draft' %}
                                     <td>
                                         <form method="POST" action="/sales/{{ order.id }}/delete-item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Ushbu qatorni o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash"></i></button>
+                                            <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                         </form>
                                     </td>
                                     {% endif %}
@@ -119,18 +158,18 @@
                                 {% endfor %}
                             </tbody>
                             <tfoot>
-                                <tr>
-                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}5{% else %}4{% endif %}" class="text-end">Jami:</th>
-                                    <th colspan="2"><strong>{{ "{:,.0f}".format(order.total or 0) }} so'm</strong></th>
+                                <tr style="background:#f8f9fa;">
+                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}4{% else %}3{% endif %}" class="text-end" style="font-size:13px;color:#555;">Jami:</th>
+                                    <th colspan="{% if order.status == 'draft' %}3{% else %}2{% endif %}" class="text-end sum-cell" style="font-size:15px;">{{ "{:,.0f}".format(order.total or 0) }} so'm</th>
                                 </tr>
                                 {% if show_foyda_zarar %}
-                                <tr>
-                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}5{% else %}4{% endif %}" class="text-end">Foyda / Zarar:</th>
-                                    <th colspan="2">
+                                <tr style="background:#f8f9fa;">
+                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}4{% else %}3{% endif %}" class="text-end" style="font-size:13px;color:#555;">Foyda / Zarar:</th>
+                                    <th colspan="{% if order.status == 'draft' %}3{% else %}2{% endif %}" class="text-end" style="font-size:15px;">
                                         {% if (foyda_zarar or 0) >= 0 %}
-                                        <strong class="text-success">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</strong>
+                                        <span class="text-success fw-bold">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</span>
                                         {% else %}
-                                        <strong class="text-danger">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</strong>
+                                        <span class="text-danger fw-bold">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</span>
                                         {% endif %}
                                     </th>
                                 </tr>
@@ -139,7 +178,10 @@
                         </table>
                     </div>
                     {% else %}
-                    <div class="alert alert-info mb-0">Hozircha mahsulotlar qo'shilmagan. {% if order.status == 'draft' %}O'ng tomondan qo'shing.{% endif %}</div>
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-inbox d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
+                        Hozircha mahsulotlar qo'shilmagan. {% if order.status == 'draft' %}O'ng tomondan qo'shing.{% endif %}
+                    </div>
                     {% endif %}
                 </div>
             </div>
@@ -148,12 +190,12 @@
         {% if order.status == 'draft' %}
         <div class="col-md-4">
             <div class="card mb-3">
-                <div class="card-header"><h6 class="mb-0">Mahsulot qo'shish</h6></div>
+                <div class="card-header"><span class="fw-bold"><i class="bi bi-search text-primary"></i> Mahsulot qo'shish</span></div>
                 <div class="card-body">
                     <div class="mb-3">
-                        <label class="form-label">Mahsulot</label>
+                        <label class="form-label small fw-600">Mahsulot</label>
                         <div class="product-search-wrapper" style="position: relative;">
-                            <input type="text" class="form-control product-search-input" id="editAddProductSearch" 
+                            <input type="text" class="form-control product-search-input" id="editAddProductSearch"
                                 placeholder="Nomi yoki kod bo'yicha qidiring..." autocomplete="off">
                             <input type="hidden" id="editAddProductId">
                             <div class="product_search_results list-group" id="editProductSearchResults" style="display: none;"></div>
@@ -168,19 +210,19 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Miqdor</label>
+                        <label class="form-label small">Miqdor</label>
                         <input type="number" class="form-control" id="editAddQuantity" step="0.01" min="0.01" value="1">
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Narx (so'm)</label>
-                        <input type="number" class="form-control" id="editAddPrice" step="1" min="0" placeholder="Narx turidan olinadi" title="Narx turi bo'yicha avtomatik to'ldiriladi. Agar narx turida narx o'rnatilmagan bo'lsa — qo'lda yozing.">
+                        <label class="form-label small">Narx (so'm)</label>
+                        <input type="number" class="form-control" id="editAddPrice" step="1" min="0" placeholder="Narx turidan olinadi" title="Narx turi bo'yicha avtomatik to'ldiriladi.">
                     </div>
-                    <button type="button" class="btn btn-primary w-100" id="editBtnAddToCart"><i class="bi bi-plus-circle"></i> Savatga qo'shish</button>
+                    <button type="button" class="top-btn btn btn-primary w-100" id="editBtnAddToCart"><i class="bi bi-plus-circle"></i> Savatga qo'shish</button>
                 </div>
             </div>
-            <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="bi bi-basket"></i> Savat</span>
+            <div class="card data-table">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-basket text-primary"></i> Savat</span>
                 </div>
                 <div class="card-body">
                     <form id="editAddItemsForm" method="POST" action="/sales/{{ order.id }}/add-items">
@@ -192,7 +234,7 @@
                             </table>
                         </div>
                         <p class="text-muted small text-center mb-2" id="editCartEmptyMsg">Savat bo'sh. Yuqoridan mahsulot tanlab «Savatga qo'shish» bosing.</p>
-                        <button type="submit" class="btn btn-success w-100" id="editBtnSubmitAll" disabled><i class="bi bi-check-lg"></i> Barchasini buyurtmaga qo'shish</button>
+                        <button type="submit" class="top-btn btn btn-success w-100" id="editBtnSubmitAll" disabled><i class="bi bi-check-lg"></i> Barchasini buyurtmaga qo'shish</button>
                     </form>
                 </div>
             </div>
@@ -218,14 +260,14 @@
                 productSearchResults.innerHTML = '';
                 productSearchResults.classList.remove('show');
                 productSearchResults.style.setProperty('display', 'none', 'important');
-                
+
                 if (!term) {
                     addProductId.value = '';
                     return;
                 }
-                
+
                 if (!addProductSelect) return;
-                
+
                 const options = Array.from(addProductSelect.options).slice(1);
                 const matches = options.filter(function(opt) {
                     const name = (opt.dataset.name || opt.textContent || '').toLowerCase();
@@ -233,7 +275,7 @@
                     const id = (opt.value || '').toString();
                     return name.indexOf(term) !== -1 || code.indexOf(term) !== -1 || id === term;
                 });
-                
+
                 if (matches.length > 0) {
                     const inputRect = addProductSearch.getBoundingClientRect();
                     productSearchResults.style.position = 'fixed';
@@ -245,7 +287,7 @@
                     productSearchResults.style.zIndex = '9999';
                     productSearchResults.classList.add('show');
                     productSearchResults.style.setProperty('display', 'block', 'important');
-                    
+
                     matches.forEach(function(opt) {
                         const item = document.createElement('a');
                         item.href = '#';
@@ -253,7 +295,7 @@
                         const displayName = opt.dataset.name || opt.textContent || '';
                         const displayCode = opt.dataset.code || '';
                         const price = opt.dataset.price || '0';
-                        item.innerHTML = '<strong>' + displayName + '</strong>' + 
+                        item.innerHTML = '<strong>' + displayName + '</strong>' +
                             (displayCode ? ' <span class="badge bg-secondary">' + displayCode + '</span>' : '') +
                             ' <span class="text-muted">— ' + parseFloat(price).toLocaleString('ru-RU') + ' so\'m</span>';
                         item.addEventListener('click', function(e) {
@@ -289,18 +331,18 @@
                         showProductResults(currentValue);
                     }
                 });
-                
+
                 addProductSearch.addEventListener('input', function() {
                     showProductResults(this.value);
                 });
-                
+
                 addProductSearch.addEventListener('keydown', function(e) {
                     if (e.key === 'Escape') {
                         productSearchResults.classList.remove('show');
                         productSearchResults.style.setProperty('display', 'none', 'important');
                     }
                 });
-                
+
                 document.addEventListener('click', function(e) {
                     if (!addProductSearch.contains(e.target) && !productSearchResults.contains(e.target)) {
                         productSearchResults.classList.remove('show');
@@ -335,7 +377,7 @@
                         '<td><input type="number" class="form-control form-control-sm cart-qty" data-index="' + i + '" value="' + qtyVal + '" step="0.01" min="0.01" style="width: 80px;"></td>' +
                         '<td><input type="number" class="form-control form-control-sm cart-price" data-index="' + i + '" value="' + priceVal + '" step="1" min="0" style="width: 100px;"></td>' +
                         '<td class="cart-sum">' + sumVal.toLocaleString('ru-RU') + ' so\'m</td>' +
-                        '<td><button type="button" class="btn btn-sm btn-outline-danger" data-index="' + i + '"><i class="bi bi-trash"></i></button></td>';
+                        '<td><button type="button" class="btn-act danger" data-index="' + i + '"><i class="bi bi-trash"></i></button></td>';
                     cartBody.appendChild(tr);
                     var h1 = document.createElement('input');
                     h1.type = 'hidden';
@@ -381,7 +423,7 @@
                 btnAdd.addEventListener('click', function() {
                     var productId = addProductId && addProductId.value;
                     if (!productId) { alert('Mahsulotni tanlang'); return; }
-                    
+
                     // Select'dan ma'lumotlarni olish
                     var opt = null;
                     if (addProductSelect) {
@@ -390,15 +432,15 @@
                         });
                         if (foundOpt) opt = foundOpt;
                     }
-                    
+
                     if (!opt) { alert('Mahsulot topilmadi'); return; }
-                    
+
                     var productName = opt.getAttribute('data-name') || opt.textContent || '';
                     var priceInput = document.getElementById('editAddPrice');
                     var price = parseFloat(priceInput && priceInput.value) || parseFloat(opt.getAttribute('data-price')) || 0;
                     var qty = parseFloat(addQuantity && addQuantity.value) || 0;
                     if (qty <= 0) { alert('Miqdorni kiriting'); return; }
-                    
+
                     addToCart(productId, productName, price, qty);
                     if (addQuantity) addQuantity.value = '1';
                     if (addProductSearch) addProductSearch.value = '';

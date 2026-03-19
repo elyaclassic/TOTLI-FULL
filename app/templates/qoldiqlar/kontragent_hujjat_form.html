@@ -6,85 +6,117 @@
     .partner-results .list-group-item:hover { background-color: #f8f9fa; cursor: pointer; }
 </style>
 <div class="container-fluid">
-    <div class="mb-3">
-        <a href="/qoldiqlar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiqlar</a>
-    </div>
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0">
-                {% if doc %}
-                Kontragent qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
-                {% else %}
-                Yangi kontragent balans hujjati
-                {% endif %}
-            </h5>
+    <div class="page-header mb-3">
+        <h5 class="mb-0">
+            {% if doc %}
+            <i class="bi bi-people"></i>
+            Kontragent qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
+            {% else %}
+            <i class="bi bi-people"></i> Yangi kontragent balans hujjati
+            {% endif %}
+        </h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/qoldiqlar" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Qoldiqlar</a>
             {% if doc and doc.status == 'draft' %}
             <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline">
-                <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+                <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
             </form>
             {% if current_user and current_user.role == 'admin' %}
             <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
-                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
+                <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
             </form>
             {% endif %}
             {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
             <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — kontragent balanslari oldingi qiymatga qaytadi. Davom etasizmi?');">
-                <button type="submit" class="btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
             </form>
             {% endif %}
         </div>
-        <div class="card-body">
-            {% if request.query_params.get('msg') %}
-            <div class="alert alert-info py-2 small">{{ request.query_params.get('msg') }}</div>
-            {% endif %}
+    </div>
+
+    {% if request.query_params.get('msg') %}
+    <div class="alert alert-info py-2 small mb-3">{{ request.query_params.get('msg') }}</div>
+    {% endif %}
+
+    {% if doc %}
+    <div class="filter-card mb-3">
+        <span class="text-muted small">
+            <i class="bi bi-person"></i> Foydalanuvchi:
+            <strong>{{ doc.user.full_name or doc.user.username if doc.user else '-' }}</strong>
+        </span>
+        &nbsp;|&nbsp;
+        <span class="text-muted small">
+            <strong>Balans:</strong> musbat = mijoz bizga qarzdor (uning qarzi), manfiy = biz unga qarzdormiz.
+        </span>
+        &nbsp;|&nbsp;
+        {% if doc.status == 'draft' %}
+        <span class="badge-draft">Qoralama</span>
+        {% else %}
+        <span class="badge-done">Tasdiqlangan</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span><i class="bi bi-list-ul"></i> Hujjat qatorlari</span>
+        </div>
+        <div class="card-body p-0">
             {% if doc %}
-            <p class="text-muted small mb-2">Foydalanuvchi: {{ doc.user.full_name or doc.user.username if doc.user else '-' }}</p>
-            <p class="small mb-3 text-muted"><strong>Balans:</strong> musbat = mijoz bizga qarzdor (uning qarzi), manfiy = biz unga qarzdormiz (bizning qarzimiz).</p>
-            <h6 class="mb-2">Hujjat qatorlari</h6>
-            <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead class="table-light">
-                        <tr><th>N</th><th>Kontragent</th><th>Yangi balans (so'm)</th></tr>
-                    </thead>
-                    <tbody>
-                        {% for item in doc.items %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ item.partner.name if item.partner else '-' }}</td>
-                            <td><strong>{{ "{:,.0f}".format(item.balance or 0) }}</strong></td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="3" class="text-muted">Qatorlar yo'q.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>N</th>
+                        <th>Kontragent</th>
+                        <th class="text-end">Yangi balans (so'm)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in doc.items %}
+                    <tr>
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td>{{ item.partner.name if item.partner else '-' }}</td>
+                        <td class="text-end num-cell">{{ "{:,.0f}".format(item.balance or 0) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
             {% else %}
             {% if partners %}
+            <div class="px-3 pt-3">
+                <p class="text-muted small mb-1">
+                    Kontragentni nomi yoki telefon bo'yicha qidiring, tanlang, yangi balansni kiriting va <strong>Qo'shish</strong> bosing. Faqat qo'shilgan qatorlar hujjatga kiritiladi.
+                </p>
+                <p class="text-muted small mb-3">
+                    <strong>Balans:</strong> turdan qarzdorni tanlang, summani (musbat son) kiriting. Yoki to'g'ridan-to'g'ri manfiy son yozishingiz ham mumkin (bizning qarzimiz).
+                </p>
+            </div>
             <form method="post" action="/qoldiqlar/kontragent/hujjat" id="kontragentDocForm">
-                <p class="text-muted small mb-2">Kontragentni nomi yoki telefon bo'yicha qidiring, tanlang, yangi balansni kiriting va <strong>Qo'shish</strong> bosing. Faqat qo'shilgan qatorlar hujjatga kiritiladi.</p>
-                <p class="small mb-3"><strong>Balans:</strong> turdan qarzdorni tanlang, summani (musbat son) kiriting. Yoki to'g'ridan-to'g'ri manfiy son yozishingiz ham mumkin (bizning qarzimiz).</p>
-                <div class="row g-2 align-items-end mb-3">
-                    <div class="col-md-4 position-relative">
-                        <label class="form-label small">Kontragent</label>
-                        <input type="text" id="partner_search" class="form-control" placeholder="Nomi yoki telefon yozing..." autocomplete="off">
-                        <input type="hidden" id="partner_id_selected" value="">
-                        <div id="partner_results" class="list-group position-absolute" style="z-index:1000; max-height:220px; overflow-y:auto; display:none; left:0; right:0;"></div>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Tur</label>
-                        <select id="balance_type" class="form-select form-select-sm">
-                            <option value="1">Uning qarzi</option>
-                            <option value="-1">Bizning qarzimiz</option>
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Summa (so'm)</label>
-                        <input type="number" id="partner_balance_input" class="form-control form-control-sm" step="0.01" min="0" value="" placeholder="100000">
-                    </div>
-                    <div class="col-md-2">
-                        <button type="button" id="btn_add_row" class="btn btn-primary w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                <div class="filter-card mx-3 mb-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label small">Kontragent</label>
+                            <input type="text" id="partner_search" class="form-control form-control-sm" placeholder="Nomi yoki telefon yozing..." autocomplete="off">
+                            <input type="hidden" id="partner_id_selected" value="">
+                            <div id="partner_results" class="list-group position-absolute" style="z-index:1000; max-height:220px; overflow-y:auto; display:none; left:0; right:0;"></div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Tur</label>
+                            <select id="balance_type" class="form-select form-select-sm">
+                                <option value="1">Uning qarzi</option>
+                                <option value="-1">Bizning qarzimiz</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Summa (so'm)</label>
+                            <input type="number" id="partner_balance_input" class="form-control form-control-sm" step="0.01" min="0" value="" placeholder="100000">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" id="btn_add_row" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                        </div>
                     </div>
                 </div>
                 <select id="partner_list" style="display:none;">
@@ -92,21 +124,29 @@
                     <option value="{{ p.id }}" data-name="{{ p.name }}" data-phone="{{ p.phone or '' }}">{{ p.name }}{% if p.phone %} — {{ p.phone }}{% endif %}</option>
                     {% endfor %}
                 </select>
-                <h6 class="mb-2">Qo'shilgan qatorlar</h6>
-                <div class="table-responsive mb-3">
-                    <table class="table table-sm" id="rowsTable">
-                        <thead class="table-light">
-                            <tr><th>N</th><th>Kontragent</th><th>Yangi balans (so'm)</th><th style="width:50px;"></th></tr>
-                        </thead>
-                        <tbody id="rowsTableBody">
-                        </tbody>
-                    </table>
+                <table class="table mb-0" id="rowsTable">
+                    <thead>
+                        <tr>
+                            <th>N</th>
+                            <th>Kontragent</th>
+                            <th class="text-end">Yangi balans (so'm)</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rowsTableBody">
+                    </tbody>
+                </table>
+                <div class="px-3 py-3">
+                    <p class="text-muted small mb-2" id="noRowsHint">
+                        Hozircha qator qo'shilmagan. Yuqoridan kontragent tanlang va Qo'shish bosing.
+                    </p>
+                    <button type="submit" class="top-btn btn btn-success" id="btnSave"><i class="bi bi-check-circle"></i> Saqlash</button>
                 </div>
-                <p class="text-muted small mb-2" id="noRowsHint">Hozircha qator qo'shilmagan. Yuqoridan kontragent tanlang va Qo'shish bosing.</p>
-                <button type="submit" class="btn btn-success" id="btnSave"><i class="bi bi-check-circle"></i> Saqlash</button>
             </form>
             {% else %}
-            <p class="text-muted mb-0">Kontragentlar yo'q. <a href="/partners">Kontragentlar</a> bo'limida qo'shing.</p>
+            <div class="p-4 text-muted">
+                Kontragentlar yo'q. <a href="/partners">Kontragentlar</a> bo'limida qo'shing.
+            </div>
             {% endif %}
             {% endif %}
         </div>
@@ -184,7 +224,7 @@
         rowIndex++;
         var tr = document.createElement('tr');
         tr.className = 'doc-row';
-        tr.innerHTML = '<td class="row-n">' + rowIndex + '</td><td class="partner-name">' + (name || '-') + '</td><td><input type="hidden" name="partner_id" value="' + pid + '"><input type="number" name="balance" class="form-control form-control-sm" step="0.01" value="' + bal + '" placeholder="0"></td><td><button type="button" class="btn btn-sm btn-outline-danger remove-doc-row"><i class="bi bi-trash"></i></button></td>';
+        tr.innerHTML = '<td class="row-n muted-cell">' + rowIndex + '</td><td class="partner-name">' + (name || '-') + '</td><td class="text-end"><input type="hidden" name="partner_id" value="' + pid + '"><input type="number" name="balance" class="form-control form-control-sm text-end" step="0.01" value="' + bal + '" placeholder="0"></td><td class="text-center"><button type="button" class="btn-act danger remove-doc-row"><i class="bi bi-trash"></i></button></td>';
         tr.querySelector('.remove-doc-row').addEventListener('click', function() {
             tr.remove();
             tbody.querySelectorAll('tr.doc-row').forEach(function(r, i) { var n = r.querySelector('.row-n'); if (n) n.textContent = i + 1; });

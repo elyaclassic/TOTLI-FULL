@@ -1,94 +1,101 @@
 {% extends "base.html" %}
 
 {% block content %}
+
+{# ── Page header ── #}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-truck"></i> {{ driver.full_name }}</h5>
+    <div class="d-flex gap-2 flex-wrap">
+        {% if driver.telegram_id %}
+        <a href="https://t.me/{{ driver.telegram_id }}" class="top-btn" target="_blank">
+            <i class="bi bi-telegram me-1"></i>Telegram
+        </a>
+        {% endif %}
+        <a href="/map?driver={{ driver.id }}" class="top-btn">
+            <i class="bi bi-geo-alt me-1"></i>Xaritada ko'rish
+        </a>
+    </div>
+</div>
+
 <div class="row mb-4">
-    <!-- Haydovchi info -->
+
+    {# ── Driver info + mini map ── #}
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-body text-center">
+        <div class="card data-table mb-3">
+            <div class="card-header fw-600"><i class="bi bi-person-badge"></i> Haydovchi ma'lumotlari</div>
+            <div class="card-body text-center py-4">
                 <div class="mb-3">
-                    <i class="bi bi-truck" style="font-size: 4rem; color: var(--primary-color);"></i>
+                    <i class="bi bi-truck" style="font-size: 3.5rem; color: var(--primary-color);"></i>
                 </div>
-                <h4>{{ driver.full_name }}</h4>
-                <p class="text-muted">{{ driver.vehicle_type or 'Transport' }} - {{ driver.vehicle_number or '' }}</p>
-                
-                <div class="d-flex justify-content-around mb-3">
+                <h5 class="mb-1">{{ driver.full_name }}</h5>
+                <p class="muted-cell mb-3">{{ driver.vehicle_type or 'Transport' }} — {{ driver.vehicle_number or '' }}</p>
+                <div class="d-flex justify-content-center gap-4">
                     <div>
                         <strong>{{ driver.phone or '-' }}</strong><br>
-                        <small class="text-muted">Telefon</small>
+                        <span class="muted-cell">Telefon</span>
                     </div>
                 </div>
-                
-                {% if driver.telegram_id %}
-                <a href="https://t.me/{{ driver.telegram_id }}" class="btn btn-info btn-sm" target="_blank">
-                    <i class="bi bi-telegram"></i> Telegram
-                </a>
-                {% endif %}
-                
-                <a href="/map?driver={{ driver.id }}" class="btn btn-primary btn-sm">
-                    <i class="bi bi-geo-alt"></i> Xaritada ko'rish
-                </a>
             </div>
         </div>
-        
-        <!-- Mini xarita -->
-        <div class="card mt-3">
-            <div class="card-header">
-                <i class="bi bi-geo-alt"></i> Hozirgi joylashuv
-            </div>
+
+        {# ── Mini map ── #}
+        <div class="card data-table">
+            <div class="card-header fw-600"><i class="bi bi-geo-alt"></i> Hozirgi joylashuv</div>
             <div class="card-body p-0">
                 {% if locations %}
                 <div id="miniMap" style="height: 200px;"></div>
                 {% else %}
-                <div class="text-center text-muted py-4">
-                    <i class="bi bi-geo-alt fs-1"></i><br>
+                <div class="muted-cell text-center py-4">
+                    <i class="bi bi-geo-alt fs-1 d-block mb-2"></i>
                     Lokatsiya ma'lumoti yo'q
                 </div>
                 {% endif %}
             </div>
         </div>
     </div>
-    
-    <!-- Statistika -->
+
+    {# ── Stats + deliveries ── #}
     <div class="col-md-8">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <p>Kutilmoqda</p>
-                    <h3 class="text-warning">{{ deliveries|selectattr('status', 'eq', 'pending')|list|length }}</h3>
+
+        {# ── Mini-stat cards ── #}
+        <div class="row g-3 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="mini-stat">
+                    <div class="num" style="color:#b45309;">{{ deliveries|selectattr('status', 'eq', 'pending')|list|length }}</div>
+                    <div class="lbl"><i class="bi bi-hourglass-split"></i> Kutilmoqda</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <p>Yo'lda</p>
-                    <h3 class="text-primary">{{ deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</h3>
+            <div class="col-6 col-md-3">
+                <div class="mini-stat">
+                    <div class="num" style="color:#1d4ed8;">{{ deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</div>
+                    <div class="lbl"><i class="bi bi-truck"></i> Yo'lda</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <p>Yetkazildi</p>
-                    <h3 class="text-success">{{ deliveries|selectattr('status', 'eq', 'delivered')|list|length }}</h3>
+            <div class="col-6 col-md-3">
+                <div class="mini-stat">
+                    <div class="num" style="color:#065f46;">{{ deliveries|selectattr('status', 'eq', 'delivered')|list|length }}</div>
+                    <div class="lbl"><i class="bi bi-check-circle"></i> Yetkazildi</div>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="stat-card">
-                    <p>Jami</p>
-                    <h3>{{ deliveries|length }}</h3>
+            <div class="col-6 col-md-3">
+                <div class="mini-stat">
+                    <div class="num">{{ deliveries|length }}</div>
+                    <div class="lbl"><i class="bi bi-box-seam"></i> Jami</div>
                 </div>
             </div>
         </div>
-        
-        <!-- Yetkazishlar -->
-        <div class="card mt-3">
-            <div class="card-header d-flex justify-content-between">
-                <span><i class="bi bi-box-seam"></i> Yetkazishlar</span>
-                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addDeliveryModal">
-                    <i class="bi bi-plus"></i> Yangi
+
+        {# ── Deliveries table ── #}
+        <div class="data-table">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-600"><i class="bi bi-box-seam"></i> Yetkazishlar</span>
+                <button class="top-btn" data-bs-toggle="modal" data-bs-target="#addDeliveryModal">
+                    <i class="bi bi-plus me-1"></i>Yangi
                 </button>
             </div>
             <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
-                <table class="table table-sm">
-                    <thead class="table-light sticky-top">
+                <table class="table table-hover mb-0">
+                    <thead class="sticky-top">
                         <tr>
                             <th>#</th>
                             <th>Manzil</th>
@@ -99,43 +106,42 @@
                     <tbody>
                         {% for d in deliveries %}
                         <tr>
-                            <td>{{ d.id }}</td>
+                            <td class="muted-cell">{{ d.id }}</td>
                             <td>{{ d.delivery_address }}</td>
                             <td>
                                 {% if d.status == 'pending' %}
-                                <span class="badge bg-warning">Kutilmoqda</span>
+                                <span class="badge-waiting">Kutilmoqda</span>
                                 {% elif d.status == 'picked_up' %}
-                                <span class="badge bg-info">Olindi</span>
+                                <span class="badge-draft">Olindi</span>
                                 {% elif d.status == 'in_transit' %}
-                                <span class="badge bg-primary">Yo'lda</span>
+                                <span class="badge-draft" style="background:#dbeafe;color:#1d4ed8;">Yo'lda</span>
                                 {% elif d.status == 'delivered' %}
-                                <span class="badge bg-success">Yetkazildi</span>
+                                <span class="badge-done">Yetkazildi</span>
                                 {% else %}
-                                <span class="badge bg-danger">Bekor</span>
+                                <span class="badge-cancelled">Bekor</span>
                                 {% endif %}
                             </td>
-                            <td>{{ d.created_at.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ d.created_at.strftime('%d.%m %H:%M') }}</td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4" class="text-center text-muted py-3">Yetkazishlar yo'q</td>
+                            <td colspan="4" class="muted-cell text-center py-4">Yetkazishlar yo'q</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
+
     </div>
 </div>
 
-<!-- Lokatsiya tarixi -->
-<div class="card">
-    <div class="card-header">
-        <i class="bi bi-clock-history"></i> Harakat tarixi
-    </div>
+{# ── Location history ── #}
+<div class="data-table">
+    <div class="card-header fw-600"><i class="bi bi-clock-history"></i> Harakat tarixi</div>
     <div class="card-body p-0">
-        <table class="table table-sm">
-            <thead class="table-light">
+        <table class="table table-hover mb-0">
+            <thead>
                 <tr>
                     <th>Vaqt</th>
                     <th>Koordinatalar</th>
@@ -145,21 +151,15 @@
             <tbody>
                 {% for loc in locations[:20] %}
                 <tr>
-                    <td>{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
-                    <td>
-                        <small>{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small>
-                    </td>
-                    <td>
-                        {% if loc.speed %}
-                        {{ "%.0f"|format(loc.speed) }} km/h
-                        {% else %}
-                        -
-                        {% endif %}
+                    <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
+                    <td class="muted-cell"><small>{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small></td>
+                    <td class="num-cell">
+                        {% if loc.speed %}{{ "%.0f"|format(loc.speed) }} km/h{% else %}-{% endif %}
                     </td>
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="3" class="text-center text-muted py-3">Harakat ma'lumoti yo'q</td>
+                    <td colspan="3" class="muted-cell text-center py-4">Harakat ma'lumoti yo'q</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -167,7 +167,7 @@
     </div>
 </div>
 
-<!-- Yangi yetkazish modali -->
+{# ── Add delivery modal ── #}
 <div class="modal fade" id="addDeliveryModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -193,12 +193,13 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
-                    <button type="submit" class="btn btn-primary">Yaratish</button>
+                    <button type="submit" class="top-btn" style="background:#065f46;color:#fff;border-color:#065f46;">Yaratish</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_css %}
@@ -213,14 +214,14 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap'
     }).addTo(map);
-    
+
     // Oxirgi joylashuv markeri
     var truckIcon = L.divIcon({
         html: '<i class="bi bi-truck-front-fill" style="font-size: 24px; color: #0d6efd;"></i>',
         iconSize: [30, 30],
         className: 'truck-marker'
     });
-    
+
     L.marker([{{ locations[0].latitude }}, {{ locations[0].longitude }}], {icon: truckIcon})
         .addTo(map)
         .bindPopup('<b>{{ driver.full_name }}</b><br>{{ locations[0].recorded_at.strftime("%H:%M") }}');

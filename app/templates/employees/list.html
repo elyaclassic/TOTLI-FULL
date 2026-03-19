@@ -2,6 +2,7 @@
 
 {% block content %}
 <div class="container-fluid">
+
     {% if request.query_params.get('error') %}
     <div class="alert alert-danger alert-dismissible fade show py-2 small">
         {{ request.query_params.get('error') }}
@@ -32,36 +33,109 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="card">
-        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-            <h5 class="mb-0"><i class="bi bi-person-badge"></i> Xodimlar</h5>
-            <div class="d-flex flex-wrap gap-2 align-items-center">
-                {% if show_dismissed %}
-                <a href="/employees" class="btn btn-outline-secondary btn-sm">Faqat faol xodimlar</a>
-                {% else %}
-                <a href="/employees?show_dismissed=1" class="btn btn-outline-secondary btn-sm">Ishdan bo'shatilganlarni ko'rsatish</a>
-                {% endif %}
-                <form action="/employees/export" method="get" class="d-inline">
-                    <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Export</button>
-                </form>
-                <a href="/employees/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza"><i class="bi bi-download"></i> Andoza</a>
-                <form action="/employees/import" method="post" enctype="multipart/form-data" class="d-inline">
-                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                    <label class="btn btn-outline-primary btn-sm mb-0">
-                        <i class="bi bi-upload"></i> Import
-                        <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
-                    </label>
-                </form>
-                <button type="button" class="btn btn-outline-info btn-sm" data-bs-toggle="modal" data-bs-target="#hikvisionImportModal" title="Hikvision qurilmasidan xodimlar ro'yxatini yuklash"><i class="bi bi-camera-video"></i> Hikvision'dan yuklash</button>
-                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addEmployeeModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+
+    <!-- Page header -->
+    <div class="page-header">
+        <h5><i class="bi bi-person-badge"></i> Xodimlar</h5>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            {% if show_dismissed %}
+            <a href="/employees" class="top-btn btn btn-outline-secondary">Faqat faol xodimlar</a>
+            {% else %}
+            <a href="/employees?show_dismissed=1" class="top-btn btn btn-outline-secondary">Ishdan bo'shatilganlarni ko'rsatish</a>
+            {% endif %}
+            <form action="/employees/export" method="get" class="d-inline">
+                <button type="submit" class="top-btn btn btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Export</button>
+            </form>
+            <a href="/employees/template" class="top-btn btn btn-outline-secondary" title="Import uchun andoza"><i class="bi bi-download"></i> Andoza</a>
+            <form action="/employees/import" method="post" enctype="multipart/form-data" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <label class="top-btn btn btn-outline-primary mb-0" style="cursor:pointer;">
+                    <i class="bi bi-upload"></i> Import
+                    <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
+                </label>
+            </form>
+            <button type="button" class="top-btn btn btn-outline-info" data-bs-toggle="modal" data-bs-target="#hikvisionImportModal" title="Hikvision qurilmasidan xodimlar ro'yxatini yuklash">
+                <i class="bi bi-camera-video"></i> Hikvision'dan yuklash
+            </button>
+            <button type="button" class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#addEmployeeModal">
+                <i class="bi bi-plus-circle"></i> Yaratish
+            </button>
+        </div>
+    </div>
+
+    <!-- Mini stats -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num text-primary">{{ employees | length }}</div>
+                <div class="lbl">Jami xodimlar</div>
             </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#065f46;">{{ employees | selectattr('is_active') | list | length }}</div>
+                <div class="lbl">Faol xodimlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#6b7280;">{{ employees | rejectattr('is_active') | list | length }}</div>
+                <div class="lbl">Bo'shatilganlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#1a73e8;">{{ employees | selectattr('salary_type') | list | length }}</div>
+                <div class="lbl">Ish haqi belgilangan</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter card -->
+    <div class="filter-card">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label">Qidirish</label>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" id="empSearch" placeholder="F.I.O, kod, lavozim, telefon...">
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label">Bo'lim</label>
+                <select class="form-select" id="deptFilter">
+                    <option value="">Barchasi</option>
+                    {% for d in departments %}
+                    <option value="{{ d.name }}">{{ d.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Ish haqi turi</label>
+                <select class="form-select" id="salaryTypeFilter">
+                    <option value="">Barchasi</option>
+                    <option value="oylik">Oylik</option>
+                    <option value="soatlik">Soatlik</option>
+                    <option value="bo'lak">Bo'lak</option>
+                    <option value="bo'lak_oylik">Bo'lak + oylik</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data table -->
+    <div class="card data-table">
+        <div class="card-header">
+            <span class="fw-600 text-dark" style="font-size:13px; font-weight:600;">
+                <i class="bi bi-people"></i> Xodimlar ro'yxati
+            </span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-hover mb-0" id="empTable">
+                    <thead>
                         <tr>
-                            <th width="50">#</th>
+                            <th width="40">#</th>
                             <th>Kodi</th>
                             <th>F.I.O</th>
                             <th>Lavozimi</th>
@@ -70,46 +144,61 @@
                             <th>Oylik</th>
                             <th>Ish haqi turi</th>
                             {% if show_dismissed %}<th>Holat</th>{% endif %}
-                            <th width="180"></th>
+                            <th width="140"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for emp in employees %}
-                        <tr class="{% if show_dismissed and not emp.is_active %}table-secondary{% endif %}">
-                            <td>{{ loop.index }}</td>
+                        <tr data-name="{{ emp.full_name | lower }}" data-code="{{ emp.code | lower }}" data-dept="{{ emp.department or '' }}" data-salary-type="{{ emp.salary_type or '' }}" data-phone="{{ emp.phone or '' }}" data-position="{{ emp.position or '' | lower }}" class="{% if show_dismissed and not emp.is_active %}table-secondary{% endif %}">
+                            <td class="muted-cell">{{ loop.index }}</td>
                             <td><code>{{ emp.code }}</code></td>
                             <td>
                                 <strong>{{ emp.full_name }}</strong>
                                 {% if emp.hire_date %}
-                                <br><small class="text-muted">{{ emp.hire_date.strftime('%d.%m.%Y') }} dan</small>
+                                <br><span class="muted-cell">{{ emp.hire_date.strftime('%d.%m.%Y') }} dan</span>
                                 {% endif %}
                             </td>
                             <td>{{ emp.position or '-' }}</td>
                             <td>{{ emp.department or '-' }}</td>
                             <td>{{ emp.phone or '-' }}</td>
-                            <td class="text-success">{{ "{:,.0f}".format(emp.salary) }}</td>
-                            <td><small>{% if emp.salary_type == 'oylik' %}Oylik{% elif emp.salary_type == 'soatlik' %}Soatlik{% elif emp.salary_type == "bo'lak" %}Bo'lak{% elif emp.salary_type == "bo'lak_oylik" %}Bo'lak + oylik{% else %}—{% endif %}</small></td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(emp.salary) }}</td>
+                            <td>
+                                <span class="muted-cell">
+                                    {% if emp.salary_type == 'oylik' %}Oylik
+                                    {% elif emp.salary_type == 'soatlik' %}Soatlik
+                                    {% elif emp.salary_type == "bo'lak" %}Bo'lak
+                                    {% elif emp.salary_type == "bo'lak_oylik" %}Bo'lak + oylik
+                                    {% else %}—{% endif %}
+                                </span>
+                            </td>
                             {% if show_dismissed %}
-                            <td>{% if emp.is_active %}<span class="badge bg-success">Faol</span>{% else %}<span class="badge bg-secondary">Bo'shatilgan</span>{% endif %}</td>
+                            <td>
+                                {% if emp.is_active %}
+                                <span class="badge-active">Faol</span>
+                                {% else %}
+                                <span class="badge-inactive">Bo'shatilgan</span>
+                                {% endif %}
+                            </td>
                             {% endif %}
                             <td>
-                                <a href="/employees/hiring-doc/create?employee_id={{ emp.id }}" class="btn btn-sm btn-outline-secondary" title="Ishga qabul hujjati"><i class="bi bi-file-earmark-person"></i></a>
-                                {% if emp.is_active %}
-                                <a href="/employees/dismissal/create?employee_id={{ emp.id }}" class="btn btn-sm btn-outline-warning" title="Ishdan bo'shatish"><i class="bi bi-person-x"></i></a>
-                                {% endif %}
-                                <a href="/employees/edit/{{ emp.id }}" class="btn btn-sm btn-outline-primary" title="Tahrirlash">
-                                    <i class="bi bi-pencil"></i>
-                                </a>
-                                <form method="POST" action="/employees/delete/{{ emp.id }}" class="d-inline" onsubmit="return confirm('Ushbu xodimni rostdan ham o\'chirishni xohlaysizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
-                                </form>
+                                <div class="d-flex gap-1">
+                                    <a href="/employees/hiring-doc/create?employee_id={{ emp.id }}" class="btn-act" title="Ishga qabul hujjati"><i class="bi bi-file-earmark-person"></i></a>
+                                    {% if emp.is_active %}
+                                    <a href="/employees/dismissal/create?employee_id={{ emp.id }}" class="btn-act warning" title="Ishdan bo'shatish"><i class="bi bi-person-x"></i></a>
+                                    {% endif %}
+                                    <a href="/employees/edit/{{ emp.id }}" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                    <form method="POST" action="/employees/delete/{{ emp.id }}" class="d-inline" onsubmit="return confirm('Ushbu xodimni rostdan ham o\'chirishni xohlaysizmi?');">
+                                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="{% if show_dismissed %}9{% else %}8{% endif %}" class="text-muted text-center py-4">Hozircha xodimlar yo'q. Yangi xodim qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
+                            <td colspan="{% if show_dismissed %}9{% else %}8{% endif %}" class="text-muted text-center py-5">
+                                <i class="bi bi-person-badge fs-2 d-block mb-2 opacity-25"></i>
+                                Hozircha xodimlar yo'q. Yangi xodim qo'shish uchun yuqoridagi Yaratish tugmasini bosing.
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -117,9 +206,10 @@
             </div>
         </div>
     </div>
-</div>
 
-<!-- Xodim qo'shish modal (ixcham) -->
+</div><!-- /container-fluid -->
+
+<!-- Xodim qo'shish modal -->
 <div class="modal fade" id="addEmployeeModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -292,6 +382,7 @@
         </div>
     </div>
 </div>
+
 <script>
 (function() {
     var btn = document.getElementById('toggleHikvisionImportPassword');
@@ -312,6 +403,38 @@
             btn.title = 'Parolni ko\'rsatish';
         }
     });
+})();
+
+// Client-side filter
+(function() {
+    var searchInput = document.getElementById('empSearch');
+    var deptFilter  = document.getElementById('deptFilter');
+    var salaryFilter = document.getElementById('salaryTypeFilter');
+    var rows = document.querySelectorAll('#empTable tbody tr[data-name]');
+
+    function applyFilters() {
+        var q    = (searchInput.value || '').toLowerCase().trim();
+        var dept = (deptFilter.value || '').toLowerCase();
+        var sal  = (salaryFilter.value || '').toLowerCase();
+        rows.forEach(function(row) {
+            var name    = (row.dataset.name || '');
+            var code    = (row.dataset.code || '');
+            var phone   = (row.dataset.phone || '').toLowerCase();
+            var pos     = (row.dataset.position || '');
+            var rowDept = (row.dataset.dept || '').toLowerCase();
+            var rowSal  = (row.dataset.salaryType || '').toLowerCase();
+
+            var matchQ    = !q    || name.includes(q) || code.includes(q) || phone.includes(q) || pos.includes(q);
+            var matchDept = !dept || rowDept === dept;
+            var matchSal  = !sal  || rowSal === sal;
+
+            row.style.display = (matchQ && matchDept && matchSal) ? '' : 'none';
+        });
+    }
+
+    if (searchInput) searchInput.addEventListener('input', applyFilters);
+    if (deptFilter)  deptFilter.addEventListener('change', applyFilters);
+    if (salaryFilter) salaryFilter.addEventListener('change', applyFilters);
 })();
 </script>
 {% endblock %}

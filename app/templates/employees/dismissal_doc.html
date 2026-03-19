@@ -8,19 +8,26 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Xodimlar</a>
-        <div class="d-flex gap-2">
-            <a href="/employees/dismissal/{{ doc.id }}/export-word" class="btn btn-outline-primary btn-sm"><i class="bi bi-download"></i> Word (.docx)</a>
-            <button type="button" class="btn btn-outline-dark btn-sm" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
+
+    <div class="page-header mb-3 no-print">
+        <h5 class="mb-0"><i class="bi bi-person-x"></i> Ishdan bo'shatish buyrug'i</h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/employees" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Xodimlar</a>
+            <a href="/employees/dismissal/{{ doc.id }}/export-word" class="top-btn btn btn-outline-primary"><i class="bi bi-download"></i> Word (.docx)</a>
+            <button type="button" class="top-btn btn btn-outline-dark" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
         </div>
     </div>
-    <div class="card">
+
+    <div class="card data-table">
         <div class="card-header">
-            <h5 class="mb-1"><i class="bi bi-person-x"></i> Ishdan bo'shatish haqida buyruq</h5>
-            <p class="mb-0 small"><strong>№</strong> {{ doc.number }} &nbsp;|&nbsp; <strong>Sana:</strong> {{ doc.doc_date.strftime('%d.%m.%Y') }}</p>
+            <span><i class="bi bi-person-x"></i> Ishdan bo'shatish haqida buyruq</span>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="muted-cell">№ {{ doc.number }}</span>
+                <span class="muted-cell">|</span>
+                <span class="muted-cell">{{ doc.doc_date.strftime('%d.%m.%Y') }}</span>
+            </div>
         </div>
-        <div class="card-body">
+        <div class="card-body p-0">
             <table class="table table-bordered mb-0">
                 <tr>
                     <th width="220" class="table-light">Xodim</th>
@@ -45,8 +52,8 @@
                 </tr>
                 {% endif %}
             </table>
-            <div class="mt-4 small text-muted">
-                <p class="mb-1">Hujjat yaratilgan: {{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '—' }}</p>
+            <div class="p-3 border-top">
+                <p class="mb-0 small text-muted">Hujjat yaratilgan: {{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '—' }}</p>
             </div>
         </div>
     </div>

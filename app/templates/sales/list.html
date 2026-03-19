@@ -1,125 +1,188 @@
 {% extends "base.html" %}
-
 {% block content %}
+
 {% if error == "delete" and error_detail %}
-<div class="alert alert-warning alert-dismissible fade show" role="alert">
-    {{ error_detail }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<div class="alert alert-warning alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-exclamation-triangle"></i> {{ error_detail }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="mb-0"><i class="bi bi-cart3"></i> Sotuvlar</h4>
-        <div class="d-flex align-items-center gap-2">
-            <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasi</a>
-            <a href="/sales/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
-        </div>
-    </div>
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <form method="get" action="/sales" class="row g-2 align-items-end">
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Sana dan</label>
-                    <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}" title="Sana dan">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Sana gacha</label>
-                    <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to or '' }}" title="Sana gacha">
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Ombor</label>
-                    <select name="warehouse_id" class="form-select form-select-sm" style="min-width: 180px;">
-                        <option value="">Barcha omborlar</option>
-                        {% for w in warehouses %}
-                        <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Filtrlash</button>
-                </div>
-                <div class="col-auto">
-                    <a href="/sales" class="btn btn-outline-secondary btn-sm">Tozalash</a>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div class="d-flex justify-content-end mb-2">
-        <div class="badge bg-success fs-6 px-3 py-2">
-            <i class="bi bi-currency-exchange me-1"></i> Jami savdo: <strong>{{ "{:,.0f}".format(total_sum or 0) }}</strong> so'm
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>№</th>
-                            {% set qp = filter_params + '&' if filter_params else '' %}
-                            <th><a href="/sales?{{ qp }}sort_by=number&sort_dir={% if sort_by == 'number' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Hujjat № {% if sort_by == 'number' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="/sales?{{ qp }}sort_by=date&sort_dir={% if sort_by == 'date' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Sana {% if sort_by == 'date' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="/sales?{{ qp }}sort_by=partner&sort_dir={% if sort_by == 'partner' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Mijoz {% if sort_by == 'partner' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="/sales?{{ qp }}sort_by=warehouse&sort_dir={% if sort_by == 'warehouse' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Ombor {% if sort_by == 'warehouse' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="/sales?{{ qp }}sort_by=total&sort_dir={% if sort_by == 'total' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Summa {% if sort_by == 'total' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="/sales?{{ qp }}sort_by=status&sort_dir={% if sort_by == 'status' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark" title="Sartirovka">Holat {% if sort_by == 'status' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for order in orders %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td><a href="/sales/edit/{{ order.id }}">{{ order.number }}</a></td>
-                            <td>{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
-                            <td>{{ order.partner.name if order.partner else '-' }}</td>
-                            <td>{{ order.warehouse.name if order.warehouse else '-' }}</td>
-                            <td class="fw-bold">{{ "{:,.0f}".format(order.total or 0) }} so'm</td>
-                            <td>
-                                {% if order.status == 'completed' %}
-                                <span class="badge bg-success">Bajarildi</span>
-                                {% elif order.status == 'draft' %}
-                                <span class="badge bg-warning text-dark">Qoralama</span>
-                                {% else %}
-                                <span class="badge bg-secondary">{{ order.status }}</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <a href="/sales/edit/{{ order.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                {% if order.status == 'completed' %}
-                                <a href="/sales/return/{{ order.id }}" class="btn btn-sm btn-outline-success ms-1" title="Savdodan qaytarish"><i class="bi bi-arrow-return-left"></i></a>
-                                {% endif %}
-                                {% if order.status == 'completed' and current_user and (current_user.role or '')|lower == 'admin' %}
-                                <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                </form>
-                                {% elif order.status == 'draft' and current_user and (current_user.role or '')|lower == 'admin' %}
-                                <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('Ushbu sotuvni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                                {% elif order.status == 'cancelled' and current_user and (current_user.role or '')|lower == 'admin' %}
-                                <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('Ushbu bekor qilingan sotuvni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                                {% elif order.status == 'waiting_production' and current_user and (current_user.role or '')|lower == 'admin' %}
-                                <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Ishlab chiqarish kutish bekor qilinadi. Davom etasizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                </form>
-                                <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('Ushbu sotuvni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="8" class="text-muted text-center py-4">Hozircha sotuvlar yo'q. <a href="/sales/new">Yangi sotuv yaratish</a></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+{% if info and info_detail %}
+<div class="alert alert-info alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-info-circle"></i> {{ info_detail }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
+{% endif %}
+
+<!-- Filter -->
+<div class="filter-card">
+  <form method="get" action="/sales" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label">📅 Sana dan</label>
+      <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label">📅 Sana gacha</label>
+      <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to or '' }}">
+    </div>
+    <div class="col-auto">
+      <label class="form-label">🏭 Ombor</label>
+      <select name="warehouse_id" class="form-select form-select-sm" style="min-width:180px;">
+        <option value="">Barcha omborlar</option>
+        {% for w in warehouses %}
+        <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-auto">
+      <label class="form-label">📋 Holat</label>
+      <select name="status" class="form-select form-select-sm" style="min-width:150px;">
+        <option value="">Barchasi</option>
+        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Qoralama</option>
+        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Bajarildi</option>
+        <option value="waiting_production" {% if status_filter == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
+        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
+      </select>
+    </div>
+    <div class="col-auto d-flex gap-2">
+      <button type="submit" class="btn btn-primary top-btn">
+        <i class="bi bi-funnel-fill"></i> Ko'rsatish
+      </button>
+      <a href="/sales" class="btn btn-outline-secondary top-btn" title="Tozalash">
+        <i class="bi bi-x-circle"></i>
+      </a>
+    </div>
+  </form>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="mini-stat">
+      <div class="num text-primary">{{ orders|length }}</div>
+      <div class="lbl">Jami hujjatlar</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mini-stat">
+      <div class="num text-success" style="font-size:1.2rem;">{{ "{:,.0f}".format(total_sum or 0) }}</div>
+      <div class="lbl">Jami summa (so'm)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mini-stat">
+      {% set done_count = orders|selectattr('status','equalto','completed')|list|length %}
+      <div class="num text-success">{{ done_count }}</div>
+      <div class="lbl">Bajarilgan</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="mini-stat">
+      {% set draft_count = orders|selectattr('status','equalto','draft')|list|length %}
+      <div class="num text-warning">{{ draft_count }}</div>
+      <div class="lbl">Qoralama</div>
+    </div>
+  </div>
+</div>
+
+<!-- Table -->
+<div class="card data-table">
+  <div class="card-header">
+    <span class="fw-bold fs-6"><i class="bi bi-cart3 text-primary"></i> Sotuvlar
+      <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill ms-1">{{ orders|length }} ta</span>
+    </span>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <div class="search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="salesSearch" class="form-control form-control-sm" placeholder="Qidirish…" style="width:180px;" oninput="filterTable(this.value)">
+      </div>
+      <a href="/sales/pos" class="btn btn-outline-primary top-btn">
+        <i class="bi bi-cart-check"></i> Sotuv oynasi
+      </a>
+      <a href="/sales/new" class="btn btn-primary top-btn">
+        <i class="bi bi-plus-circle"></i> Yaratish
+      </a>
+    </div>
+  </div>
+  <div class="card-body p-0" style="overflow-x:auto;">
+    <table class="table mb-0" id="salesTable">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          {% set qp = filter_params + '&' if filter_params else '' %}
+          <th><a href="/sales?{{ qp }}sort_by=number&sort_dir={% if sort_by == 'number' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Hujjat № {% if sort_by == 'number' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
+          <th><a href="/sales?{{ qp }}sort_by=date&sort_dir={% if sort_by == 'date' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Sana {% if sort_by == 'date' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
+          <th><a href="/sales?{{ qp }}sort_by=partner&sort_dir={% if sort_by == 'partner' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Mijoz {% if sort_by == 'partner' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
+          <th><a href="/sales?{{ qp }}sort_by=warehouse&sort_dir={% if sort_by == 'warehouse' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Ombor {% if sort_by == 'warehouse' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
+          <th class="text-end"><a href="/sales?{{ qp }}sort_by=total&sort_dir={% if sort_by == 'total' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Summa {% if sort_by == 'total' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
+          <th>Holat</th>
+          <th style="width:110px;"></th>
+        </tr>
+      </thead>
+      <tbody id="salesBody">
+        {% for order in orders %}
+        <tr>
+          <td class="text-muted">{{ loop.index }}</td>
+          <td><a href="/sales/edit/{{ order.id }}" class="fw-semibold text-decoration-none">{{ order.number }}</a></td>
+          <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '—' }}</td>
+          <td>{{ order.partner.name if order.partner else '—' }}</td>
+          <td class="muted-cell">{{ order.warehouse.name if order.warehouse else '—' }}</td>
+          <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total or 0) }}</td>
+          <td>
+            {% if order.status == 'completed' %}
+            <span class="badge-done">Bajarildi</span>
+            {% elif order.status == 'draft' %}
+            <span class="badge-draft">Qoralama</span>
+            {% elif order.status == 'waiting_production' %}
+            <span class="badge-waiting">Ishlab chiqarishda</span>
+            {% elif order.status == 'cancelled' %}
+            <span class="badge-cancelled">Bekor qilingan</span>
+            {% else %}
+            <span class="badge-inactive">{{ order.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <div class="d-flex gap-1">
+              <a href="/sales/edit/{{ order.id }}" class="btn-act" title="Ochish"><i class="bi bi-pencil-square"></i></a>
+              {% if order.status == 'completed' %}
+              <a href="/sales/return/{{ order.id }}" class="btn-act" title="Qaytarish"><i class="bi bi-arrow-return-left"></i></a>
+              {% endif %}
+              {% if current_user and (current_user.role or '')|lower == 'admin' %}
+                {% if order.status in ('completed', 'waiting_production') %}
+                <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');">
+                  <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
+                </form>
+                {% endif %}
+                {% if order.status in ('draft', 'cancelled', 'waiting_production') %}
+                <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('O\'chirish?');">
+                  <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                </form>
+                {% endif %}
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center text-muted py-5">
+            <i class="bi bi-cart3 d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
+            Sotuvlar topilmadi. <a href="/sales/new">Yangi sotuv yaratish</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+function filterTable(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#salesBody tr').forEach(function(tr) {
+    if (!tr.cells || tr.cells.length < 4) return;
+    var txt = tr.textContent.toLowerCase();
+    tr.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  });
+}
+</script>
 {% endblock %}

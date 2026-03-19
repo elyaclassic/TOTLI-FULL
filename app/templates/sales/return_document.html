@@ -1,60 +1,71 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if request.query_params.get('reverted') == '1' %}
-<div class="alert alert-info alert-dismissible fade show" role="alert">
-    Tasdiq bekor qilindi. Qoldiq ombordan olib tashlandi.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-{% if request.query_params.get('updated') == '1' %}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-    O'zgarishlar saqlandi.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-{% if request.query_params.get('confirmed') == '1' %}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-    Qaytarish qayta tasdiqlandi.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="bi bi-file-earmark-text"></i> Qaytarish hujjati {{ doc.number }}</h4>
-        <div>
+
+    {# ── Alerts ── #}
+    {% if request.query_params.get('reverted') == '1' %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-info-circle"></i> Tasdiq bekor qilindi. Qoldiq ombordan olib tashlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('updated') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-check-circle"></i> O'zgarishlar saqlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('confirmed') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-check-circle"></i> Qaytarish qayta tasdiqlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {# ── Page header ── #}
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Qaytarish hujjati {{ doc.number }}</h5>
+        <div class="d-flex gap-2 flex-wrap">
             {% if doc.status == 'completed' %}
-            <form method="post" action="/sales/return/revert/{{ doc.id }}" class="d-inline me-2" onsubmit="return confirm('Tasdiqni bekor qilsangiz, omborga qo\'shilgan qoldiq olib tashlanadi. Davom etasizmi?');">
-                <button type="submit" class="btn btn-warning"><i class="bi bi-x-circle me-1"></i>Tasdiqni bekor qilish</button>
+            <form method="post" action="/sales/return/revert/{{ doc.id }}" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilsangiz, omborga qo\'shilgan qoldiq olib tashlanadi. Davom etasizmi?');">
+                <button type="submit" class="top-btn" style="background:#b45309;color:#fff;border-color:#b45309;"><i class="bi bi-x-circle me-1"></i>Tasdiqni bekor qilish</button>
             </form>
             {% else %}
-            <a href="/sales/return/edit/{{ doc.id }}" class="btn btn-outline-primary me-2"><i class="bi bi-pencil me-1"></i>Tahrirlash</a>
-            <form method="post" action="/sales/return/confirm/{{ doc.id }}" class="d-inline me-2" onsubmit="return confirm('Qayta tasdiqlasangiz, qoldiq omborga qo\'shiladi. Davom etasizmi?');">
-                <button type="submit" class="btn btn-success"><i class="bi bi-check2-circle me-1"></i>Qayta tasdiqlash</button>
+            <a href="/sales/return/edit/{{ doc.id }}" class="top-btn"><i class="bi bi-pencil me-1"></i>Tahrirlash</a>
+            <form method="post" action="/sales/return/confirm/{{ doc.id }}" class="d-inline" onsubmit="return confirm('Qayta tasdiqlasangiz, qoldiq omborga qo\'shiladi. Davom etasizmi?');">
+                <button type="submit" class="top-btn" style="background:#065f46;color:#fff;border-color:#065f46;"><i class="bi bi-check2-circle me-1"></i>Qayta tasdiqlash</button>
             </form>
-            <form method="post" action="/sales/return/delete/{{ doc.id }}" class="d-inline me-2" onsubmit="return confirm('Hujjatni o\'chirishni xohlaysizmi?');">
-                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash me-1"></i>O'chirish</button>
+            <form method="post" action="/sales/return/delete/{{ doc.id }}" class="d-inline" onsubmit="return confirm('Hujjatni o\'chirishni xohlaysizmi?');">
+                <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
             </form>
             {% endif %}
-            <button type="button" class="btn btn-outline-secondary me-2" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
-            <a href="/sales/returns" class="btn btn-outline-primary"><i class="bi bi-arrow-left"></i> Savdodan qaytarish</a>
+            <button type="button" class="top-btn" onclick="window.print();"><i class="bi bi-printer me-1"></i>Chop etish</button>
+            <a href="/sales/returns" class="top-btn"><i class="bi bi-arrow-left me-1"></i>Qaytarish ro'yxati</a>
         </div>
     </div>
-    <div class="card">
-        <div class="card-header bg-light">
-            <strong>Hujjat:</strong> {{ doc.number }} &nbsp;|&nbsp;
-            <strong>Holat:</strong>
-            {% if doc.status == 'completed' %}<span class="badge bg-success">Tasdiqlangan</span>{% else %}<span class="badge bg-secondary">Bekor qilingan</span>{% endif %}
-            &nbsp;|&nbsp;
-            <strong>Sana:</strong> {{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '-' }} &nbsp;|&nbsp;
-            <strong>Mijoz:</strong> {{ doc.partner.name if doc.partner else '-' }} &nbsp;|&nbsp;
-            <strong>Ombor:</strong> {{ doc.warehouse.name if doc.warehouse else '-' }} &nbsp;|&nbsp;
-            <strong>Jami:</strong> {{ "{:,.0f}".format(doc.total or 0) }} so'm
+
+    {# ── Document meta card ── #}
+    <div class="card data-table mb-3">
+        <div class="card-header d-flex flex-wrap gap-3 align-items-center">
+            <span><strong>Hujjat:</strong> {{ doc.number }}</span>
+            <span>
+                <strong>Holat:</strong>
+                {% if doc.status == 'completed' %}
+                <span class="badge-done">Tasdiqlangan</span>
+                {% else %}
+                <span class="badge-cancelled">Bekor qilingan</span>
+                {% endif %}
+            </span>
+            <span class="muted-cell"><strong>Sana:</strong> {{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '-' }}</span>
+            <span><strong>Mijoz:</strong> {{ doc.partner.name if doc.partner else '-' }}</span>
+            <span class="muted-cell"><strong>Ombor:</strong> {{ doc.warehouse.name if doc.warehouse else '-' }}</span>
+            <span class="sum-cell"><strong>Jami:</strong> {{ "{:,.0f}".format(doc.total or 0) }} so'm</span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>№</th>
                             <th>Mahsulot</th>
@@ -68,23 +79,24 @@
                         {% set _uc = (item.product.unit.code or '')|lower if (item.product and item.product.unit) else '' %}
                         {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
                         <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ item.product.name if item.product else '-' }}</td>
-                            <td>{{ "{:,.0f}".format((item.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(item.quantity or 0) }}</td>
-                            <td>{{ "{:,.0f}".format(item.price or 0) }} so'm</td>
-                            <td>{{ "{:,.0f}".format(item.total or 0) }} so'm</td>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td><strong>{{ item.product.name if item.product else '-' }}</strong></td>
+                            <td class="num-cell">{{ "{:,.0f}".format((item.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(item.quantity or 0) }}</td>
+                            <td class="muted-cell">{{ "{:,.0f}".format(item.price or 0) }} so'm</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(item.total or 0) }} so'm</td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="5" class="text-muted text-center py-3">Hujjatda mahsulot yo'q.</td></tr>
+                        <tr><td colspan="5" class="muted-cell text-center py-4">Hujjatda mahsulot yo'q.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="card-footer bg-light">
-            <strong>Jami summa:</strong> {{ "{:,.0f}".format(doc.total or 0) }} so'm
-            {% if doc.note %}<br><span class="text-muted small">{{ doc.note }}</span>{% endif %}
+        <div class="card-footer d-flex align-items-center gap-3">
+            <span class="sum-cell fw-bold">Jami summa: {{ "{:,.0f}".format(doc.total or 0) }} so'm</span>
+            {% if doc.note %}<span class="muted-cell">{{ doc.note }}</span>{% endif %}
         </div>
     </div>
+
 </div>
 {% endblock %}

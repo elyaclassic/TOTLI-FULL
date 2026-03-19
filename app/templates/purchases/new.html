@@ -3,18 +3,18 @@
 {% block content %}
 <style>
     #partner_search_results, .product_search_results {
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
         border: 1px solid #dee2e6;
-        border-radius: 0.25rem;
+        border-radius: 0.5rem;
         margin-top: 2px;
         background: white;
         z-index: 1050 !important;
         overflow-y: auto;
         overflow-x: hidden;
     }
-    #partner_search_results .list-group-item:hover, .product_search_results .list-group-item:hover { 
-        background-color: #f8f9fa; 
-        cursor: pointer; 
+    #partner_search_results .list-group-item:hover, .product_search_results .list-group-item:hover {
+        background-color: #f8f9fa;
+        cursor: pointer;
     }
     .product-search-wrapper {
         position: relative !important;
@@ -28,72 +28,44 @@
         display: none !important;
         background: white !important;
         border: 1px solid #dee2e6 !important;
-        border-radius: 0.25rem !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15) !important;
+        border-radius: 0.5rem !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15) !important;
     }
     .product_search_results.show {
         display: block !important;
     }
-    /* Jadval ichida overflow muammosini hal qilish */
-    #productsTable {
-        table-layout: auto;
-    }
-    #productsTable td {
-        position: relative !important;
-        overflow: visible !important;
-    }
-    #productsTable tbody tr {
-        position: relative !important;
-    }
-    .table-responsive {
-        overflow: visible !important;
-    }
-    /* Scrollbar styling */
-    .product_search_results::-webkit-scrollbar {
-        width: 8px;
-    }
-    .product_search_results::-webkit-scrollbar-track {
-        background: #f1f1f1;
-        border-radius: 4px;
-    }
-    .product_search_results::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 4px;
-    }
-    .product_search_results::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
+    #productsTable { table-layout: auto; }
+    #productsTable td { position: relative !important; overflow: visible !important; }
+    #productsTable tbody tr { position: relative !important; }
+    .table-responsive { overflow: visible !important; }
 </style>
 
 {% set from_pos = from_pos|default(false) %}
 <div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-12 d-flex flex-wrap gap-2 align-items-center">
-            <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="btn btn-outline-secondary mb-0">
-                <i class="bi bi-arrow-left"></i> Orqaga
-            </a>
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-box-arrow-in-down text-primary"></i> Yangi tovar kirimi</h5>
+        <div class="d-flex gap-2">
             {% if from_pos %}
-            <a href="/sales/pos" class="btn btn-outline-primary mb-0"><i class="bi bi-cart-check me-1"></i>Sotuv oynasiga</a>
+            <a href="/sales/pos" class="top-btn btn btn-outline-primary"><i class="bi bi-cart-check"></i> Sotuv oynasiga</a>
             {% endif %}
+            <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
         </div>
     </div>
 
     <div class="card">
-        <div class="card-header">
-            <h5 class="mb-0">Yangi tovar kirimi</h5>
-        </div>
+        <div class="card-header"><span class="fw-bold"><i class="bi bi-plus-circle text-primary"></i> Yangi kirim hujjati</span></div>
         <div class="card-body">
             <form method="POST" action="/purchases/create" id="purchaseCreateForm">
                 {% if from_pos %}<input type="hidden" name="from_pos" value="1">{% endif %}
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="mb-3 position-relative">
-                            <label class="form-label">Ta'minotchi *</label>
+                            <label class="form-label fw-600">Ta'minotchi *</label>
                             <div class="input-group">
                                 <input type="text" class="form-control" id="partner_search_input"
                                     placeholder="Nomi, telefon yoki kod bo'yicha qidiring..." autocomplete="off" required>
                                 <input type="hidden" name="partner_id" id="partner_id_hidden" required>
-                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPartnerModal">
+                                <button type="button" class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addPartnerModal" title="Yangi kontragent qo'shish">
                                     <i class="bi bi-plus-circle"></i>
                                 </button>
                             </div>
@@ -103,7 +75,7 @@
                     </div>
                     <div class="col-md-6">
                         <div class="mb-3">
-                            <label class="form-label">Ombor *</label>
+                            <label class="form-label fw-600">Ombor *</label>
                             {% if warehouses and warehouses|length == 1 %}
                             <input type="hidden" name="warehouse_id" value="{{ warehouses[0].id }}" id="purchase_warehouse_id">
                             <p class="form-control-plaintext mb-0 py-2 px-3 bg-light rounded border"><strong>{{ warehouses[0].name }}</strong></p>
@@ -138,25 +110,28 @@
                     {% endfor %}
                 </select>
 
-                <!-- Mahsulotlar jadvali: kirim narxi shu yerda, sotuv narxi narx turlaridan -->
-                <h6 class="mb-2">Mahsulotlar</h6>
-                <p class="text-muted small mb-2">Kirim narxi shu yerda yoziladi; sotuv narxi narx turlaridan olinadi.</p>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div>
+                        <h6 class="mb-0 fw-bold">Mahsulotlar</h6>
+                        <small class="text-muted">Kirim narxi shu yerda yoziladi; sotuv narxi narx turlaridan olinadi.</small>
+                    </div>
+                </div>
                 <div class="mb-3" style="position: relative;">
                     <div class="table-responsive">
                         <table class="table table-sm" id="productsTable">
-                            <thead>
+                            <thead class="table-light">
                                 <tr>
                                     <th>Mahsulot</th>
                                     <th style="width: 120px;">Miqdor</th>
                                     <th style="width: 140px;">Kirim narxi (so'm)</th>
-                                    <th style="width: 100px;"></th>
+                                    <th style="width: 50px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="productsTableBody">
                                 <tr class="product-row">
                                     <td style="position: relative;">
                                         <div class="product-search-wrapper">
-                                            <input type="text" class="form-control form-select-sm product-search-input" 
+                                            <input type="text" class="form-control form-select-sm product-search-input"
                                                 placeholder="Nomi yoki kod bo'yicha qidiring..." autocomplete="off">
                                             <input type="hidden" name="product_id" class="product-id-hidden">
                                             <div class="product_search_results list-group" style="display: none;"></div>
@@ -164,56 +139,60 @@
                                     </td>
                                     <td><input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
                                     <td><input type="number" name="price" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
-                                    <td><button type="button" class="btn btn-sm btn-outline-danger remove-product-row" title="O'chirish"><i class="bi bi-trash"></i></button></td>
+                                    <td><button type="button" class="btn-act danger remove-product-row" title="O'chirish"><i class="bi bi-trash"></i></button></td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
-                <button type="button" class="btn btn-outline-primary btn-sm mb-4" id="addProductRow">
+                <button type="button" class="top-btn btn btn-outline-primary btn-sm mb-4" id="addProductRow">
                     <i class="bi bi-plus-circle"></i> Qator qo'shish
                 </button>
 
-                <!-- Xarajatlar -->
-                <h6 class="mb-2">Xarajatlar</h6>
+                <h6 class="mb-2 fw-bold">Xarajatlar</h6>
                 <div class="table-responsive mb-3">
                     <table class="table table-sm" id="expensesTable">
-                        <thead>
+                        <thead class="table-light">
                             <tr>
                                 <th>Xarajat nomi</th>
                                 <th style="width: 160px;">Summa (so'm)</th>
-                                <th style="width: 100px;"></th>
+                                <th style="width: 50px;"></th>
                             </tr>
                         </thead>
                         <tbody id="expensesTableBody">
                             <tr class="expense-row">
                                 <td><input type="text" name="expense_name" class="form-control form-control-sm" placeholder="masalan: Yo'l, Yuk, Boj"></td>
                                 <td><input type="number" name="expense_amount" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
-                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-expense-row" title="O'chirish"><i class="bi bi-trash"></i></button></td>
+                                <td><button type="button" class="btn-act danger remove-expense-row" title="O'chirish"><i class="bi bi-trash"></i></button></td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <button type="button" class="btn btn-outline-secondary btn-sm mb-4" id="addExpenseRow">
+                <button type="button" class="top-btn btn btn-outline-secondary btn-sm mb-4" id="addExpenseRow">
                     <i class="bi bi-plus-circle"></i> Xarajat qo'shish
                 </button>
 
                 <!-- Umumiy summa -->
-                <div class="card bg-light mb-4">
-                    <div class="card-body py-3">
-                        <div class="row g-2">
-                            <div class="col-md-4"><strong>Tovarlar jami:</strong> <span id="purchaseProductsTotal">0</span> so'm</div>
-                            <div class="col-md-4"><strong>Xarajatlar jami:</strong> <span id="purchaseExpensesTotal">0</span> so'm</div>
-                            <div class="col-md-4"><strong>Jami (tovarlar + xarajatlar):</strong> <span id="purchaseGrandTotal">0</span> so'm</div>
+                <div class="filter-card mb-4">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Tovarlar jami</div>
+                            <div class="sum-cell" style="font-size:16px;"><span id="purchaseProductsTotal">0</span> so'm</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Xarajatlar jami</div>
+                            <div style="font-size:16px;font-weight:600;color:#f57c00;"><span id="purchaseExpensesTotal">0</span> so'm</div>
+                        </div>
+                        <div class="col-md-4">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Jami (tovarlar + xarajatlar)</div>
+                            <div style="font-size:18px;font-weight:800;color:#017449;"><span id="purchaseGrandTotal">0</span> so'm</div>
                         </div>
                     </div>
                 </div>
 
-                <div class="d-flex gap-2">
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-check-circle"></i> Saqlash
-                    </button>
-                </div>
+                <button type="submit" class="top-btn btn btn-success">
+                    <i class="bi bi-check-circle"></i> Saqlash
+                </button>
             </form>
         </div>
     </div>
@@ -222,10 +201,10 @@
 <!-- Kontragent qo'shish modal -->
 <div class="modal fade" id="addPartnerModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
+        <div class="modal-content" style="border-radius:16px;">
             <form id="addPartnerForm">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Yangi kontragent</h5>
+                <div class="modal-header" style="border-radius:16px 16px 0 0;">
+                    <h5 class="modal-title"><i class="bi bi-plus-circle text-primary"></i> Yangi kontragent</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
@@ -253,8 +232,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-success">Saqlash</button>
+                    <button type="button" class="top-btn btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="submit" class="top-btn btn btn-success">Saqlash</button>
                 </div>
             </form>
         </div>
@@ -314,33 +293,33 @@
     function getWarehouseIdEl() {
         return document.querySelector('select[name="warehouse_id"]') || document.getElementById('purchase_warehouse_id');
     }
-    
+
     function initProductSearch(row) {
         const searchInput = row.querySelector('.product-search-input');
         const hiddenInput = row.querySelector('.product-id-hidden');
         const resultsDiv = row.querySelector('.product_search_results');
-        
+
         if (!searchInput || !hiddenInput || !resultsDiv) {
             console.error('Product search elements not found in row:', row);
             return;
         }
-        
+
         if (!productSelect) {
             console.error('product_select element not found');
             return;
         }
-        
+
         function showProductResults(term) {
             term = (term || '').trim().toLowerCase();
             resultsDiv.innerHTML = '';
             resultsDiv.classList.remove('show');
             resultsDiv.style.setProperty('display', 'none', 'important');
-            
+
             if (!term) {
                 hiddenInput.value = '';
                 return;
             }
-            
+
             const options = Array.from(productSelect.options).slice(1);
             const matches = options.filter(function(opt) {
                 const name = (opt.dataset.name || opt.textContent || '').toLowerCase();
@@ -348,10 +327,8 @@
                 const id = (opt.value || '').toString();
                 return name.indexOf(term) !== -1 || code.indexOf(term) !== -1 || id === term;
             });
-            
+
             if (matches.length > 0) {
-                console.log('Found', matches.length, 'product matches');
-                // Dropdown pozitsiyasini hisoblash (fixed position uchun)
                 const inputRect = searchInput.getBoundingClientRect();
                 resultsDiv.style.position = 'fixed';
                 resultsDiv.style.left = inputRect.left + 'px';
@@ -362,14 +339,14 @@
                 resultsDiv.style.zIndex = '9999';
                 resultsDiv.classList.add('show');
                 resultsDiv.style.setProperty('display', 'block', 'important');
-                
+
                 matches.forEach(function(opt) {
                     const item = document.createElement('a');
-                    item.href = '#'; 
+                    item.href = '#';
                     item.className = 'list-group-item list-group-item-action';
                     const displayName = opt.dataset.name || opt.textContent || '';
                     const displayCode = opt.dataset.code || '';
-                    item.innerHTML = '<strong>' + displayName + '</strong>' + 
+                    item.innerHTML = '<strong>' + displayName + '</strong>' +
                         (displayCode ? ' <span class="badge bg-secondary">' + displayCode + '</span>' : '');
                     item.addEventListener('click', function(e) {
                         e.preventDefault();
@@ -378,14 +355,13 @@
                         hiddenInput.value = opt.value;
                         resultsDiv.classList.remove('show');
                         resultsDiv.style.setProperty('display', 'none', 'important');
-                        
+
                         // Mahsulot tanlanganda avtomatik narxni ko'rsatish
                         updateProductPrice(row);
                     });
                     resultsDiv.appendChild(item);
                 });
             } else {
-                // Topilmadi xabari
                 const inputRect = searchInput.getBoundingClientRect();
                 resultsDiv.style.position = 'fixed';
                 resultsDiv.style.left = inputRect.left + 'px';
@@ -397,44 +373,36 @@
                 resultsDiv.innerHTML = '<div class="list-group-item text-muted">Topilmadi.</div>';
             }
         }
-        
+
         // Mahsulot narxini yangilash funksiyasi
         function updateProductPrice(row) {
             const hiddenInput = row.querySelector('.product-id-hidden');
             const priceInput = row.querySelector('input[name="price"]');
             const warehouseIdEl = getWarehouseIdEl();
-            
+
             if (!hiddenInput || !priceInput || !warehouseIdEl) return;
-            
+
             const productId = hiddenInput.value;
             const warehouseId = warehouseIdEl.value;
-            
+
             if (!productId || !warehouseId) {
                 priceInput.value = '';
                 return;
             }
-            
-            // API dan narxni olish
+
             fetch(`/purchases/api/product-price?product_id=${productId}&warehouse_id=${warehouseId}`)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data && data.price && data.price > 0) {
                         priceInput.value = parseFloat(data.price).toFixed(2);
-                        // Narx o'zgarganda totalni yangilash
-                        const qtyInput = row.querySelector('input[name="quantity"]');
-                        if (qtyInput) {
-                            const qty = parseFloat(qtyInput.value) || 0;
-                            const price = parseFloat(priceInput.value) || 0;
-                            // Total avtomatik hisoblanadi form submit qilganda
-                        }
                     }
                 })
                 .catch(function(e) {
                     console.error('Narx olishda xatolik:', e);
                 });
         }
-        
-        // Ombor o'zgarganda (faqat select mavjud bo'lsa) barcha qatorlardagi narxlarni yangilash
+
+        // Ombor o'zgarganda barcha qatorlardagi narxlarni yangilash
         const purchaseWarehouseSelect = document.querySelector('select[name="warehouse_id"]');
         if (purchaseWarehouseSelect) {
             purchaseWarehouseSelect.addEventListener('change', function() {
@@ -446,28 +414,25 @@
                 });
             });
         }
-        
+
         searchInput.addEventListener('focus', function() {
             const currentValue = this.value.trim();
             if (currentValue) {
                 showProductResults(currentValue);
             }
         });
-        
+
         searchInput.addEventListener('input', function() {
-            const value = this.value.trim();
-            console.log('Product search input:', value);
-            showProductResults(value);
+            showProductResults(this.value.trim());
         });
-        
+
         searchInput.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 resultsDiv.classList.remove('show');
                 resultsDiv.style.setProperty('display', 'none', 'important');
             }
         });
-        
-        // Tashqariga bosilganda yopish
+
         document.addEventListener('click', function(e) {
             if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
                 resultsDiv.classList.remove('show');
@@ -475,15 +440,12 @@
             }
         });
     }
-    
+
     // Mavjud qatorlar uchun qidirishni ishga tushirish
     if (productSelect) {
-        console.log('Product select found, initializing search for', document.querySelectorAll('#productsTableBody .product-row').length, 'rows');
         document.querySelectorAll('#productsTableBody .product-row').forEach(function(row) {
             initProductSearch(row);
         });
-    } else {
-        console.error('product_select element not found - product search will not work');
     }
 
     // Umumiy summani hisoblash va ko'rsatish
@@ -509,7 +471,6 @@
         if (elExpenses) elExpenses.textContent = formatSum(expensesTotal);
         if (elGrand) elGrand.textContent = formatSum(grand);
     }
-    // Input o'zgarganda umumiy summani yangilash
     document.getElementById('purchaseCreateForm').addEventListener('input', updatePurchaseTotal);
     document.getElementById('purchaseCreateForm').addEventListener('change', updatePurchaseTotal);
     updatePurchaseTotal();
@@ -556,25 +517,18 @@
         newRow.querySelector('.remove-product-row').addEventListener('click', function() {
             if (tbody.querySelectorAll('.product-row').length > 1) { newRow.remove(); updatePurchaseTotal(); }
         });
-        // Yangi qator uchun qidirishni ishga tushirish
         initProductSearch(newRow);
         updatePurchaseTotal();
-        
-        // Yangi qator uchun narxni avtomatik to'ldirish funksiyasini qo'shish
+
         const newHiddenInput = newRow.querySelector('.product-id-hidden');
         const newPriceInput = newRow.querySelector('input[name="price"]');
         const warehouseIdElNew = getWarehouseIdEl();
-        
+
         if (newHiddenInput && newPriceInput && warehouseIdElNew) {
             function updateNewRowPrice() {
                 const productId = newHiddenInput.value;
                 const warehouseId = warehouseIdElNew.value;
-                
-                if (!productId || !warehouseId) {
-                    newPriceInput.value = '';
-                    return;
-                }
-                
+                if (!productId || !warehouseId) { newPriceInput.value = ''; return; }
                 fetch(`/purchases/api/product-price?product_id=${productId}&warehouse_id=${warehouseId}`)
                     .then(function(r) { return r.json(); })
                     .then(function(data) {
@@ -582,11 +536,8 @@
                             newPriceInput.value = parseFloat(data.price).toFixed(2);
                         }
                     })
-                    .catch(function(e) {
-                        console.error('Narx olishda xatolik:', e);
-                    });
+                    .catch(function(e) { console.error('Narx olishda xatolik:', e); });
             }
-            
             newHiddenInput.addEventListener('change', updateNewRowPrice);
         }
     });

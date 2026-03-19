@@ -2,14 +2,15 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+    <div class="page-header mb-3">
         <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Xodimni tahrirlash</h5>
-        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+        <a href="/employees" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
     </div>
     {% if request.query_params.get('error') %}
     <div class="alert alert-danger py-2 small">{{ request.query_params.get('error') }}</div>
     {% endif %}
     <div class="card">
+        <div class="card-header"><span class="fw-bold"><i class="bi bi-pencil-square text-primary"></i> Xodimni tahrirlash</span></div>
         <div class="card-body">
             <form method="POST" action="/employees/update/{{ emp.id }}">
                 <div class="row g-3">
@@ -63,8 +64,8 @@
                         <input type="text" class="form-control" name="phone" value="{{ emp.phone or '' }}" placeholder="+998 XX XXX XX XX">
                     </div>
                     <div class="col-12">
-                        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Saqlash</button>
-                        <a href="/employees" class="btn btn-secondary">Bekor</a>
+                        <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-lg"></i> Saqlash</button>
+                        <a href="/employees" class="top-btn btn btn-outline-secondary">Bekor</a>
                     </div>
                 </div>
             </form>

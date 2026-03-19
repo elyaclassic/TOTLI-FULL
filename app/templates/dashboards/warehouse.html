@@ -2,131 +2,161 @@
 
 {% block title %}Ombor Dashboard - TOTLI HOLVA{% endblock %}
 
-{% block extra_css %}
-<style>
-    .warehouse-card {
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    .stock-item {
-        padding: 12px;
-        border-bottom: 1px solid #dee2e6;
-    }
-
-    .stock-item:last-child {
-        border-bottom: none;
-    }
-
-    .stock-low {
-        background: #fff3cd;
-    }
-
-    .stock-critical {
-        background: #f8d7da;
-    }
-
-    .stock-ok {
-        background: #d4edda;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="container-fluid py-4">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2><i class="bi bi-box-seam"></i> Ombor Dashboard</h2>
-            <p class="text-muted">Qoldiqlar va harakatlar</p>
+<div class="container-fluid">
+
+    <!-- Page Header -->
+    <div class="page-header mb-3">
+        <h5><i class="bi bi-box-seam"></i> Ombor Dashboard</h5>
+    </div>
+
+    <!-- Mini-stat cards -->
+    <div class="row g-3 mb-3">
+        <!-- Umumiy Qiymat -->
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #2e7d32;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-success">{{ "{:,.0f}".format(metrics.total_value) }}</div>
+                        <div class="lbl">Umumiy Qiymat (so'm)</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e8f5e9;color:#2e7d32;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-currency-dollar"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mahsulotlar -->
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #1a73e8;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-primary">{{ metrics.total_products }}</div>
+                        <div class="lbl">Mahsulotlar</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">{{ metrics.categories }} kategoriya</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e3f2fd;color:#1a73e8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-boxes"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bugungi Kirim -->
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #0dcaf0;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#0dcaf0;">{{ metrics.today_in }}</div>
+                        <div class="lbl">Bugungi Kirim (dona)</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e0f7fa;color:#0dcaf0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-arrow-down-circle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bugungi Chiqim -->
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #dc3545;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-danger">{{ metrics.today_out }}</div>
+                        <div class="lbl">Bugungi Chiqim (dona)</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#ffebee;color:#dc3545;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-arrow-up-circle"></i>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="row mb-4">
-        <div class="col-md-3 mb-3">
-            <div
-                style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; padding: 25px; text-align: center;">
-                <div style="font-size: 0.9rem; opacity: 0.9;">Umumiy Qiymat</div>
-                <div style="font-size: 2.5rem; font-weight: bold;">{{ "{:,.0f}".format(metrics.total_value) }}</div>
-                <small>so'm</small>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div
-                style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; border-radius: 10px; padding: 25px; text-align: center;">
-                <div style="font-size: 0.9rem; opacity: 0.9;">Mahsulotlar</div>
-                <div style="font-size: 2.5rem; font-weight: bold;">{{ metrics.total_products }}</div>
-                <small>{{ metrics.categories }} kategoriya</small>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div
-                style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white; border-radius: 10px; padding: 25px; text-align: center;">
-                <div style="font-size: 0.9rem; opacity: 0.9;">Bugungi Kirim</div>
-                <div style="font-size: 2.5rem; font-weight: bold;">{{ metrics.today_in }}</div>
-                <small>dona</small>
-            </div>
-        </div>
-        <div class="col-md-3 mb-3">
-            <div
-                style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); color: white; border-radius: 10px; padding: 25px; text-align: center;">
-                <div style="font-size: 0.9rem; opacity: 0.9;">Bugungi Chiqim</div>
-                <div style="font-size: 2.5rem; font-weight: bold;">{{ metrics.today_out }}</div>
-                <small>dona</small>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mb-4">
-        <div class="col-md-6 mb-3">
-            <div class="card warehouse-card">
-                <div class="card-header bg-white">
+    <!-- Stock & Moves Row -->
+    <div class="row g-3 mb-3">
+        <!-- Past Qoldiq -->
+        <div class="col-md-6">
+            <div class="card data-table">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-exclamation-triangle"></i> Past Qoldiq</h5>
                 </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    {% for item in low_stock %}
-                    <div class="stock-item stock-{{ item.level }}">
-                        <strong>{{ item.name }}</strong>
-                        <span class="float-end badge bg-{{ item.badge }}">{{ item.quantity }} dona</span>
-                        <br><small class="text-muted">Min: {{ item.min_quantity }} dona</small>
-                    </div>
-                    {% endfor %}
+                <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mahsulot</th>
+                                <th class="text-end">Qoldiq</th>
+                                <th class="text-end">Min</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in low_stock %}
+                            <tr style="{% if item.level == 'critical' %}background:#fff5f5;{% elif item.level == 'low' %}background:#fffbf0;{% else %}background:#f6fff6;{% endif %}">
+                                <td><strong>{{ item.name }}</strong></td>
+                                <td class="text-end">
+                                    <span class="badge bg-{{ item.badge }}">{{ item.quantity }} dona</span>
+                                </td>
+                                <td class="text-end muted-cell">{{ item.min_quantity }} dona</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
-        <div class="col-md-6 mb-3">
-            <div class="card warehouse-card">
-                <div class="card-header bg-white">
+
+        <!-- So'nggi Harakatlar -->
+        <div class="col-md-6">
+            <div class="card data-table">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-arrow-left-right"></i> So'nggi Harakatlar</h5>
                 </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    {% for move in recent_moves %}
-                    <div class="stock-item">
-                        <strong>{{ move.product }}</strong>
-                        <span class="float-end badge bg-{{ move.type_color }}">{{ move.type_text }}</span>
-                        <br><small class="text-muted">{{ move.quantity }} dona - {{ move.time }}</small>
-                    </div>
-                    {% endfor %}
+                <div class="card-body p-0" style="max-height:400px;overflow-y:auto;">
+                    <table class="table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Mahsulot</th>
+                                <th class="text-center">Tur</th>
+                                <th class="text-end">Miqdor</th>
+                                <th class="muted-cell">Vaqt</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for move in recent_moves %}
+                            <tr>
+                                <td><strong>{{ move.product }}</strong></td>
+                                <td class="text-center">
+                                    <span class="badge bg-{{ move.type_color }}">{{ move.type_text }}</span>
+                                </td>
+                                <td class="text-end num-cell">{{ move.quantity }} dona</td>
+                                <td class="muted-cell">{{ move.time }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- Chart Row -->
     <div class="row">
         <div class="col-12">
-            <div class="card warehouse-card">
-                <div class="card-header bg-white">
+            <div class="card">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-graph-up"></i> Haftalik Harakat</h5>
                 </div>
                 <div class="card-body">
-                    <div style="height: 300px; position: relative;">
+                    <div style="height:300px;position:relative;">
                         <canvas id="movementChart"></canvas>
                     </div>
                 </div>
             </div>
         </div>
     </div>
+
 </div>
 {% endblock %}
 

@@ -7,11 +7,13 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core import templates
+from sqlalchemy.orm import joinedload
 from app.models.database import (
     get_db, User, Product, Partner, Order, Stock,
-    CashRegister, Employee, Production,
+    CashRegister, Employee, Production, Recipe, Warehouse,
 )
 from app.deps import get_current_user, require_auth
+from app.utils.production_order import recipe_kg_per_unit
 
 router = APIRouter(tags=["home"])
 
@@ -58,12 +60,38 @@ async def home(
         today_sales = db.query(Order).filter(Order.type == "sale", Order.date >= today_start).all()
         stats["today_sales"] = sum(s.total for s in today_sales)
         stats["today_orders"] = len(today_sales)
-        today_productions = db.query(Production).filter(
+        today_productions = db.query(Production).options(
+            joinedload(Production.recipe).joinedload(Recipe.product),
+            joinedload(Production.output_warehouse),
+            joinedload(Production.production_items),
+        ).filter(
             Production.date >= today_start,
             Production.status == "completed",
         ).all()
-        stats["today_production"] = sum(p.quantity for p in today_productions if p.quantity)
-        debtors = db.query(Partner).filter(Partner.balance > 0).all()
+        tayyor_kg = 0.0
+        yarim_tayyor_kg = 0.0
+        for p in today_productions:
+            out_wh_name = (getattr(p.output_warehouse, "name", None) or "").lower()
+            is_yarim = "yarim" in out_wh_name
+            is_qiyom = p.recipe and "qiyom" in (getattr(p.recipe, "name", None) or "").lower()
+            if is_yarim:
+                if not is_qiyom:
+                    yarim_tayyor_kg += sum(float(pi.quantity or 0) for pi in (p.production_items or []))
+            else:
+                tayyor_kg += recipe_kg_per_unit(p.recipe) * float(p.quantity or 0)
+        stats["today_production"] = tayyor_kg + yarim_tayyor_kg
+        stats["today_tayyor_kg"] = tayyor_kg
+        stats["today_yarim_tayyor_kg"] = yarim_tayyor_kg
+        # Faqat savdodan haqiqiy qarzi bor mijozlar
+        sale_debtor_ids = [
+            r[0] for r in db.query(Order.partner_id).filter(
+                Order.type == "sale", Order.debt > 0, Order.partner_id.isnot(None),
+            ).distinct().all() if r and r[0]
+        ]
+        if sale_debtor_ids:
+            debtors = db.query(Partner).filter(Partner.id.in_(sale_debtor_ids), Partner.balance > 0).all()
+        else:
+            debtors = []
         stats["total_debt"] = sum(p.balance for p in debtors)
         recent_sales = (
             db.query(Order)
@@ -72,7 +100,18 @@ async def home(
             .limit(10)
             .all()
         )
-        low_stock_count = db.query(Stock).join(Product).filter(Stock.quantity < Product.min_stock).count()
+        # 1) min_stock o'rnatilgan va qoldiq kamaygan tovarlar
+        low_by_min = db.query(Stock).join(Product).filter(
+            Product.min_stock > 0,
+            Stock.quantity < Product.min_stock,
+        ).count()
+        # 2) min_stock o'rnatilmagan, lekin qoldig'i 10 kg dan kam (0 dan katta)
+        low_by_threshold = db.query(Stock).join(Product).filter(
+            (Product.min_stock == None) | (Product.min_stock <= 0),
+            Stock.quantity > 0,
+            Stock.quantity < 10,
+        ).count()
+        low_stock_count = low_by_min + low_by_threshold
         birthday_today_count = 0
         try:
             md = today.strftime("%m-%d")
@@ -96,6 +135,7 @@ async def home(
             "tayyor_count": 0, "yarim_tayyor_count": 0, "hom_ashyo_count": 0,
             "partners_count": 0, "employees_count": 0, "products_count": 0, "materials_count": 0,
             "today_sales": 0, "today_orders": 0, "total_debt": 0, "today_production": 0,
+            "today_tayyor_kg": 0, "today_yarim_tayyor_kg": 0,
         }
         recent_sales = []
         low_stock_count = 0

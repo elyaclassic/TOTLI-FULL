@@ -44,7 +44,7 @@ async def global_safe_middleware_impl(request: Request, call_next):
         raise
     except BaseException as e:
         tb = traceback.format_exc()
-        pass  # logged above
+        print("[GLOBAL_SAFE_ERROR]", tb, flush=True)
         _write_error_log(tb, "global_safe")
         path = _get_path(request)
         if path == "/login" or path == "/favicon.ico":
@@ -90,6 +90,13 @@ async def csrf_middleware_impl(request: Request, call_next):
 
     # Himoyalanmaydigan yo'llar (API login, Android/PWA)
     if path in ("/login", "/api/login", "/api/agent/login", "/api/driver/login") or path.startswith("/static"):
+        try:
+            setattr(request.state, "csrf_token", request.cookies.get("csrf_token") or generate_csrf_token())
+        except Exception:
+            pass
+        return await call_next(request)
+    # Agent mobil ilova API — Bearer token ishlatadi, CSRF shart emas
+    if path.startswith("/api/agent/my-") or path.startswith("/api/agent/partner") or path.startswith("/api/agent/product") or path == "/api/agent/order/create" or path == "/api/agent/stats":
         try:
             setattr(request.state, "csrf_token", request.cookies.get("csrf_token") or generate_csrf_token())
         except Exception:
@@ -159,6 +166,9 @@ async def auth_middleware_impl(request: Request, call_next):
         return await call_next(request)
     if path in ("/api/agent/orders", "/api/agent/partners"):
         return await call_next(request)
+    # Agent mobil ilova — Bearer token orqali o'z autentifikatsiyasini qiladi
+    if path == "/agent" or path.startswith("/api/agent/my-") or path.startswith("/api/agent/partner") or path.startswith("/api/agent/product") or path == "/api/agent/order/create" or path == "/api/agent/stats":
+        return await call_next(request)
 
     token = request.cookies.get("session_token")
     if not token:
@@ -172,9 +182,17 @@ async def auth_middleware_impl(request: Request, call_next):
         resp = RedirectResponse(url="/login", status_code=303)
         resp.delete_cookie("session_token")
         return resp
+    # Eski format token: user_id int bo'lishi shart, aks holda qayta login
+    raw_uid = user_data.get("user_id")
+    if not isinstance(raw_uid, int):
+        if path.startswith("/api/"):
+            return JSONResponse(status_code=401, content={"detail": "Session muddati tugadi"})
+        resp = RedirectResponse(url="/login", status_code=303)
+        resp.delete_cookie("session_token")
+        return resp
     db = SessionLocal()
     try:
-        user = db.query(User).filter(User.id == user_data["user_id"]).first()
+        user = db.query(User).filter(User.id == raw_uid).first()
         if not user or not user.is_active:
             if path.startswith("/api/"):
                 return JSONResponse(status_code=401, content={"detail": "Foydalanuvchi faol emas"})

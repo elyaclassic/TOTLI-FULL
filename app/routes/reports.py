@@ -210,7 +210,9 @@ async def report_stock(
                 qty = float(v.get("quantity") or 0)
                 p = v.get("product")
                 min_s = float(getattr(p, "min_stock", 0) or 0) if p else 0
-                if qty <= min_s:
+                if min_s > 0 and qty < min_s:
+                    filtered.append(v)
+                elif min_s <= 0 and 0 < qty < 10:
                     filtered.append(v)
             except Exception:
                 continue
@@ -910,7 +912,7 @@ def _stock_report_as_of_date(db: Session, report_date, wh_id: int = None):
 
 
 def _stock_report_filtered(db: Session, wh_id: int = None):
-    """Stock jadvalidan faqat tasdiqlangan manba va qoldiq > 0 bo'lgan qatorlarni qaytaradi (hisobot va eksport uchun)."""
+    """Stock jadvalidan qoldiq > 0 bo'lgan barcha qatorlarni qaytaradi."""
     q = (
         db.query(Stock)
         .join(Product, Stock.product_id == Product.id)
@@ -926,34 +928,6 @@ def _stock_report_filtered(db: Session, wh_id: int = None):
         if key not in aggregated:
             aggregated[key] = {"warehouse": s.warehouse, "product": s.product, "quantity": 0}
         aggregated[key]["quantity"] += float(s.quantity or 0)
-    keys = list(aggregated.keys())
-    allowed_keys = set()
-    if keys:
-        mov_q = db.query(StockMovement).filter(
-            or_(*[and_(StockMovement.warehouse_id == k[0], StockMovement.product_id == k[1]) for k in keys])
-        ).all()
-        adj_doc_ids = {m.document_id for m in mov_q if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id}
-        confirmed_adj_ids = set()
-        if adj_doc_ids:
-            confirmed_adj_ids = {
-                d.id for d in db.query(StockAdjustmentDoc.id).filter(
-                    StockAdjustmentDoc.id.in_(adj_doc_ids),
-                    StockAdjustmentDoc.status == "confirmed",
-                ).all()
-            }
-        for m in mov_q:
-            key = (m.warehouse_id, m.product_id)
-            if key not in aggregated:
-                continue
-            if (m.document_type or "") == "StockAdjustmentDoc":
-                if m.document_id in confirmed_adj_ids:
-                    allowed_keys.add(key)
-            else:
-                allowed_keys.add(key)
-    if allowed_keys:
-        aggregated = {k: v for k, v in aggregated.items() if k in allowed_keys}
-    else:
-        aggregated = {}
     aggregated = {k: v for k, v in aggregated.items() if float(v.get("quantity") or 0) > 0}
     return sorted(aggregated.values(), key=lambda x: ((x["warehouse"].name or "").lower(), (x["product"].name or "").lower()))
 
@@ -1213,7 +1187,23 @@ async def report_debts(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    q = db.query(Partner).filter(Partner.balance != 0)
+    # Faqat savdodan qarzi bor mijozlar (balance > 0) va ta'minotchilarga qarzimiz (balance < 0) alohida
+    # Savdodan haqiqiy qarzdor partner ID lari
+    sale_debtor_ids = [
+        r[0] for r in db.query(Order.partner_id).filter(
+            Order.type == "sale",
+            Order.debt > 0,
+            Order.partner_id.isnot(None),
+        ).distinct().all() if r and r[0]
+    ]
+    # Ta'minotchilarga qarzimiz (balance < 0) — kirimdan qarz
+    supplier_debt_ids = [
+        p.id for p in db.query(Partner).filter(Partner.balance < 0).all()
+    ]
+    all_ids = list(set(sale_debtor_ids + supplier_debt_ids))
+    if not all_ids:
+        all_ids = [-1]
+    q = db.query(Partner).filter(Partner.id.in_(all_ids), Partner.balance != 0)
     if overdue_days and int(overdue_days) > 0:
         cutoff = datetime.now() - timedelta(days=int(overdue_days))
         overdue_partner_ids = (
@@ -1233,7 +1223,9 @@ async def report_debts(
         else:
             q = q.filter(Partner.id == -1)
     debtors = q.all()
-    total_debt = sum(p.balance for p in debtors if p.balance > 0)
+    # Mijozlar qarzi (balance > 0 va savdosi bor)
+    total_debt = sum(p.balance for p in debtors if p.balance > 0 and p.id in sale_debtor_ids)
+    # Ta'minotchilarga qarzimiz (balance < 0)
     total_credit = sum(abs(p.balance) for p in debtors if p.balance < 0)
     return templates.TemplateResponse("reports/debts.html", {
         "request": request,

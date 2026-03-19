@@ -24,7 +24,7 @@ def _redirect_after_login(user: User) -> str:
     if role == "manager":
         return "/sales"  # Buyurtmalar / Sotuvlar
     role_home = {
-        "agent": "/dashboard/agent",
+        "agent": "/agent",
         "driver": "/dashboard/agent",
         "production": "/production",
         "qadoqlash": "/production",
@@ -87,9 +87,29 @@ async def login(
             user.password_hash = hash_password(password)
             db.commit()
         record_success(request)
-        token = create_session_token(user.id, user.role or "user")
+        role = (user.role or "user").strip().lower()
+        token = create_session_token(user.id, role)
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
         redirect_url = _redirect_after_login(user)
+        # Agent uchun: session cookie o'rniga Bearer token bilan /agent ga redirect
+        if role == "agent":
+            from app.models.database import Agent as AgentModel
+            from sqlalchemy import or_, text as _text
+            # user_id ustuni orqali agent topish (asosiy), phone yoki username bo'yicha zaxira
+            agent = db.query(AgentModel).filter(
+                AgentModel.is_active == True,
+                AgentModel.user_id == user.id
+            ).first()
+            if not agent:
+                agent = db.query(AgentModel).filter(
+                    AgentModel.is_active == True,
+                    or_(AgentModel.phone == user.username, AgentModel.phone == user.phone)
+                ).first()
+            agent_token = create_session_token(agent.id if agent else user.id, "agent")
+            resp = RedirectResponse(url=f"/agent?token={agent_token}", status_code=303)
+            resp.set_cookie("session_token", token, path="/", httponly=True, max_age=86400,
+                            samesite="lax", secure=use_https)
+            return resp
         resp = RedirectResponse(url=redirect_url, status_code=303)
         resp.set_cookie(
             key="session_token",

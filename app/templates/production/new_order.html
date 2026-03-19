@@ -1,7 +1,4 @@
 {% extends "base.html" %}
-{% block extra_css %}
-<link href="/static/css/production.css" rel="stylesheet">
-{% endblock %}
 {% block content %}
 <style>
     .recipe_search_results {
@@ -24,21 +21,22 @@
         cursor: pointer;
     }
 </style>
-<div class="container-fluid production-page">
-<div class="page-header">
-    <div>
-        <a href="/production" class="btn btn-outline-secondary btn-sm mb-2">
-            <i class="bi bi-arrow-left"></i> Orqaga
-        </a>
-        <h4><i class="bi bi-plus-circle"></i> Yangi ishlab chiqarish</h4>
-    </div>
+
+<div class="container-fluid">
+
+<!-- Page header -->
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-plus-circle"></i> Yangi ishlab chiqarish</h5>
+    <a href="/production" class="top-btn btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Orqaga
+    </a>
 </div>
 
 <div class="row g-3">
     <div class="col-lg-8">
-        <div class="card">
+        <div class="card data-table">
             <div class="card-header">
-                <i class="bi bi-gear"></i> Ishlab chiqarish ma'lumotlari
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-gear"></i> Ishlab chiqarish ma'lumotlari</span>
             </div>
             <div class="card-body">
                 {% if error %}
@@ -52,7 +50,7 @@
                         <div class="col-md-6">
                             <label class="form-label">Retsept <span class="text-danger">*</span></label>
                             <div class="recipe-search-wrapper" style="position: relative;">
-                                <input type="text" class="form-control recipe-search-input" id="recipeSearch" 
+                                <input type="text" class="form-control recipe-search-input" id="recipeSearch"
                                     placeholder="Retsept nomini yozib qidiring..." autocomplete="off">
                                 <input type="hidden" name="recipe_id" id="recipeSelect" required>
                                 <div class="recipe_search_results list-group" id="recipeSearchResults" style="display: none;"></div>
@@ -62,7 +60,7 @@
                                 {% for recipe in recipes %}
                                 {% set _rname = (recipe.name or '')|lower %}
                                 {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (recipe.output_quantity or 1))))))) %}
-                                <option value="{{ recipe.id }}" 
+                                <option value="{{ recipe.id }}"
                                         data-name="{{ recipe.name|e }}"
                                         data-items="{{ recipe.items|length }}"
                                         data-output="{{ _kg_per_unit }}"
@@ -101,7 +99,7 @@
                         </div>
                         <div class="col-md-6"></div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Uskuna</label>
@@ -125,8 +123,8 @@
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label class="form-label">Ishlab chiqarish miqdori (kg) <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control form-control-lg" name="quantity" 
-                                   id="quantityInput" value="10" step="0.01" min="0.01" required 
+                            <input type="number" class="form-control form-control-lg" name="quantity"
+                                   id="quantityInput" value="10" step="0.01" min="0.01" required
                                    onchange="calculateMaterials()" title="Miqdorni o'zgartirish: F4 — kalkulyator">
                         </div>
                         <div class="col-md-6">
@@ -136,12 +134,12 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label class="form-label">Izoh</label>
                         <textarea class="form-control" name="note" rows="2" placeholder="Qo'shimcha ma'lumotlar..."></textarea>
                     </div>
-                    
+
                     <div class="d-flex gap-2">
                         <button type="submit" class="btn btn-success btn-lg">
                             <i class="bi bi-play-fill"></i> Ishlab chiqarishni boshlash
@@ -152,12 +150,12 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-4">
         <!-- Retsept ma'lumoti -->
-        <div class="card" id="recipeInfoCard" style="display: none;">
+        <div class="card data-table" id="recipeInfoCard" style="display: none;">
             <div class="card-header">
-                <i class="bi bi-journal-text"></i> Retsept ma'lumoti
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-journal-text"></i> Retsept ma'lumoti</span>
             </div>
             <div class="card-body">
                 <div id="recipeInfo">
@@ -165,22 +163,24 @@
                 </div>
             </div>
         </div>
-        
+
         <!-- Kerakli xom ashyolar -->
-        <div class="card mt-3" id="materialsCard" style="display: none;">
+        <div class="card data-table mt-3" id="materialsCard" style="display: none;">
             <div class="card-header">
-                <i class="bi bi-list-check"></i> Kerakli xom ashyolar
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-list-check"></i> Kerakli xom ashyolar</span>
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush" id="materialsList">
                 </ul>
             </div>
         </div>
-        
-        <!-- Qisqa yo'riqnoma -->
-        <div class="card mt-3 border-info">
+
+        <!-- Yo'riqnoma -->
+        <div class="card data-table mt-3">
+            <div class="card-header">
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-info-circle text-info"></i> Yo'riqnoma</span>
+            </div>
             <div class="card-body">
-                <h6><i class="bi bi-info-circle text-info"></i> Yo'riqnoma</h6>
                 <ol class="small mb-0">
                     <li>Retseptni tanlang</li>
                     <li>Miqdorni kiriting (kg)</li>
@@ -234,7 +234,7 @@
                     <div class="col-3"><button type="button" class="btn btn-outline-primary w-100 btn-sm" id="calcBtnEq">=</button></div>
                 </div>
                 <div class="row g-1">
-                    <div class="col-12"><button type="button" class="btn btn-success w-100" id="calcOK">OK — qiymatni qo‘yish</button></div>
+                    <div class="col-12"><button type="button" class="btn btn-success w-100" id="calcOK">OK — qiymatni qo'yish</button></div>
                 </div>
             </div>
         </div>
@@ -442,27 +442,27 @@ var recipes = {
     var recipeSelect = document.getElementById('recipeSelect');
     var recipeSelectHidden = document.getElementById('recipeSelectHidden');
     var recipeSearchResults = document.getElementById('recipeSearchResults');
-    
+
     if (!recipeSearch || !recipeSelect || !recipeSelectHidden || !recipeSearchResults) return;
-    
+
     function showRecipeResults(term) {
         term = (term || '').trim().toLowerCase();
         recipeSearchResults.innerHTML = '';
         recipeSearchResults.classList.remove('show');
         recipeSearchResults.style.setProperty('display', 'none', 'important');
-        
+
         if (!term) {
             recipeSelect.value = '';
             updateRecipeInfo();
             return;
         }
-        
+
         const options = Array.from(recipeSelectHidden.options).slice(1);
         const matches = options.filter(function(opt) {
             const name = (opt.dataset.name || opt.textContent || '').toLowerCase();
             return name.indexOf(term) !== -1;
         });
-        
+
         if (matches.length > 0) {
             const inputRect = recipeSearch.getBoundingClientRect();
             recipeSearchResults.style.position = 'fixed';
@@ -474,7 +474,7 @@ var recipes = {
             recipeSearchResults.style.zIndex = '9999';
             recipeSearchResults.classList.add('show');
             recipeSearchResults.style.setProperty('display', 'block', 'important');
-            
+
             matches.forEach(function(opt) {
                 const item = document.createElement('a');
                 item.href = '#';
@@ -514,32 +514,32 @@ var recipes = {
             recipeSearchResults.innerHTML = '<div class="list-group-item text-muted">Topilmadi.</div>';
         }
     }
-    
+
     recipeSearch.addEventListener('focus', function() {
         const currentValue = this.value.trim();
         if (currentValue) {
             showRecipeResults(currentValue);
         }
     });
-    
+
     recipeSearch.addEventListener('input', function() {
         showRecipeResults(this.value);
     });
-    
+
     recipeSearch.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
             recipeSearchResults.classList.remove('show');
             recipeSearchResults.style.setProperty('display', 'none', 'important');
         }
     });
-    
+
     document.addEventListener('click', function(e) {
         if (!recipeSearch.contains(e.target) && !recipeSearchResults.contains(e.target)) {
             recipeSearchResults.classList.remove('show');
             recipeSearchResults.style.setProperty('display', 'none', 'important');
         }
     });
-    
+
     // Retsept tanlanganda avtomatik yangilash
     recipeSelect.addEventListener('input', function() {
         updateRecipeInfo();
@@ -549,18 +549,18 @@ var recipes = {
 function updateRecipeInfo() {
     var select = document.getElementById('recipeSelect');
     var recipeId = select.value;
-    
+
     if (recipeId && recipes[recipeId]) {
         var recipe = recipes[recipeId];
-        
+
         document.getElementById('recipeInfoCard').style.display = 'block';
         document.getElementById('materialsCard').style.display = 'block';
-        
-        document.getElementById('recipeInfo').innerHTML = 
+
+        document.getElementById('recipeInfo').innerHTML =
             '<strong>' + recipe.name + '</strong><br>' +
             '<span class="text-muted">' + recipe.items.length + ' xom ashyo</span><br>' +
             '<span class="text-muted">Chiqish: ' + recipe.output + ' kg</span>';
-        
+
         calculateMaterials();
     } else {
         document.getElementById('recipeInfoCard').style.display = 'none';
@@ -571,15 +571,15 @@ function updateRecipeInfo() {
 function calculateMaterials() {
     var recipeId = document.getElementById('recipeSelect').value;
     var quantity = parseFloat(document.getElementById('quantityInput').value) || 0;
-    
+
     if (recipeId && recipes[recipeId]) {
         var recipe = recipes[recipeId];
-        
+
         // Chiqish miqdori — yaxlitlanmasin, kiritilgan miqdor bo'yicha (2 xona kasr)
         var outputVal = quantity * recipe.output;
-        document.getElementById('outputQuantity').textContent = 
+        document.getElementById('outputQuantity').textContent =
             (Math.round(outputVal * 100) / 100).toFixed(2) + ' kg';
-        
+
         // Xom ashyolar (editable)
         var html = '';
         recipe.items.forEach(function(item, idx) {
@@ -591,9 +591,11 @@ function calculateMaterials() {
                 <span class="ms-1">kg</span>
             </li>`;
         });
-        document.getElementById('materialsList').innerHTML = html || 
+        document.getElementById('materialsList').innerHTML = html ||
             '<li class="list-group-item text-muted">Tarkib bo\'sh</li>';
     }
 }
 </script>
+
+</div>
 {% endblock %}

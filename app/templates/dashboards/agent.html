@@ -2,159 +2,85 @@
 
 {% block title %}Agent Dashboard - TOTLI HOLVA{% endblock %}
 
-{% block extra_css %}
-<style>
-    .agent-card {
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s;
-        padding: 20px;
-    }
-
-    .agent-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-
-    .kpi-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-        text-align: center;
-    }
-
-    .kpi-value {
-        font-size: 2.5rem;
-        font-weight: bold;
-    }
-
-    .kpi-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-
-    .visit-item {
-        padding: 15px;
-        border-left: 4px solid #667eea;
-        margin-bottom: 10px;
-        background: #f8f9fa;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .visit-item:hover {
-        background: #e9ecef;
-        transform: translateX(5px);
-    }
-
-    .visit-completed {
-        border-left-color: #28a745;
-        opacity: 0.7;
-    }
-
-    .visit-pending {
-        border-left-color: #ffc107;
-    }
-
-    .customer-card {
-        padding: 15px;
-        border: 1px solid #dee2e6;
-        border-radius: 5px;
-        margin-bottom: 10px;
-        background: white;
-    }
-
-    .map-container {
-        height: 400px;
-        background: #e9ecef;
-        border-radius: 10px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-    }
-
-    .location-badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: white;
-        padding: 10px 15px;
-        border-radius: 20px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-
-    .progress-ring {
-        width: 120px;
-        height: 120px;
-        margin: 0 auto;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="container-fluid py-4">
-    <!-- Page Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2><i class="bi bi-person-badge"></i> Agent Dashboard</h2>
-            <p class="text-muted">{{ agent.name }} - Bugungi faoliyat</p>
+<div class="container-fluid">
+    <div class="page-header mb-3">
+        <div>
+            <h5 class="mb-0"><i class="bi bi-person-badge text-primary"></i> Agent Dashboard</h5>
+            <p class="text-muted mb-0 small">{{ agent.name }} - Bugungi faoliyat</p>
         </div>
     </div>
 
-    <!-- KPI Cards -->
-    <div class="row mb-4">
-        <!-- Bugungi Tashrif -->
-        <div class="col-md-3 mb-3">
-            <div class="kpi-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                <div class="kpi-label">Bugungi Tashrif</div>
-                <div class="kpi-value">{{ kpi.visits_completed }}/{{ kpi.visits_total }}</div>
-                <small>{{ kpi.visits_percent }}% bajarilgan</small>
+    <!-- KPI mini-stat cards -->
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #667eea;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#667eea;">{{ kpi.visits_completed }}/{{ kpi.visits_total }}</div>
+                        <div class="lbl">Bugungi Tashrif</div>
+                        <div style="font-size:11px;color:#888;margin-top:3px;">{{ kpi.visits_percent }}% bajarilgan</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#ede7ff;color:#667eea;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-calendar-check"></i>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Bugungi Savdo -->
-        <div class="col-md-3 mb-3">
-            <div class="kpi-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                <div class="kpi-label">Bugungi Savdo</div>
-                <div class="kpi-value">{{ "{:,.0f}".format(kpi.today_sales) }}</div>
-                <small>so'm</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #f5576c;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#f5576c;">{{ "{:,.0f}".format(kpi.today_sales) }}</div>
+                        <div class="lbl">Bugungi Savdo</div>
+                        <div style="font-size:11px;color:#888;margin-top:3px;">so'm</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#fde8ea;color:#f5576c;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-cash-stack"></i>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Buyurtmalar -->
-        <div class="col-md-3 mb-3">
-            <div class="kpi-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                <div class="kpi-label">Buyurtmalar</div>
-                <div class="kpi-value">{{ kpi.orders }}</div>
-                <small>{{ kpi.orders_completed }} bajarilgan</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #00b4d8;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#00b4d8;">{{ kpi.orders }}</div>
+                        <div class="lbl">Buyurtmalar</div>
+                        <div style="font-size:11px;color:#888;margin-top:3px;">{{ kpi.orders_completed }} bajarilgan</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e0f7fa;color:#00b4d8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-cart-check"></i>
+                    </div>
+                </div>
             </div>
         </div>
-
-        <!-- Maqsad -->
-        <div class="col-md-3 mb-3">
-            <div class="kpi-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                <div class="kpi-label">Oylik Maqsad</div>
-                <div class="kpi-value">{{ kpi.target_percent }}%</div>
-                <small>{{ "{:,.0f}".format(kpi.target_achieved) }}/{{ "{:,.0f}".format(kpi.target_total) }}</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #fa709a;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#fa709a;">{{ kpi.target_percent }}%</div>
+                        <div class="lbl">Oylik Maqsad</div>
+                        <div style="font-size:11px;color:#888;margin-top:3px;">{{ "{:,.0f}".format(kpi.target_achieved) }}/{{ "{:,.0f}".format(kpi.target_total) }}</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#fde8f0;color:#fa709a;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-trophy"></i>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Main Content Row -->
+    <!-- Map + Schedule -->
     <div class="row mb-4">
-        <!-- Map -->
         <div class="col-md-8 mb-3">
-            <div class="card agent-card">
+            <div class="card">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-geo-alt"></i> Joylashuv va Marshrut</h5>
+                    <h5 class="mb-0"><i class="bi bi-geo-alt text-primary"></i> Joylashuv va Marshrut</h5>
                 </div>
                 <div class="card-body">
-                    <div class="map-container">
-                        <div class="location-badge">
+                    <div style="height:400px;background:#e9ecef;border-radius:10px;display:flex;align-items:center;justify-content:center;position:relative;">
+                        <div style="position:absolute;top:10px;right:10px;background:white;padding:10px 15px;border-radius:20px;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
                             <i class="bi bi-geo-alt-fill text-primary"></i>
                             <strong>{{ agent.location }}</strong>
                         </div>
@@ -167,53 +93,46 @@
                 </div>
             </div>
         </div>
-
-        <!-- Today's Schedule -->
         <div class="col-md-4 mb-3">
-            <div class="card agent-card">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Bugungi Reja</h5>
+            <div class="card data-table">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-calendar-check text-primary"></i> Bugungi Reja</span>
                 </div>
-                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
-                    {% for visit in schedule %}
-                    <div class="visit-item {% if visit.completed %}visit-completed{% else %}visit-pending{% endif %}">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div>
-                                <strong>{{ visit.customer }}</strong>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="bi bi-clock"></i> {{ visit.time }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="bi bi-geo-alt"></i> {{ visit.address }}
-                                </small>
-                            </div>
-                            <div>
-                                {% if visit.completed %}
-                                <span class="badge bg-success">✓</span>
-                                {% else %}
-                                <span class="badge bg-warning">⏱</span>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
+                <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table mb-0">
+                        <tbody>
+                            {% for visit in schedule %}
+                            <tr>
+                                <td style="border-left: 4px solid {% if visit.completed %}#28a745{% else %}#ffc107{% endif %}; padding-left: 10px;">
+                                    <strong>{{ visit.customer }}</strong>
+                                    <br><small class="text-muted"><i class="bi bi-clock"></i> {{ visit.time }}</small>
+                                    <br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ visit.address }}</small>
+                                </td>
+                                <td class="text-end align-middle">
+                                    {% if visit.completed %}
+                                    <span class="badge-done">✓</span>
+                                    {% else %}
+                                    <span class="badge-waiting">⏱</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Bottom Row -->
+    <!-- Recent Orders + Customers -->
     <div class="row mb-4">
-        <!-- Recent Orders -->
         <div class="col-md-6 mb-3">
-            <div class="card agent-card">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-cart-check"></i> So'nggi Buyurtmalar</h5>
+            <div class="card data-table">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-cart-check text-primary"></i> So'nggi Buyurtmalar</span>
                 </div>
-                <div class="card-body">
-                    <table class="table table-hover">
+                <div class="card-body p-0">
+                    <table class="table mb-0">
                         <thead>
                             <tr>
                                 <th>№</th>
@@ -225,9 +144,9 @@
                         <tbody>
                             {% for order in recent_orders %}
                             <tr>
-                                <td>{{ order.number }}</td>
+                                <td class="muted-cell">{{ order.number }}</td>
                                 <td>{{ order.customer }}</td>
-                                <td>{{ "{:,.0f}".format(order.total) }} so'm</td>
+                                <td class="num-cell">{{ "{:,.0f}".format(order.total) }} so'm</td>
                                 <td>
                                     <span class="badge bg-{{ order.status_color }}">
                                         {{ order.status_text }}
@@ -240,36 +159,29 @@
                 </div>
             </div>
         </div>
-
-        <!-- My Customers -->
         <div class="col-md-6 mb-3">
-            <div class="card agent-card">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-people"></i> Mening Mijozlarim</h5>
+            <div class="card data-table">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-people text-primary"></i> Mening Mijozlarim</span>
                 </div>
-                <div class="card-body" style="max-height: 300px; overflow-y: auto;">
-                    {% for customer in customers %}
-                    <div class="customer-card">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <div>
-                                <strong>{{ customer.name }}</strong>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="bi bi-telephone"></i> {{ customer.phone }}
-                                </small>
-                                <br>
-                                <small class="text-muted">
-                                    <i class="bi bi-geo-alt"></i> {{ customer.address }}
-                                </small>
-                            </div>
-                            <div class="text-end">
-                                <small class="text-muted">So'nggi buyurtma:</small>
-                                <br>
-                                <strong>{{ "{:,.0f}".format(customer.last_order) }} so'm</strong>
-                            </div>
-                        </div>
-                    </div>
-                    {% endfor %}
+                <div class="card-body p-0" style="max-height: 300px; overflow-y: auto;">
+                    <table class="table mb-0">
+                        <tbody>
+                            {% for customer in customers %}
+                            <tr>
+                                <td>
+                                    <strong>{{ customer.name }}</strong>
+                                    <br><small class="text-muted"><i class="bi bi-telephone"></i> {{ customer.phone }}</small>
+                                    <br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ customer.address }}</small>
+                                </td>
+                                <td class="text-end align-middle">
+                                    <small class="text-muted">So'nggi buyurtma:</small>
+                                    <br><strong class="num-cell">{{ "{:,.0f}".format(customer.last_order) }} so'm</strong>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -278,9 +190,9 @@
     <!-- Performance Chart -->
     <div class="row mb-4">
         <div class="col-12">
-            <div class="card agent-card">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-graph-up"></i> Oylik Samaradorlik</h5>
+            <div class="card data-table">
+                <div class="card-header">
+                    <span class="fw-bold"><i class="bi bi-graph-up text-primary"></i> Oylik Samaradorlik</span>
                 </div>
                 <div class="card-body">
                     <div style="height: 300px; position: relative;">

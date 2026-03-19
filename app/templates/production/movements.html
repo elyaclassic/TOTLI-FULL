@@ -1,50 +1,88 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container-fluid">
-    <div class="mb-3">
-        <a href="/production/orders" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Buyurtmalar</a>
-        <a href="/production/{{ production.id }}/materials" class="btn btn-outline-primary btn-sm ms-2"><i class="bi bi-pencil-square"></i> Xom ashyo</a>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <h5><i class="bi bi-clock-history"></i> Ombor harakati tarixi</h5>
+        <div class="d-flex gap-2">
+            <a href="/production/orders" class="btn top-btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Buyurtmalar
+            </a>
+            <a href="/production/{{ production.id }}/materials" class="btn top-btn btn-outline-secondary">
+                <i class="bi bi-pencil-square"></i> Xom ashyo
+            </a>
+        </div>
     </div>
-    <div class="card">
-        <div class="card-header">
-            <i class="bi bi-clock-history"></i> Ishlab chiqarish harakati tarixi — {{ production.number }}
-        </div>
-        <div class="card-body">
-            <p class="text-muted small mb-2">
-                <strong>Buyurtma:</strong> {{ production.number }} &nbsp;|&nbsp;
-                {% if production.recipe %}<strong>Retsept:</strong> {{ production.recipe.name }}{% endif %}
-                &nbsp;|&nbsp; <strong>Sana:</strong> {{ production.date.strftime('%d.%m.%Y %H:%M') if production.date else '—' }}
-            </p>
-            <p class="text-muted small mb-3">Tasdiqlanganda: 1-ombordan xom ashyo chiqadi (−), 2-omborga tayyor mahsulot kiradi (+).</p>
-            {% if rows %}
-            <div class="table-responsive">
-                <table class="table table-sm table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Sana</th>
-                            <th>Ombor</th>
-                            <th>Mahsulot</th>
-                            <th class="text-end">O'zgarish (+/−)</th>
-                            <th class="text-end">Qoldiq (harakatdan keyin)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for r in rows %}
-                        <tr>
-                            <td>{{ r.created_at }}</td>
-                            <td>{{ r.warehouse_name }}</td>
-                            <td>{{ r.product_name }}{% if r.product_code %} <small class="text-muted">({{ r.product_code }})</small>{% endif %}</td>
-                            <td class="text-end {% if r.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:+,.3f}".format(r.quantity_change) }}</td>
-                            <td class="text-end">{{ "{:,.3f}".format(r.quantity_after) }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+    <!-- Info card -->
+    <div class="filter-card mb-3">
+        <div class="d-flex flex-wrap gap-3 align-items-center">
+            <div>
+                <span class="muted-cell">Buyurtma:</span>
+                <strong class="ms-1">{{ production.number }}</strong>
             </div>
-            {% else %}
-            <p class="text-muted mb-0">Bu buyurtma uchun ombor harakati yozuvlari yo'q (buyurtma tasdiqlanmagan yoki tasdiq bekor qilingan bo'lishi mumkin).</p>
+            {% if production.recipe %}
+            <div>
+                <span class="muted-cell">Retsept:</span>
+                <strong class="ms-1">{{ production.recipe.name }}</strong>
+            </div>
             {% endif %}
+            <div>
+                <span class="muted-cell">Sana:</span>
+                <strong class="ms-1">{{ production.date.strftime('%d.%m.%Y %H:%M') if production.date else '—' }}</strong>
+            </div>
         </div>
+        <p class="text-muted small mb-0 mt-2">
+            Tasdiqlanganda: 1-ombordan xom ashyo chiqadi (−), 2-omborga tayyor mahsulot kiradi (+).
+        </p>
+    </div>
+
+    <!-- Jadval -->
+    <div class="card data-table">
+        {% if rows %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Sana</th>
+                        <th>Ombor</th>
+                        <th>Mahsulot</th>
+                        <th class="text-end">O'zgarish (+/−)</th>
+                        <th class="text-end">Qoldiq (harakatdan keyin)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td class="muted-cell">{{ r.created_at }}</td>
+                        <td>{{ r.warehouse_name }}</td>
+                        <td>
+                            {{ r.product_name }}
+                            {% if r.product_code %}
+                            <span class="muted-cell">({{ r.product_code }})</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if r.quantity_change >= 0 %}
+                            <span class="badge-done">{{ "{:+,.3f}".format(r.quantity_change) }}</span>
+                            {% else %}
+                            <span class="badge-cancelled">{{ "{:+,.3f}".format(r.quantity_change) }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end num-cell">{{ "{:,.3f}".format(r.quantity_after) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-clock-history fs-1 d-block mb-2 opacity-25"></i>
+            Bu buyurtma uchun ombor harakati yozuvlari yo'q<br>
+            <small>(buyurtma tasdiqlanmagan yoki tasdiq bekor qilingan bo'lishi mumkin)</small>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

@@ -1,27 +1,24 @@
 {% extends "base.html" %}
-{% block extra_css %}
-<link href="/static/css/production.css" rel="stylesheet">
-{% endblock %}
 {% block content %}
-<div class="container-fluid production-page">
-<div class="page-header">
-    <div>
-        <a href="/production/orders" class="btn btn-outline-secondary btn-sm mb-2">
-            <i class="bi bi-arrow-left"></i> Buyurtmalar
-        </a>
-        <h4><i class="bi bi-pencil-square"></i> Xom ashyo miqdorlarini tahrirlash</h4>
-    </div>
+<div class="container-fluid">
+
+<div class="page-header mb-3">
+    <h5><i class="bi bi-pencil-square"></i> Xom ashyo miqdorlarini tahrirlash</h5>
+    <a href="/production/orders" class="top-btn btn btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i> Buyurtmalar
+    </a>
 </div>
 
 <div class="alert alert-info py-2 px-3 mb-3">
     <strong>{{ production.number }}</strong> — {{ recipe.name }}<br>
     <strong>Ishlab chiqarish miqdori: {{ "%.2f"|format(production.quantity) }} {{ output_unit_name|default('kg') }}</strong> (o'zgarmaydi).<br>
     {% if read_only %}
-    <span class="badge bg-success">Yakunlangan</span> — faqat ko'rish rejimi. Tasdiqni bekor qilish uchun pastdagi tugmani bosing.
+    <span class="badge-done">Yakunlangan</span> — faqat ko'rish rejimi. Tasdiqni bekor qilish uchun pastdagi tugmani bosing.
     {% else %}
     Retsept asli turadi; faqat shu buyurtma uchun xom ashyo miqdorlarini o'zgartiring.
     {% endif %}
 </div>
+
 {% if (current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar']) and total_material_cost is defined and output_units is defined %}
 <div class="card mb-3 border-success">
     <div class="card-body">
@@ -33,26 +30,27 @@
                 <strong>Tannarx (1 {{ output_unit_name|default('kg') }} uchun):</strong> {{ "{:,.2f}".format(cost_per_unit) }} so'm
             </div>
         </div>
-        <small class="text-muted">Tannarx = jami xarajat ÷ ishlab chiqarish miqdori. Bu yerda faqat xom ashyo summasi; 1C da «Жами харажатлар» odatda material + Харажатлар + Иш хақи bo‘lishi mumkin — shuning uchun summa 1C dan farq qilishi mumkin.</small>
+        <small class="text-muted">Tannarx = jami xarajat ÷ ishlab chiqarish miqdori. Bu yerda faqat xom ashyo summasi; 1C da «Жами харажатлар» odatda material + Харажатлар + Иш хақи bo'lishi mumkin — shuning uchun summa 1C dan farq qilishi mumkin.</small>
     </div>
 </div>
 {% endif %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
+
+<div class="card data-table">
+    <div class="card-header">
         <span><i class="bi bi-list-check"></i> Shu buyurtma uchun xom ashyo</span>
         {% if read_only and current_user and current_user.role == 'admin' %}
-        <form method="POST" action="/production/{{ production.id }}/revert" style="display: inline;">
-            <button type="submit" class="btn btn-warning btn-sm"
+        <form method="POST" action="/production/{{ production.id }}/revert" style="display:inline;">
+            <button type="submit" class="top-btn btn btn-warning"
                 onclick="return confirm('Tasdiqni bekor qilish — xom ashyo qaytadi, tayyor mahsulot olib tashlanadi. Davom etasizmi?');">
                 <i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish
             </button>
         </form>
         {% endif %}
     </div>
-    <div class="card-body">
-        <form method="POST" action="/production/{{ production.id }}/materials" {% if read_only %}style="pointer-events: none;"{% endif %}>
-            <table class="table">
-                <thead class="table-light">
+    <div class="card-body p-0">
+        <form method="POST" action="/production/{{ production.id }}/materials" {% if read_only %}style="pointer-events:none;"{% endif %}>
+            <table class="table mb-0">
+                <thead>
                     <tr>
                         <th>Xom ashyo</th>
                         <th>Retseptda (1 chiqish uchun)</th>
@@ -66,7 +64,7 @@
                     <tr>
                         <td>
                             <strong>{{ pi.product.name if pi.product else 'Noma\'lum' }}</strong>
-                            {% if pi.product %}<br><small class="text-muted"><code>{{ pi.product.barcode or pi.product.code or '-' }}</code></small>{% endif %}
+                            {% if pi.product %}<br><small class="muted-cell"><code>{{ pi.product.barcode or pi.product.code or '-' }}</code></small>{% endif %}
                         </td>
                         <td>
                             {% for ri in recipe.items %}
@@ -80,36 +78,41 @@
                             {% if read_only %}
                             {{ "%.3f"|format(pi.quantity) }} {{ _unit }}
                             {% else %}
-                            <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm" 
-                                   value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width: 120px;">
-                            <span class="text-muted small ms-1">{{ _unit }}</span>
+                            <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm"
+                                   value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width:120px;">
+                            <span class="muted-cell ms-1">{{ _unit }}</span>
                             {% endif %}
                         </td>
                         {% if production.warehouse_id %}
                         <td class="text-center">
-                            <a href="/reports/stock/source?warehouse_id={{ production.warehouse_id }}&product_id={{ pi.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi (1-ombor)"><i class="bi bi-clock-history"></i></a>
+                            <a href="/reports/stock/source?warehouse_id={{ production.warehouse_id }}&product_id={{ pi.product_id }}" class="btn-act" title="Harakat tarixi (1-ombor)"><i class="bi bi-clock-history"></i></a>
                         </td>
                         {% endif %}
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{% if production.warehouse_id %}4{% else %}3{% endif %}" class="text-center text-muted">Xom ashyo yo'q.</td>
+                        <td colspan="{% if production.warehouse_id %}4{% else %}3{% endif %}" class="text-center muted-cell">Xom ashyo yo'q.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
             {% if production.production_items and not read_only %}
-            <button type="submit" class="btn btn-primary">
-                <i class="bi bi-check-lg"></i> Saqlash
-            </button>
-            <a href="/production/orders" class="btn btn-secondary">Bekor</a>
+            <div class="p-3 d-flex gap-2">
+                <button type="submit" class="top-btn btn btn-primary">
+                    <i class="bi bi-check-lg"></i> Saqlash
+                </button>
+                <a href="/production/orders" class="top-btn btn btn-secondary">Bekor</a>
+            </div>
             {% elif read_only %}
-            <a href="/production/orders" class="btn btn-secondary">Buyurtmalarga qaytish</a>
+            <div class="p-3">
+                <a href="/production/orders" class="top-btn btn btn-secondary">Buyurtmalarga qaytish</a>
+            </div>
             {% endif %}
         </form>
     </div>
 </div>
-</div><!-- .production-page -->
+
+</div><!-- .container-fluid -->
 {% if not read_only and production.production_items %}
 <script>
 (function() {

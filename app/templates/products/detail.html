@@ -2,34 +2,56 @@
 
 {% block content %}
 {% if error_param == 'duplicate' and detail_param %}
-<div class="container py-2">
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <strong>Nom dublikati.</strong> {{ detail_param }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
+<div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+    <strong>Nom dublikati.</strong> {{ detail_param }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="container py-4">
-    <div class="row">
-        <div class="col-md-6">
-            <h3>{{ product.name }}</h3>
-            <p><b>Kod:</b> {{ product.code }}</p>
-            <p><b>Shtixkod:</b> {{ product.barcode }}</p>
-            <p>
-                <a href="/qoldiqlar/tarix?product_id={{ product.id }}" class="btn btn-outline-info btn-sm"><i class="bi bi-clock-history"></i> Mahsulot harakati tarixi</a>
-            </p>
-            {% if product.image %}
-            <img src="/static/images/products/{{ product.image }}" alt="Rasm" class="img-thumbnail mb-3" style="max-width:200px;">
-            {% endif %}
-            <hr>
-            <h5>Barcode (shtixkod) rasmi:</h5>
-            {% if product.barcode %}
-            <img src="/products/barcode/{{ product.id }}" alt="Barcode" class="mb-3" style="max-width:200px;">
-            <br>
-            <a href="/products/barcode/{{ product.id }}?download=1" class="btn btn-outline-primary">Yuklab olish / Chop etish</a>
-            {% else %}
-            <span class="text-muted">Shtixkod kiritilmagan</span>
-            {% endif %}
+
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-box-seam text-primary"></i> {{ product.name }}</h5>
+    <div class="d-flex gap-2">
+        <a href="/qoldiqlar/tarix?product_id={{ product.id }}" class="top-btn btn btn-outline-info"><i class="bi bi-clock-history"></i> Harakat tarixi</a>
+        <a href="/products" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><span class="fw-bold"><i class="bi bi-info-circle text-primary"></i> Mahsulot ma'lumotlari</span></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #f1f3f5;">
+                    <span class="text-muted" style="font-size:13px;">Kod</span>
+                    <strong>{{ product.code or '—' }}</strong>
+                </div>
+                <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #f1f3f5;">
+                    <span class="text-muted" style="font-size:13px;">Shtixkod</span>
+                    <strong>{{ product.barcode or '—' }}</strong>
+                </div>
+                {% if product.image %}
+                <div class="mt-3">
+                    <img src="/static/images/products/{{ product.image }}" alt="Rasm" class="img-thumbnail" style="max-width:200px;">
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header"><span class="fw-bold"><i class="bi bi-upc-scan text-primary"></i> Barcode (shtixkod)</span></div>
+            <div class="card-body">
+                {% if product.barcode %}
+                <img src="/products/barcode/{{ product.id }}" alt="Barcode" class="mb-3 d-block" style="max-width:220px;">
+                <a href="/products/barcode/{{ product.id }}?download=1" class="top-btn btn btn-outline-primary"><i class="bi bi-download"></i> Yuklab olish / Chop etish</a>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-upc d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
+                    Shtixkod kiritilmagan
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>

@@ -2,27 +2,106 @@
 
 {% block content %}
 {% set from_pos = from_pos|default(false) %}
+
 {% if error == "delete" and error_detail %}
 <div class="alert alert-warning alert-dismissible fade show" role="alert">
     {{ error_detail }}
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+
 <div class="container-fluid">
+
+    <!-- Page title -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <div class="d-flex flex-wrap align-items-center gap-2">
-            <h4 class="mb-0"><i class="bi bi-box-seam"></i> Tovar kirimlari</h4>
-            {% if from_pos %}
-            <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasiga qaytish</a>
-            {% endif %}
-        </div>
-        <a href="/purchases/new{% if from_pos %}?from=pos{% endif %}" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
+        <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2"></i>Tovar kirimlari</h5>
+        {% if from_pos %}
+        <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasiga qaytish</a>
+        {% endif %}
     </div>
-    <div class="card">
+
+    <!-- Filter card -->
+    <div class="filter-card">
+        <form method="get" action="/purchases" class="row align-items-end g-2">
+            {% if from_pos %}<input type="hidden" name="from" value="pos">{% endif %}
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label">Boshlanish sanasi</label>
+                <input type="date" name="date_from" class="form-control" value="{{ request.query_params.get('date_from', '') }}">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label">Tugash sanasi</label>
+                <input type="date" name="date_to" class="form-control" value="{{ request.query_params.get('date_to', '') }}">
+            </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label">Ombor</label>
+                <select name="warehouse_id" class="form-select">
+                    <option value="">— Barcha omborlar —</option>
+                    {% for wh in warehouses or [] %}
+                    <option value="{{ wh.id }}" {% if request.query_params.get('warehouse_id')|string == wh.id|string %}selected{% endif %}>{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3 col-sm-6 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel me-1"></i>Filtrlash</button>
+                <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="btn btn-outline-secondary btn-sm" title="Tozalash"><i class="bi bi-x-circle"></i></a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Mini stat cards -->
+    {% set total_count = purchases|length %}
+    {% set confirmed_count = purchases|selectattr('status', 'equalto', 'confirmed')|list|length %}
+    {% set draft_count = purchases|selectattr('status', 'equalto', 'draft')|list|length %}
+    {% set total_sum = purchases|sum(attribute='total', start=0) %}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num">{{ total_count }}</div>
+                <div class="lbl"><i class="bi bi-receipt me-1"></i>Jami kirimlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#2e7d32;">{{ "{:,.0f}".format(purchases|sum(attribute='total', start=0)) }}</div>
+                <div class="lbl"><i class="bi bi-cash-stack me-1"></i>Jami summa (so'm)</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#065f46;">{{ confirmed_count }}</div>
+                <div class="lbl"><i class="bi bi-check-circle me-1"></i>Tasdiqlangan</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#856404;">{{ draft_count }}</div>
+                <div class="lbl"><i class="bi bi-pencil-square me-1"></i>Qoralama</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data table card -->
+    <div class="card data-table">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-table text-muted"></i>
+                <span class="fw-semibold" style="font-size:14px;">Kirimlar ro'yxati</span>
+                <span class="text-muted" style="font-size:12px;">({{ total_count }} ta)</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="purchasesSearchInp" class="form-control form-control-sm" placeholder="Qidirish..." autocomplete="off" style="width:200px;">
+                </div>
+                <a href="/purchases/new{% if from_pos %}?from=pos{% endif %}" class="top-btn btn btn-success">
+                    <i class="bi bi-plus-circle me-1"></i>Yaratish
+                </a>
+            </div>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table mb-0" id="purchasesTable">
+                    <thead>
                         <tr>
                             <th>№</th>
                             <th>Raqam</th>
@@ -36,40 +115,58 @@
                     </thead>
                     <tbody>
                         {% for purchase in purchases %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td><a href="/purchases/edit/{{ purchase.id }}{% if from_pos %}?from=pos{% endif %}">{{ purchase.number }}</a></td>
-                            <td>{{ purchase.date.strftime('%d.%m.%Y %H:%M') if purchase.date else '-' }}</td>
-                            <td>{{ purchase.partner.name if purchase.partner else '-' }}</td>
-                            <td>{{ purchase.warehouse.name if purchase.warehouse else '-' }}</td>
-                            <td><strong>{{ "{:,.0f}".format((purchase.total or 0) + (purchase.total_expenses or 0)) }}</strong> so'm</td>
+                        <tr class="purchase-row" data-search="{{ (purchase.number or '')|lower }} {{ (purchase.partner.name if purchase.partner else '')|lower }} {{ (purchase.warehouse.name if purchase.warehouse else '')|lower }}">
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td class="num-cell">
+                                <a href="/purchases/edit/{{ purchase.id }}{% if from_pos %}?from=pos{% endif %}" class="text-decoration-none">
+                                    {{ purchase.number }}
+                                </a>
+                            </td>
+                            <td class="muted-cell">{{ purchase.date.strftime('%d.%m.%Y %H:%M') if purchase.date else '-' }}</td>
+                            <td>{{ purchase.partner.name if purchase.partner else '<span class="text-muted">—</span>'|safe }}</td>
+                            <td class="muted-cell">{{ purchase.warehouse.name if purchase.warehouse else '—' }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format((purchase.total or 0) + (purchase.total_expenses or 0)) }} <span class="text-muted fw-normal" style="font-size:11px;">so'm</span></td>
                             <td>
                                 {% if purchase.status == 'draft' %}
-                                <span class="badge bg-warning text-dark">Qoralama</span>
+                                <span class="badge-draft">Qoralama</span>
                                 {% elif purchase.status == 'confirmed' %}
-                                <span class="badge bg-success">Tasdiqlangan</span>
+                                <span class="badge-done">Tasdiqlangan</span>
                                 {% elif purchase.status == 'cancelled' %}
-                                <span class="badge bg-danger">Bekor qilingan</span>
+                                <span class="badge-cancelled">Bekor qilingan</span>
                                 {% else %}
-                                <span class="badge bg-secondary">{{ purchase.status }}</span>
+                                <span class="badge-inactive">{{ purchase.status }}</span>
                                 {% endif %}
                             </td>
                             <td>
-                                <a href="/purchases/edit/{{ purchase.id }}{% if from_pos %}?from=pos{% endif %}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                {% if purchase.status == 'confirmed' and current_user and current_user.role == 'admin' %}
-                                <form method="POST" action="/purchases/{{ purchase.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Davom etasizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                </form>
-                                {% elif purchase.status == 'draft' and current_user and current_user.role == 'admin' %}
-                                <form method="POST" action="/purchases/{{ purchase.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu kirimni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                                {% endif %}
+                                <div class="d-flex gap-1">
+                                    <a href="/purchases/edit/{{ purchase.id }}{% if from_pos %}?from=pos{% endif %}" class="btn-act" title="Ochish">
+                                        <i class="bi bi-folder2-open"></i>
+                                    </a>
+                                    {% if purchase.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                    <form method="POST" action="/purchases/{{ purchase.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Davom etasizmi?');">
+                                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                                        <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    </form>
+                                    {% elif purchase.status == 'draft' and current_user and current_user.role == 'admin' %}
+                                    <form method="POST" action="/purchases/{{ purchase.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu kirimni o\'chirmoqchimisiz?');">
+                                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                                        <button type="submit" class="btn-act danger" title="O'chirish">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="8" class="text-muted text-center py-4">Hozircha tovar kirimlari yo'q. <a href="/purchases/new{% if from_pos %}?from=pos{% endif %}">Yangi kirim yaratish</a></td>
+                            <td colspan="8" class="text-center text-muted py-5">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                                Hozircha tovar kirimlari yo'q.<br>
+                                <a href="/purchases/new{% if from_pos %}?from=pos{% endif %}" class="mt-2 d-inline-block">Yangi kirim yaratish</a>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -77,5 +174,28 @@
             </div>
         </div>
     </div>
+
 </div>
+
+<script>
+(function () {
+    var inp = document.getElementById('purchasesSearchInp');
+    var rows = document.querySelectorAll('.purchase-row');
+    if (!inp || !rows.length) return;
+    inp.addEventListener('input', function () {
+        var q = inp.value.trim().toLowerCase();
+        rows.forEach(function (tr) {
+            var text = (tr.getAttribute('data-search') || '').toLowerCase();
+            tr.style.display = (!q || text.indexOf(q) !== -1) ? '' : 'none';
+        });
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.ctrlKey && e.key === 'f') {
+            e.preventDefault();
+            inp.focus();
+            inp.select();
+        }
+    });
+})();
+</script>
 {% endblock %}

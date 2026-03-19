@@ -1,73 +1,73 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    {% if request.query_params.get('added') == '1' %}
-    <div class="alert alert-success alert-dismissible fade show py-2 small">
-        <i class="bi bi-check-circle"></i> Bo'lak ish qo'shildi.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endif %}
-    {% if request.query_params.get('updated') == '1' %}
-    <div class="alert alert-success alert-dismissible fade show py-2 small">
-        <i class="bi bi-check-circle"></i> Bo'lak ish yangilandi.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endif %}
-    {% if request.query_params.get('deleted') == '1' %}
-    <div class="alert alert-info alert-dismissible fade show py-2 small">
-        <i class="bi bi-trash"></i> Bo'lak ish o'chirildi.
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endif %}
+{% if request.query_params.get('added') == '1' %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-check-circle"></i> Bo'lak ish qo'shildi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('updated') == '1' %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-check-circle"></i> Bo'lak ish yangilandi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('deleted') == '1' %}
+<div class="alert alert-info alert-dismissible fade show py-2 small">
+    <i class="bi bi-trash"></i> Bo'lak ish o'chirildi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-list-check"></i> Bo'lak ishlar (bo'lak turlari)</h5>
-            <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-circle"></i> Qo'shish</button>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-sm table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Kod</th>
-                            <th>Nomi</th>
-                            <th class="text-end">Narx (so'm/birlik)</th>
-                            <th>Birlik</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for t in tasks %}
-                        <tr>
-                            <td>{{ t.id }}</td>
-                            <td><code>{{ t.code or '—' }}</code></td>
-                            <td>{{ t.name or '—' }}</td>
-                            <td class="text-end">{{ "{:,.0f}".format(t.price_per_unit or 0) }}</td>
-                            <td>{{ t.unit_name or 'kg' }}</td>
-                            <td>
-                                <a href="#" class="btn btn-sm btn-outline-primary" title="Tahrirlash"
-                                    data-id="{{ t.id }}" data-code="{{ t.code or '' }}" data-name="{{ t.name or '' }}"
-                                    data-price="{{ t.price_per_unit or 0 }}" data-unit="{{ t.unit_name or 'kg' }}"
-                                    onclick="openEdit(this); return false;"><i class="bi bi-pencil"></i></a>
-                                <form method="post" action="/info/piecework-tasks/delete/{{ t.id }}" class="d-inline" onsubmit="return confirm('Ushbu bo\'lak ishni o\'chirishni xohlaysizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="6" class="text-center text-muted py-4">
-                                Hozircha bo'lak ishlar yo'q. Ishga qabul hujjatida «Bo'lak» / «Bo'lak + oylik» tanlash uchun yuqoridan <strong>Qo'shish</strong> tugmasini bosing.
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-list-check"></i> Bo'lak ishlar (bo'lak turlari)</h5>
+    <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
+        <i class="bi bi-plus-circle"></i> Qo'shish
+    </button>
+</div>
+
+<div class="card data-table">
+    <div class="card-header"><span class="fw-bold">Bo'lak ishlar ro'yxati</span></div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Kod</th>
+                    <th>Nomi</th>
+                    <th class="text-end">Narx (so'm/birlik)</th>
+                    <th>Birlik</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in tasks %}
+                <tr>
+                    <td>{{ t.id }}</td>
+                    <td><code>{{ t.code or '—' }}</code></td>
+                    <td>{{ t.name or '—' }}</td>
+                    <td class="text-end num-cell">{{ "{:,.0f}".format(t.price_per_unit or 0) }}</td>
+                    <td><span class="muted-cell">{{ t.unit_name or 'kg' }}</span></td>
+                    <td>
+                        <a href="#" class="btn-act" title="Tahrirlash"
+                            data-id="{{ t.id }}" data-code="{{ t.code or '' }}" data-name="{{ t.name or '' }}"
+                            data-price="{{ t.price_per_unit or 0 }}" data-unit="{{ t.unit_name or 'kg' }}"
+                            onclick="openEdit(this); return false;"><i class="bi bi-pencil"></i></a>
+                        <form method="post" action="/info/piecework-tasks/delete/{{ t.id }}" class="d-inline" onsubmit="return confirm('Ushbu bo\'lak ishni o\'chirishni xohlaysizmi?');">
+                            <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        Hozircha bo'lak ishlar yo'q. Ishga qabul hujjatida «Bo'lak» / «Bo'lak + oylik» tanlash uchun yuqoridan <strong>Qo'shish</strong> tugmasini bosing.
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 

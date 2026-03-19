@@ -471,9 +471,11 @@ class CashTransfer(Base):
     from_cash_id = Column(Integer, ForeignKey("cash_registers.id"), nullable=False)
     to_cash_id = Column(Integer, ForeignKey("cash_registers.id"), nullable=False)
     amount = Column(Float, default=0)
-    status = Column(String(20), default="draft")  # draft, pending_approval, confirmed
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Jo'natuvchi
-    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Qabul qiluvchi (tasdiqlovchi)
+    status = Column(String(20), default="pending")  # pending, in_transit, completed, cancelled
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Yaratuvchi (admin)
+    sent_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Sotuvchi (pulni bergan)
+    sent_at = Column(DateTime, nullable=True)
+    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Admin (pulni qabul qilgan)
     approved_at = Column(DateTime, nullable=True)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
@@ -481,6 +483,7 @@ class CashTransfer(Base):
     from_cash = relationship("CashRegister", foreign_keys=[from_cash_id])
     to_cash = relationship("CashRegister", foreign_keys=[to_cash_id])
     user = relationship("User", foreign_keys=[user_id])
+    sent_by = relationship("User", foreign_keys=[sent_by_user_id])
     approved_by = relationship("User", foreign_keys=[approved_by_user_id])
 
 
@@ -1517,8 +1520,30 @@ def ensure_dismissal_docs_table():
         print(f"ensure_dismissal_docs_table: {e}")
 
 
+def ensure_agent_order_columns():
+    """orders va agents jadvallariga qo'shimcha kolonkalar qo'shish."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            try:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN agent_id INTEGER REFERENCES agents(id)"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN source VARCHAR(20) DEFAULT 'web'"))
+            except Exception:
+                pass
+            try:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN user_id INTEGER REFERENCES users(id)"))
+            except Exception:
+                pass
+    except Exception as e:
+        print(f"ensure_agent_order_columns: {e}")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_agent_order_columns()
     ensure_recipe_warehouse_columns()
     ensure_cash_register_payment_type()
     ensure_purchase_expense_cash_register()
@@ -1604,6 +1629,25 @@ def ensure_attendance_advance_tables():
             ed_cols = [row[1] for row in r]
             if col not in ed_cols:
                 conn.execute(text(f"ALTER TABLE employment_docs ADD COLUMN {col} {sql}"))
+
+
+def ensure_cash_transfer_inkasatsiya():
+    """CashTransfer jadvaliga inkasatsiya ustunlarini qo'shadi va eski statuslarni yangilaydi."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(cash_transfers)"))
+            cols = [row[1] for row in r]
+            if "sent_by_user_id" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN sent_by_user_id INTEGER REFERENCES users(id)"))
+            if "sent_at" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN sent_at DATETIME"))
+            # Eski statuslarni yangilash
+            conn.execute(text("UPDATE cash_transfers SET status='completed' WHERE status='confirmed'"))
+            conn.execute(text("UPDATE cash_transfers SET status='in_transit' WHERE status='pending_approval'"))
+            conn.execute(text("UPDATE cash_transfers SET status='pending' WHERE status='draft'"))
+    except Exception as e:
+        print(f"ensure_cash_transfer_inkasatsiya: {e}")
 
 
 if __name__ == "__main__":

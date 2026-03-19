@@ -1,104 +1,109 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="page-header mb-3">
     <h4 class="mb-0"><i class="bi bi-arrow-left-right"></i> Kontragentlar hisob-kitobini solishtirish</h4>
-    <a href="/reports" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+    <div class="d-flex gap-2">
+        <a href="/reports" class="top-btn"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+    </div>
 </div>
 
-<div class="card mb-4">
-    <div class="card-header bg-light">
-        <i class="bi bi-funnel"></i> Filtr
-    </div>
-    <div class="card-body">
-        <form method="get" action="/reports/partner-reconciliation" class="row g-3 align-items-end" id="reconciliationForm">
-            <div class="col-md-4 position-relative">
-                <label class="form-label">Kontragent <span class="text-danger">*</span></label>
-                <input type="hidden" name="partner_id" id="partnerId" value="{{ partner_id or '' }}" required>
-                <input type="text" class="form-control" id="partnerSearch" autocomplete="off"
-                       placeholder="Nomini yoki kodini yozib qidiring..."
-                       value="{% if partner %}{{ partner.name }}{% if partner.code %} ({{ partner.code }}){% endif %}{% endif %}">
-                <div class="list-group position-absolute top-100 start-0 end-0 mt-1 shadow-sm border rounded" id="partnerDropdown" style="z-index: 1050; max-height: 280px; overflow-y: auto; display: none;"></div>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Boshlanish</label>
-                <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">Tugash</label>
-                <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
-            </div>
-            <div class="col-md-2">
-                <button type="submit" class="btn btn-primary w-100"><i class="bi bi-search"></i> Ko'rsatish</button>
-            </div>
-        </form>
-    </div>
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/partner-reconciliation" class="row g-3 align-items-end" id="reconciliationForm">
+        <div class="col-md-4 position-relative">
+            <label class="form-label">Kontragent <span class="text-danger">*</span></label>
+            <input type="hidden" name="partner_id" id="partnerId" value="{{ partner_id or '' }}" required>
+            <input type="text" class="form-control" id="partnerSearch" autocomplete="off"
+                   placeholder="Nomini yoki kodini yozib qidiring..."
+                   value="{% if partner %}{{ partner.name }}{% if partner.code %} ({{ partner.code }}){% endif %}{% endif %}">
+            <div class="list-group position-absolute top-100 start-0 end-0 mt-1 shadow-sm border rounded" id="partnerDropdown" style="z-index: 1050; max-height: 280px; overflow-y: auto; display: none;"></div>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="top-btn w-100"><i class="bi bi-search"></i> Ko'rsatish</button>
+        </div>
+    </form>
 </div>
 
 {% if partner %}
 {# Soddalashtirilgan analitika — 1C uslubida #}
-<div class="card mb-3 border-primary">
-    <div class="card-header bg-light py-2">
-        <h5 class="mb-0 text-center"><i class="bi bi-arrow-left-right"></i> Hisob kitoblarni solishtirish</h5>
-        <p class="text-center text-muted small mb-0 mt-1">Biz va <strong>{{ partner.name }}</strong> oʻrtasidagi oʻzaro hisob-kitoblar — {{ date_from }} dan {{ date_to }} gacha</p>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num {% if opening_balance > 0 %}text-danger{% elif opening_balance < 0 %}text-success{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
+                {{ "{:,.0f}".format(opening_balance) }}
+            </div>
+            <div class="lbl">Davr boshiga qoldiq ({{ date_from }})</div>
+        </div>
     </div>
-    <div class="card-body py-3">
-        <div class="row g-3 text-center">
-            <div class="col-6 col-md-3">
-                <span class="text-muted small d-block">Davr boshiga qoldiq ({{ date_from }})</span>
-                <strong class="{% if opening_balance > 0 %}text-danger{% elif opening_balance < 0 %}text-success{% else %}text-muted{% endif %}">
-                    {{ "{:,.0f}".format(opening_balance) }} so'm
-                </strong>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary" style="font-size:1.1rem;">{{ "{:,.0f}".format(total_debit) }}</div>
+            <div class="lbl">Davr debet</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success" style="font-size:1.1rem;">{{ "{:,.0f}".format(total_credit) }}</div>
+            <div class="lbl">Davr kredit</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num {% if closing_balance > 0 %}text-danger{% elif closing_balance < 0 %}text-success{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
+                {{ "{:,.0f}".format(closing_balance) }}
             </div>
-            <div class="col-6 col-md-3">
-                <span class="text-muted small d-block">Davr debet</span>
-                <strong>{{ "{:,.0f}".format(total_debit) }}</strong>
-            </div>
-            <div class="col-6 col-md-3">
-                <span class="text-muted small d-block">Davr kredit</span>
-                <strong>{{ "{:,.0f}".format(total_credit) }}</strong>
-            </div>
-            <div class="col-6 col-md-3">
-                <span class="text-muted small d-block">Davr oxiriga qoldiq ({{ date_to }})</span>
-                <strong class="{% if closing_balance > 0 %}text-danger{% elif closing_balance < 0 %}text-success{% else %}text-muted{% endif %}">
-                    {{ "{:,.0f}".format(closing_balance) }} so'm
-                </strong>
+            <div class="lbl">Davr oxiriga qoldiq ({{ date_to }})</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="mini-stat text-center">
+            <div class="lbl mb-1">Bizning foydamizga (kontragent qarzdor)</div>
+            <div class="num {% if closing_balance > 0 %}text-danger{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
+                {{ "{:,.0f}".format(closing_balance if closing_balance > 0 else 0) }} so'm
             </div>
         </div>
-        <div class="row mt-3 pt-3 border-top">
-            <div class="col-md-6 text-center">
-                <span class="text-muted small">Bizning foydamizga (kontragent qarzdor):</span>
-                <div class="fw-bold {% if closing_balance > 0 %}text-danger{% else %}text-muted{% endif %}">
-                    {{ "{:,.0f}".format(closing_balance if closing_balance > 0 else 0) }} so'm
-                </div>
-            </div>
-            <div class="col-md-6 text-center">
-                <span class="text-muted small">Kontragent foydasiga (biz qarzdormiz):</span>
-                <div class="fw-bold {% if closing_balance < 0 %}text-success{% else %}text-muted{% endif %}">
-                    {{ "{:,.0f}".format(-closing_balance if closing_balance < 0 else 0) }} so'm
-                </div>
+    </div>
+    <div class="col-md-6">
+        <div class="mini-stat text-center">
+            <div class="lbl mb-1">Kontragent foydasiga (biz qarzdormiz)</div>
+            <div class="num {% if closing_balance < 0 %}text-success{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
+                {{ "{:,.0f}".format(-closing_balance if closing_balance < 0 else 0) }} so'm
             </div>
         </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-table"></i> Hujjatlar — 1C uslubida ikki tomonlama</span>
-        <a href="/reports/partner-reconciliation/export?partner_id={{ partner.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-success btn-sm">
-            <i class="bi bi-file-earmark-excel"></i> Excel
-        </a>
+<div class="card data-table mb-3">
+    <div class="card-header">
+        <span><i class="bi bi-arrow-left-right"></i> Hisob kitoblarni solishtirish — <strong>{{ partner.name }}</strong> &nbsp;|&nbsp; {{ date_from }} – {{ date_to }}</span>
+        <div>
+            <a href="/reports/partner-reconciliation/export?partner_id={{ partner.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="top-btn">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
             <table class="table table-hover table-striped mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th>Hujjatlar</th>
                         <th colspan="2" class="text-center border-start">TOTLI HOLVA</th>
                         <th colspan="2" class="text-center border-start">{{ partner.name }}</th>
                     </tr>
-                    <tr class="table-light">
+                    <tr>
                         <th></th>
                         <th class="text-end border-start">DT Haqdor (so'm)</th>
                         <th class="text-end">KT Qarzdor (so'm)</th>
@@ -109,35 +114,35 @@
                 <tbody>
                     <tr class="table-info">
                         <td><strong>Davr boshiga qoldiq ({{ date_from }})</strong></td>
-                        <td class="text-end border-start">{% if opening_balance > 0 %}{{ "{:,.0f}".format(opening_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end border-start">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end">{% if opening_balance > 0 %}{{ "{:,.0f}".format(opening_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end border-start sum-cell">{% if opening_balance > 0 %}{{ "{:,.0f}".format(opening_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end sum-cell">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end border-start sum-cell">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end sum-cell">{% if opening_balance > 0 %}{{ "{:,.0f}".format(opening_balance) }}{% else %}—{% endif %}</td>
                     </tr>
                     {% if rows %}
                         {% for r in rows %}
                         <tr class="{% if r.doc_url %}doc-row-clickable{% endif %}" {% if r.doc_url %}data-href="{{ r.doc_url }}" role="button" title="Hujjatni ochish"{% endif %}>
                             <td>{{ r.doc_label }}{% if r.doc_url %} <i class="bi bi-box-arrow-up-right small text-muted"></i>{% endif %}</td>
-                            <td class="text-end border-start">{% if r.debit %}{{ "{:,.0f}".format(r.debit) }}{% else %}—{% endif %}</td>
-                            <td class="text-end">{% if r.credit %}{{ "{:,.0f}".format(r.credit) }}{% else %}—{% endif %}</td>
-                            <td class="text-end border-start">{% if r.credit %}{{ "{:,.0f}".format(r.credit) }}{% else %}—{% endif %}</td>
-                            <td class="text-end">{% if r.debit %}{{ "{:,.0f}".format(r.debit) }}{% else %}—{% endif %}</td>
+                            <td class="text-end border-start sum-cell">{% if r.debit %}{{ "{:,.0f}".format(r.debit) }}{% else %}—{% endif %}</td>
+                            <td class="text-end sum-cell">{% if r.credit %}{{ "{:,.0f}".format(r.credit) }}{% else %}—{% endif %}</td>
+                            <td class="text-end border-start sum-cell">{% if r.credit %}{{ "{:,.0f}".format(r.credit) }}{% else %}—{% endif %}</td>
+                            <td class="text-end sum-cell">{% if r.debit %}{{ "{:,.0f}".format(r.debit) }}{% else %}—{% endif %}</td>
                         </tr>
                         {% endfor %}
                         <tr class="table-secondary fw-bold">
                             <td class="text-end">Jami davr:</td>
-                            <td class="text-end border-start">{{ "{:,.0f}".format(total_debit) }}</td>
-                            <td class="text-end">{{ "{:,.0f}".format(total_credit) }}</td>
-                            <td class="text-end border-start">{{ "{:,.0f}".format(total_credit) }}</td>
-                            <td class="text-end">{{ "{:,.0f}".format(total_debit) }}</td>
+                            <td class="text-end border-start sum-cell">{{ "{:,.0f}".format(total_debit) }}</td>
+                            <td class="text-end sum-cell">{{ "{:,.0f}".format(total_credit) }}</td>
+                            <td class="text-end border-start sum-cell">{{ "{:,.0f}".format(total_credit) }}</td>
+                            <td class="text-end sum-cell">{{ "{:,.0f}".format(total_debit) }}</td>
                         </tr>
                     {% endif %}
                     <tr class="table-info fw-bold">
                         <td><strong>Davr oxiriga qoldiq ({{ date_to }})</strong></td>
-                        <td class="text-end border-start">{% if closing_balance > 0 %}{{ "{:,.0f}".format(closing_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end border-start">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
-                        <td class="text-end">{% if closing_balance > 0 %}{{ "{:,.0f}".format(closing_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end border-start sum-cell">{% if closing_balance > 0 %}{{ "{:,.0f}".format(closing_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end sum-cell">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end border-start sum-cell">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
+                        <td class="text-end sum-cell">{% if closing_balance > 0 %}{{ "{:,.0f}".format(closing_balance) }}{% else %}—{% endif %}</td>
                     </tr>
                     {% if not rows %}
                         <tr>
@@ -151,16 +156,16 @@
 </div>
 
 {# Analitika: kontragentdan xarid / kontragentga sotuv mahsulotlar bo'yicha #}
-<div class="row mt-4">
-    <div class="col-lg-6 mb-3">
-        <div class="card h-100">
-            <div class="card-header bg-success bg-opacity-10 py-2">
-                <i class="bi bi-cart-down"></i> Kontragentdan xarid qilingan mahsulotlar
+<div class="row g-3 mb-3">
+    <div class="col-lg-6">
+        <div class="card data-table h-100">
+            <div class="card-header">
+                <span><i class="bi bi-cart-down"></i> Kontragentdan xarid qilingan mahsulotlar</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
+                        <thead>
                             <tr>
                                 <th>Mahsulot</th>
                                 <th class="text-end">Miqdor</th>
@@ -171,9 +176,9 @@
                             {% if products_purchased %}
                                 {% for p in products_purchased %}
                                 <tr>
-                                    <td>{{ p.product_name }}{% if p.product_code %} <code class="small">{{ p.product_code }}</code>{% endif %}</td>
-                                    <td class="text-end">{{ "{:,.2f}".format(p.quantity) }}</td>
-                                    <td class="text-end">{{ "{:,.0f}".format(p.total) }}</td>
+                                    <td>{{ p.product_name }}{% if p.product_code %} <code class="muted-cell">{{ p.product_code }}</code>{% endif %}</td>
+                                    <td class="text-end num-cell">{{ "{:,.2f}".format(p.quantity) }}</td>
+                                    <td class="text-end sum-cell">{{ "{:,.0f}".format(p.total) }}</td>
                                 </tr>
                                 {% endfor %}
                             {% else %}
@@ -185,15 +190,15 @@
             </div>
         </div>
     </div>
-    <div class="col-lg-6 mb-3">
-        <div class="card h-100">
-            <div class="card-header bg-primary bg-opacity-10 py-2">
-                <i class="bi bi-cart-up"></i> Kontragentga sotilgan mahsulotlar
+    <div class="col-lg-6">
+        <div class="card data-table h-100">
+            <div class="card-header">
+                <span><i class="bi bi-cart-up"></i> Kontragentga sotilgan mahsulotlar</span>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
+                        <thead>
                             <tr>
                                 <th>Mahsulot</th>
                                 <th class="text-end">Miqdor</th>
@@ -204,9 +209,9 @@
                             {% if products_sold %}
                                 {% for p in products_sold %}
                                 <tr>
-                                    <td>{{ p.product_name }}{% if p.product_code %} <code class="small">{{ p.product_code }}</code>{% endif %}</td>
-                                    <td class="text-end">{{ "{:,.2f}".format(p.quantity) }}</td>
-                                    <td class="text-end">{{ "{:,.0f}".format(p.total) }}</td>
+                                    <td>{{ p.product_name }}{% if p.product_code %} <code class="muted-cell">{{ p.product_code }}</code>{% endif %}</td>
+                                    <td class="text-end num-cell">{{ "{:,.2f}".format(p.quantity) }}</td>
+                                    <td class="text-end sum-cell">{{ "{:,.0f}".format(p.total) }}</td>
                                 </tr>
                                 {% endfor %}
                             {% else %}
@@ -220,23 +225,25 @@
     </div>
 </div>
 
-<div class="card mt-3">
-    <div class="card-header bg-light py-2"><i class="bi bi-person-lines-fill"></i> Tomonlar tafsilotlari</div>
+<div class="card data-table">
+    <div class="card-header">
+        <span><i class="bi bi-person-lines-fill"></i> Tomonlar tafsilotlari</span>
+    </div>
     <div class="card-body">
         <div class="row">
             <div class="col-md-6">
                 <p class="mb-1 fw-bold">Tashkilot: TOTLI HOLVA</p>
-                <p class="mb-0 small text-muted">Manzil: — &nbsp;| &nbsp; INN: — &nbsp;| &nbsp; Tel: —</p>
+                <p class="mb-0 muted-cell">Manzil: — &nbsp;| &nbsp; INN: — &nbsp;| &nbsp; Tel: —</p>
             </div>
             <div class="col-md-6">
                 <p class="mb-1 fw-bold">Kontragent: {{ partner.name }}{% if partner.legal_name %} ({{ partner.legal_name }}){% endif %}</p>
-                <p class="mb-0 small text-muted">Manzil: {{ partner.address or '—' }} &nbsp;| &nbsp; INN: {{ partner.inn or '—' }} &nbsp;| &nbsp; Tel: {{ partner.phone or '—' }}</p>
+                <p class="mb-0 muted-cell">Manzil: {{ partner.address or '—' }} &nbsp;| &nbsp; INN: {{ partner.inn or '—' }} &nbsp;| &nbsp; Tel: {{ partner.phone or '—' }}</p>
             </div>
         </div>
     </div>
 </div>
 
-<p class="small text-muted mt-2 mb-0">
+<p class="muted-cell mt-2 mb-0">
     <i class="bi bi-info-circle"></i> Debet — kontragent bizga qarzdor (sotuv, biz to'lagan to'lov). Kredit — to'lov (kirim), qaytarish, xarid.
 </p>
 {% else %}

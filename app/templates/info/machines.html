@@ -2,45 +2,37 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <h4><i class="bi bi-gear-wide-connected"></i> Uskunalar (ishlab chiqarish)</h4>
-                <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addMachineModal">
-                    <i class="bi bi-plus-circle"></i> Yaratish
-                </button>
-            </div>
-        </div>
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-gear-wide-connected"></i> Uskunalar (ishlab chiqarish)</h5>
+        <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addMachineModal">
+            <i class="bi bi-plus-circle"></i> Yaratish
+        </button>
     </div>
 
     <div class="row mb-3">
         <div class="col-md-4">
-            <div class="card border-primary">
-                <div class="card-body py-2">
-                    <small class="text-muted">Jami</small>
-                    <h5 class="mb-0">{{ machines|length }} ta</h5>
-                </div>
+            <div class="mini-stat">
+                <div class="num">{{ machines|length }}</div>
+                <div class="lbl">Jami</div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card border-success">
-                <div class="card-body py-2">
-                    <small class="text-muted">Ishlayapti</small>
-                    <h5 class="mb-0">{{ machines|selectattr('status', 'eq', 'active')|list|length }} ta</h5>
-                </div>
+            <div class="mini-stat">
+                <div class="num">{{ machines|selectattr('status', 'eq', 'active')|list|length }}</div>
+                <div class="lbl">Ishlayapti</div>
             </div>
         </div>
         <div class="col-md-4">
-            <div class="card border-warning">
-                <div class="card-body py-2">
-                    <small class="text-muted">Ta'mirda</small>
-                    <h5 class="mb-0">{{ machines|selectattr('status', 'eq', 'maintenance')|list|length }} ta</h5>
-                </div>
+            <div class="mini-stat">
+                <div class="num">{{ machines|selectattr('status', 'eq', 'maintenance')|list|length }}</div>
+                <div class="lbl">Ta'mirda</div>
             </div>
         </div>
     </div>
 
-    <div class="card">
+    <div class="card data-table">
+        <div class="card-header">Uskunalar ro'yxati</div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
@@ -57,51 +49,56 @@
                             <th></th>
                         </tr>
                     </thead>
-                <tbody>
-                    {% for m in machines %}
-                    <tr class="{% if not m.is_active %}table-secondary{% endif %}">
-                        <td>{{ m.id }}</td>
-                        <td><code>{{ m.code }}</code></td>
-                        <td><strong>{{ m.name }}</strong></td>
-                        <td>{{ m.machine_type or '-' }}</td>
-                        <td>{{ "{:,.0f}".format(m.capacity or 0) }}</td>
-                        <td>{{ "{:,.0f}".format(m.efficiency or 100) }}%</td>
-                        <td>
-                            <span class="badge bg-{{ 'success' if m.status == 'active' else 'warning' if m.status == 'maintenance' else 'secondary' }}">
-                                {{ m.status or 'idle' }}
-                            </span>
-                        </td>
-                        <td>{{ m.operator.full_name if m.operator else '-' }}</td>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-outline-primary" title="Tahrirlash"
-                                data-bs-toggle="modal" data-bs-target="#editMachineModal"
-                                data-id="{{ m.id }}" data-code="{{ m.code }}" data-name="{{ m.name }}"
-                                data-type="{{ m.machine_type or '' }}" data-capacity="{{ m.capacity or 0 }}"
-                                data-efficiency="{{ m.efficiency or 100 }}" data-status="{{ m.status or 'idle' }}"
-                                data-operator="{{ m.operator_id or '' }}">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            {% if m.is_active %}
-                            <form action="/info/machines/delete/{{ m.id }}" method="post" class="d-inline" onsubmit="return confirm('Ushbu uskunani o\'chirishni xohlaysizmi?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% else %}
-                    <tr>
-                        <td colspan="9" class="text-center text-muted py-5">
-                            <i class="bi bi-gear fs-1 d-block mb-2"></i>
-                            Hozircha uskunalar yo'q<br>
-                            <small>Yuqoridagi Yaratish tugmasini bosing</small>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                    <tbody>
+                        {% for m in machines %}
+                        <tr class="{% if not m.is_active %}table-secondary{% endif %}">
+                            <td class="muted-cell">{{ m.id }}</td>
+                            <td><code>{{ m.code }}</code></td>
+                            <td><strong>{{ m.name }}</strong></td>
+                            <td class="muted-cell">{{ m.machine_type or '-' }}</td>
+                            <td class="num-cell">{{ "{:,.0f}".format(m.capacity or 0) }}</td>
+                            <td class="num-cell">{{ "{:,.0f}".format(m.efficiency or 100) }}%</td>
+                            <td>
+                                {% if m.status == 'active' %}
+                                    <span class="badge-active">Ishlayapti</span>
+                                {% elif m.status == 'maintenance' %}
+                                    <span class="badge-waiting">Ta'mirda</span>
+                                {% else %}
+                                    <span class="badge-inactive">{{ m.status or 'idle' }}</span>
+                                {% endif %}
+                            </td>
+                            <td>{{ m.operator.full_name if m.operator else '-' }}</td>
+                            <td>
+                                <button type="button" class="btn-act" title="Tahrirlash"
+                                    data-bs-toggle="modal" data-bs-target="#editMachineModal"
+                                    data-id="{{ m.id }}" data-code="{{ m.code }}" data-name="{{ m.name }}"
+                                    data-type="{{ m.machine_type or '' }}" data-capacity="{{ m.capacity or 0 }}"
+                                    data-efficiency="{{ m.efficiency or 100 }}" data-status="{{ m.status or 'idle' }}"
+                                    data-operator="{{ m.operator_id or '' }}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                {% if m.is_active %}
+                                <form action="/info/machines/delete/{{ m.id }}" method="post" class="d-inline" onsubmit="return confirm('Ushbu uskunani o\'chirishni xohlaysizmi?');">
+                                    <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-5">
+                                <i class="bi bi-gear fs-1 d-block mb-2"></i>
+                                Hozircha uskunalar yo'q<br>
+                                <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
+
 </div>
 
 <!-- Yangi uskuna modal -->

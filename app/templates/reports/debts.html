@@ -1,94 +1,94 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row g-4 mb-4">
-    <div class="col-md-6">
-        <div class="stat-card border-danger">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Jami qarzdorlik</p>
-                    <h3 class="text-danger">{{ "{:,.0f}".format(total_debt) }}</h3>
-                    <small class="text-muted">Olish kerak</small>
-                </div>
-                <div class="icon red">
-                    <i class="bi bi-arrow-down"></i>
-                </div>
-            </div>
+<!-- Mini-stat row -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-4">
+        <div class="mini-stat">
+            <div class="num" style="color:#dc3545;">{{ "{:,.0f}".format(total_debt) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-down-circle me-1 text-danger"></i>Jami qarzdorlik (so'm)</div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="stat-card border-success">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Jami avans</p>
-                    <h3 class="text-success">{{ "{:,.0f}".format(total_credit) }}</h3>
-                    <small class="text-muted">Berish kerak</small>
-                </div>
-                <div class="icon green">
-                    <i class="bi bi-arrow-up"></i>
-                </div>
-            </div>
+    <div class="col-6 col-md-4">
+        <div class="mini-stat">
+            <div class="num text-success">{{ "{:,.0f}".format(total_credit) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-up-circle me-1 text-success"></i>Jami avans (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
+        <div class="mini-stat">
+            <div class="num text-primary">{{ debtors | length if debtors else 0 }}</div>
+            <div class="lbl"><i class="bi bi-people me-1"></i>Kontragentlar soni</div>
         </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-exclamation-triangle"></i> Qarzdorlik hisoboti</span>
-        <a href="/reports/debts/export" class="btn btn-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+<!-- Data table card -->
+<div class="card data-table">
+    <div class="card-header">
+        <span class="d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle text-warning"></i>
+            <span>Qarzdorlik hisoboti</span>
+        </span>
+        <a href="/reports/debts/export" class="top-btn btn btn-success">
+            <i class="bi bi-file-earmark-excel"></i> Excel
+        </a>
     </div>
     <div class="card-body p-0">
-        <table class="table table-hover">
-            <thead class="table-light">
-                <tr>
-                    <th>#</th>
-                    <th>Kodi</th>
-                    <th>Kontragent</th>
-                    <th>Turi</th>
-                    <th>Telefon</th>
-                    <th>Balans</th>
-                    <th>Holat</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if debtors %}
-                    {% for partner in debtors %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
                     <tr>
-                        <td>{{ loop.index }}</td>
-                        <td><code>{{ partner.code }}</code></td>
-                        <td><strong>{{ partner.name }}</strong></td>
-                        <td>
-                            {% if partner.type == 'customer' %}
-                                <span class="badge bg-primary">Mijoz</span>
-                            {% elif partner.type == 'supplier' %}
-                                <span class="badge bg-info">Yetkazib beruvchi</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Ikkalasi</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ partner.phone or '-' }}</td>
-                        <td class="fw-bold {% if partner.balance > 0 %}text-danger{% else %}text-success{% endif %}">
-                            {{ "{:,.0f}".format(partner.balance) }}
-                        </td>
-                        <td>
-                            {% if partner.balance > 0 %}
-                                <span class="badge bg-danger">Qarzdor</span>
-                            {% else %}
-                                <span class="badge bg-success">Avans</span>
-                            {% endif %}
-                        </td>
+                        <th style="width:48px">#</th>
+                        <th>Kodi</th>
+                        <th>Kontragent</th>
+                        <th>Turi</th>
+                        <th>Telefon</th>
+                        <th class="text-end">Balans (so'm)</th>
+                        <th>Holat</th>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="7" class="text-center text-muted py-5">
-                            <i class="bi bi-check-circle fs-1 d-block mb-2 text-success"></i>
-                            Qarzdorlar topilmadi 🎉
-                        </td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% if debtors %}
+                        {% for partner in debtors %}
+                        <tr>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td><code class="num-cell">{{ partner.code }}</code></td>
+                            <td><strong>{{ partner.name }}</strong></td>
+                            <td>
+                                {% if partner.type == 'customer' %}
+                                    <span class="badge-active">Mijoz</span>
+                                {% elif partner.type == 'supplier' %}
+                                    <span class="badge-waiting">Yetkazib beruvchi</span>
+                                {% else %}
+                                    <span class="badge-inactive">Ikkalasi</span>
+                                {% endif %}
+                            </td>
+                            <td class="muted-cell">{{ partner.phone or '-' }}</td>
+                            <td class="text-end fw-700
+                                {% if partner.balance > 0 %} text-danger{% else %} sum-cell{% endif %}">
+                                {{ "{:,.0f}".format(partner.balance) }}
+                            </td>
+                            <td>
+                                {% if partner.balance > 0 %}
+                                    <span class="badge-cancelled">Qarzdor</span>
+                                {% else %}
+                                    <span class="badge-done">Avans</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center muted-cell py-5">
+                                <i class="bi bi-check-circle fs-2 d-block mb-2 text-success opacity-60"></i>
+                                Qarzdorlar topilmadi
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}

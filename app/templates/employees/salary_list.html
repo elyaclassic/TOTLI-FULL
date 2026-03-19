@@ -27,36 +27,36 @@
     </div>
     {% endif %}
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0"><i class="bi bi-calculator"></i> Oylik hisoblash</h5>
-        <a href="/employees" class="btn btn-outline-secondary btn-sm"><i class="bi bi-person-badge"></i> Xodimlar</a>
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-calculator text-primary"></i> Oylik hisoblash</h5>
+        <a href="/employees" class="btn btn-outline-secondary top-btn"><i class="bi bi-person-badge"></i> Xodimlar</a>
     </div>
 
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <form method="get" action="/employees/salary" class="row g-2 align-items-end">
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Oy</label>
-                    <select name="month" class="form-select form-select-sm" style="width: auto;">
-                        {% for m in range(1, 13) %}
-                        <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }} — {% if m == 1 %}Yanvar{% elif m == 2 %}Fevral{% elif m == 3 %}Mart{% elif m == 4 %}Aprel{% elif m == 5 %}May{% elif m == 6 %}Iyun{% elif m == 7 %}Iyul{% elif m == 8 %}Avgust{% elif m == 9 %}Sentabr{% elif m == 10 %}Oktabr{% elif m == 11 %}Noyabr{% else %}Dekabr{% endif %}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-auto">
-                    <label class="form-label small mb-0">Yil</label>
-                    <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" min="2020" max="2030" style="width: 90px;">
-                </div>
-                <div class="col-auto">
-                    <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
-                </div>
-            </form>
-        </div>
+    <div class="filter-card mb-3">
+        <form method="get" action="/employees/salary" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label">📅 Oy</label>
+                <select name="month" class="form-select form-select-sm" style="width:auto;">
+                    {% for m in range(1, 13) %}
+                    <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }} — {% if m == 1 %}Yanvar{% elif m == 2 %}Fevral{% elif m == 3 %}Mart{% elif m == 4 %}Aprel{% elif m == 5 %}May{% elif m == 6 %}Iyun{% elif m == 7 %}Iyul{% elif m == 8 %}Avgust{% elif m == 9 %}Sentabr{% elif m == 10 %}Oktabr{% elif m == 11 %}Noyabr{% else %}Dekabr{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="form-label">📆 Yil</label>
+                <input type="number" name="year" class="form-control form-control-sm" value="{{ year }}" min="2020" max="2030" style="width:90px;">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel-fill"></i> Ko'rsatish</button>
+            </div>
+        </form>
     </div>
 
-    <div class="card">
+    <div class="card data-table">
         <div class="card-header">
-            <span>Oylik — {{ year }}-yil {{ month }}-oy</span>
+            <span class="fw-bold"><i class="bi bi-calculator text-primary"></i> Oylik — {{ year }}-yil {{ month }}-oy
+              <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill ms-1">{{ rows|length }} xodim</span>
+            </span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -113,14 +113,14 @@
                             <td class="text-center">
                                 <div class="d-flex flex-nowrap align-items-center justify-content-center gap-1">
                                 {% if row.status == 'paid' %}
-                                <span class="badge bg-success" title="To'langan"><i class="bi bi-check-circle-fill"></i></span>
+                                <span class="badge-done" title="To'langan"><i class="bi bi-check-circle-fill"></i> To'langan</span>
                                 {% else %}
-                                <span class="badge bg-warning text-dark" title="Kutilmoqda"><i class="bi bi-clock"></i></span>
+                                <span class="badge-waiting" title="Kutilmoqda"><i class="bi bi-clock"></i> Kutilmoqda</span>
                                 <form method="post" action="/employees/salary/mark-paid/{{ row.employee.id }}" class="d-inline">
                                     <input type="hidden" name="year" value="{{ year }}">
                                     <input type="hidden" name="month" value="{{ month }}">
                                     <input type="hidden" name="paid_amount" value="{{ row.total }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-success" title="To'langan deb belgilash"><i class="bi bi-check-circle-fill"></i></button>
+                                    <button type="submit" class="btn-act" title="To'langan deb belgilash"><i class="bi bi-check-circle-fill"></i></button>
                                 </form>
                                 {% endif %}
                                 </div>
@@ -148,7 +148,7 @@
                     <small class="text-muted">Saqlanganda Harajatlar jurnalida hujjat (qoralama) yaratiladi. Kassadan chiqim yozish uchun hujjatni oching va <strong>Tasdiqlash</strong> bosing.</small>
                 </div>
                 {% endif %}
-                <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Barcha o'zgarishlarni saqlash</button>
+                <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-lg"></i> Barcha o'zgarishlarni saqlash</button>
             </form>
         </div>
     </div>

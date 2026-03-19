@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Sales Agent</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bottom-nav-h: 60px; }
+  body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  #app { display: none; }
+  #loginScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); }
+  .login-card { background: white; border-radius: 20px; padding: 2rem; width: 340px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+  .login-logo { text-align: center; margin-bottom: 1.5rem; }
+  .login-logo i { font-size: 3rem; color: #1a73e8; }
+  .login-logo h4 { margin-top: 0.5rem; font-weight: 700; color: #1a73e8; }
+
+  /* Bottom nav */
+  #bottomNav { position: fixed; bottom: 0; left: 0; right: 0; height: var(--bottom-nav-h); background: white; border-top: 1px solid #e0e0e0; display: flex; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); }
+  .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: color .2s; color: #9e9e9e; font-size: 11px; gap: 2px; border: none; background: none; }
+  .nav-tab i { font-size: 20px; }
+  .nav-tab.active { color: #1a73e8; }
+  .nav-tab .badge-dot { position: relative; }
+  .nav-tab .badge-dot::after { content: ''; position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; background: #e53935; border-radius: 50%; display: none; }
+  .nav-tab .badge-dot.has-dot::after { display: block; }
+
+  /* Pages */
+  .page { display: none; padding-bottom: calc(var(--bottom-nav-h) + 10px); min-height: 100vh; }
+  .page.active { display: block; }
+  .page-header { background: white; padding: 12px 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
+  .page-header h5 { margin: 0; font-weight: 700; font-size: 17px; }
+  .content-area { padding: 12px 16px; }
+
+  /* Cards */
+  .stat-card { background: white; border-radius: 16px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .stat-card .num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
+  .stat-card .lbl { font-size: 12px; color: #666; margin-top: 4px; }
+  .client-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform .15s; }
+  .client-card:active { transform: scale(0.98); }
+  .client-card .name { font-weight: 700; font-size: 15px; }
+  .client-card .meta { font-size: 12px; color: #666; margin-top: 2px; }
+  .order-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+  .order-card .order-num { font-weight: 700; font-size: 14px; color: #1a73e8; }
+  .order-card .order-meta { font-size: 12px; color: #666; }
+
+  /* Debt badge */
+  .debt-badge { background: #ffebee; color: #c62828; border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
+  .debt-badge.ok { background: #e8f5e9; color: #2e7d32; }
+
+  /* Detail page */
+  #clientDetailPage .page-header { display: flex; align-items: center; gap: 10px; }
+  #clientDetailPage .page-header h5 { flex: 1; }
+  #mapBox { height: 220px; border-radius: 12px; overflow: hidden; background: #e0e0e0; margin-bottom: 12px; }
+
+  /* New order */
+  .product-row { background: white; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .product-row .p-name { font-weight: 600; font-size: 14px; }
+  .product-row .p-price { font-size: 12px; color: #1a73e8; font-weight: 600; }
+  .qty-ctrl { display: flex; align-items: center; gap: 8px; }
+  .qty-ctrl button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #ddd; background: white; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .qty-ctrl input { width: 50px; text-align: center; border: 1px solid #ddd; border-radius: 8px; padding: 4px; font-size: 14px; }
+  .order-total-bar { position: fixed; bottom: var(--bottom-nav-h); left: 0; right: 0; background: white; border-top: 1px solid #e0e0e0; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 200; }
+
+  /* Search */
+  .search-box { position: relative; }
+  .search-box input { padding-left: 36px; border-radius: 12px; border: 1px solid #ddd; background: white; }
+  .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9e9e9e; }
+
+  /* Loading */
+  .spinner-wrap { text-align: center; padding: 40px; color: #9e9e9e; }
+
+  /* Status badges */
+  .s-badge { border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
+  .s-new { background: #e3f2fd; color: #1565c0; }
+  .s-confirmed { background: #e8f5e9; color: #2e7d32; }
+  .s-delivered { background: #ede7f6; color: #4527a0; }
+  .s-cancelled { background: #fce4ec; color: #880e4f; }
+  .s-production { background: #fff3e0; color: #e65100; }
+
+  /* Profile */
+  .profile-row { background: white; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+  .profile-row i { font-size: 20px; color: #1a73e8; width: 24px; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">
+      <i class="bi bi-person-badge"></i>
+      <h4>Sales Agent</h4>
+      <p class="text-muted small mb-0">TOTLI Business</p>
+    </div>
+    <div id="loginErr" class="alert alert-danger d-none small p-2"></div>
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Telefon raqam</label>
+      <input type="tel" id="loginPhone" class="form-control" placeholder="+998901234567" autocomplete="username">
+    </div>
+    <div class="mb-3">
+      <label class="form-label small fw-semibold">Parol</label>
+      <div class="input-group">
+        <input type="password" id="loginPass" class="form-control" placeholder="Parolingizni kiriting" autocomplete="current-password">
+        <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVis()"><i class="bi bi-eye" id="passEyeIcon"></i></button>
+      </div>
+    </div>
+    <button class="btn btn-primary w-100 py-2 fw-semibold" onclick="doLogin()">
+      <i class="bi bi-box-arrow-in-right"></i> Kirish
+    </button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <!-- HOME PAGE -->
+  <div class="page active" id="homePage">
+    <div class="page-header d-flex align-items-center justify-content-between">
+      <div>
+        <h5 id="agentName">Agent</h5>
+        <div class="text-muted" style="font-size:12px;" id="agentRegion"></div>
+      </div>
+      <button class="btn btn-sm btn-outline-danger" onclick="doLogout()"><i class="bi bi-box-arrow-right"></i></button>
+    </div>
+    <div class="content-area">
+      <div id="statsArea" class="row g-2 mb-3">
+        <div class="col-6"><div class="stat-card"><div class="num text-primary" id="statOrders">—</div><div class="lbl">Bugungi buyurtmalar</div></div></div>
+        <div class="col-6"><div class="stat-card"><div class="num text-success" id="statTotal">—</div><div class="lbl">Bugungi summa</div></div></div>
+        <div class="col-6"><div class="stat-card"><div class="num text-info" id="statPartners">—</div><div class="lbl">Mijozlar</div></div></div>
+        <div class="col-6"><div class="stat-card"><div class="num text-danger" id="statDebt">—</div><div class="lbl">Umumiy qarz</div></div></div>
+      </div>
+      <h6 class="fw-bold mb-2">So'nggi buyurtmalar</h6>
+      <div id="recentOrdersList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
+    </div>
+  </div>
+
+  <!-- CLIENTS PAGE -->
+  <div class="page" id="clientsPage">
+    <div class="page-header">
+      <h5>Mijozlar</h5>
+      <div class="search-box mt-2">
+        <i class="bi bi-search"></i>
+        <input type="text" id="clientSearch" class="form-control form-control-sm" placeholder="Qidirish…" oninput="filterClients()">
+      </div>
+    </div>
+    <div class="content-area">
+      <div id="clientsList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
+    </div>
+  </div>
+
+  <!-- CLIENT DETAIL PAGE -->
+  <div class="page" id="clientDetailPage">
+    <div class="page-header">
+      <button class="btn btn-sm btn-link p-0 text-dark" onclick="showPage('clientsPage')"><i class="bi bi-arrow-left fs-5"></i></button>
+      <h5 id="clientDetailName">Mijoz</h5>
+    </div>
+    <div class="content-area">
+      <div id="clientDetailContent"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div></div>
+    </div>
+  </div>
+
+  <!-- NEW ORDER PAGE -->
+  <div class="page" id="newOrderPage">
+    <div class="page-header d-flex align-items-center justify-content-between">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-link p-0 text-dark" id="newOrderBack"><i class="bi bi-arrow-left fs-5"></i></button>
+        <h5 class="mb-0">Yangi buyurtma</h5>
+      </div>
+      <div class="text-muted small" id="newOrderClientName"></div>
+    </div>
+    <div class="content-area pb-5" style="padding-bottom: 120px !important;">
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">To'lov turi</label>
+        <select id="paymentType" class="form-select form-select-sm">
+          <option value="cash">Naqd</option>
+          <option value="transfer">O'tkazma</option>
+          <option value="credit">Nasiya</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label class="form-label small fw-semibold">Izoh</label>
+        <input type="text" id="orderNote" class="form-control form-control-sm" placeholder="Ixtiyoriy…">
+      </div>
+      <div class="search-box mb-3">
+        <i class="bi bi-search"></i>
+        <input type="text" id="productSearch" class="form-control form-control-sm" placeholder="Mahsulot qidirish…" oninput="filterProducts()">
+      </div>
+      <div id="productsList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div></div>
+    </div>
+    <div class="order-total-bar d-none" id="orderTotalBar">
+      <div>
+        <div class="small text-muted">Jami:</div>
+        <div class="fw-bold text-primary" id="orderTotalAmt">0 so'm</div>
+      </div>
+      <button class="btn btn-success px-4 fw-semibold" onclick="submitOrder()">
+        <i class="bi bi-check-lg"></i> Buyurtma berish
+      </button>
+    </div>
+  </div>
+
+  <!-- ORDERS PAGE -->
+  <div class="page" id="ordersPage">
+    <div class="page-header">
+      <h5>Mening buyurtmalarim</h5>
+    </div>
+    <div class="content-area">
+      <div id="myOrdersList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="bottomNav">
+    <button class="nav-tab active" id="tabHome" onclick="showPage('homePage','tabHome')">
+      <i class="bi bi-house"></i><span>Asosiy</span>
+    </button>
+    <button class="nav-tab" id="tabClients" onclick="showPage('clientsPage','tabClients')">
+      <i class="bi bi-people"></i><span>Mijozlar</span>
+    </button>
+    <button class="nav-tab" id="tabOrders" onclick="showPage('ordersPage','tabOrders')">
+      <i class="bi bi-bag"></i><span>Buyurtmalar</span>
+    </button>
+  </nav>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+'use strict';
+
+// ── STATE ──────────────────────────────────────────────────────────────────
+var TOKEN = '';
+var agentInfo = null;
+var allClients = [];
+var allProducts = [];
+var orderItems = {}; // product_id -> qty
+var currentOrderPartnerId = null;
+var leafletMap = null;
+
+// ── UTILS ──────────────────────────────────────────────────────────────────
+function fmt(n) {
+  if (n == null) return '0';
+  return Number(n).toLocaleString('uz-UZ');
+}
+function fmtDate(s) {
+  if (!s) return '';
+  return (s||'').slice(0,16).replace('T',' ');
+}
+function statusBadge(s) {
+  var map = {new:'s-new',confirmed:'s-confirmed',delivered:'s-delivered',cancelled:'s-cancelled',production:'s-production',waiting_production:'s-production'};
+  var labels = {new:'Yangi',confirmed:'Tasdiqlangan',delivered:'Yetkazilgan',cancelled:'Bekor',production:"Ishlab chiqarishda",waiting_production:"Kutilmoqda"};
+  return '<span class="s-badge '+(map[s]||'')+'">'+( labels[s]||s)+'</span>';
+}
+function api(path, opts) {
+  var options = Object.assign({ credentials: 'same-origin', headers: { 'Authorization': 'Bearer ' + TOKEN } }, opts || {});
+  return fetch(path, options).then(function(r){ return r.json(); });
+}
+
+// ── AUTH ────────────────────────────────────────────────────────────────────
+function togglePasswordVis() {
+  var inp = document.getElementById('loginPass');
+  var icon = document.getElementById('passEyeIcon');
+  if (inp.type === 'password') { inp.type = 'text'; icon.className = 'bi bi-eye-slash'; }
+  else { inp.type = 'password'; icon.className = 'bi bi-eye'; }
+}
+window.togglePasswordVis = togglePasswordVis;
+
+function doLogin() {
+  var phone = (document.getElementById('loginPhone').value || '').trim();
+  var pass = (document.getElementById('loginPass').value || '').trim();
+  if (!phone) { showLoginErr('Telefon raqam kiriting'); return; }
+  if (!pass) { showLoginErr('Parol kiriting'); return; }
+  var fd = new FormData();
+  fd.append('username', phone);
+  fd.append('password', pass);
+  fetch('/api/login', { method: 'POST', body: fd }).then(function(r){ return r.json(); }).then(function(d){
+    if (!d || d.error || d.detail || !d.token) { showLoginErr(d && (d.error || d.detail) || 'Login yoki parol xato'); return; }
+    if (d.role !== 'agent') { showLoginErr('Faqat agentlar kirishi mumkin'); return; }
+    TOKEN = d.token;
+    localStorage.setItem('agent_token', TOKEN);
+    agentInfo = d.agent || {};
+    startApp();
+  }).catch(function(){ showLoginErr('Server bilan bog\'lanib bo\'lmadi'); });
+}
+window.doLogin = doLogin;
+
+function showLoginErr(msg) {
+  var el = document.getElementById('loginErr');
+  el.textContent = msg; el.classList.remove('d-none');
+}
+
+function doLogout() {
+  localStorage.removeItem('agent_token');
+  TOKEN = ''; agentInfo = null;
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+window.doLogout = doLogout;
+
+function startApp() {
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  if (agentInfo) {
+    document.getElementById('agentName').textContent = agentInfo.full_name || agentInfo.name || 'Agent';
+    document.getElementById('agentRegion').textContent = agentInfo.region || '';
+  }
+  loadHome();
+  loadClients();
+  loadProducts();
+  showPage('homePage','tabHome');
+}
+
+// Auto-login (URL token yoki localStorage)
+(function(){
+  // URL dan token olish: /agent?token=xxx
+  var urlToken = new URLSearchParams(window.location.search).get('token');
+  if (urlToken) {
+    localStorage.setItem('agent_token', urlToken);
+    // URL ni tozalash (token ko'rinmasin)
+    history.replaceState(null, '', '/agent');
+  }
+  var saved = urlToken || localStorage.getItem('agent_token');
+  if (!saved) return;
+  TOKEN = saved;
+  api('/api/agent/stats').then(function(d){
+    if (!d || d.error || d.detail || d.success === false) { TOKEN=''; localStorage.removeItem('agent_token'); return; }
+    agentInfo = d.agent || {};
+    startApp();
+  }).catch(function(){ TOKEN=''; });
+})();
+
+// Enter key support on login fields
+document.addEventListener('DOMContentLoaded', function(){
+  ['loginPhone','loginPass'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.addEventListener('keydown', function(e){ if (e.key === 'Enter') doLogin(); });
+  });
+});
+
+// ── NAVIGATION ─────────────────────────────────────────────────────────────
+var pageStack = [];
+
+function showPage(pageId, tabId) {
+  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.nav-tab').forEach(function(t){ t.classList.remove('active'); });
+  document.getElementById(pageId).classList.add('active');
+  if (tabId) document.getElementById(tabId).classList.add('active');
+  document.getElementById('bottomNav').style.display = ['clientDetailPage','newOrderPage'].includes(pageId) ? 'none' : 'flex';
+  window.scrollTo(0,0);
+  if (pageId === 'ordersPage') loadMyOrders();
+}
+window.showPage = showPage;
+
+// ── HOME ────────────────────────────────────────────────────────────────────
+function loadHome() {
+  api('/api/agent/stats').then(function(d){
+    if (!d || d.error) return;
+    var st = d.stats || d;
+    document.getElementById('statOrders').textContent = st.today_orders || 0;
+    document.getElementById('statTotal').textContent = fmt(st.today_total) + ' so\'m';
+    document.getElementById('statPartners').textContent = st.partners_count || st.partner_count || 0;
+    document.getElementById('statDebt').textContent = fmt(st.total_debt) + ' so\'m';
+    agentInfo = d.agent || agentInfo;
+    if (agentInfo) {
+      document.getElementById('agentName').textContent = agentInfo.full_name || agentInfo.name || 'Agent';
+      document.getElementById('agentRegion').textContent = agentInfo.region || '';
+    }
+  });
+  api('/api/agent/my-orders').then(function(d){
+    var list = document.getElementById('recentOrdersList');
+    var orders = (Array.isArray(d) ? d : (d.orders || [])).slice(0, 5);
+    if (!orders.length) { list.innerHTML = '<div class="text-muted small text-center py-3">Buyurtmalar yo\'q</div>'; return; }
+    list.innerHTML = orders.map(function(o){
+      return '<div class="order-card">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="order-num">' + (o.number||o.order_number||'—') + '</div>' +
+          statusBadge(o.status) +
+        '</div>' +
+        '<div class="order-meta mt-1">' + (o.partner||o.partner_name||'') + ' · ' + fmt(o.total||o.total_amount) + ' so\'m</div>' +
+        '<div class="order-meta">' + (o.date||o.created_at||'') + '</div>' +
+      '</div>';
+    }).join('');
+  });
+}
+
+// ── CLIENTS ─────────────────────────────────────────────────────────────────
+function loadClients() {
+  api('/api/agent/my-partners').then(function(d){
+    allClients = Array.isArray(d) ? d : (d.partners || []);
+    renderClients(allClients);
+  });
+}
+
+function renderClients(list) {
+  var el = document.getElementById('clientsList');
+  if (!list.length) { el.innerHTML = '<div class="text-muted small text-center py-4">Mijozlar yo\'q</div>'; return; }
+  el.innerHTML = list.map(function(c){
+    var debt = Number(c.balance || 0);
+    var debtHtml = '<span class="debt-badge ' + (debt > 0 ? '' : 'ok') + '">' + (debt > 0 ? '-' + fmt(debt) : 'Qarz yo\'q') + ' so\'m</span>';
+    return '<div class="client-card" onclick="openClient(' + c.id + ')">' +
+      '<div class="d-flex justify-content-between align-items-start">' +
+        '<div class="name">' + (c.name||'—') + '</div>' +
+        debtHtml +
+      '</div>' +
+      '<div class="meta">' + (c.phone||'') + (c.region ? ' · '+c.region : '') + '</div>' +
+      '<div class="d-flex gap-2 mt-2">' +
+        '<button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="event.stopPropagation();startNewOrder(' + c.id + ',\'' + escHtml(c.name||'') + '\')">' +
+          '<i class="bi bi-plus-lg"></i> Buyurtma' +
+        '</button>' +
+        (c.phone ? '<a class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:12px;" href="tel:' + c.phone + '" onclick="event.stopPropagation()"><i class="bi bi-telephone"></i> Qo\'ng\'iroq</a>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function escHtml(s){ return (s||'').replace(/'/g,"\\'"); }
+
+function filterClients() {
+  var q = (document.getElementById('clientSearch').value || '').toLowerCase();
+  if (!q) { renderClients(allClients); return; }
+  renderClients(allClients.filter(function(c){ return (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q); }));
+}
+window.filterClients = filterClients;
+
+// ── CLIENT DETAIL ───────────────────────────────────────────────────────────
+function openClient(id) {
+  showPage('clientDetailPage');
+  document.getElementById('clientDetailName').textContent = 'Yuklanmoqda…';
+  document.getElementById('clientDetailContent').innerHTML = '<div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div>';
+  // Remove old map
+  if (leafletMap) { try { leafletMap.remove(); } catch(e){} leafletMap = null; }
+  api('/api/agent/partner/' + id).then(function(d){
+    if (!d || d.error) { document.getElementById('clientDetailContent').innerHTML = '<div class="alert alert-danger">Ma\'lumot topilmadi</div>'; return; }
+    var p = d.partner || d;
+    document.getElementById('clientDetailName').textContent = p.name || 'Mijoz';
+    var debt = Number(p.balance || 0);
+    var lat = p.lat || p.latitude;
+    var lng = p.lng || p.longitude;
+    var hasLoc = lat && lng;
+    var mapHtml = hasLoc ? '<div id="mapBox"></div>' : '';
+    var orders = d.orders || [];
+    var ordersHtml = orders.length ? orders.map(function(o){
+      return '<div class="order-card">' +
+        '<div class="d-flex justify-content-between">' +
+          '<span class="order-num">' + (o.number||o.order_number||'—') + '</span>' +
+          statusBadge(o.status) +
+        '</div>' +
+        '<div class="order-meta">' + fmt(o.total||o.total_amount) + ' so\'m · ' + (o.date||o.created_at||'') + '</div>' +
+      '</div>';
+    }).join('') : '<div class="text-muted small text-center py-2">Buyurtmalar yo\'q</div>';
+
+    document.getElementById('clientDetailContent').innerHTML =
+      '<div class="mb-3">' +
+        '<button class="btn btn-primary w-100 fw-semibold" onclick="startNewOrder(' + id + ',\'' + escHtml(p.name||'') + '\')">' +
+          '<i class="bi bi-plus-circle"></i> Yangi buyurtma berish' +
+        '</button>' +
+      '</div>' +
+      mapHtml +
+      '<div class="profile-row"><i class="bi bi-telephone"></i><div>' + (p.phone||'—') + '</div></div>' +
+      '<div class="profile-row"><i class="bi bi-geo-alt"></i><div>' + (p.address||'—') + '</div></div>' +
+      '<div class="profile-row"><i class="bi bi-cash-stack"></i><div>' +
+        '<div class="small text-muted">Balans / qarz</div>' +
+        '<div class="fw-bold ' + (debt > 0 ? 'text-danger' : 'text-success') + '">' + (debt > 0 ? '-' : '') + fmt(Math.abs(debt)) + ' so\'m</div>' +
+      '</div></div>' +
+      '<h6 class="fw-bold mt-3 mb-2">So\'nggi buyurtmalar</h6>' +
+      ordersHtml;
+
+    if (hasLoc) {
+      setTimeout(function(){
+        var mapEl = document.getElementById('mapBox');
+        if (!mapEl) return;
+        leafletMap = L.map('mapBox').setView([lat, lng], 15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(leafletMap);
+        L.marker([lat, lng]).addTo(leafletMap).bindPopup(p.name || '').openPopup();
+        leafletMap.invalidateSize();
+      }, 100);
+    }
+  });
+}
+window.openClient = openClient;
+
+// ── NEW ORDER ───────────────────────────────────────────────────────────────
+function loadProducts() {
+  api('/api/agent/products').then(function(d){
+    allProducts = Array.isArray(d) ? d : (d.products || []);
+  });
+}
+
+function startNewOrder(partnerId, partnerName) {
+  currentOrderPartnerId = partnerId;
+  orderItems = {};
+  document.getElementById('newOrderClientName').textContent = partnerName || '';
+  document.getElementById('orderNote').value = '';
+  document.getElementById('productSearch').value = '';
+  document.getElementById('newOrderBack').onclick = function(){ history.back(); showPage('clientDetailPage'); };
+  updateOrderTotal();
+  renderProducts(allProducts);
+  showPage('newOrderPage');
+}
+window.startNewOrder = startNewOrder;
+
+function renderProducts(list) {
+  var el = document.getElementById('productsList');
+  if (!list.length) { el.innerHTML = '<div class="text-muted small text-center py-3">Mahsulotlar yo\'q</div>'; return; }
+  el.innerHTML = list.map(function(p){
+    var qty = orderItems[p.id] || 0;
+    return '<div class="product-row" id="prow_'+p.id+'">' +
+      '<div class="d-flex justify-content-between align-items-center">' +
+        '<div>' +
+          '<div class="p-name">' + (p.name||'—') + '</div>' +
+          '<div class="p-price">' + fmt(p.price) + ' so\'m / ' + (p.unit||'dona') + '</div>' +
+        '</div>' +
+        '<div class="qty-ctrl">' +
+          '<button onclick="changeQty('+p.id+',-1)">−</button>' +
+          '<input type="number" id="qty_'+p.id+'" value="'+qty+'" min="0" onchange="setQty('+p.id+',this.value)">' +
+          '<button onclick="changeQty('+p.id+',1)">+</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function filterProducts() {
+  var q = (document.getElementById('productSearch').value || '').toLowerCase();
+  var filtered = q ? allProducts.filter(function(p){ return (p.name||'').toLowerCase().includes(q); }) : allProducts;
+  renderProducts(filtered);
+}
+window.filterProducts = filterProducts;
+
+function getProductPrice(id) {
+  var p = allProducts.find(function(x){ return x.id == id; });
+  return p ? Number(p.price || 0) : 0;
+}
+
+function changeQty(id, delta) {
+  var inp = document.getElementById('qty_'+id);
+  var cur = parseInt(inp ? inp.value : 0) || 0;
+  var nv = Math.max(0, cur + delta);
+  if (inp) inp.value = nv;
+  orderItems[id] = nv;
+  if (nv === 0) delete orderItems[id];
+  updateOrderTotal();
+}
+window.changeQty = changeQty;
+
+function setQty(id, val) {
+  var nv = Math.max(0, parseInt(val) || 0);
+  orderItems[id] = nv;
+  if (nv === 0) delete orderItems[id];
+  updateOrderTotal();
+}
+window.setQty = setQty;
+
+function updateOrderTotal() {
+  var total = 0;
+  Object.keys(orderItems).forEach(function(id){
+    total += getProductPrice(id) * (orderItems[id] || 0);
+  });
+  document.getElementById('orderTotalAmt').textContent = fmt(total) + ' so\'m';
+  var bar = document.getElementById('orderTotalBar');
+  var hasItems = Object.keys(orderItems).some(function(k){ return orderItems[k] > 0; });
+  bar.classList.toggle('d-none', !hasItems);
+}
+
+function submitOrder() {
+  var items = [];
+  Object.keys(orderItems).forEach(function(id){
+    if (orderItems[id] > 0) items.push({ product_id: parseInt(id), qty: orderItems[id] });
+  });
+  if (!items.length) { alert('Mahsulot tanlanmadi'); return; }
+  var btn = document.querySelector('#orderTotalBar button');
+  btn.disabled = true; btn.textContent = 'Yuborilmoqda…';
+
+  var payload = {
+    partner_id: currentOrderPartnerId,
+    payment_type: document.getElementById('paymentType').value,
+    note: document.getElementById('orderNote').value,
+    items: items
+  };
+  fetch('/api/agent/order/create', {
+    method: 'POST',
+    headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).then(function(r){ return r.json(); }).then(function(d){
+    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Buyurtma berish';
+    if (d.error || d.detail) { alert(d.error || d.detail || 'Xatolik'); return; }
+    alert('Buyurtma #' + (d.order_number||'') + ' muvaffaqiyatli yuborildi!');
+    orderItems = {};
+    updateOrderTotal();
+    showPage('clientsPage','tabClients');
+    loadHome();
+  }).catch(function(e){ btn.disabled=false; btn.innerHTML='<i class="bi bi-check-lg"></i> Buyurtma berish'; alert('Xatolik: '+e); });
+}
+window.submitOrder = submitOrder;
+
+// ── MY ORDERS ───────────────────────────────────────────────────────────────
+function loadMyOrders() {
+  var el = document.getElementById('myOrdersList');
+  el.innerHTML = '<div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div>';
+  api('/api/agent/my-orders').then(function(d){
+    var orders = Array.isArray(d) ? d : (d.orders || []);
+    if (!orders.length) { el.innerHTML = '<div class="text-muted small text-center py-4">Buyurtmalar yo\'q</div>'; return; }
+    el.innerHTML = orders.map(function(o){
+      return '<div class="order-card">' +
+        '<div class="d-flex justify-content-between align-items-start">' +
+          '<div class="order-num">' + (o.number||o.order_number||'—') + '</div>' +
+          statusBadge(o.status) +
+        '</div>' +
+        '<div class="order-meta mt-1 fw-semibold">' + (o.partner||o.partner_name||'') + '</div>' +
+        '<div class="order-meta">' + fmt(o.total||o.total_amount) + ' so\'m · ' + (o.payment_type||'') + '</div>' +
+        '<div class="order-meta">' + (o.date||o.created_at||'') + '</div>' +
+      '</div>';
+    }).join('');
+  });
+}
+
+
+})();
+</script>
+</body>
+</html>

@@ -9,14 +9,15 @@
 <div id="cartHiddenInputs"></div>
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-cart-plus"></i> Yangi sotuv
+        <div class="card" style="border-radius:16px;">
+            <div class="card-header d-flex align-items-center justify-content-between">
+                <span class="fw-bold"><i class="bi bi-cart-plus text-primary"></i> Yangi sotuv</span>
+                <a href="/sales" class="btn btn-outline-secondary top-btn"><i class="bi bi-arrow-left"></i> Orqaga</a>
             </div>
             <div class="card-body">
                 <div class="row g-3 mb-2">
                     <div class="col-md-5 position-relative">
-                        <label class="form-label">Mijoz *</label>
+                        <label class="form-label fw-semibold">Mijoz *</label>
                         <input type="text" class="form-control" id="sales_partner_input"
                             placeholder="Nomi, telefon yoki kod bo'yicha qidiring..." autocomplete="off" required>
                         <input type="hidden" name="partner_id" id="sales_partner_id_hidden" required>

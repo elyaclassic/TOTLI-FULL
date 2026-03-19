@@ -190,7 +190,7 @@
                             {% endif %}
                             {% if transfer and transfer.from_warehouse_id %}
                             <td class="text-center">
-                                <a href="/reports/stock/source?warehouse_id={{ transfer.from_warehouse_id }}&product_id={{ row.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
+                                <a href="/reports/stock/source?warehouse_id={{ transfer.from_warehouse_id }}&product_id={{ row.product_id }}" class="btn-act" title="Harakat tarixi"><i class="bi bi-clock-history"></i></a>
                             </td>
                             {% endif %}
                             <td>

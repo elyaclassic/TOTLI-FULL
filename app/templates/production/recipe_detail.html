@@ -2,27 +2,29 @@
 
 {% block content %}
 {% set _stages = recipe_stages if recipe_stages is defined else [] %}
-<div class="d-flex justify-content-between mb-4">
-    <div>
-        <a href="/production/recipes{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="btn btn-outline-secondary btn-sm mb-2">
+
+<!-- Page header -->
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-journal-text"></i> {{ recipe.name }}</h5>
+    <div class="d-flex gap-2">
+        <a href="/production/recipes{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="top-btn btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Orqaga
         </a>
-        <h4><i class="bi bi-journal-text"></i> {{ recipe.name }}</h4>
+        <button class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#produceModal">
+            <i class="bi bi-play-fill"></i> Ishlab chiqarish
+        </button>
     </div>
-    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#produceModal">
-        <i class="bi bi-play-fill"></i> Ishlab chiqarish
-    </button>
 </div>
 
-<!-- Bosqichlar — sarlavha ostida -->
-<div class="card mb-4 border-primary">
-    <div class="card-header bg-primary bg-opacity-10 d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <span class="text-primary"><i class="bi bi-list-ol"></i> <strong>Bosqichlar</strong> — ishlab chiqarish bosqichlarini retseptga bog'lash</span>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStageModal">
+<!-- Bosqichlar -->
+<div class="card data-table mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <span style="font-size:13px; font-weight:600;"><i class="bi bi-list-ol"></i> Bosqichlar — ishlab chiqarish bosqichlarini retseptga bog'lash</span>
+        <button type="button" class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addStageModal">
             <i class="bi bi-plus-lg"></i> Bosqich qo'shish
         </button>
     </div>
-    <div class="card-body p-0">
+    <div class="card-body">
         {% if _stages %}
         <ul class="list-group list-group-flush list-group-horizontal flex-wrap">
             {% for s in _stages %}
@@ -30,13 +32,13 @@
                 <span><span class="badge bg-primary rounded-pill me-2">{{ s.stage_number }}</span> {{ s.name }}</span>
                 <form method="POST" action="/production/recipes/{{ recipe.id }}/delete-stage/{{ s.id }}" style="display: inline;" onsubmit="return confirm('Ushbu bosqichni o\u2019chirmoqchimisiz?');">
                     <input type="hidden" name="return_q" value="{{ search_q or '' }}">
-                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                    <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                 </form>
             </li>
             {% endfor %}
         </ul>
         {% else %}
-        <p class="text-muted mb-0 p-3">Bosqichlar hali qo'shilmagan. <strong>«Bosqich qo'shish»</strong> tugmasini bosing.</p>
+        <p class="text-muted mb-0">Bosqichlar hali qo'shilmagan. <strong>«Bosqich qo'shish»</strong> tugmasini bosing.</p>
         {% endif %}
     </div>
 </div>
@@ -44,9 +46,9 @@
 <div class="row">
     <!-- Retsept ma'lumotlari -->
     <div class="col-md-4">
-        <div class="card">
+        <div class="card data-table">
             <div class="card-header">
-                <i class="bi bi-info-circle"></i> Ma'lumotlar
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-info-circle"></i> Ma'lumotlar</span>
             </div>
             <div class="card-body">
                 <form method="POST" action="/production/recipes/{{ recipe.id }}/set-name" class="mb-3">
@@ -57,38 +59,37 @@
                         <button type="submit" class="btn btn-outline-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
                     </div>
                 </form>
-                <table class="table table-sm">
+                <table class="table table-sm mb-0">
                     <tr>
-                        <td>Mahsulot:</td>
+                        <td class="muted-cell">Mahsulot:</td>
                         <td><strong>{% if recipe.product %}{{ recipe.product.name }}{% else %}-{% endif %}</strong></td>
                     </tr>
                     <tr>
-                        <td>Chiqish miqdori:</td>
+                        <td class="muted-cell">Chiqish miqdori:</td>
                         <td><strong>{{ recipe.output_quantity }} {{ (recipe.product.unit.name or recipe.product.unit.code if recipe.product and recipe.product.unit else 'kg') }}</strong></td>
                     </tr>
                     <tr>
-                        <td>Holati:</td>
+                        <td class="muted-cell">Holati:</td>
                         <td>
                             {% if recipe.is_active %}
-                            <span class="badge bg-success">Faol</span>
+                            <span class="badge-active">Faol</span>
                             {% else %}
-                            <span class="badge bg-secondary">Nofaol</span>
+                            <span class="badge-inactive">Nofaol</span>
                             {% endif %}
                         </td>
                     </tr>
                 </table>
-                
                 {% if recipe.description %}
                 <hr>
                 <p class="text-muted mb-0">{{ recipe.description }}</p>
                 {% endif %}
             </div>
         </div>
-        
-        <!-- Retseptga biriktirilgan omborlar (ishlab chiqarishda avtomatik to'ldiriladi) -->
-        <div class="card mt-3">
+
+        <!-- Omborlar -->
+        <div class="card data-table mt-3">
             <div class="card-header">
-                <i class="bi bi-building"></i> Ishlab chiqarishda ishlatiladigan omborlar
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-building"></i> Ishlab chiqarishda ishlatiladigan omborlar</span>
             </div>
             <div class="card-body">
                 <p class="text-muted small mb-3">Retseptni tanlaganda «Yangi ishlab chiqarish» formasida shu omborlar avtomatik tanlanadi.</p>
@@ -116,13 +117,13 @@
                 </form>
             </div>
         </div>
-        
-        <!-- Tannarx hisoblash -->
-        <div class="card mt-3">
+
+        <!-- Tannarx -->
+        <div class="card data-table mt-3">
             <div class="card-header">
-                <i class="bi bi-calculator"></i> Tannarx
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-calculator"></i> Tannarx</span>
             </div>
-            <div class="card-body">
+            <div class="card-body text-center">
                 {% set ns = namespace(total_cost=0) %}
                 {% for item in recipe.items %}
                     {% if item.product %}
@@ -130,32 +131,35 @@
                         {% set ns.total_cost = ns.total_cost + (item.quantity * unit_price)|round(0) %}
                     {% endif %}
                 {% endfor %}
-                <h4 class="text-center text-primary">{{ "{:,.0f}".format(ns.total_cost) }} so'm</h4>
+                <div class="mini-stat">
+                    <div class="num text-primary">{{ "{:,.0f}".format(ns.total_cost) }}</div>
+                    <div class="lbl">Jami tannarx (so'm)</div>
+                </div>
                 {% set _out_unit = (recipe.product.unit.name or recipe.product.unit.code if recipe.product and recipe.product.unit else 'kg') %}
-                <p class="text-center text-muted mb-0">1 {{ _out_unit }} uchun: {{ "{:,.0f}".format((ns.total_cost / recipe.output_quantity)|round(0) if recipe.output_quantity > 0 else 0) }} so'm</p>
+                <p class="text-muted small mb-0 mt-2">1 {{ _out_unit }} uchun: <strong>{{ "{:,.0f}".format((ns.total_cost / recipe.output_quantity)|round(0) if recipe.output_quantity > 0 else 0) }} so'm</strong></p>
             </div>
         </div>
     </div>
-    
+
     <!-- Tarkib -->
     <div class="col-md-8">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between">
-                <span><i class="bi bi-list-check"></i> Tarkibi (xom ashyolar)</span>
-                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addItemModal">
+        <div class="card data-table">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span style="font-size:13px; font-weight:600;"><i class="bi bi-list-check"></i> Tarkibi (xom ashyolar)</span>
+                <button class="top-btn btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addItemModal">
                     <i class="bi bi-plus"></i> Qo'shish
                 </button>
             </div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>#</th>
                             <th>Xom ashyo</th>
                             <th>Miqdor</th>
                             <th>Narx</th>
                             <th>Summa</th>
-                            <th width="100">Amallar</th>
+                            <th width="100"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -163,23 +167,25 @@
                         {% set unit_price = item_recipe_costs.get(item.product_id) if item_recipe_costs and item.product_id in item_recipe_costs else (item.product.purchase_price if item.product else 0) %}
                         {% set row_sum = ((item.quantity * unit_price)|round(0)) if item.product else 0 %}
                         <tr>
-                            <td>{{ loop.index }}</td>
+                            <td class="muted-cell">{{ loop.index }}</td>
                             <td>
                                 <strong>{{ item.product.name if item.product else 'Noma\'lum' }}</strong>
-                                {% if item.product %}<br><small class="text-muted"><code>{{ item.product.barcode or item.product.code or '-' }}</code></small>{% endif %}
+                                {% if item.product %}<br><small class="muted-cell"><code>{{ item.product.barcode or item.product.code or '-' }}</code></small>{% endif %}
                             </td>
                             <td>{{ item.quantity }} {{ (item.product.unit.name or item.product.unit.code if item.product and item.product.unit else 'kg') }}</td>
-                            <td>{{ "{:,.0f}".format(unit_price) }} so'm</td>
-                            <td><strong>{{ "{:,.0f}".format(row_sum) }} so'm</strong></td>
+                            <td class="muted-cell">{{ "{:,.0f}".format(unit_price) }} so'm</td>
+                            <td class="sum-cell"><strong>{{ "{:,.0f}".format(row_sum) }} so'm</strong></td>
                             <td>
-                                <button type="button" class="btn btn-sm btn-outline-primary" title="Tahrirlash"
-                                    onclick="editItem({{ item.id }}, {{ item.product_id if item.product_id else 0 }}, {{ item.quantity }})">
-                                    <i class="bi bi-pencil"></i>
-                                </button>
-                                <form method="POST" action="/production/recipes/{{ recipe.id }}/delete-item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Ushbu xom ashyoni tarkibdan o\'chirmoqchimisiz?');">
-                                    <input type="hidden" name="return_q" value="{{ search_q or '' }}">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
+                                <div class="d-flex gap-1">
+                                    <button type="button" class="btn-act" title="Tahrirlash"
+                                        onclick="editItem({{ item.id }}, {{ item.product_id if item.product_id else 0 }}, {{ item.quantity }})">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <form method="POST" action="/production/recipes/{{ recipe.id }}/delete-item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Ushbu xom ashyoni tarkibdan o\'chirmoqchimisiz?');">
+                                        <input type="hidden" name="return_q" value="{{ search_q or '' }}">
+                                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                         {% else %}
@@ -516,4 +522,5 @@
         </div>
     </div>
 </div>
+
 {% endblock %}

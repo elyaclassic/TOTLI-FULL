@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-life-preserver"></i> Support chat</h5>
+    <a href="/chat" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Chat</a>
+</div>
+
+<div class="card data-table">
+    <div class="card-header">Murojaatlar</div>
+    <div class="card-body p-0">
+        <div class="list-group list-group-flush">
+            {% for it in items %}
+            <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start" href="/chat/thread/{{ it.thread.id }}">
+                <div class="me-2">
+                    <div class="fw-semibold">{{ it.title }}</div>
+                    <div class="text-muted small">
+                        {% if it.last %}
+                            {{ it.last.body[:80] }}{% if it.last.body|length > 80 %}…{% endif %}
+                        {% else %}
+                            Hali xabar yo'q
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="text-end">
+                    {% if it.unread %}
+                    <span class="badge bg-danger">{{ it.unread }}</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% else %}
+            <div class="p-3 text-muted">Hali murojaat yo'q.</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

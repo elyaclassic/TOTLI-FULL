@@ -551,7 +551,7 @@ async def agent_dashboard(request: Request, db: Session = Depends(get_db), curre
     
     agent_info = {
         'name': agent.full_name,
-        'location': latest_location.address if latest_location and latest_location.address else agent.region or 'Noma\'lum'
+        'location': agent.region or 'Noma\'lum'
     }
     
     # Today's visits

@@ -2,33 +2,47 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+
+    {# ── Page header ── #}
+    <div class="page-header mb-3">
         <div>
-            <a href="/inventory" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxat</a>
-            <h4 class="mb-0 mt-2"><i class="bi bi-clipboard-check"></i> {{ doc.number }}</h4>
-            <p class="text-muted small mb-0">Ombor: <strong>{{ warehouse.name }}</strong> · Sana: {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} · <span class="badge bg-success">Tasdiqlangan</span></p>
+            <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> {{ doc.number }}</h5>
+            <p class="muted-cell mb-0 mt-1">
+                Ombor: <strong>{{ warehouse.name }}</strong>
+                &middot; Sana: {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }}
+                &middot; <span class="badge-done">Tasdiqlangan</span>
+            </p>
         </div>
-        <div class="d-flex gap-2">
-            <a href="/inventory/{{ doc.id }}/print" target="_blank" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Chop etish</a>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/inventory/{{ doc.id }}/print" target="_blank" class="top-btn">
+                <i class="bi bi-printer me-1"></i>Chop etish
+            </a>
             {% if current_user.role == 'admin' %}
-            <form method="post" action="/inventory/{{ doc.id }}/revoke" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi? Qoldiqlar oldingi holatga qaytadi.');">
-                <button type="submit" class="btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqlashni bekor qilish</button>
+            <form method="post" action="/inventory/{{ doc.id }}/revoke" class="d-inline"
+                  onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi? Qoldiqlar oldingi holatga qaytadi.');">
+                <button type="submit" class="top-btn" style="background:#b45309;color:#fff;border-color:#b45309;">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>Tasdiqlashni bekor qilish
+                </button>
             </form>
             {% endif %}
+            <a href="/inventory" class="top-btn"><i class="bi bi-arrow-left me-1"></i>Ro'yxat</a>
         </div>
     </div>
 
+    {# ── Alerts ── #}
     {% if request.query_params.get('message') %}
-    <div class="alert alert-info alert-dismissible fade show">{{ request.query_params.get('message') }}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-info-circle"></i> {{ request.query_params.get('message') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
 
-    <div class="card">
+    {# ── Items table ── #}
+    <div class="data-table">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                    <thead>
                         <tr>
                             <th>№</th>
                             <th>Tovar</th>
@@ -39,21 +53,29 @@
                     <tbody>
                         {% for row in rows %}
                         <tr>
-                            <td>{{ loop.index }}</td>
-                            <td><strong>{{ row.product_name }}</strong>{% if row.product_code %} <small class="text-muted">({{ row.product_code }})</small>{% endif %}</td>
-                            <td>{{ "{:,.3f}".format(row.quantity) }}</td>
-                            {% if show_tannarx %}<td>{{ "{:,.0f}".format(row.cost_price) }}</td><td>{{ "{:,.0f}".format(row.sale_price) }}</td>{% endif %}
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td>
+                                <strong>{{ row.product_name }}</strong>
+                                {% if row.product_code %}<span class="muted-cell">({{ row.product_code }})</span>{% endif %}
+                            </td>
+                            <td class="num-cell">{{ "{:,.3f}".format(row.quantity) }}</td>
+                            {% if show_tannarx %}
+                            <td class="muted-cell">{{ "{:,.0f}".format(row.cost_price) }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(row.sale_price) }}</td>
+                            {% endif %}
                         </tr>
                         {% else %}
-                        <tr><td colspan="5" class="text-muted text-center py-3">Qatorlar yo'q</td></tr>
+                        <tr><td colspan="5" class="muted-cell text-center py-4">Qatorlar yo'q</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
-        <div class="card-footer text-muted small">
-            Jami tannarx: {{ "{:,.0f}".format(doc.total_tannarx or 0) }} so'm · Jami sotuv: {{ "{:,.0f}".format(doc.total_sotuv or 0) }} so'm
+        <div class="card-footer d-flex gap-4 align-items-center">
+            <span class="muted-cell">Jami tannarx: <strong>{{ "{:,.0f}".format(doc.total_tannarx or 0) }} so'm</strong></span>
+            <span class="sum-cell">Jami sotuv: <strong>{{ "{:,.0f}".format(doc.total_sotuv or 0) }} so'm</strong></span>
         </div>
     </div>
+
 </div>
 {% endblock %}

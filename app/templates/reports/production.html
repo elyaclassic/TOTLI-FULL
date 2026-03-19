@@ -1,40 +1,65 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card mb-4">
-    <div class="card-header">
-        <i class="bi bi-funnel"></i> Filtr
-    </div>
-    <div class="card-body">
-        <form method="GET" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Boshlanish sanasi</label>
-                <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Tugash sanasi</label>
-                <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">&nbsp;</label>
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search"></i> Ko'rsatish
-                </button>
-            </div>
-        </form>
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-gear"></i> Ishlab chiqarish hisoboti</h4>
+    <div class="d-flex gap-2">
+        <a href="/reports" class="top-btn"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-gear"></i> Ishlab chiqarish hisoboti</span>
-        <div>
-            <strong class="text-primary">Yakunlangan jami: {{ "{:,.2f}".format(total_qty) }} kg</strong>
+<div class="filter-card mb-3">
+    <form method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label">Boshlanish sanasi</label>
+            <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
         </div>
+        <div class="col-md-4">
+            <label class="form-label">Tugash sanasi</label>
+            <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
+        </div>
+        <div class="col-md-4">
+            <button type="submit" class="top-btn w-100">
+                <i class="bi bi-search"></i> Ko'rsatish
+            </button>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary">{{ "{:,.2f}".format(total_qty) }}</div>
+            <div class="lbl">Yakunlangan jami (kg)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success">{{ productions | selectattr('status', 'equalto', 'completed') | list | length if productions else 0 }}</div>
+            <div class="lbl">Yakunlangan</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-warning">{{ productions | selectattr('status', 'equalto', 'in_progress') | list | length if productions else 0 }}</div>
+            <div class="lbl">Jarayonda</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-danger">{{ productions | selectattr('status', 'equalto', 'cancelled') | list | length if productions else 0 }}</div>
+            <div class="lbl">Bekor qilingan</div>
+        </div>
+    </div>
+</div>
+
+<div class="card data-table">
+    <div class="card-header">
+        <span><i class="bi bi-gear"></i> Ishlab chiqarish ro'yxati</span>
     </div>
     <div class="card-body p-0">
         <table class="table table-hover mb-0">
-            <thead class="table-light">
+            <thead>
                 <tr>
                     <th>#</th>
                     <th>Raqam</th>
@@ -49,24 +74,26 @@
                 {% if productions %}
                     {% for p in productions %}
                     <tr>
-                        <td>{{ loop.index }}</td>
-                        <td><code>{{ p.number }}</code></td>
-                        <td>{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '-' }}</td>
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td><code class="muted-cell">{{ p.number }}</code></td>
+                        <td class="muted-cell">{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '-' }}</td>
                         <td>{{ p.recipe.name if p.recipe else '-' }}</td>
-                        <td class="fw-bold">{{ "{:,.2f}".format(p.quantity or 0) }}</td>
+                        <td class="num-cell">{{ "{:,.2f}".format(p.quantity or 0) }}</td>
                         <td>
                             {% if p.status == 'completed' %}
-                                <span class="badge bg-success">Yakunlangan</span>
+                                <span class="badge-done">Yakunlangan</span>
                             {% elif p.status == 'cancelled' %}
-                                <span class="badge bg-danger">Bekor</span>
+                                <span class="badge-cancelled">Bekor</span>
                             {% elif p.status == 'in_progress' %}
-                                <span class="badge bg-info">Jarayonda</span>
+                                <span class="badge-waiting">Jarayonda</span>
                             {% else %}
-                                <span class="badge bg-warning text-dark">Kutilmoqda</span>
+                                <span class="badge-draft">Kutilmoqda</span>
                             {% endif %}
                         </td>
                         <td>
-                            <a href="/production/orders" class="btn btn-sm btn-outline-primary">Buyurtmalar</a>
+                            <a href="/production/orders" class="btn-act" title="Buyurtmalar">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
                         </td>
                     </tr>
                     {% endfor %}

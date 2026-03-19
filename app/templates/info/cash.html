@@ -7,110 +7,110 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="bi bi-cash-stack"></i> Kassalar</h4>
-        <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addCashModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
-    </div>
 
-    <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Nomi</th>
-                            <th>To'lov turi (POS)</th>
-                            <th>Bo'lim</th>
-                            <th>Balans</th>
-                            <th>Holati</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for cash in cash_registers %}
-                        <tr>
-                        <td>{{ cash.id }}</td>
-                        <td><strong>{{ cash.name }}</strong></td>
-                        <td>
-                            {% if cash.payment_type == 'naqd' %}
-                            <span class="badge bg-success">Naqd</span>
-                            {% elif cash.payment_type == 'plastik' %}
-                            <span class="badge bg-primary">Plastik</span>
-                            {% elif cash.payment_type == 'click' %}
-                            <span class="badge bg-secondary">Click</span>
-                            {% elif cash.payment_type == 'terminal' %}
-                            <span class="badge bg-info">Terminal</span>
-                            {% else %}
-                            <span class="text-muted" title="Tahrirlash orqali tanlang">Tanlanmagan</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if cash.department %}
-                            <span class="badge bg-info">{{ cash.department.name }}</span>
-                            {% else %}
-                            <span class="text-muted">-</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% set bal = cash_computed_balance.get(cash.id, cash.balance) %}
-                            <span class="badge {% if bal >= 0 %}bg-success{% else %}bg-danger{% endif %} fs-6" title="Faqat tasdiqlangan kirim/chiqimlar yig'indisi">
-                                {{ "{:,.0f}".format(bal) }} so'm
-                            </span>
-                        </td>
-                        <td>
-                            {% if cash.is_active %}
-                            <span class="badge bg-success">Faol</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Nofaol</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary" title="Tahrirlash"
-                                onclick="editCash({{ cash.id }}, `{{ cash.name }}`, {{ cash.balance }}, {{ cash.department_id or 'null' }}, '{{ (cash.payment_type or '')|e }}')">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            {% if current_user and current_user.role == 'admin' %}
-                            <button class="btn btn-sm btn-outline-warning" title="Balansni qayta hisoblash (Payment yozuvlaridan)"
-                                onclick="recalculateCash({{ cash.id }}, `{{ cash.name }}`)">
-                                <i class="bi bi-arrow-clockwise"></i>
-                            </button>
-                            {% endif %}
-                            <button class="btn btn-sm btn-outline-danger" title="O'chirish"
-                                onclick="deleteCash({{ cash.id }}, `{{ cash.name }}`)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                        </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-muted text-center py-4">Hozircha kassalar yo'q. Yangi kassa qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <!-- Jami balans (faqat tasdiqlangan to'lovlar bo'yicha) -->
-    {% if cash_registers %}
-    <div class="row mt-3">
-        <div class="col-md-4">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <h6 class="card-title">Jami balans</h6>
-                    <h3 class="mb-0">
-                        {{ "{:,.0f}".format(jami_balans) }} so'm
-                    </h3>
-                    <small class="opacity-75">Faqat tasdiqlangan kirim/chiqimlar yig'indisi. Bekor qilingan to'lovlar hisobga olinmaydi.</small>
-                </div>
-            </div>
-        </div>
-    </div>
-    {% endif %}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Kassalar</h5>
+    <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addCashModal">
+        <i class="bi bi-plus-circle"></i> Yaratish
+    </button>
 </div>
+
+<div class="card data-table">
+    <div class="card-header"><span class="fw-bold">Kassa ro'yxati</span></div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nomi</th>
+                    <th>To'lov turi (POS)</th>
+                    <th>Bo'lim</th>
+                    <th>Balans</th>
+                    <th>Holati</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cash in cash_registers %}
+                <tr>
+                    <td>{{ cash.id }}</td>
+                    <td><strong>{{ cash.name }}</strong></td>
+                    <td>
+                        {% if cash.payment_type == 'naqd' %}
+                        <span class="badge bg-success">Naqd</span>
+                        {% elif cash.payment_type == 'plastik' %}
+                        <span class="badge bg-primary">Plastik</span>
+                        {% elif cash.payment_type == 'click' %}
+                        <span class="badge bg-secondary">Click</span>
+                        {% elif cash.payment_type == 'terminal' %}
+                        <span class="badge bg-info">Terminal</span>
+                        {% else %}
+                        <span class="text-muted" title="Tahrirlash orqali tanlang">Tanlanmagan</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if cash.department %}
+                        <span class="badge bg-info">{{ cash.department.name }}</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% set bal = cash_computed_balance.get(cash.id, cash.balance) %}
+                        <span class="badge {% if bal >= 0 %}bg-success{% else %}bg-danger{% endif %} fs-6" title="Faqat tasdiqlangan kirim/chiqimlar yig'indisi">
+                            {{ "{:,.0f}".format(bal) }} so'm
+                        </span>
+                    </td>
+                    <td>
+                        {% if cash.is_active %}
+                        <span class="badge-active">Faol</span>
+                        {% else %}
+                        <span class="badge-inactive">Nofaol</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn-act" title="Tahrirlash"
+                            onclick="editCash({{ cash.id }}, `{{ cash.name }}`, {{ cash.balance }}, {{ cash.department_id or 'null' }}, '{{ (cash.payment_type or '')|e }}')">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        {% if current_user and current_user.role == 'admin' %}
+                        <button class="btn-act" title="Balansni qayta hisoblash (Payment yozuvlaridan)"
+                            onclick="recalculateCash({{ cash.id }}, `{{ cash.name }}`)">
+                            <i class="bi bi-arrow-clockwise"></i>
+                        </button>
+                        {% endif %}
+                        <button class="btn-act danger" title="O'chirish"
+                            onclick="deleteCash({{ cash.id }}, `{{ cash.name }}`)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-muted text-center py-4">Hozircha kassalar yo'q. Yangi kassa qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Jami balans (faqat tasdiqlangan to'lovlar bo'yicha) -->
+{% if cash_registers %}
+<div class="row mt-3">
+    <div class="col-md-4">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <h6 class="card-title">Jami balans</h6>
+                <h3 class="mb-0">
+                    {{ "{:,.0f}".format(jami_balans) }} so'm
+                </h3>
+                <small class="opacity-75">Faqat tasdiqlangan kirim/chiqimlar yig'indisi. Bekor qilingan to'lovlar hisobga olinmaydi.</small>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Yangi kassa qo'shish modal -->
 <div class="modal fade" id="addCashModal" tabindex="-1">

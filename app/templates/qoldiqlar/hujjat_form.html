@@ -6,7 +6,7 @@
     .product-results, .add-product-results { box-shadow: 0 4px 12px rgba(0,0,0,0.15); border: 1px solid #0d6efd; border-radius: 0.25rem; margin-top: 2px; background: white; z-index: 1050; position: fixed; min-width: 280px; max-width: 420px; max-height: 280px; overflow-y: auto; }
     .product-results .list-group-item, .add-product-results .list-group-item { cursor: pointer; }
     .product-results .list-group-item:hover, .add-product-results .list-group-item:hover { background-color: #e7f1ff; }
-    /* Jadval ixcham va simmetrik, hajmi o‘rtacha */
+    /* Jadval ixcham va simmetrik, hajmi o'rtacha */
     .table-compact { font-size: 0.875rem; table-layout: fixed; width: 100%; }
     .table-compact th, .table-compact td { padding: 0.35rem 0.5rem; vertical-align: middle; }
     .table-compact .form-control, .table-compact .form-select { font-size: 0.875rem; padding: 0.25rem 0.5rem; min-height: 1.9rem; height: 1.9rem; box-sizing: border-box; }
@@ -21,255 +21,253 @@
     .hujjat-doc-info p { margin-bottom: 0.2rem; font-size: 0.875rem; }
 </style>
 
-<div class="container-fluid">
-    <div class="mb-3">
-        <a href="/qoldiqlar/tovar/hujjat" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Hujjatlar ro'yxati</a>
+<div class="page-header mb-3">
+    <h5 class="mb-0">
+        {% if doc %}
+        <i class="bi bi-file-earmark-text"></i> Tovar qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
+        {% else %}
+        <i class="bi bi-file-earmark-plus"></i> Yangi tovar qoldiq hujjati
+        {% endif %}
+    </h5>
+    <div class="d-flex gap-2 align-items-center">
+        {% if doc and doc.status == 'draft' %}
+        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline" id="tasdiqlash-form">
+            <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+            <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+        </form>
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+            <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
+        </form>
+        {% endif %}
+        {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/apply-to-warehouse" class="d-inline" onsubmit="return confirm('Hujjatda yo\'q mahsulotlar uchun ombor qoldig\'i 0 qilinadi (savdoda ko\'rinmaydi). Davom etasizmi?');">
+            <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+            <button type="submit" class="top-btn btn btn-info btn-sm" title="Hujjatda qatori yo'q mahsulotlarni omborda 0 qiladi"><i class="bi bi-arrow-repeat"></i> Omborni hujjatga moslash</button>
+        </form>
+        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Faqat siz (admin) bu amalni qilasiz. Davom etasizmi?');">
+            <button type="submit" class="top-btn btn btn-warning" title="Faqat admin tasdiqni bekor qiladi — tizim o'zidan bekor qilmaydi"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+        </form>
+        {% endif %}
+        <a href="/qoldiqlar/tovar/hujjat" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hujjatlar ro'yxati</a>
     </div>
+</div>
 
-    <div class="card">
-        <div class="card-header py-2 d-flex justify-content-between align-items-center">
-            <h5 class="mb-0" style="font-size: 1.1rem;">
-                {% if doc %}
-                Tovar qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
-                {% else %}
-                Yangi tovar qoldiq hujjati
-                {% endif %}
-            </h5>
-            {% if doc and doc.status == 'draft' %}
-            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline" id="tasdiqlash-form">
-                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
-            </form>
-            {% if current_user and current_user.role == 'admin' %}
-            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
-                <button type="submit" class="btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
-            </form>
-            {% endif %}
-            {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
-            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/apply-to-warehouse" class="d-inline" onsubmit="return confirm('Hujjatda yo\'q mahsulotlar uchun ombor qoldig\'i 0 qilinadi (savdoda ko\'rinmaydi). Davom etasizmi?');">
-                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                <button type="submit" class="btn btn-info btn-sm" title="Hujjatda qatori yo'q mahsulotlarni omborda 0 qiladi"><i class="bi bi-arrow-repeat"></i> Omborni hujjatga moslash</button>
-            </form>
-            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Faqat siz (admin) bu amalni qilasiz. Davom etasizmi?');">
-                <button type="submit" class="btn btn-warning" title="Faqat admin tasdiqni bekor qiladi — tizim o'zidan bekor qilmaydi"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
-            </form>
-            {% endif %}
+<div class="card data-table">
+    <div class="card-body py-2">
+        {% if doc %}
+        <div class="row hujjat-doc-info mb-2">
+            <div class="col-md-6">
+                <p class="mb-0"><strong>Hujjat raqami:</strong> <span class="badge bg-primary">{{ doc.number }}</span> &nbsp; <strong>Sana:</strong> {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} &nbsp; <strong>Foydalanuvchi:</strong> {{ doc.user.full_name or doc.user.username if doc.user else '-' }}</p>
+            </div>
+            <div class="col-md-6">
+                <p class="mb-0"><strong>Holat:</strong> {% if doc.status == 'draft' %}<span class="badge-draft">Qoralama</span>{% else %}<span class="badge-done">Tasdiqlangan</span> <small class="text-muted">(tasdiq o'zidan bekor bo'lmaydi — faqat admin bekor qiladi)</small>{% endif %}
+                {% if show_tannarx %}&nbsp; <strong>Jami tannarx:</strong> <span class="text-success fw-bold">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</span> so'm{% endif %}
+                &nbsp; <strong>Jami sotuv:</strong> <span class="text-primary fw-bold">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</span> so'm</p>
+            </div>
         </div>
-        <div class="card-body py-2">
-            {% if doc %}
-            <div class="row hujjat-doc-info mb-2">
-                <div class="col-md-6">
-                    <p class="mb-0"><strong>Hujjat raqami:</strong> <span class="badge bg-primary">{{ doc.number }}</span> &nbsp; <strong>Sana:</strong> {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} &nbsp; <strong>Foydalanuvchi:</strong> {{ doc.user.full_name or doc.user.username if doc.user else '-' }}</p>
-                </div>
-                <div class="col-md-6">
-                    <p class="mb-0"><strong>Holat:</strong> {% if doc.status == 'draft' %}<span class="badge bg-warning text-dark">Qoralama</span>{% else %}<span class="badge bg-success">Tasdiqlangan</span> <small class="text-muted">(tasdiq o'zidan bekor bo'lmaydi — faqat admin bekor qiladi)</small>{% endif %}
-                    {% if show_tannarx %}&nbsp; <strong>Jami tannarx:</strong> <span class="text-success fw-bold">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</span> so'm{% endif %}
-                    &nbsp; <strong>Jami sotuv:</strong> <span class="text-primary fw-bold">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</span> so'm</p>
-                </div>
-            </div>
-            {% if doc.status == 'draft' %}
-            <div class="alert alert-warning py-2 mb-2 small" role="alert">
-                <i class="bi bi-exclamation-triangle-fill"></i> <strong>Qoralama:</strong> O'zgarishlar omborga va savdo oynasiga <strong>«Tasdiqlash»</strong> bosilguncha qo'llanmaydi. Mahsulot qoldig'ini nolga tushirsangiz yoki qatorni o'chirsangiz, savdoda ko'rinmasligi uchun avval <strong>Tasdiqlash</strong> tugmasini bosing.
-            </div>
-            {% endif %}
-            {% if doc.status == 'confirmed' and request.query_params.get('applied') == '1' %}
-            <div class="alert alert-success py-2 mb-2 small" role="alert">
-                <i class="bi bi-check-circle-fill"></i> Ombor hujjatga moslashtirildi. Hujjatda yo'q mahsulotlar uchun qoldiq 0 qilindi — savdo oynasini yangilang (F5).
-            </div>
-            {% endif %}
-            <hr class="my-2">
-            {% endif %}
+        {% if doc.status == 'draft' %}
+        <div class="alert alert-warning py-2 mb-2 small" role="alert">
+            <i class="bi bi-exclamation-triangle-fill"></i> <strong>Qoralama:</strong> O'zgarishlar omborga va savdo oynasiga <strong>«Tasdiqlash»</strong> bosilguncha qo'llanmaydi. Mahsulot qoldig'ini nolga tushirsangiz yoki qatorni o'chirsangiz, savdoda ko'rinmasligi uchun avval <strong>Tasdiqlash</strong> tugmasini bosing.
+        </div>
+        {% endif %}
+        {% if doc.status == 'confirmed' and request.query_params.get('applied') == '1' %}
+        <div class="alert alert-success py-2 mb-2 small" role="alert">
+            <i class="bi bi-check-circle-fill"></i> Ombor hujjatga moslashtirildi. Hujjatda yo'q mahsulotlar uchun qoldiq 0 qilindi — savdo oynasini yangilang (F5).
+        </div>
+        {% endif %}
+        <hr class="my-2">
+        {% endif %}
 
-            {% if doc %}
-            <div class="mb-1 d-flex flex-wrap align-items-center gap-2">
-                <h6 class="mb-0 small"><i class="bi bi-list-ul"></i> Hujjat qatorlari ({{ doc.items|length }} ta)</h6>
-                <input type="text" class="form-control form-control-sm hujjat-row-search" placeholder="Tovar nomi bo'yicha qidirish (masalan: alpen gold plitka)..." style="max-width: 280px;" autocomplete="off">
-                <span class="small text-muted hujjat-search-count"></span>
+        {% if doc %}
+        <div class="mb-1 d-flex flex-wrap align-items-center gap-2">
+            <h6 class="mb-0 small"><i class="bi bi-list-ul"></i> Hujjat qatorlari ({{ doc.items|length }} ta)</h6>
+            <input type="text" class="form-control form-control-sm hujjat-row-search" placeholder="Tovar nomi bo'yicha qidirish (masalan: alpen gold plitka)..." style="max-width: 280px;" autocomplete="off">
+            <span class="small text-muted hujjat-search-count"></span>
+        </div>
+        <div class="table-responsive mb-3">
+            <table class="table table-sm table-bordered table-hover table-compact mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 40px;" class="text-center">№</th>
+                        <th class="col-tovar">Tovar</th>
+                        <th style="width: 135px;">Ombor</th>
+                        <th style="width: 88px;" class="text-end">Qoldiq</th>
+                        {% if show_tannarx %}<th style="width: 98px;" class="text-end">Tannarx</th><th style="width: 108px;" class="text-end">Summa tann.</th>{% endif %}
+                        <th style="width: 98px;" class="text-end">Sotuv narx</th>
+                        <th style="width: 108px;" class="text-end">Sotuv summa</th>
+                        {% if doc.status == 'draft' %}<th style="width: 64px;" class="text-center">Amal</th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in doc.items %}
+                    <tr class="hujjat-data-row {% if doc.status == 'draft' %}edit-row{% endif %}" data-item-id="{{ item.id }}" data-search="{{ (item.product.name if item.product else '')|lower }} {{ (item.product.code or '')|lower }} {{ (item.quantity)|string|lower }} {{ (item.warehouse.name if item.warehouse else '')|lower }}">
+                        <td class="text-center">{{ loop.index }}</td>
+                        <td class="small col-tovar">
+                            <strong>{{ item.product.name if item.product else '-' }}</strong>
+                            {% if item.product and (item.product.code or item.product.barcode) %}
+                            <br><span class="text-muted" style="font-size: 0.75rem;"><code>{{ item.product.code or item.product.barcode }}</code></span>
+                            {% endif %}
+                            {% if item.product and item.product.unit %}
+                            <br><span class="text-muted" style="font-size: 0.75rem;">{{ item.product.unit.name }}</span>
+                            {% endif %}
+                        </td>
+                        {% if doc.status == 'draft' %}
+                        <td>
+                            <select form="edit-form-{{ item.id }}" name="warehouse_id" class="form-select form-select-sm" required>
+                                {% for wh in warehouses %}
+                                <option value="{{ wh.id }}" {% if item.warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td class="text-end col-number">
+                            <input form="edit-form-{{ item.id }}" type="number" name="quantity" class="form-control form-control-sm text-end" step="0.001" min="0.001" required value="{{ item.quantity }}">
+                        </td>
+                        {% if show_tannarx %}
+                        <td class="text-end col-number">
+                            <input form="edit-form-{{ item.id }}" type="number" name="cost_price" class="form-control form-control-sm text-end row-cost" step="0.001" min="0" value="{{ item.cost_price or 0 }}">
+                        </td>
+                        <td class="text-end col-number"><strong class="text-success row-sum-tannarx">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
+                        {% else %}
+                        <input form="edit-form-{{ item.id }}" type="hidden" name="cost_price" value="{{ item.cost_price or 0 }}">
+                        {% endif %}
+                        <td class="text-end col-number">
+                            <input form="edit-form-{{ item.id }}" type="number" name="sale_price" class="form-control form-control-sm text-end row-sale" step="0.001" min="0" value="{{ item.sale_price or 0 }}">
+                        </td>
+                        <td class="text-end col-number"><strong class="text-primary row-sum-sotuv">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
+                        <td class="text-center">
+                            <form id="edit-form-{{ item.id }}" method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/edit-row/{{ item.id }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}"></form>
+                            <button type="submit" form="edit-form-{{ item.id }}" class="btn-act" title="Saqlash"><i class="bi bi-check-lg"></i></button>
+                            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete-row/{{ item.id }}" class="d-inline" onsubmit="return confirm('Ushbu qatorni o\'chirishni xohlaysizmi?');">
+                                <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                        {% else %}
+                        <td>{{ item.warehouse.name if item.warehouse else '-' }}</td>
+                        <td class="text-end fw-bold col-number">{{ "{:,.3f}".format(item.quantity) }}</td>
+                        {% if show_tannarx %}
+                        <td class="text-end col-number">{{ "{:,.0f}".format(item.cost_price or 0) }}</td>
+                        <td class="text-end col-number"><strong class="text-success">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
+                        {% endif %}
+                        <td class="text-end col-number">{{ "{:,.0f}".format(item.sale_price or 0) }}</td>
+                        <td class="text-end col-number"><strong class="text-primary">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="{% if doc.status == 'draft' %}{{ 9 if show_tannarx else 7 }}{% else %}{{ 8 if show_tannarx else 6 }}{% endif %}" class="text-muted text-center py-4">Hozircha qatorlar yo'q.</td></tr>
+                    {% endfor %}
+                    {% if doc.items %}
+                    <tr class="table-info fw-bold table-compact hujjat-jami-row">
+                        <td colspan="3" class="text-end py-1">JAMI:</td>
+                        <td class="text-end py-1 col-number">{{ "{:,.3f}".format(doc.items|sum(attribute='quantity')) }}</td>
+                        {% if show_tannarx %}<td class="py-1"></td>
+                        <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</td>
+                        <td class="py-1"></td>{% endif %}
+                        <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</td>
+                        {% if doc.status == 'draft' %}<td class="py-1"></td>{% endif %}
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if doc.status == 'draft' %}
+        <!-- Qator qo'shish -->
+        <h6 class="mb-2">Qator qo'shish</h6>
+        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/add-row" class="row g-2 align-items-end mb-4">
+            <div class="col-md-3 position-relative">
+                <label class="form-label small">Mahsulot *</label>
+                <input type="text" class="form-control form-control-sm add-product-search" placeholder="Yozing yoki bosing — mahsulotni tanlang" autocomplete="off">
+                <input type="hidden" name="product_id" id="add_row_product_id" required>
+                <div class="add-product-results list-group" style="display:none;"></div>
             </div>
+            <div class="col-md-2">
+                <label class="form-label small">O'mbor *</label>
+                <select name="warehouse_id" class="form-select form-select-sm" required>
+                    <option value="">Tanlang...</option>
+                    {% for wh in warehouses %}
+                    <option value="{{ wh.id }}">{{ wh.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small">Soni *</label>
+                <input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0.01" required placeholder="0">
+            </div>
+            {% if show_tannarx %}
+            <div class="col-md-1">
+                <label class="form-label small">Tannarx</label>
+                <input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
+            </div>
+            {% else %}
+            <input type="hidden" name="cost_price" value="0">
+            {% endif %}
+            <div class="col-md-1">
+                <label class="form-label small">Sotuv narx</label>
+                <input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="top-btn btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+            </div>
+        </form>
+        <select id="add_row_product_list" style="display:none;" aria-hidden="true">
+            {% for p in products %}
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+        {% else %}
+        <!-- Yangi hujjat: barcha qatorlar bir formda -->
+        <form method="post" action="/qoldiqlar/tovar/hujjat" id="newDocForm">
+            <h6 class="mb-2">Qatorlar</h6>
             <div class="table-responsive mb-3">
-                <table class="table table-sm table-bordered table-hover table-compact">
+                <table class="table table-sm" id="itemsTable">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 40px;" class="text-center">№</th>
-                            <th class="col-tovar">Tovar</th>
-                            <th style="width: 135px;">Ombor</th>
-                            <th style="width: 88px;" class="text-end">Qoldiq</th>
-                            {% if show_tannarx %}<th style="width: 98px;" class="text-end">Tannarx</th><th style="width: 108px;" class="text-end">Summa tann.</th>{% endif %}
-                            <th style="width: 98px;" class="text-end">Sotuv narx</th>
-                            <th style="width: 108px;" class="text-end">Sotuv summa</th>
-                            {% if doc.status == 'draft' %}<th style="width: 64px;" class="text-center">Amal</th>{% endif %}
+                            <th>N</th>
+                            <th>Tovar *</th>
+                            <th>O'mbor *</th>
+                            <th>Soni *</th>
+                            {% if show_tannarx %}<th>Tannarx (so'm)</th>{% endif %}
+                            <th>Sotuv narx (so'm)</th>
+                            <th style="width:50px;"></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for item in doc.items %}
-                        <tr class="hujjat-data-row {% if doc.status == 'draft' %}edit-row{% endif %}" data-item-id="{{ item.id }}" data-search="{{ (item.product.name if item.product else '')|lower }} {{ (item.product.code or '')|lower }} {{ (item.quantity)|string|lower }} {{ (item.warehouse.name if item.warehouse else '')|lower }}">
-                            <td class="text-center">{{ loop.index }}</td>
-                            <td class="small col-tovar">
-                                <strong>{{ item.product.name if item.product else '-' }}</strong>
-                                {% if item.product and (item.product.code or item.product.barcode) %}
-                                <br><span class="text-muted" style="font-size: 0.75rem;"><code>{{ item.product.code or item.product.barcode }}</code></span>
-                                {% endif %}
-                                {% if item.product and item.product.unit %}
-                                <br><span class="text-muted" style="font-size: 0.75rem;">{{ item.product.unit.name }}</span>
-                                {% endif %}
+                    <tbody id="itemsTableBody">
+                        <tr class="item-row">
+                            <td class="row-n">1</td>
+                            <td class="position-relative">
+                                <input type="text" class="form-control form-control-sm product-search" placeholder="Yozing yoki maydonni bosing — ro'yxatdan tanlang" autocomplete="off">
+                                <input type="hidden" name="product_id" class="row-product-id">
+                                <div class="product-results list-group" style="display:none;"></div>
                             </td>
-                            {% if doc.status == 'draft' %}
                             <td>
-                                <select form="edit-form-{{ item.id }}" name="warehouse_id" class="form-select form-select-sm" required>
+                                <select name="warehouse_id" class="form-select form-select-sm">
+                                    <option value="">Tanlang...</option>
                                     {% for wh in warehouses %}
-                                    <option value="{{ wh.id }}" {% if item.warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                                    <option value="{{ wh.id }}">{{ wh.name }}</option>
                                     {% endfor %}
                                 </select>
                             </td>
-                            <td class="text-end col-number">
-                                <input form="edit-form-{{ item.id }}" type="number" name="quantity" class="form-control form-control-sm text-end" step="0.001" min="0.001" required value="{{ item.quantity }}">
-                            </td>
-                            {% if show_tannarx %}
-                            <td class="text-end col-number">
-                                <input form="edit-form-{{ item.id }}" type="number" name="cost_price" class="form-control form-control-sm text-end row-cost" step="0.001" min="0" value="{{ item.cost_price or 0 }}">
-                            </td>
-                            <td class="text-end col-number"><strong class="text-success row-sum-tannarx">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
-                            {% else %}
-                            <input form="edit-form-{{ item.id }}" type="hidden" name="cost_price" value="{{ item.cost_price or 0 }}">
-                            {% endif %}
-                            <td class="text-end col-number">
-                                <input form="edit-form-{{ item.id }}" type="number" name="sale_price" class="form-control form-control-sm text-end row-sale" step="0.001" min="0" value="{{ item.sale_price or 0 }}">
-                            </td>
-                            <td class="text-end col-number"><strong class="text-primary row-sum-sotuv">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
-                            <td class="text-center">
-                                <form id="edit-form-{{ item.id }}" method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/edit-row/{{ item.id }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}"></form>
-                                <button type="submit" form="edit-form-{{ item.id }}" class="btn btn-sm btn-success py-0 px-1" title="Saqlash"><i class="bi bi-check-lg"></i></button>
-                                <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/delete-row/{{ item.id }}" class="d-inline" onsubmit="return confirm('Ushbu qatorni o\'chirishni xohlaysizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-1" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                </form>
-                            </td>
-                            {% else %}
-                            <td>{{ item.warehouse.name if item.warehouse else '-' }}</td>
-                            <td class="text-end fw-bold col-number">{{ "{:,.3f}".format(item.quantity) }}</td>
-                            {% if show_tannarx %}
-                            <td class="text-end col-number">{{ "{:,.0f}".format(item.cost_price or 0) }}</td>
-                            <td class="text-end col-number"><strong class="text-success">{{ "{:,.0f}".format((item.quantity or 0) * (item.cost_price or 0)) }}</strong></td>
-                            {% endif %}
-                            <td class="text-end col-number">{{ "{:,.0f}".format(item.sale_price or 0) }}</td>
-                            <td class="text-end col-number"><strong class="text-primary">{{ "{:,.0f}".format((item.quantity or 0) * (item.sale_price or 0)) }}</strong></td>
-                            {% endif %}
+                            <td><input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
+                            {% if show_tannarx %}<td><input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>{% else %}<td style="display:none"><input type="hidden" name="cost_price" value="0"></td>{% endif %}
+                            <td><input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>
+                            <td><button type="button" class="btn-act danger remove-row"><i class="bi bi-trash"></i></button></td>
                         </tr>
-                        {% else %}
-                        <tr><td colspan="{% if doc.status == 'draft' %}{{ 9 if show_tannarx else 7 }}{% else %}{{ 8 if show_tannarx else 6 }}{% endif %}" class="text-muted text-center py-4">Hozircha qatorlar yo'q.</td></tr>
-                        {% endfor %}
-                        {% if doc.items %}
-                        <tr class="table-info fw-bold table-compact hujjat-jami-row">
-                            <td colspan="3" class="text-end py-1">JAMI:</td>
-                            <td class="text-end py-1 col-number">{{ "{:,.3f}".format(doc.items|sum(attribute='quantity')) }}</td>
-                            {% if show_tannarx %}<td class="py-1"></td>
-                            <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</td>
-                            <td class="py-1"></td>{% endif %}
-                            <td class="text-end py-1 col-number">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</td>
-                            {% if doc.status == 'draft' %}<td class="py-1"></td>{% endif %}
-                        </tr>
-                        {% endif %}
                     </tbody>
                 </table>
             </div>
-
-            {% if doc.status == 'draft' %}
-            <!-- Qator qo'shish -->
-            <h6 class="mb-2">Qator qo'shish</h6>
-            <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/add-row" class="row g-2 align-items-end mb-4">
-                <div class="col-md-3 position-relative">
-                    <label class="form-label small">Mahsulot *</label>
-                    <input type="text" class="form-control form-control-sm add-product-search" placeholder="Yozing yoki bosing — mahsulotni tanlang" autocomplete="off">
-                    <input type="hidden" name="product_id" id="add_row_product_id" required>
-                    <div class="add-product-results list-group" style="display:none;"></div>
-                </div>
-                <div class="col-md-2">
-                    <label class="form-label small">O'mbor *</label>
-                    <select name="warehouse_id" class="form-select form-select-sm" required>
-                        <option value="">Tanlang...</option>
-                        {% for wh in warehouses %}
-                        <option value="{{ wh.id }}">{{ wh.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-1">
-                    <label class="form-label small">Soni *</label>
-                    <input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0.01" required placeholder="0">
-                </div>
-                {% if show_tannarx %}
-                <div class="col-md-1">
-                    <label class="form-label small">Tannarx</label>
-                    <input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
-                </div>
-                {% else %}
-                <input type="hidden" name="cost_price" value="0">
-                {% endif %}
-                <div class="col-md-1">
-                    <label class="form-label small">Sotuv narx</label>
-                    <input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0">
-                </div>
-                <div class="col-md-2">
-                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
-                </div>
-            </form>
-            <select id="add_row_product_list" style="display:none;" aria-hidden="true">
-                {% for p in products %}
-                <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
-                {% endfor %}
-            </select>
-            {% endif %}
-            {% else %}
-            <!-- Yangi hujjat: barcha qatorlar bir formda -->
-            <form method="post" action="/qoldiqlar/tovar/hujjat" id="newDocForm">
-                <h6 class="mb-2">Qatorlar</h6>
-                <div class="table-responsive mb-3">
-                    <table class="table table-sm" id="itemsTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th>N</th>
-                                <th>Tovar *</th>
-                                <th>O'mbor *</th>
-                                <th>Soni *</th>
-                                {% if show_tannarx %}<th>Tannarx (so'm)</th>{% endif %}
-                                <th>Sotuv narx (so'm)</th>
-                                <th style="width:50px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="itemsTableBody">
-                            <tr class="item-row">
-                                <td class="row-n">1</td>
-                                <td class="position-relative">
-                                    <input type="text" class="form-control form-control-sm product-search" placeholder="Yozing yoki maydonni bosing — ro'yxatdan tanlang" autocomplete="off">
-                                    <input type="hidden" name="product_id" class="row-product-id">
-                                    <div class="product-results list-group" style="display:none;"></div>
-                                </td>
-                                <td>
-                                    <select name="warehouse_id" class="form-select form-select-sm">
-                                        <option value="">Tanlang...</option>
-                                        {% for wh in warehouses %}
-                                        <option value="{{ wh.id }}">{{ wh.name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </td>
-                                <td><input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
-                                {% if show_tannarx %}<td><input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>{% else %}<td style="display:none"><input type="hidden" name="cost_price" value="0"></td>{% endif %}
-                                <td><input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>
-                                <td><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <button type="button" class="btn btn-outline-primary btn-sm mb-3" id="addRowBtn"><i class="bi bi-plus-circle"></i> Qator qo'shish</button>
-                <div>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Saqlash</button>
-                </div>
-            </form>
-            <select id="product_list" style="display:none;" aria-hidden="true">
-                {% for p in products %}
-                <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
-                {% endfor %}
-            </select>
-            {% endif %}
-        </div>
+            <button type="button" class="top-btn btn btn-outline-primary btn-sm mb-3" id="addRowBtn"><i class="bi bi-plus-circle"></i> Qator qo'shish</button>
+            <div>
+                <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-circle"></i> Saqlash</button>
+            </div>
+        </form>
+        <select id="product_list" style="display:none;" aria-hidden="true">
+            {% for p in products %}
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
     </div>
 </div>
 

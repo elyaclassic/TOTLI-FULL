@@ -2,15 +2,58 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-person-walking"></i> Agentlar</h5>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addAgentModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+
+    <!-- Page header -->
+    <div class="page-header mb-3">
+        <div>
+            <h4 class="mb-0"><i class="bi bi-person-walking"></i> Agentlar</h4>
+            <p class="text-muted mb-0 small">Savdo agentlari ro'yxati va holati</p>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <button class="top-btn" data-bs-toggle="modal" data-bs-target="#addAgentModal">
+                <i class="bi bi-plus-circle"></i> Yaratish
+            </button>
+        </div>
+    </div>
+
+    <!-- Mini-stat cards -->
+    <div class="d-flex flex-wrap gap-3 mb-3">
+        <div class="mini-stat">
+            <div class="num">{{ agents|length }}</div>
+            <div class="lbl"><i class="bi bi-people"></i> Jami agentlar</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num">
+                {% set online_count = namespace(v=0) %}
+                {% for agent in agents %}
+                    {% if agent.last_location %}
+                        {% set mins_ago = ((now() - agent.last_location.recorded_at).total_seconds() / 60)|int if now is defined else 999 %}
+                        {% if mins_ago < 10 %}{% set online_count.v = online_count.v + 1 %}{% endif %}
+                    {% endif %}
+                {% endfor %}
+                {{ online_count.v }}
+            </div>
+            <div class="lbl"><i class="bi bi-circle-fill text-success"></i> Online agentlar</div>
+        </div>
+    </div>
+
+    <!-- Filter card with search -->
+    <div class="filter-card mb-3">
+        <div class="search-wrap">
+            <i class="bi bi-search"></i>
+            <input type="search" id="agentSearch" class="form-control" placeholder="Agent nomi, kodi yoki telefon bo'yicha qidirish..." autocomplete="off">
+        </div>
+    </div>
+
+    <!-- Data table -->
+    <div class="data-table">
+        <div class="card-header">
+            <span><i class="bi bi-list-ul"></i> Agentlar ro'yxati</span>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-hover mb-0" id="agentsTable">
+                    <thead>
                         <tr>
                             <th>#</th>
                             <th>Kodi</th>
@@ -24,52 +67,58 @@
                     </thead>
                     <tbody>
                         {% for agent in agents %}
-                            <tr>
-                                <td>{{ loop.index }}</td>
-                                <td><code>{{ agent.code }}</code></td>
-                                <td>
-                                    <strong>{{ agent.full_name }}</strong>
-                                    {% if agent.telegram_id %}
-                                    <br><small class="text-muted"><i class="bi bi-telegram"></i> {{ agent.telegram_id }}</small>
-                                    {% endif %}
-                                </td>
-                                <td>{{ agent.phone or '-' }}</td>
-                                <td>{{ agent.region or '-' }}</td>
-                                <td>
-                                    {% if agent.last_location %}
-                                        {% set mins_ago = ((now() - agent.last_location.recorded_at).total_seconds() / 60)|int if now is defined else 999 %}
-                                        {% if mins_ago < 10 %}
-                                            <span class="badge bg-success"><i class="bi bi-circle-fill"></i> Online</span>
-                                        {% elif mins_ago < 60 %}
-                                            <span class="badge bg-warning">{{ mins_ago }} min oldin</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">Offline</span>
-                                        {% endif %}
-                                        <br><small class="text-muted">
-                                            <i class="bi bi-battery-half"></i> {{ agent.last_location.battery }}%
-                                        </small>
+                        <tr>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td><code>{{ agent.code }}</code></td>
+                            <td>
+                                <strong>{{ agent.full_name }}</strong>
+                                {% if agent.telegram_id %}
+                                <br><small class="text-muted"><i class="bi bi-telegram"></i> {{ agent.telegram_id }}</small>
+                                {% endif %}
+                            </td>
+                            <td class="muted-cell">{{ agent.phone or '-' }}</td>
+                            <td class="muted-cell">{{ agent.region or '-' }}</td>
+                            <td>
+                                {% if agent.last_location %}
+                                    {% set mins_ago = ((now() - agent.last_location.recorded_at).total_seconds() / 60)|int if now is defined else 999 %}
+                                    {% if mins_ago < 10 %}
+                                        <span class="badge-active"><i class="bi bi-circle-fill"></i> Online</span>
+                                    {% elif mins_ago < 60 %}
+                                        <span class="badge-waiting">{{ mins_ago }} min oldin</span>
                                     {% else %}
-                                        <span class="badge bg-secondary">Ma'lumot yo'q</span>
+                                        <span class="badge-inactive">Offline</span>
                                     {% endif %}
-                                </td>
-                                <td>
-                                    <span class="badge bg-primary">{{ agent.today_visits }} tashrif</span>
-                                </td>
-                                <td>
-                                    <a href="/agents/{{ agent.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                    <a href="/map?agent={{ agent.id }}" class="btn btn-sm btn-outline-info" title="Xaritada"><i class="bi bi-geo-alt"></i></a>
-                                </td>
-                            </tr>
+                                    <br><small class="text-muted">
+                                        <i class="bi bi-battery-half"></i> {{ agent.last_location.battery }}%
+                                    </small>
+                                {% else %}
+                                    <span class="badge-inactive">Ma'lumot yo'q</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge bg-primary">{{ agent.today_visits }} tashrif</span>
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="/agents/{{ agent.id }}" class="btn-act" title="Ochish"><i class="bi bi-eye"></i></a>
+                                    <a href="/map?agent={{ agent.id }}" class="btn-act" title="Xaritada ko'rish"><i class="bi bi-geo-alt"></i></a>
+                                </div>
+                            </td>
+                        </tr>
                         {% else %}
-                            <tr>
-                                <td colspan="8" class="text-muted text-center py-4">Hozircha agentlar yo'q. Yangi agent qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
-                            </tr>
+                        <tr>
+                            <td colspan="8" class="text-muted text-center py-5">
+                                <i class="bi bi-person-x fs-1 d-block mb-2" style="color:#ccc;"></i>
+                                Hozircha agentlar yo'q. Yangi agent qo'shish uchun yuqoridagi Yaratish tugmasini bosing.
+                            </td>
+                        </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+
 </div>
 
 <!-- Agent qo'shish modal -->
@@ -113,4 +162,21 @@
         </div>
     </div>
 </div>
+
+<script>
+(function() {
+    var searchInput = document.getElementById('agentSearch');
+    var table = document.getElementById('agentsTable');
+    if (!searchInput || !table) return;
+    searchInput.addEventListener('input', function() {
+        var q = this.value.trim().toLowerCase();
+        var rows = table.querySelectorAll('tbody tr');
+        rows.forEach(function(row) {
+            if (!q) { row.style.display = ''; return; }
+            var text = row.textContent.toLowerCase();
+            row.style.display = text.indexOf(q) !== -1 ? '' : 'none';
+        });
+    });
+})();
+</script>
 {% endblock %}

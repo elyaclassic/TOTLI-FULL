@@ -3,52 +3,63 @@
 {% block content %}
 <div class="container-fluid">
     {% if request.query_params.get('created') == '1' %}
-    <div class="alert alert-success alert-dismissible fade show no-print" role="alert">
+    <div class="alert alert-success alert-dismissible fade show no-print py-2 small" role="alert">
         <i class="bi bi-check-circle"></i> Hujjat yaratildi. Quyida mehnat shartnomasi shartlari. Chop etish uchun <strong>Chop etish</strong> tugmasini bosing.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
     {% if request.query_params.get('edited') == '1' %}
-    <div class="alert alert-success alert-dismissible fade show no-print" role="alert">
+    <div class="alert alert-success alert-dismissible fade show no-print py-2 small" role="alert">
         <i class="bi bi-check-circle"></i> Hujjat tahrirlandi.
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="d-flex justify-content-between align-items-center mb-3 no-print">
-        <a href="/employees/hiring-docs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
-        <div class="d-flex gap-2 align-items-center">
+
+    <div class="page-header mb-3 no-print">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-person"></i> Ishga qabul qilish hujjati</h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/employees/hiring-docs" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
             {% if current_user and current_user.role == 'admin' %}
-            {% if not doc.confirmed_at %}
-            <a href="/employees/hiring-doc/{{ doc.id }}/edit" class="btn btn-outline-primary btn-sm"><i class="bi bi-pencil"></i> Tahrirlash</a>
-            <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/confirm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlashni xohlaysizmi?');">
-                <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
-            </form>
-            <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Hujjatni o\'chirishni xohlaysizmi?');">
-                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
-            </form>
-            {% else %}
-            <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/cancel-confirm" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
-                <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-x-circle"></i> Tasdiqlashni bekor qilish</button>
-            </form>
-            <span class="text-muted small">Tasdiqlangan hujjatni faqat ko'rish mumkin. Tahrirlash va o'chirish: avval tasdiqlashni bekor qiling.</span>
+                {% if not doc.confirmed_at %}
+                <a href="/employees/hiring-doc/{{ doc.id }}/edit" class="top-btn btn btn-outline-primary"><i class="bi bi-pencil"></i> Tahrirlash</a>
+                <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/confirm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlashni xohlaysizmi?');">
+                    <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+                </form>
+                <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Hujjatni o\'chirishni xohlaysizmi?');">
+                    <button type="submit" class="top-btn btn btn-danger"><i class="bi bi-trash"></i> O'chirish</button>
+                </form>
+                {% else %}
+                <form method="POST" action="/employees/hiring-doc/{{ doc.id }}/cancel-confirm" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
+                    <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-x-circle"></i> Tasdiqlashni bekor qilish</button>
+                </form>
+                {% endif %}
             {% endif %}
-            {% endif %}
-            <a href="/employees/hiring-doc/{{ doc.id }}/contract" class="btn btn-outline-dark btn-sm"><i class="bi bi-file-earmark-text"></i> Shartnoma (to'liq)</a>
-            <button type="button" class="btn btn-outline-primary btn-sm" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
+            <a href="/employees/hiring-doc/{{ doc.id }}/contract" class="top-btn btn btn-outline-dark"><i class="bi bi-file-earmark-text"></i> Shartnoma (to'liq)</a>
+            <button type="button" class="top-btn btn btn-outline-primary" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
         </div>
     </div>
-    <div class="card">
+
+    {% if current_user and current_user.role == 'admin' and doc.confirmed_at %}
+    <div class="filter-card mb-3 no-print">
+        <span class="text-muted small"><i class="bi bi-info-circle"></i> Tasdiqlangan hujjatni faqat ko'rish mumkin. Tahrirlash va o'chirish uchun avval tasdiqlashni bekor qiling.</span>
+    </div>
+    {% endif %}
+
+    <div class="card data-table">
         <div class="card-header">
-            <h5 class="mb-1"><i class="bi bi-file-earmark-person"></i> Ishga qabul qilish hujjati (Mehnat shartnomasi shartlari)</h5>
-            <p class="mb-0 small">
-                <strong>Hujjat raqami:</strong> {{ doc.number }} &nbsp;|&nbsp;
-                <strong>Imzolangan sana:</strong> {{ doc.doc_date.strftime('%d.%m.%Y') }}
-                {% if doc.confirmed_at %}&nbsp;|&nbsp; <span class="text-success"><i class="bi bi-check-circle"></i> Tasdiqlangan {{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') }}</span>{% endif %}
-            </p>
-            <p class="mb-0 mt-1 small text-muted">O'zR Mehnat kodeksi, <a href="https://gov.uz/oz/advice/NaN/document/2234" target="_blank" rel="noopener">Mehnat shartnomasini tuzish</a> qoidalariga muvofiq.</p>
+            <span><i class="bi bi-file-earmark-person"></i> Ishga qabul qilish hujjati (Mehnat shartnomasi shartlari)</span>
+            <div class="d-flex gap-2 align-items-center flex-wrap">
+                <span class="muted-cell">№ {{ doc.number }}</span>
+                <span class="muted-cell">|</span>
+                <span class="muted-cell">{{ doc.doc_date.strftime('%d.%m.%Y') }}</span>
+                {% if doc.confirmed_at %}
+                <span class="badge-done"><i class="bi bi-check-circle"></i> Tasdiqlangan {{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') }}</span>
+                {% else %}
+                <span class="badge-draft">Qoralama</span>
+                {% endif %}
+            </div>
         </div>
-        <div class="card-body">
-            <p class="small text-muted mb-2">Mehnat shartnomasida quyidagilar belgilanadi:</p>
+        <div class="card-body p-0">
             <table class="table table-bordered mb-0">
                 <tr>
                     <th width="240" class="table-light">Ish joyi (korxona / bo'lim)</th>
@@ -102,7 +113,7 @@
                 {% endif %}
                 <tr>
                     <th class="table-light">Mehnat haqi miqdori (so'm)</th>
-                    <td>{{ "{:,.0f}".format(doc.salary or 0) }}</td>
+                    <td class="num-cell">{{ "{:,.0f}".format(doc.salary or 0) }}</td>
                 </tr>
                 <tr>
                     <th class="table-light">Telefon</th>
@@ -115,9 +126,12 @@
                 </tr>
                 {% endif %}
             </table>
-            <p class="mt-3 mb-0 text-muted small">
-                Hujjat yaratilgan: {{ doc.created_at.strftime('%d.%m.%Y %H:%M') }}. Mehnat shartnomasi xodim va ishga qabul qilish huquqiga ega bo'lgan mansabdor shaxs imzolari bilan mustahkamlanadi.
-            </p>
+            <div class="p-3 border-top">
+                <p class="mb-1 small text-muted">
+                    Hujjat yaratilgan: {{ doc.created_at.strftime('%d.%m.%Y %H:%M') }}. Mehnat shartnomasi xodim va ishga qabul qilish huquqiga ega bo'lgan mansabdor shaxs imzolari bilan mustahkamlanadi.
+                </p>
+                <p class="mb-0 small text-muted">O'zR Mehnat kodeksi, <a href="https://gov.uz/oz/advice/NaN/document/2234" target="_blank" rel="noopener">Mehnat shartnomasini tuzish</a> qoidalariga muvofiq.</p>
+            </div>
         </div>
     </div>
 </div>

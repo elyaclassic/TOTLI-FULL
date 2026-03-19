@@ -2,12 +2,37 @@
 Umumiy dependency lar — get_db, get_current_user, require_auth, require_admin.
 Routerlar shu moduldan import qiladi.
 """
-from typing import Optional
+from typing import Optional, Any
 from fastapi import Depends, Cookie
 from sqlalchemy.orm import Session
 
 from app.models.database import get_db, User
 from app.utils.auth import get_user_from_token
+
+
+def _extract_user_id(user_data: Any) -> Optional[int]:
+    """
+    Token payload turli formatda kelishi mumkin:
+    - {"user_id": 1, ...}
+    - {"user_id": {"user_id": 1, "username": "...", "role": "..."}}
+    - {"id": 1, ...}
+    Noto'g'ri bo'lsa None qaytaradi.
+    """
+    if not user_data:
+        return None
+    if isinstance(user_data, int):
+        return int(user_data)
+    if not isinstance(user_data, dict):
+        return None
+    uid = user_data.get("user_id", None)
+    if isinstance(uid, dict):
+        uid = uid.get("user_id", None) or uid.get("id", None)
+    if uid is None:
+        uid = user_data.get("id", None)
+    try:
+        return int(uid)
+    except (ValueError, TypeError):
+        return None
 
 
 def get_current_user(
@@ -20,7 +45,10 @@ def get_current_user(
     user_data = get_user_from_token(session_token)
     if not user_data:
         return None
-    user = db.query(User).filter(User.id == user_data["user_id"]).first()
+    user_id = _extract_user_id(user_data)
+    if not user_id:
+        return None
+    user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         return None
     return user

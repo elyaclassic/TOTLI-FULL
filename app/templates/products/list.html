@@ -4,8 +4,9 @@
 {% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
 {% set search_q = search_q|default('') %}
 {% set search_encoded = search_encoded|default('') %}
+
 {% if import_ok == '1' %}
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
+<div class="alert alert-success alert-dismissible fade show" role="alert">
     <strong>Import muvaffaqiyatli.</strong>
     {% if import_added %}{{ import_added }} ta yangi qo'shildi.{% endif %}
     {% if import_updated %}{{ import_updated }} ta yangilandi.{% endif %}
@@ -44,110 +45,198 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+
 <div class="container-fluid">
-    <div class="card">
-            <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <a href="/products{% if search_encoded %}?search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'all' %}btn-success{% else %}btn-outline-success{% endif %}">Hammasi</a>
-                    <a href="/products?type=tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'tayyor' %}btn-success{% else %}btn-outline-success{% endif %}">Tayyor</a>
-                    <a href="/products?type=yarim_tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'yarim_tayyor' %}btn-warning{% else %}btn-outline-warning{% endif %}">Yarim tayyor</a>
-                    <a href="/products?type=hom_ashyo{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'hom_ashyo' %}btn-info{% else %}btn-outline-info{% endif %}">Xom ashyo</a>
-                    {% if current_type != 'all' or search_q %}
-                    <a href="/products" class="btn btn-sm btn-outline-secondary" title="Barcha filtrlarni tozalash"><i class="bi bi-x-circle"></i> Tozalash</a>
-                    {% endif %}
-                </div>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <a href="/product-check" class="btn btn-outline-info btn-sm" title="Bir xil nomdagi tovarlarni tekshirish"><i class="bi bi-clipboard-check"></i> Tekshiruv</a>
-                    <form action="/products/export" method="get" class="d-inline">
-                        <button type="submit" class="btn btn-outline-success btn-sm"><i class="bi bi-file-earmark-excel"></i> Export</button>
-                    </form>
-                    <a href="/products/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza yuklab olish"><i class="bi bi-download"></i> Andoza</a>
-                    <form id="productsImportForm" action="/products/import" method="post" enctype="multipart/form-data" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                        <input type="file" id="products_excel_file" name="file" accept=".xlsx,.xls" required class="d-none" aria-label="Excel fayl tanlash">
-                        <label class="btn btn-outline-primary btn-sm mb-0" for="products_excel_file"><i class="bi bi-upload"></i> Fayl tanlash</label>
-                        <button type="submit" class="btn btn-primary btn-sm" id="products_import_btn" disabled title="Avval Excel fayl tanlang"><i class="bi bi-check-lg"></i> Import qilish</button>
-                    </form>
-                    <script>(function(){var inp=document.getElementById('products_excel_file');var btn=document.getElementById('products_import_btn');if(inp&&btn)inp.addEventListener('change',function(){btn.disabled=!(this.files&&this.files.length>0);if(this.files&&this.files.length>0)btn.title=this.files[0].name;});})();</script>
-                    {% if current_user and current_user.role == 'admin' %}
-                    <form id="productsBulkDeleteForm" method="POST" action="/products/delete-bulk" class="d-inline" onsubmit="var n = document.querySelectorAll('.product-row-check:checked').length; return n ? confirm('Tanlangan ' + n + ' ta tovarni o\'chirmoqchimisiz?') : (alert('Kamida bitta tovarni tanlang.'); return false);">
-                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                        <button type="submit" class="btn btn-danger btn-sm" id="productsBulkDeleteBtn" disabled title="Tanlangan tovarlarni o'chirish"><i class="bi bi-trash"></i> Tanlanganlarni o'chirish</button>
-                    </form>
-                    <button type="button" class="btn btn-warning btn-sm" id="productsBulkUpdateBtn" disabled data-bs-toggle="modal" data-bs-target="#bulkUpdateModal" title="Tanlangan tovarlarga turi yoki o'lchov birligini bir xil qilish"><i class="bi bi-pencil-square"></i> Gruppavoy o'zgartirish</button>
-                    {% endif %}
-                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addProductModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
+
+    <!-- Page title -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2"></i>Tovarlar</h5>
+    </div>
+
+    <!-- Filter card -->
+    <div class="filter-card">
+        <form method="get" action="/products" class="row align-items-end g-2" id="productsFilterForm">
+            <input type="hidden" name="type" value="{{ current_type }}">
+            <div class="col-md-4 col-sm-6">
+                <label class="form-label"><i class="bi bi-search me-1"></i>Qidirish</label>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" name="search" id="productsSearch" class="form-control" placeholder="Nomi, kod yoki shtrix kod..." value="{{ search_q or '' }}" autocomplete="off">
                 </div>
             </div>
-            <div class="card-body border-bottom">
-                <form method="get" action="/products" class="row align-items-end g-2" id="productsFilterForm">
-                    <input type="hidden" name="type" value="{{ current_type }}">
-                    <div class="col-md-4">
-                        <label class="form-label mb-0 small text-muted"><i class="bi bi-search"></i> Ro'yxatdan qidirish</label>
-                        <input type="text" name="search" id="productsSearch" class="form-control form-control-sm" placeholder="Nomi, kod yoki shtrix kod (Enter — filtrlash)" value="{{ search_q or '' }}" autocomplete="off">
-                    </div>
-                    <div class="col-auto">
-                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Qidirish</button>
-                    </div>
-                    <div class="col-auto">
-                        <small id="productsSearchCount" class="text-muted">{% if search_q %}{{ products|length }} ta ko'rsatilmoqda{% endif %}</small>
-                    </div>
+            <div class="col-md-3 col-sm-6">
+                <label class="form-label">Kategoriya (tur)</label>
+                <div class="d-flex flex-wrap gap-1">
+                    <a href="/products{% if search_encoded %}?search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'all' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Hammasi</a>
+                    <a href="/products?type=tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'tayyor' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Tayyor</a>
+                    <a href="/products?type=yarim_tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'yarim_tayyor' %}btn-warning{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Yarim tayyor</a>
+                    <a href="/products?type=hom_ashyo{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'hom_ashyo' %}btn-info{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Xom ashyo</a>
+                </div>
+            </div>
+            <div class="col-md-5 col-sm-12 d-flex flex-wrap gap-2 align-items-end justify-content-end">
+                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Qidirish</button>
+                {% if current_type != 'all' or search_q %}
+                <a href="/products" class="btn btn-outline-secondary btn-sm" title="Filtrlarni tozalash"><i class="bi bi-x-circle me-1"></i>Tozalash</a>
+                {% endif %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Mini stat cards -->
+    {% set total_products = products|length %}
+    {% set active_count = products|selectattr('is_active', 'defined')|selectattr('is_active')|list|length %}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num">{{ total_products }}</div>
+                <div class="lbl"><i class="bi bi-box me-1"></i>Jami tovarlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#065f46;">
+                    {% set tayyor_count = products|selectattr('type', 'equalto', 'tayyor')|list|length %}
+                    {{ tayyor_count }}
+                </div>
+                <div class="lbl"><i class="bi bi-check-circle me-1"></i>Tayyor mahsulot</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#856404;">
+                    {% set yarim_count = products|selectattr('type', 'equalto', 'yarim_tayyor')|list|length %}
+                    {{ yarim_count }}
+                </div>
+                <div class="lbl"><i class="bi bi-layers me-1"></i>Yarim tayyor</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#1e40af;">
+                    {% set hom_count = products|selectattr('type', 'equalto', 'hom_ashyo')|list|length %}
+                    {{ hom_count }}
+                </div>
+                <div class="lbl"><i class="bi bi-archive me-1"></i>Xom ashyo</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data table card -->
+    <div class="card data-table">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-table text-muted"></i>
+                <span class="fw-semibold" style="font-size:14px;">Tovarlar ro'yxati</span>
+                <span class="text-muted" id="productsSearchCount" style="font-size:12px;">
+                    {% if search_q %}({{ products|length }} ta ko'rsatilmoqda){% else %}({{ products|length }} ta){% endif %}
+                </span>
+            </div>
+            <div class="d-flex flex-wrap gap-2 align-items-center">
+                <!-- Export / import tools -->
+                <a href="/product-check" class="btn-act" title="Bir xil nomdagi tovarlarni tekshirish">
+                    <i class="bi bi-clipboard-check"></i>
+                </a>
+                <form action="/products/export" method="get" class="d-inline">
+                    <button type="submit" class="btn-act" title="Excel export"><i class="bi bi-file-earmark-excel"></i></button>
                 </form>
+                <a href="/products/template" class="btn-act" title="Import uchun andoza yuklab olish"><i class="bi bi-download"></i></a>
+                <form id="productsImportForm" action="/products/import" method="post" enctype="multipart/form-data" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <input type="file" id="products_excel_file" name="file" accept=".xlsx,.xls" required class="d-none" aria-label="Excel fayl tanlash">
+                    <label class="btn-act mb-0" for="products_excel_file" title="Excel fayl tanlash" style="cursor:pointer;display:inline-flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-upload"></i>
+                    </label>
+                    <button type="submit" class="btn btn-primary btn-sm" id="products_import_btn" disabled title="Avval Excel fayl tanlang" style="border-radius:8px;">
+                        <i class="bi bi-check-lg me-1"></i>Import
+                    </button>
+                </form>
+                <script>(function(){var inp=document.getElementById('products_excel_file');var btn=document.getElementById('products_import_btn');if(inp&&btn)inp.addEventListener('change',function(){btn.disabled=!(this.files&&this.files.length>0);if(this.files&&this.files.length>0)btn.title=this.files[0].name;});})();</script>
+
+                {% if current_user and current_user.role == 'admin' %}
+                <!-- Bulk actions -->
+                <form id="productsBulkDeleteForm" method="POST" action="/products/delete-bulk" class="d-inline" onsubmit="var n = document.querySelectorAll('.product-row-check:checked').length; return n ? confirm('Tanlangan ' + n + ' ta tovarni o\'chirmoqchimisiz?') : (alert('Kamida bitta tovarni tanlang.'), false);">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <button type="submit" class="btn-act danger" id="productsBulkDeleteBtn" disabled title="Tanlangan tovarlarni o'chirish">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </form>
+                <button type="button" class="btn-act warning" id="productsBulkUpdateBtn" disabled data-bs-toggle="modal" data-bs-target="#bulkUpdateModal" title="Tanlangan tovarlarga turi yoki o'lchov birligini bir xil qilish">
+                    <i class="bi bi-pencil-square"></i>
+                </button>
+                {% endif %}
+
+                <!-- Create new product -->
+                <button type="button" class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#addProductModal">
+                    <i class="bi bi-plus-circle me-1"></i>Yaratish
+                </button>
             </div>
-            <div class="card-body p-0">
-                <table class="table table-hover mb-0" id="productsTable">
-                    <thead class="table-light">
-                        <tr>
-                            {% if current_user and current_user.role == 'admin' %}
-                            <th class="text-center" style="width: 2.5rem;">
-                                <input type="checkbox" id="productsSelectAll" class="form-check-input" title="Hammasini tanlash">
-                            </th>
+        </div>
+
+        <div class="card-body p-0">
+            <table class="table mb-0" id="productsTable">
+                <thead>
+                    <tr>
+                        {% if current_user and current_user.role == 'admin' %}
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="productsSelectAll" class="form-check-input" title="Hammasini tanlash">
+                        </th>
+                        {% endif %}
+                        <th class="products-sort" data-sort="num" role="button" title="Saralash"># <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="products-sort" data-sort="barcode" role="button" title="Saralash">Shtrix kod <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="products-sort" data-sort="name" role="button" title="Saralash">Nomi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="products-sort" data-sort="type" role="button" title="Saralash">Turi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="products-sort" data-sort="unit" role="button" title="Saralash">O'lchov birligi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="text-center">Tarix</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if products %}
+                    {% for product in products %}
+                    <tr class="product-row"
+                        data-search="{{ (product.name or '')|lower }} {{ (product.barcode or '')|lower }} {{ (product.type or '')|lower }} {{ (product.unit.name if product.unit else '')|lower }} {{ (product.unit.code if product.unit else '')|lower }} tayyor yarim xom ashyo"
+                        data-sort-num="{{ loop.index }}"
+                        data-sort-barcode="{{ (product.barcode or '-')|lower }}"
+                        data-sort-name="{{ (product.name or '')|lower }}"
+                        data-sort-type="{{ (product.type or '')|lower }}"
+                        data-sort-unit="{{ (product.unit.name if product.unit else '')|lower }} {{ (product.unit.code if product.unit else '')|lower }}">
+                        {% if current_user and current_user.role == 'admin' %}
+                        <td class="text-center">
+                            <input type="checkbox" class="form-check-input product-row-check" name="product_ids" value="{{ product.id }}" form="productsBulkDeleteForm">
+                        </td>
+                        {% endif %}
+                        <td class="col-num muted-cell">{{ loop.index }}</td>
+                        <td><code class="text-muted">{{ product.barcode or '—' }}</code></td>
+                        <td>
+                            <a href="/products/{{ product.id }}" class="fw-semibold text-decoration-none">{{ product.name }}</a>
+                        </td>
+                        <td>
+                            {% if product.type == 'tayyor' %}
+                            <span class="badge-active">Tayyor</span>
+                            {% elif product.type == 'yarim_tayyor' %}
+                            <span class="badge-draft">Yarim tayyor</span>
+                            {% else %}
+                            <span class="badge-waiting">Xom ashyo</span>
                             {% endif %}
-                            <th class="products-sort" data-sort="num" role="button" title="Saralash"># <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
-                            <th class="products-sort" data-sort="barcode" role="button" title="Saralash">Shtrix kod <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
-                            <th class="products-sort" data-sort="name" role="button" title="Saralash">Nomi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
-                            <th class="products-sort" data-sort="type" role="button" title="Saralash">Turi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
-                            <th class="products-sort" data-sort="unit" role="button" title="Saralash">O'lchov birligi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
-                            <th class="text-center">Tarix</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if products %}
-                        {% for product in products %}
-                        <tr class="product-row" data-search="{{ (product.name or '')|lower }} {{ (product.barcode or '')|lower }} {{ (product.type or '')|lower }} {{ (product.unit.name if product.unit else '')|lower }} {{ (product.unit.code if product.unit else '')|lower }} tayyor yarim xom ashyo" data-sort-num="{{ loop.index }}" data-sort-barcode="{{ (product.barcode or '-')|lower }}" data-sort-name="{{ (product.name or '')|lower }}" data-sort-type="{{ (product.type or '')|lower }}" data-sort-unit="{{ (product.unit.name if product.unit else '')|lower }} {{ (product.unit.code if product.unit else '')|lower }}">
-                            {% if current_user and current_user.role == 'admin' %}
-                            <td class="text-center">
-                                <input type="checkbox" class="form-check-input product-row-check" name="product_ids" value="{{ product.id }}" form="productsBulkDeleteForm">
-                            </td>
-                            {% endif %}
-                            <td class="col-num">{{ loop.index }}</td>
-                            <td><code>{{ product.barcode or '-' }}</code></td>
-                            <td>
-                                <a href="/products/{{ product.id }}"><strong>{{ product.name }}</strong></a>
-                            </td>
-                            <td>
-                                {% if product.type == 'tayyor' %}
-                                <span class="badge bg-success">Tayyor</span>
-                                {% elif product.type == 'yarim_tayyor' %}
-                                <span class="badge bg-warning text-dark">Yarim tayyor</span>
-                                {% else %}
-                                <span class="badge bg-info">Xom ashyo</span>
-                                {% endif %}
-                            </td>
-                            <td><span class="text-muted">{% if product.unit %}{{ product.unit.name or product.unit.code or '—' }}{% else %}—{% endif %}</span></td>
-                            <td class="text-center">
-                                <a href="/qoldiqlar/tarix?product_id={{ product.id }}" class="btn btn-sm btn-outline-info" title="Mahsulot harakati tarixi"><i class="bi bi-clock-history"></i></a>
-                            </td>
-                            <td>
-                                <button type="button" class="btn btn-sm btn-outline-secondary btn-copy-product" title="Nusxa ko'chirish"
+                        </td>
+                        <td class="muted-cell">
+                            {% if product.unit %}{{ product.unit.name or product.unit.code or '—' }}{% else %}—{% endif %}
+                        </td>
+                        <td class="text-center">
+                            <a href="/qoldiqlar/tarix?product_id={{ product.id }}" class="btn-act" title="Mahsulot harakati tarixi">
+                                <i class="bi bi-clock-history"></i>
+                            </a>
+                        </td>
+                        <td>
+                            <div class="d-flex gap-1">
+                                <button type="button" class="btn-act btn-copy-product" title="Nusxa ko'chirish"
                                     data-bs-toggle="modal" data-bs-target="#addProductModal"
                                     data-name="{{ product.name|e }}"
                                     data-type="{{ product.type|e }}"
                                     data-unit-id="{{ product.unit_id or 0 }}">
                                     <i class="bi bi-files"></i>
                                 </button>
-                                <button type="button" class="btn btn-sm btn-outline-primary btn-edit-product" title="Tahrirlash"
+                                <button type="button" class="btn-act btn-edit-product" title="Tahrirlash"
                                     data-bs-toggle="modal" data-bs-target="#editProductModal"
                                     data-product-id="{{ product.id }}"
                                     data-name="{{ product.name|e }}"
@@ -162,26 +251,30 @@
                                 </button>
                                 {% if current_user and current_user.role == 'admin' %}
                                 <form method="POST" action="/products/delete/{{ product.id }}" style="display:inline;" onsubmit="return confirm('Haqiqatan ham \"{{ product.name|e }}\" ni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                                    <button type="submit" class="btn-act danger" title="O'chirish">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
                                 </form>
                                 {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                        {% else %}
-                        <tr>
-                            <td colspan="{% if current_user and current_user.role == 'admin' %}9{% else %}7{% endif %}" class="text-center text-muted py-5">
-                                <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
-                                Hozircha tovarlar yo'q<br>
-                                <small>Yuqoridagi Yaratish tugmasini bosing</small>
-                            </td>
-                        </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% else %}
+                    <tr>
+                        <td colspan="{% if current_user and current_user.role == 'admin' %}9{% else %}7{% endif %}" class="text-center text-muted py-5">
+                            <i class="bi bi-box-seam fs-1 d-block mb-2 opacity-25"></i>
+                            Hozircha tovarlar yo'q<br>
+                            <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
         </div>
     </div>
+
 </div>
 
 <!-- Tovar qo'shish modal -->
@@ -189,6 +282,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form action="/products/add" method="POST" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
                 <div class="modal-header py-2">
                     <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi tovar</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -227,13 +321,11 @@
                         </div>
                         <div class="col-md-6">
                             <label class="form-label small mb-0" for="add_product_barcode">Shtrixkod</label>
-                            <input type="text" id="add_product_barcode" class="form-control form-control-sm" name="barcode"
-                                autocomplete="off">
+                            <input type="text" id="add_product_barcode" class="form-control form-control-sm" name="barcode" autocomplete="off">
                         </div>
                         <div class="col-12">
                             <label class="form-label small mb-0">Rasm</label>
                             <input type="file" id="add_product_image" class="form-control form-control-sm" name="image" accept="image/*">
-                            <small class="text-muted small d-none">Rasm ixtiyoriy. JPG, PNG va boshqa rasmlar qo‘llab-quvvatlanadi.</small>
                         </div>
                     </div>
                 </div>
@@ -251,6 +343,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form id="editProductForm" method="POST" action="" enctype="multipart/form-data">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
                 <div class="modal-header py-2">
                     <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Tovarni tahrirlash</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
@@ -450,8 +543,9 @@
             tr.style.display = show ? '' : 'none';
             if (show) visible++;
         });
-        if (countEl && countEl.closest('form')) {
-            if (q) countEl.textContent = visible + ' / ' + rows.length + ' ta';
+        if (countEl) {
+            if (q) countEl.textContent = '(' + visible + ' / ' + rows.length + ' ta)';
+            else countEl.textContent = '(' + rows.length + ' ta)';
         }
     }
 

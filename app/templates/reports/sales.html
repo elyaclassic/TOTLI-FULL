@@ -1,91 +1,120 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="card mb-4">
-    <div class="card-header">
-        <i class="bi bi-funnel"></i> Filtr
+<!-- Filter card -->
+<div class="filter-card">
+    <form method="GET" class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label">Boshlanish sanasi</label>
+            <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Tugash sanasi</label>
+            <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="top-btn btn btn-primary flex-grow-1">
+                <i class="bi bi-search"></i> Ko'rsatish
+            </button>
+            <a href="/reports/sales/export?start_date={{ start_date }}&end_date={{ end_date }}"
+               class="top-btn btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+        </div>
+    </form>
+</div>
+
+<!-- Mini-stat row -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary">{{ orders | length if orders else 0 }}</div>
+            <div class="lbl"><i class="bi bi-receipt me-1"></i>Jami hujjatlar</div>
+        </div>
     </div>
-    <div class="card-body">
-        <form method="GET" class="row g-3">
-            <div class="col-md-4">
-                <label class="form-label">Boshlanish sanasi</label>
-                <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">Tugash sanasi</label>
-                <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">&nbsp;</label>
-                <button type="submit" class="btn btn-primary w-100">
-                    <i class="bi bi-search"></i> Ko'rsatish
-                </button>
-            </div>
-            <div class="col-md-2">
-                <label class="form-label">&nbsp;</label>
-                <a href="/reports/sales/export?start_date={{ start_date }}&end_date={{ end_date }}" class="btn btn-success w-100">
-                    <i class="bi bi-file-earmark-excel"></i> Excel
-                </a>
-            </div>
-        </form>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success">{{ "{:,.0f}".format(total) }}</div>
+            <div class="lbl"><i class="bi bi-currency-dollar me-1"></i>Jami summa (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set completed = orders | selectattr('status', 'equalto', 'completed') | list if orders else [] %}
+            <div class="num text-success">{{ completed | length }}</div>
+            <div class="lbl"><i class="bi bi-check-circle me-1"></i>Bajarilgan</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set drafts = orders | selectattr('status', 'equalto', 'draft') | list if orders else [] %}
+            <div class="num text-warning">{{ drafts | length }}</div>
+            <div class="lbl"><i class="bi bi-pencil me-1"></i>Qoralama</div>
+        </div>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-cart-check"></i> Savdo hisoboti</span>
-        <div>
-            <strong class="text-success">Jami: {{ "{:,.0f}".format(total) }} so'm</strong>
-        </div>
+<!-- Data table card -->
+<div class="card data-table">
+    <div class="card-header">
+        <span class="fw-600 d-flex align-items-center gap-2">
+            <i class="bi bi-cart-check text-primary"></i> Savdo hisoboti
+        </span>
+        <span class="sum-cell fs-6">Jami: {{ "{:,.0f}".format(total) }} so'm</span>
     </div>
     <div class="card-body p-0">
-        <table class="table table-hover">
-            <thead class="table-light">
-                <tr>
-                    <th>#</th>
-                    <th>Hujjat №</th>
-                    <th>Sana</th>
-                    <th>Mijoz</th>
-                    <th>Summa</th>
-                    <th>Holat</th>
-                </tr>
-            </thead>
-            <tbody>
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:48px">#</th>
+                        <th>Hujjat №</th>
+                        <th>Sana</th>
+                        <th>Mijoz</th>
+                        <th class="text-end">Summa (so'm)</th>
+                        <th>Holat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if orders %}
+                        {% for order in orders %}
+                        <tr>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td><code class="num-cell">{{ order.number }}</code></td>
+                            <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') }}</td>
+                            <td>{{ order.partner.name if order.partner else '-' }}</td>
+                            <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total) }}</td>
+                            <td>
+                                {% if order.status == 'completed' %}
+                                    <span class="badge-done">Bajarildi</span>
+                                {% elif order.status == 'draft' %}
+                                    <span class="badge-draft">Qoralama</span>
+                                {% else %}
+                                    <span class="badge-inactive">{{ order.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center muted-cell py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                Tanlangan davrda sotuvlar topilmadi
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
                 {% if orders %}
-                    {% for order in orders %}
-                    <tr>
-                        <td>{{ loop.index }}</td>
-                        <td><code>{{ order.number }}</code></td>
-                        <td>{{ order.date.strftime('%d.%m.%Y %H:%M') }}</td>
-                        <td>{{ order.partner.name if order.partner else '-' }}</td>
-                        <td class="text-success fw-bold">{{ "{:,.0f}".format(order.total) }}</td>
-                        <td>
-                            {% if order.status == 'completed' %}
-                                <span class="badge bg-success">Bajarildi</span>
-                            {% elif order.status == 'draft' %}
-                                <span class="badge bg-warning">Qoralama</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ order.status }}</span>
-                            {% endif %}
-                        </td>
+                <tfoot>
+                    <tr style="background:#f8f9fa; border-top: 2px solid #e9ecef;">
+                        <td colspan="4" class="text-end fw-700 muted-cell py-2">JAMI:</td>
+                        <td class="text-end sum-cell fw-700 py-2">{{ "{:,.0f}".format(total) }}</td>
+                        <td></td>
                     </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
-                            Tanlangan davrda sotuvlar topilmadi
-                        </td>
-                    </tr>
+                </tfoot>
                 {% endif %}
-            </tbody>
-            <tfoot class="table-light">
-                <tr>
-                    <th colspan="4" class="text-end">JAMI:</th>
-                    <th class="text-success">{{ "{:,.0f}".format(total) }}</th>
-                    <th></th>
-                </tr>
-            </tfoot>
-        </table>
+            </table>
+        </div>
     </div>
 </div>
 {% endblock %}

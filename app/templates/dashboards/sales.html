@@ -2,140 +2,91 @@
 
 {% block title %}Savdo Dashboard - TOTLI HOLVA{% endblock %}
 
-{% block extra_css %}
-<style>
-    .sales-card {
-        border-radius: 10px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-        transition: transform 0.2s;
-        padding: 20px;
-    }
-
-    .sales-card:hover {
-        transform: translateY(-5px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    }
-
-    .metric-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border-radius: 10px;
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    .metric-value {
-        font-size: 2rem;
-        font-weight: bold;
-    }
-
-    .metric-label {
-        font-size: 0.9rem;
-        opacity: 0.9;
-    }
-
-    .status-badge {
-        padding: 5px 15px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: 600;
-    }
-
-    .status-new {
-        background: #e3f2fd;
-        color: #1976d2;
-    }
-
-    .status-processing {
-        background: #fff3e0;
-        color: #f57c00;
-    }
-
-    .status-completed {
-        background: #e8f5e9;
-        color: #388e3c;
-    }
-
-    .status-cancelled {
-        background: #ffebee;
-        color: #d32f2f;
-    }
-
-    .chart-container {
-        position: relative;
-        height: 300px;
-        padding: 20px;
-    }
-
-    .customer-item {
-        padding: 15px;
-        border-left: 4px solid #667eea;
-        margin-bottom: 10px;
-        background: #f8f9fa;
-        border-radius: 5px;
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="container-fluid py-4">
+<div class="container-fluid">
+
     <!-- Page Header -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <h2><i class="bi bi-cart-check"></i> Savdo Dashboard</h2>
-            <p class="text-muted">Savdo bo'limi statistikasi va analitikasi</p>
-        </div>
+    <div class="page-header mb-3">
+        <h5><i class="bi bi-cart-check"></i> Savdo Dashboard</h5>
     </div>
 
-    <!-- Metrics Row -->
-    <div class="row mb-4">
+    <!-- Mini-stat cards -->
+    <div class="row g-3 mb-3">
         <!-- Bugungi Savdo -->
-        <div class="col-md-3 mb-3">
-            <div class="metric-card" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
-                <div class="metric-label">Bugungi Savdo</div>
-                <div class="metric-value">{{ "{:,.0f}".format(metrics.today_sales) }} so'm</div>
-                <small><i class="bi bi-arrow-up"></i> +{{ metrics.sales_growth }}%</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #2e7d32;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-success">{{ "{:,.0f}".format(metrics.today_sales) }}</div>
+                        <div class="lbl">Bugungi Savdo (so'm)</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;"><i class="bi bi-arrow-up"></i> +{{ metrics.sales_growth }}%</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e8f5e9;color:#2e7d32;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-cash-coin"></i>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Buyurtmalar -->
-        <div class="col-md-3 mb-3">
-            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                <div class="metric-label">Buyurtmalar</div>
-                <div class="metric-value">{{ metrics.total_orders }}</div>
-                <small>{{ metrics.completed_orders }} bajarilgan</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #1a73e8;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-primary">{{ metrics.total_orders }}</div>
+                        <div class="lbl">Buyurtmalar</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">{{ metrics.completed_orders }} bajarilgan</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e3f2fd;color:#1a73e8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-receipt"></i>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- Mijozlar -->
-        <div class="col-md-3 mb-3">
-            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                <div class="metric-label">Faol Mijozlar</div>
-                <div class="metric-value">{{ metrics.active_customers }}</div>
-                <small>{{ metrics.new_customers }} yangi</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #0dcaf0;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#0dcaf0;">{{ metrics.active_customers }}</div>
+                        <div class="lbl">Faol Mijozlar</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">{{ metrics.new_customers }} yangi</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e0f7fa;color:#0dcaf0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
             </div>
         </div>
 
         <!-- O'rtacha Check -->
-        <div class="col-md-3 mb-3">
-            <div class="metric-card" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
-                <div class="metric-label">O'rtacha Check</div>
-                <div class="metric-value">{{ "{:,.0f}".format(metrics.avg_check) }} so'm</div>
-                <small>Buyurtma uchun</small>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat" style="border-left: 4px solid #f57c00;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#f57c00;">{{ "{:,.0f}".format(metrics.avg_check) }}</div>
+                        <div class="lbl">O'rtacha Check (so'm)</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">Buyurtma uchun</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#fff3e0;color:#f57c00;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
     <!-- Charts Row -->
-    <div class="row mb-4">
+    <div class="row g-3 mb-3">
         <!-- Buyurtmalar Holati -->
-        <div class="col-md-4 mb-3">
-            <div class="card sales-card">
-                <div class="card-header bg-white">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Buyurtmalar Holati</h5>
                 </div>
                 <div class="card-body">
-                    <div class="chart-container">
+                    <div style="position:relative;height:300px;">
                         <canvas id="orderStatusChart"></canvas>
                     </div>
                 </div>
@@ -143,13 +94,13 @@
         </div>
 
         <!-- Savdo Voronkasi -->
-        <div class="col-md-4 mb-3">
-            <div class="card sales-card">
-                <div class="card-header bg-white">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-funnel"></i> Savdo Voronkasi</h5>
                 </div>
                 <div class="card-body">
-                    <div class="chart-container">
+                    <div style="position:relative;height:300px;">
                         <canvas id="salesFunnelChart"></canvas>
                     </div>
                 </div>
@@ -157,13 +108,13 @@
         </div>
 
         <!-- Haftalik Savdo -->
-        <div class="col-md-4 mb-3">
-            <div class="card sales-card">
-                <div class="card-header bg-white">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-graph-up"></i> Haftalik Savdo</h5>
                 </div>
                 <div class="card-body">
-                    <div class="chart-container">
+                    <div style="position:relative;height:300px;">
                         <canvas id="weeklySalesChart"></canvas>
                     </div>
                 </div>
@@ -172,15 +123,15 @@
     </div>
 
     <!-- Tables Row -->
-    <div class="row mb-4">
+    <div class="row g-3">
         <!-- So'nggi Buyurtmalar -->
-        <div class="col-md-6 mb-3">
-            <div class="card sales-card">
-                <div class="card-header bg-white">
+        <div class="col-md-6">
+            <div class="card data-table">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-list-check"></i> So'nggi Buyurtmalar</h5>
                 </div>
-                <div class="card-body">
-                    <table class="table table-hover">
+                <div class="card-body p-0">
+                    <table class="table mb-0">
                         <thead>
                             <tr>
                                 <th>№</th>
@@ -192,13 +143,21 @@
                         <tbody>
                             {% for order in recent_orders %}
                             <tr>
-                                <td>{{ order.number }}</td>
+                                <td class="muted-cell">{{ order.number }}</td>
                                 <td>{{ order.customer }}</td>
-                                <td>{{ "{:,.0f}".format(order.total) }} so'm</td>
+                                <td class="sum-cell">{{ "{:,.0f}".format(order.total) }} so'm</td>
                                 <td>
-                                    <span class="status-badge status-{{ order.status }}">
-                                        {{ order.status_text }}
-                                    </span>
+                                    {% if order.status == 'completed' %}
+                                    <span class="badge-done">{{ order.status_text }}</span>
+                                    {% elif order.status == 'new' %}
+                                    <span class="badge-waiting">{{ order.status_text }}</span>
+                                    {% elif order.status == 'processing' %}
+                                    <span class="badge-draft">{{ order.status_text }}</span>
+                                    {% elif order.status == 'cancelled' %}
+                                    <span class="badge-cancelled">{{ order.status_text }}</span>
+                                    {% else %}
+                                    <span class="badge-inactive">{{ order.status_text }}</span>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -209,14 +168,14 @@
         </div>
 
         <!-- Top Mijozlar -->
-        <div class="col-md-6 mb-3">
-            <div class="card sales-card">
-                <div class="card-header bg-white">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
                     <h5 class="mb-0"><i class="bi bi-people"></i> Top 5 Mijozlar</h5>
                 </div>
                 <div class="card-body">
                     {% for customer in top_customers %}
-                    <div class="customer-item">
+                    <div style="padding:12px;border-left:4px solid #1a73e8;margin-bottom:10px;background:#f8f9fa;border-radius:0 6px 6px 0;">
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <strong>{{ customer.name }}</strong>
@@ -224,7 +183,7 @@
                                 <small class="text-muted">{{ customer.orders }} buyurtma</small>
                             </div>
                             <div class="text-end">
-                                <strong>{{ "{:,.0f}".format(customer.total) }} so'm</strong>
+                                <strong class="sum-cell">{{ "{:,.0f}".format(customer.total) }} so'm</strong>
                             </div>
                         </div>
                     </div>
@@ -233,6 +192,7 @@
             </div>
         </div>
     </div>
+
 </div>
 {% endblock %}
 

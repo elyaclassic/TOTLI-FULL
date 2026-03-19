@@ -2,9 +2,10 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
+
+    <div class="page-header mb-3">
         <h5 class="mb-0"><i class="bi bi-file-earmark-plus"></i> Tabel formasi</h5>
-        <a href="/employees/attendance" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+        <a href="/employees/attendance" class="top-btn"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
     </div>
 
     {% if request.query_params.get('error') %}
@@ -26,16 +27,14 @@
     </div>
     {% endif %}
 
-    <div class="card mb-3">
-        <div class="card-body">
-            <form method="get" action="/employees/attendance/form" class="d-flex align-items-end gap-3 flex-wrap" id="attendanceDateForm">
-                <div>
-                    <label class="form-label small mb-1">Sana</label>
-                    <input type="date" name="date" id="attendanceFormDate" class="form-control" value="{{ form_date_str }}" onchange="this.form.submit()" style="width: auto;">
-                </div>
-                <button type="submit" class="btn btn-sm btn-outline-primary">Ko'rsatish</button>
-            </form>
-        </div>
+    <div class="filter-card mb-3">
+        <form method="get" action="/employees/attendance/form" class="d-flex align-items-end gap-3 flex-wrap" id="attendanceDateForm">
+            <div>
+                <label class="form-label small mb-1">Sana</label>
+                <input type="date" name="date" id="attendanceFormDate" class="form-control" value="{{ form_date_str }}" onchange="this.form.submit()" style="width: auto;">
+            </div>
+            <button type="submit" class="top-btn"><i class="bi bi-search"></i> Ko'rsatish</button>
+        </form>
     </div>
 
     {% if doc %}
@@ -45,50 +44,48 @@
         <a href="/employees/attendance/doc/{{ doc.id }}">Hujjatni ko'rish</a>
     </div>
     {% else %}
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <div class="d-flex flex-wrap align-items-center gap-3">
-                <button type="button" class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#hikvisionModal">
-                    <i class="bi bi-cloud-download"></i> Hikvision'dan yuklash
-                </button>
-                <span class="text-muted small">Hozir ko‘rilayotgan sana: {{ form_date.strftime('%d.%m.%Y') }}. Hikvision modali orqali «Dan»–«Gacha» oralig‘ida yuklab, keyin «Sana» orqali kunma-kun filtrlab ko‘rishingiz mumkin.</span>
-                <div class="d-flex align-items-center gap-2 ms-auto" id="autoSyncBlock">
-                    <label class="form-check-label small mb-0">
-                        <input type="checkbox" class="form-check-input" id="autoSyncCheck" title="Hikvision bilan doimiy aloqa — har N daqiqada avtomatik yuklash">
-                        Doimiy aloqa (avtomatik yuklash)
-                    </label>
-                    <select class="form-select form-select-sm" id="autoSyncInterval" style="width: auto;">
-                        <option value="5">Har 5 daqiqa</option>
-                        <option value="10">Har 10 daqiqa</option>
-                        <option value="15">Har 15 daqiqa</option>
-                    </select>
-                    <span class="text-muted small" id="autoSyncStatus"></span>
-                </div>
+    <div class="filter-card mb-3">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <button type="button" class="top-btn" data-bs-toggle="modal" data-bs-target="#hikvisionModal">
+                <i class="bi bi-cloud-download"></i> Hikvision'dan yuklash
+            </button>
+            <span class="text-muted small">Hozir ko'rilayotgan sana: {{ form_date.strftime('%d.%m.%Y') }}. Hikvision modali orqali «Dan»–«Gacha» oralig'ida yuklab, keyin «Sana» orqali kunma-kun filtrlab ko'rishingiz mumkin.</span>
+            <div class="d-flex align-items-center gap-2 ms-auto" id="autoSyncBlock">
+                <label class="form-check-label small mb-0">
+                    <input type="checkbox" class="form-check-input" id="autoSyncCheck" title="Hikvision bilan doimiy aloqa — har N daqiqada avtomatik yuklash">
+                    Doimiy aloqa (avtomatik yuklash)
+                </label>
+                <select class="form-select form-select-sm" id="autoSyncInterval" style="width: auto;">
+                    <option value="5">Har 5 daqiqa</option>
+                    <option value="10">Har 10 daqiqa</option>
+                    <option value="15">Har 15 daqiqa</option>
+                </select>
+                <span class="text-muted small" id="autoSyncStatus"></span>
             </div>
-            <p class="small text-muted mb-0 mt-2" id="autoSyncHint">Avval bir marta «Hikvision'dan yuklash» tugmasini bosing va kirish ma'lumotlarini kiriting — keyin doimiy aloqa ishlaydi.</p>
         </div>
+        <p class="small text-muted mb-0 mt-2" id="autoSyncHint">Avval bir marta «Hikvision'dan yuklash» tugmasini bosing va kirish ma'lumotlarini kiriting — keyin doimiy aloqa ishlaydi.</p>
     </div>
 
-    <div class="card mb-3">
+    <div class="card data-table mb-3">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span>Barcha xodimlar ({{ attendance_rows|length }} ta) — keldi: {{ attendances|length }} ta. <span class="text-muted small">Hikvision yuklamasangiz, quyidagi ustunlarni qo'lda to'ldiring va «Qo'lda saqlash» bosing.</span></span>
             <div class="d-flex gap-2 flex-wrap">
-                <button type="button" id="btnBulkTimeFill" class="btn btn-sm btn-outline-secondary" title="Barcha qatorlarda Keldi 9:00, Ketdi 18:00 va Soat avtomatik to'ldiriladi">
-                    <i class="bi bi-clock-history"></i> Vaqt yuklash (9:00–18:00)
+                <button type="button" id="btnBulkTimeFill" class="btn-act" title="Barcha qatorlarda Keldi 9:00, Ketdi 18:00 va Soat avtomatik to'ldiriladi">
+                    <i class="bi bi-clock-history"></i>
                 </button>
                 <form method="POST" action="/employees/attendance/form/bulk-time" class="d-inline" id="formBulkTimeSave">
                     <input type="hidden" name="date" value="{{ form_date_str }}">
-                    <button type="submit" class="btn btn-sm btn-outline-primary" id="btnBulkTimeSave">
+                    <button type="submit" class="top-btn" id="btnBulkTimeSave" title="Vaqt yuklash va saqlash">
                         <i class="bi bi-cloud-upload"></i> Vaqt yuklash va saqlash
                     </button>
                 </form>
-                <button type="submit" form="attendanceManualFormInner" class="btn btn-sm btn-primary">
+                <button type="submit" form="attendanceManualFormInner" class="top-btn">
                     <i class="bi bi-pencil-square"></i> Qo'lda saqlash
                 </button>
                 {% if current_user and current_user.role == 'admin' %}
                 <form method="POST" action="/employees/attendance/form/confirm" class="d-inline">
                     <input type="hidden" name="date" value="{{ form_date_str }}">
-                    <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('{{ form_date.strftime('%d.%m.%Y') }} kunini tasdiqlashni xohlaysizmi? Hujjat yaratiladi.');">
+                    <button type="submit" class="top-btn" onclick="return confirm('{{ form_date.strftime('%d.%m.%Y') }} kunini tasdiqlashni xohlaysizmi? Hujjat yaratiladi.');">
                         <i class="bi bi-check-circle"></i> Tasdiqlash
                     </button>
                 </form>
@@ -100,7 +97,7 @@
                 <input type="hidden" name="date" value="{{ form_date_str }}">
                 <div class="table-responsive">
                     <table class="table table-sm table-hover mb-0">
-                        <thead class="table-light">
+                        <thead>
                             <tr>
                                 <th width="40" class="text-center" title="Vaqt yuklash uchun tanlash">
                                     <label class="form-check-label small mb-0"><input type="checkbox" class="form-check-input" id="bulkSelectAll" title="Hammasini tanlash"> Tanlash</label>
@@ -122,13 +119,13 @@
                             {% for row in attendance_rows %}
                             <tr class="{% if not row.attendance %}table-secondary{% endif %}" data-employee-id="{{ row.employee.id }}">
                                 <td class="text-center"><input type="checkbox" class="form-check-input bulk-select-employee" value="{{ row.employee.id }}" title="Vaqt yuklash uchun tanlash"></td>
-                                <td>{{ loop.index }}</td>
-                                <td>{{ row.employee.full_name }}{% if row.employee.code %} <small class="text-muted">({{ row.employee.code }})</small>{% endif %}
+                                <td class="muted-cell">{{ loop.index }}</td>
+                                <td>{{ row.employee.full_name }}{% if row.employee.code %} <small class="muted-cell">({{ row.employee.code }})</small>{% endif %}
                                     <input type="hidden" name="employee_id" value="{{ row.employee.id }}">
                                 </td>
-                                <td><small>{{ row.employee.position or '-' }}</small></td>
-                                <td><small>{{ row.employee.department or '-' }}</small></td>
-                                <td><small>{% if row.employee.salary_type %}{% if row.employee.salary_type == 'oylik' %}Oylik{% elif row.employee.salary_type == 'soatlik' %}Soatlik{% elif row.employee.salary_type == "bo'lak" %}Bo'lak{% elif row.employee.salary_type == "bo'lak_oylik" %}Bo'lak+oylik{% else %}{{ row.employee.salary_type }}{% endif %}{% else %}-{% endif %}</small></td>
+                                <td><small class="muted-cell">{{ row.employee.position or '-' }}</small></td>
+                                <td><small class="muted-cell">{{ row.employee.department or '-' }}</small></td>
+                                <td><small class="muted-cell">{% if row.employee.salary_type %}{% if row.employee.salary_type == 'oylik' %}Oylik{% elif row.employee.salary_type == 'soatlik' %}Soatlik{% elif row.employee.salary_type == "bo'lak" %}Bo'lak{% elif row.employee.salary_type == "bo'lak_oylik" %}Bo'lak+oylik{% else %}{{ row.employee.salary_type }}{% endif %}{% else %}-{% endif %}</small></td>
                                 <td><input type="time" name="check_in_{{ row.employee.id }}" class="form-control form-control-sm" style="width:100px;" value="{% if row.attendance and row.attendance.check_in %}{{ row.attendance.check_in.strftime('%H:%M') }}{% endif %}" title="Keldi vaqti"></td>
                                 <td><input type="time" name="check_out_{{ row.employee.id }}" class="form-control form-control-sm" style="width:100px;" value="{% if row.attendance and row.attendance.check_out %}{{ row.attendance.check_out.strftime('%H:%M') }}{% endif %}" title="Ketdi vaqti"></td>
                                 <td><input type="number" name="hours_{{ row.employee.id }}" class="form-control form-control-sm" style="width:70px;" step="0.5" min="0" max="24" placeholder="-" value="{% if row.attendance and row.attendance.hours_worked is not none %}{{ row.attendance.hours_worked }}{% endif %}" title="Ishlash soati"></td>
@@ -144,14 +141,14 @@
                             </tr>
                             {% else %}
                             <tr>
-                                <td colspan="12" class="text-center text-muted py-4">Xodimlar ro'yxati bo'sh. <a href="/info/employees">Ma'lumotnomalar → Xodimlar</a> da qo'shing.</td>
+                                <td colspan="12" class="text-center muted-cell py-4">Xodimlar ro'yxati bo'sh. <a href="/info/employees">Ma'lumotnomalar → Xodimlar</a> da qo'shing.</td>
                             </tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
                 <div class="card-footer py-2">
-                    <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-pencil-square"></i> Qo'lda saqlash</button>
+                    <button type="submit" class="top-btn"><i class="bi bi-pencil-square"></i> Qo'lda saqlash</button>
                 </div>
             </form>
         </div>
@@ -173,7 +170,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <p class="small text-muted mb-2">Belgilangan vaqtdan belgilangan vaqtgacha Hikvision'dan davomat yuklanadi; har bir kun alohida saqlanadi. Keyin yuqoridagi «Sana» orqali kunma-kun ko‘rishingiz mumkin.</p>
+                    <p class="small text-muted mb-2">Belgilangan vaqtdan belgilangan vaqtgacha Hikvision'dan davomat yuklanadi; har bir kun alohida saqlanadi. Keyin yuqoridagi «Sana» orqali kunma-kun ko'rishingiz mumkin.</p>
                     <div class="row g-2 mb-3">
                         <div class="col-6">
                             <label class="form-label">Dan (sana) *</label>
@@ -214,7 +211,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-success"><i class="bi bi-cloud-download"></i> Yuklash</button>
+                    <button type="submit" class="top-btn"><i class="bi bi-cloud-download"></i> Yuklash</button>
                 </div>
             </form>
         </div>

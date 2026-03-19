@@ -3,13 +3,23 @@
 {% block content %}
 <div class="container-fluid">
     {% if request.query_params.get('error') %}
-    <div class="alert alert-danger py-2 small">{{ request.query_params.get('error') }}</div>
-    {% endif %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0"><i class="bi bi-file-earmark-person"></i> Ishga qabul qilish hujjati yaratish</h5>
-        <a href="/employees/hiring-docs" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+    <div class="alert alert-danger alert-dismissible fade show py-2 small">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
-    <div class="card">
+    {% endif %}
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-person"></i> Ishga qabul qilish hujjati yaratish</h5>
+        <div class="d-flex gap-2">
+            <a href="/employees/hiring-docs" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+        </div>
+    </div>
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span><i class="bi bi-person-plus"></i> Yangi hujjat</span>
+        </div>
         <div class="card-body">
             <form method="POST" action="/employees/hiring-doc/create">
                 <div class="row g-3">
@@ -125,7 +135,10 @@
                         </select>
                         <small class="text-muted">Agar sinov muddati bo'lsa tanlang, aks holda sinovsiz hisoblanadi.</small>
                     </div>
-                    <div class="col-md-12"><hr class="my-2"><small class="text-muted">Mehnat shartnomasi muddati (O'zR Mehnat kodeksi)</small></div>
+                    <div class="col-md-12">
+                        <hr class="my-2">
+                        <small class="text-muted">Mehnat shartnomasi muddati (O'zR Mehnat kodeksi)</small>
+                    </div>
                     <div class="col-md-4">
                         <label class="form-label">Shartnoma turi</label>
                         <select class="form-select" name="contract_type" id="contractType">
@@ -143,8 +156,8 @@
                         <input type="text" class="form-control" name="note" placeholder="Ixtiyoriy">
                     </div>
                     <div class="col-12">
-                        <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Hujjat yaratish</button>
-                        <a href="/employees/hiring-docs" class="btn btn-secondary">Bekor</a>
+                        <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-lg"></i> Hujjat yaratish</button>
+                        <a href="/employees/hiring-docs" class="top-btn btn btn-outline-secondary">Bekor</a>
                     </div>
                 </div>
             </form>

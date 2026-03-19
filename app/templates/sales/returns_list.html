@@ -1,40 +1,83 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if success == '1' and number %}
-<div class="alert alert-success alert-dismissible fade show" role="alert">
-    <strong>Savdodan qaytarish rasmiylashtirildi.</strong> Hujjat: <a href="/sales/return/document/{{ number }}" class="alert-link">{{ number }}</a>.
-    {% if warehouse_name %}<br><span class="small">Qoldiq <strong>{{ warehouse_name }}</strong> omboriga qo'shildi. Ombor qoldiqlarini shu ombor bo'yicha tekshiring.</span>{% endif %}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-{% if error and error_detail %}
-<div class="alert alert-warning alert-dismissible fade show" role="alert">
-    {{ error_detail }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
-{% if request.query_params.get('deleted') == '1' and request.query_params.get('number') %}
-<div class="alert alert-info alert-dismissible fade show" role="alert">
-    Qaytarish hujjati {{ request.query_params.get('number') }} o'chirildi.
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="bi bi-arrow-return-left"></i> Savdodan qaytarish</h4>
-        <a href="/sales/pos" class="btn btn-outline-success"><i class="bi bi-cart-check"></i> Sotuv oynasi</a>
+
+    {# ── Alerts ── #}
+    {% if success == '1' and number %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-check-circle"></i> <strong>Savdodan qaytarish rasmiylashtirildi.</strong>
+        Hujjat: <a href="/sales/return/document/{{ number }}" class="alert-link">{{ number }}</a>.
+        {% if warehouse_name %}<br><span class="small">Qoldiq <strong>{{ warehouse_name }}</strong> omboriga qo'shildi. Ombor qoldiqlarini shu ombor bo'yicha tekshiring.</span>{% endif %}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
+    {% endif %}
+    {% if error and error_detail %}
+    <div class="alert alert-warning alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ error_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') == '1' and request.query_params.get('number') %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-trash"></i> Qaytarish hujjati {{ request.query_params.get('number') }} o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    {# ── Page header ── #}
+    <div class="page-header mb-3">
+        <h5><i class="bi bi-arrow-return-left"></i> Savdodan qaytarish</h5>
+        <div class="d-flex gap-2">
+            <a href="/sales/pos" class="top-btn"><i class="bi bi-cart-check"></i> Sotuv oynasi</a>
+        </div>
+    </div>
+
     <p class="text-muted small mb-3">Qaytarishni xohlaydigan sotuvni tanlang (faqat bajarilgan sotuvlar ko'rsatiladi).</p>
 
-    <div class="card mb-4">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <span><i class="bi bi-file-earmark-text"></i> Qaytarish hujjatlari (R-...)</span>
+    {# ── Mini-stat cards ── #}
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num">{{ return_docs | length }}</div>
+                <div class="lbl"><i class="bi bi-file-earmark-text"></i> Jami hujjatlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#065f46;">{{ return_docs | selectattr('status', 'equalto', 'completed') | list | length }}</div>
+                <div class="lbl"><i class="bi bi-check-circle"></i> Tasdiqlangan</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#991b1b;">{{ return_docs | rejectattr('status', 'equalto', 'completed') | list | length }}</div>
+                <div class="lbl"><i class="bi bi-x-circle"></i> Bekor qilingan</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#017449;">{{ "{:,.0f}".format(return_docs | sum(attribute='total') if return_docs else 0) }}</div>
+                <div class="lbl"><i class="bi bi-cash-stack"></i> Jami summa (so'm)</div>
+            </div>
+        </div>
+    </div>
+
+    {# ── Return documents table ── #}
+    <div class="data-table mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <span class="fw-600"><i class="bi bi-file-earmark-text"></i> Qaytarish hujjatlari (R-...)</span>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="returnDocsSearch" class="form-control form-control-sm" placeholder="Qidirish...">
+                </div>
+            </div>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-hover mb-0" id="returnDocsTable">
+                    <thead>
                         <tr>
                             <th>Hujjat №</th>
                             <th>Sana</th>
@@ -42,22 +85,30 @@
                             <th>Mijoz</th>
                             <th>Ombor</th>
                             <th>Summa</th>
-                            <th></th>
+                            <th style="width:80px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for doc in return_docs %}
                         <tr>
-                            <td><a href="/sales/return/document/{{ doc.number }}">{{ doc.number }}</a></td>
-                            <td>{{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '-' }}</td>
-                            <td>{% if doc.status == 'completed' %}<span class="badge bg-success">Tasdiqlangan</span>{% else %}<span class="badge bg-secondary">Bekor qilingan</span>{% endif %}</td>
+                            <td><a href="/sales/return/document/{{ doc.number }}" class="fw-600 text-decoration-none">{{ doc.number }}</a></td>
+                            <td class="muted-cell">{{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '-' }}</td>
+                            <td>
+                                {% if doc.status == 'completed' %}
+                                <span class="badge-done">Tasdiqlangan</span>
+                                {% else %}
+                                <span class="badge-cancelled">Bekor qilingan</span>
+                                {% endif %}
+                            </td>
                             <td>{{ doc.partner.name if doc.partner else '-' }}</td>
-                            <td>{{ doc.warehouse.name if doc.warehouse else '-' }}</td>
-                            <td>{{ "{:,.0f}".format(doc.total or 0) }} so'm</td>
-                            <td><a href="/sales/return/document/{{ doc.number }}" class="btn btn-sm btn-outline-primary">Hujjat</a></td>
+                            <td class="muted-cell">{{ doc.warehouse.name if doc.warehouse else '-' }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(doc.total or 0) }} so'm</td>
+                            <td>
+                                <a href="/sales/return/document/{{ doc.number }}" class="btn-act" title="Hujjatni ko'rish"><i class="bi bi-eye"></i></a>
+                            </td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="7" class="text-muted text-center py-3">Qaytarish hujjatlari yo'q.</td></tr>
+                        <tr><td colspan="7" class="muted-cell text-center py-4">Qaytarish hujjatlari yo'q.</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -65,37 +116,47 @@
         </div>
     </div>
 
-    <div class="card">
+    {# ── Completed sales available for return ── #}
+    <div class="data-table">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <span class="fw-600"><i class="bi bi-cart-check"></i> Bajarilgan sotuvlar</span>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="ordersSearch" class="form-control form-control-sm" placeholder="Qidirish...">
+                </div>
+            </div>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                <table class="table table-hover mb-0" id="ordersTable">
+                    <thead>
                         <tr>
-                            <th>№</th>
+                            <th class="num-cell">#</th>
                             <th>Hujjat №</th>
                             <th>Sana</th>
                             <th>Mijoz</th>
                             <th>Ombor</th>
                             <th>Summa</th>
-                            <th></th>
+                            <th style="width:120px;"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for order in orders %}
                         <tr>
-                            <td>{{ loop.index }}</td>
-                            <td>{{ order.number }}</td>
-                            <td>{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td class="fw-600">{{ order.number }}</td>
+                            <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
                             <td>{{ order.partner.name if order.partner else '-' }}</td>
-                            <td>{{ order.warehouse.name if order.warehouse else '-' }}</td>
-                            <td class="fw-bold">{{ "{:,.0f}".format(order.total or 0) }} so'm</td>
+                            <td class="muted-cell">{{ order.warehouse.name if order.warehouse else '-' }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(order.total or 0) }} so'm</td>
                             <td>
                                 <a href="/sales/return/{{ order.id }}" class="btn btn-sm btn-success"><i class="bi bi-arrow-return-left me-1"></i>Qaytarish</a>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-muted text-center py-4">Bajarilgan sotuvlar yo'q.</td>
+                            <td colspan="7" class="muted-cell text-center py-4">Bajarilgan sotuvlar yo'q.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -103,5 +164,23 @@
             </div>
         </div>
     </div>
+
 </div>
+<script>
+(function() {
+    function liveSearch(inputId, tableId) {
+        var inp = document.getElementById(inputId);
+        var tbl = document.getElementById(tableId);
+        if (!inp || !tbl) return;
+        inp.addEventListener('input', function() {
+            var q = this.value.toLowerCase();
+            tbl.querySelectorAll('tbody tr').forEach(function(row) {
+                row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+    }
+    liveSearch('returnDocsSearch', 'returnDocsTable');
+    liveSearch('ordersSearch', 'ordersTable');
+})();
+</script>
 {% endblock %}

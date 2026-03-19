@@ -21,7 +21,7 @@ from app.core import templates
 from app.models.database import (
     get_db, User, Employee, Department, Position, PieceworkTask,
     Attendance, AttendanceDoc, EmployeeAdvance, EmploymentDoc, DismissalDoc,
-    Salary, employee_piecework_tasks,
+    Salary, employee_piecework_tasks, Payment,
     ExpenseType, ExpenseDoc, ExpenseDocItem, CashRegister,
     Warehouse, Product, Unit,
 )

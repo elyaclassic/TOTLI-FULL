@@ -1,74 +1,80 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <h4 class="mb-0"><i class="bi bi-tags"></i> Harajat turlari</h4>
-        <div>
-            <a href="/finance/harajatlar" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Harajatlar</a>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-circle"></i> Qo'shish</button>
-        </div>
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-tags"></i> Harajat turlari</h4>
+    <div class="d-flex gap-2">
+        <a href="/finance/harajatlar" class="top-btn"><i class="bi bi-arrow-left"></i> Harajatlar</a>
+        <button class="top-btn" data-bs-toggle="modal" data-bs-target="#addModal"><i class="bi bi-plus-circle"></i> Qo'shish</button>
     </div>
-    {% if request.query_params.get('error') == 'name' %}
-    <div class="alert alert-warning">Nom kiritilishi shart.</div>
-    {% endif %}
-    <div class="card">
-        <div class="card-body p-0">
-            <table class="table table-sm table-hover mb-0 harajat-table-compact">
-                <thead class="table-light">
-                    <tr>
-                        <th>#</th>
-                        <th>Nomi</th>
-                        <th>Kategoriya</th>
-                        <th width="100"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for t in expense_types %}
-                    <tr>
-                        <td>{{ t.id }}</td>
-                        <td>{{ t.name }}</td>
-                        <td><span class="text-muted">{{ t.category or '-' }}</span></td>
-                        <td>
-                            <button type="button" class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editModal{{ t.id }}" title="Tahrirlash"><i class="bi bi-pencil"></i></button>
-                            <form method="post" action="/finance/expense-types/delete/{{ t.id }}" class="d-inline" onsubmit="return confirm('Ushbu harajat turini o\'chirmoqchimisiz?');">
-                                <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+</div>
+
+{% if request.query_params.get('error') == 'name' %}
+<div class="alert alert-warning mb-3"><i class="bi bi-exclamation-triangle"></i> Nom kiritilishi shart.</div>
+{% endif %}
+
+<div class="card data-table">
+    <div class="card-header">
+        <span><i class="bi bi-tags"></i> Turlar ro'yxati</span>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Nomi</th>
+                    <th>Kategoriya</th>
+                    <th width="90"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in expense_types %}
+                <tr>
+                    <td class="muted-cell">{{ t.id }}</td>
+                    <td>{{ t.name }}</td>
+                    <td class="muted-cell">{{ t.category or '-' }}</td>
+                    <td>
+                        <button type="button" class="btn-act" data-bs-toggle="modal" data-bs-target="#editModal{{ t.id }}" title="Tahrirlash">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <form method="post" action="/finance/expense-types/delete/{{ t.id }}" class="d-inline" onsubmit="return confirm('Ushbu harajat turini o\'chirmoqchimisiz?');">
+                            <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                <div class="modal fade" id="editModal{{ t.id }}" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <form method="post" action="/finance/expense-types/edit/{{ t.id }}">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Harajat turini tahrirlash</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Nomi *</label>
+                                        <input type="text" class="form-control" name="name" value="{{ t.name }}" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Kategoriya</label>
+                                        <input type="text" class="form-control" name="category" value="{{ t.category or '' }}" placeholder="Masalan: Ishlab chiqarish xarajatlari">
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
+                                    <button type="submit" class="btn btn-primary">Saqlash</button>
+                                </div>
                             </form>
-                        </td>
-                    </tr>
-                    <div class="modal fade" id="editModal{{ t.id }}" tabindex="-1">
-                        <div class="modal-dialog">
-                            <div class="modal-content">
-                                <form method="post" action="/finance/expense-types/edit/{{ t.id }}">
-                                    <div class="modal-header">
-                                        <h5 class="modal-title">Harajat turini tahrirlash</h5>
-                                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                                    </div>
-                                    <div class="modal-body">
-                                        <div class="mb-3">
-                                            <label class="form-label">Nomi *</label>
-                                            <input type="text" class="form-control" name="name" value="{{ t.name }}" required>
-                                        </div>
-                                        <div class="mb-3">
-                                            <label class="form-label">Kategoriya</label>
-                                            <input type="text" class="form-control" name="category" value="{{ t.category or '' }}" placeholder="Masalan: Ishlab chiqarish xarajatlari">
-                                        </div>
-                                    </div>
-                                    <div class="modal-footer">
-                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
-                                        <button type="submit" class="btn btn-primary">Saqlash</button>
-                                    </div>
-                                </form>
-                            </div>
                         </div>
                     </div>
-                    {% else %}
-                    <tr>
-                        <td colspan="4" class="text-center text-muted py-4">Harajat turlari yo'q. &laquo;Qo'shish&raquo; tugmasini bosing.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                </div>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center text-muted py-5">Harajat turlari yo'q. &laquo;Qo'shish&raquo; tugmasini bosing.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -98,8 +104,5 @@
         </div>
     </div>
 </div>
-<style>
-.harajat-table-compact th,
-.harajat-table-compact td { padding: 0.35rem 0.5rem; vertical-align: middle; }
-</style>
+
 {% endblock %}

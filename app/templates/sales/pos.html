@@ -10,12 +10,39 @@
     <button type="button" class="btn btn-sm btn-outline-secondary" id="posFullscreenDismiss">Hozircha yo'q</button>
 </div>
 {% if success == '1' and number %}
-<div class="alert alert-success alert-dismissible fade show d-flex align-items-center justify-content-between flex-wrap gap-2 pos-alert-success" role="alert">
-    <span><strong>Sotuv bajarildi.</strong> Hujjat: {{ number }}. Chek avtomatik printerga yuboriladi. Printer ishlamasa, chek oynasida «Saqlab qo'yish» tugmasini bosing.</span>
-    <div>
-        <a href="/sales/pos/receipt?number={{ number|urlencode }}" target="_blank" class="btn btn-sm btn-outline-success me-2" title="Chekni qayta chop etish"><i class="bi bi-printer me-1"></i>Chekni chop etish</a>
-        <a href="/sales/pos" class="btn btn-sm btn-success me-2"><i class="bi bi-cart-plus"></i> Yana sotuv</a>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+{% set is_payment = number.startswith("To'lov:") or number.startswith("To%27lov") %}
+{% set is_expense = number.startswith("Harajat:") or number.startswith("Harajat") %}
+<div class="pos-success-overlay" id="posSuccessOverlay" onclick="if(event.target===this)this.classList.add('pos-success-hiding');">
+    <div class="pos-success-card">
+        <div class="pos-success-card-top">
+            <div class="pos-success-checkmark">
+                <svg viewBox="0 0 52 52"><circle cx="26" cy="26" r="25" fill="none" stroke="currentColor" stroke-width="2"/><path fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" d="M14.1 27.2l7.1 7.2 16.7-16.8"/></svg>
+            </div>
+        </div>
+        <div class="pos-success-card-body">
+            {% if is_payment %}
+            <div class="pos-success-card-title">To'lov muvaffaqiyatli!</div>
+            <div class="pos-success-card-number">{{ number }}</div>
+            {% elif is_expense %}
+            <div class="pos-success-card-title">Harajat yozildi!</div>
+            <div class="pos-success-card-number">{{ number }}</div>
+            {% else %}
+            <div class="pos-success-card-title">Sotuv bajarildi!</div>
+            <div class="pos-success-card-number">{{ number }}</div>
+            {% endif %}
+        </div>
+        <div class="pos-success-card-actions">
+            {% if not is_payment and not is_expense %}
+            <a href="/sales/pos/receipt?number={{ number|urlencode }}" target="_blank" class="pos-success-card-btn pos-success-card-btn-outline">
+                <i class="bi bi-printer"></i>
+                <span>Chekni chop etish</span>
+            </a>
+            {% endif %}
+            <a href="/sales/pos" class="pos-success-card-btn pos-success-card-btn-primary">
+                <i class="bi bi-cart-plus"></i>
+                <span>Yangi sotuv</span>
+            </a>
+        </div>
     </div>
 </div>
 {% endif %}
@@ -144,63 +171,66 @@
         <div class="row">
             <div class="col-lg-8">
                 <div class="card pos-card pos-card-products">
-                    <div class="card-header pos-card-header d-flex flex-wrap gap-2 align-items-center">
-                        <span class="pos-card-title"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Tovarlar</span>
-                        <label class="mb-0 d-flex align-items-center gap-1 small text-muted ms-auto me-1">
-                            <i class="bi bi-funnel"></i> Kategoriya:
-                        </label>
-                        <select class="form-select form-select-sm" id="posCategoryFilter" style="max-width: 180px;" title="Kategoriya bo'yicha filtrlash">
-                            <option value="">Barcha kategoriyalar</option>
-                            {% for cat in (pos_all_categories or []) %}
-                            <option value="{{ cat.id }}">{{ cat.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <input type="text" class="form-control form-control-sm pos-input-search" id="posSearch" placeholder="Nom bo'yicha qidirish..." style="max-width: 220px;">
-                        <input type="text" class="form-control form-control-sm pos-input-barcode" id="posBarcode" placeholder="Barkod skaner" style="max-width: 180px;" title="Barkodni kiriting va Enter bosing">
-                    </div>
-                    <div class="card-body pos-card-body">
+                    <div class="pos-products-header-premium">
+                        <div class="pos-products-header-top">
+                            <div class="pos-products-header-title"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Tovarlar <span class="pos-products-count">{{ products|length }}</span></div>
+                            <div class="pos-products-header-controls">
+                                <div class="pos-search-premium">
+                                    <i class="bi bi-search"></i>
+                                    <input type="text" id="posSearch" placeholder="Qidirish..." autocomplete="off">
+                                </div>
+                                <div class="pos-barcode-premium">
+                                    <i class="bi bi-upc-scan"></i>
+                                    <input type="text" id="posBarcode" placeholder="Barkod" autocomplete="off">
+                                </div>
+                                <select class="pos-category-select-premium" id="posCategoryFilter">
+                                    <option value="">Barchasi</option>
+                                    {% for cat in (pos_all_categories or []) %}
+                                    <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
                         {% if pos_categories %}
-                        <div class="pos-category-pills d-flex flex-wrap gap-2 mb-3">
-                            <button type="button" class="btn btn-sm pos-category-pill active" data-category="">Barchasi</button>
+                        <div class="pos-category-pills-premium">
+                            <button type="button" class="pos-cat-pill active" data-category="">Barchasi</button>
                             {% for cat in pos_categories %}
-                            <button type="button" class="btn btn-sm pos-category-pill" data-category="{{ cat.id }}">{{ cat.name }}</button>
+                            <button type="button" class="pos-cat-pill" data-category="{{ cat.id }}">{{ cat.name }}</button>
                             {% endfor %}
                         </div>
                         {% endif %}
+                    </div>
+                    <div class="card-body pos-card-body">
                         {% if products %}
-                        <div class="row g-3" id="posProductGrid">
+                        <div class="pos-product-grid" id="posProductGrid">
                             {% for product in products %}
                             {% set sale_price_val = (product_prices.get(product.id) if product_prices else none) or product.sale_price or 0 %}
                             {% set has_sale_price = (sale_price_val or 0)|float > 0 %}
                             {% set display_price = (sale_price_val if has_sale_price else (product.purchase_price if show_tannarx else 0) or 0) %}
                             {% set stock_qty = stock_by_product.get(product.id) if stock_by_product is defined else None %}
-                            <div class="col-6 col-md-4 col-lg-3 pos-product-item" data-product-id="{{ product.id }}" data-name="{{ (product.name or '')|lower }}" data-barcode="{{ (product.barcode or '')|lower }}" data-category-id="{{ product.category_id or '' }}">
-                                <div class="card h-100 pos-product-card" style="cursor: pointer;" data-product-id="{{ product.id }}" data-name="{{ product.name|e }}" data-price="{{ display_price }}" data-barcode="{{ product.barcode or '' }}" data-stock="{{ stock_qty if stock_qty is not none else 0 }}">
-                                    <div class="card-body text-center p-3 d-flex flex-column">
-                                        <div class="pos-product-image-wrap mb-2">
-                                            {% if product.image %}
-                                            <img src="/static/images/products/{{ product.image }}" alt="{{ product.name }}" class="pos-product-img">
-                                            {% else %}
-                                            <div class="pos-product-placeholder"><i class="bi bi-box-seam"></i></div>
-                                            {% endif %}
-                                        </div>
-                                        <h6 class="pos-product-name mb-1 text-truncate" title="{{ product.name }}">{{ product.name }}</h6>
-                                        <p class="pos-product-price mb-0 mt-auto">
-                                            {% if has_sale_price %}
-                                            <span class="fw-bold">{{ "{:,.0f}".format(sale_price_val) }}</span>
-                                            <small class="text-muted">so'm</small>
-                                            {% else %}
-                                            <span class="text-muted small">Narx o'rnatilmagan</span>
-                                            {% endif %}
-                                        </p>
-                                        {% if show_tannarx and (product.purchase_price or 0) > 0 %}
-                                        <p class="mb-0 mt-0 small text-muted">Tannarx: {{ "{:,.0f}".format(product.purchase_price or 0) }} so'm</p>
+                            <div class="pos-product-item" data-product-id="{{ product.id }}" data-name="{{ (product.name or '')|lower }}" data-barcode="{{ (product.barcode or '')|lower }}" data-category-id="{{ product.category_id or '' }}">
+                                <div class="pos-product-card-premium" data-product-id="{{ product.id }}" data-name="{{ product.name|e }}" data-price="{{ display_price }}" data-barcode="{{ product.barcode or '' }}" data-stock="{{ stock_qty if stock_qty is not none else 0 }}">
+                                    <div class="pos-product-img-wrap">
+                                        {% if product.image %}
+                                        <img src="/static/images/products/{{ product.image }}" alt="{{ product.name }}" class="pos-product-img">
+                                        {% else %}
+                                        <div class="pos-product-placeholder"><i class="bi bi-box-seam"></i></div>
                                         {% endif %}
                                         {% if stock_by_product is defined and stock_qty is not none %}
                                         {% set _uc = (product.unit.code or '')|lower if product.unit else '' %}
-                                        {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
-                                        <small class="pos-product-stock">Qoldiq: {{ "{:,.0f}".format((stock_qty or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock_qty) }}</small>
+                                        {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta'] %}
+                                        <div class="pos-product-stock-badge">{{ "{:,.0f}".format((stock_qty or 0)|round(0)|int) if _is_dona else "{:,.1f}".format(stock_qty) }}</div>
                                         {% endif %}
+                                    </div>
+                                    <div class="pos-product-info">
+                                        <div class="pos-product-name-premium" title="{{ product.name }}">{{ product.name }}</div>
+                                        <div class="pos-product-price-premium">
+                                            {% if has_sale_price %}
+                                            {{ "{:,.0f}".format(sale_price_val) }} <small>so'm</small>
+                                            {% else %}
+                                            <span class="pos-no-price">Narx yo'q</span>
+                                            {% endif %}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -217,78 +247,103 @@
             </div>
             <div class="col-lg-4">
                 <div class="card pos-card pos-card-cart sticky-top">
-                    <div class="card-header pos-card-header pos-cart-header d-flex justify-content-between align-items-center">
-                        <span class="pos-card-title"><i class="bi bi-basket3-fill me-2"></i>Savat</span>
+                    <div class="pos-cart-header-premium">
+                        <div class="pos-cart-header-icon"><i class="bi bi-basket3-fill"></i></div>
+                        <div>
+                            <div class="pos-cart-header-title">Savat</div>
+                            {% if current_user %}
+                            <div class="pos-cart-header-kassir"><i class="bi bi-person-fill me-1"></i>{{ current_user.full_name or current_user.username or 'Kassir' }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="pos-cart-header-badge" id="posCartCountBadge" style="display:none;">0</div>
                     </div>
                     <div class="card-body pos-cart-body">
-                        {% if current_user %}
-                        <div class="pos-kassir mb-3 d-flex align-items-center gap-2">
-                            <i class="bi bi-person-circle"></i>
-                            <span class="small">Kassir: <strong>{{ current_user.username or 'Foydalanuvchi' }}</strong></span>
-                        </div>
-                        {% endif %}
-                        <div class="table-responsive mb-3">
+                        <div class="pos-cart-items-wrap mb-3">
                             <table class="table table-sm mb-0 pos-cart-table">
-                                <thead><tr><th>Mahsulot</th><th>Miqdor</th><th>Narx</th><th>Summa</th><th></th></tr></thead>
+                                <thead><tr><th>Mahsulot</th><th class="text-center">Miqdor</th><th class="text-end">Narx</th><th class="text-end">Summa</th><th></th></tr></thead>
                                 <tbody id="posCartBody"></tbody>
                             </table>
                         </div>
-                        <p class="text-muted small text-center mb-3" id="posCartEmpty">Savat bo'sh. Tovarga bosing yoki barkod skanerlang.</p>
-                        <div class="pos-partner-discount mb-3">
-                            <label class="form-label small text-muted mb-1">Kontragent</label>
-                            <select name="partner_id" id="posPartnerSelect" class="form-select form-select-sm">
+                        <div class="pos-cart-empty-state" id="posCartEmpty">
+                            <div class="pos-cart-empty-icon"><i class="bi bi-cart3"></i></div>
+                            <div class="pos-cart-empty-text">Savat bo'sh</div>
+                            <div class="pos-cart-empty-hint">Tovarga bosing yoki barkod skanerlang</div>
+                        </div>
+
+                        <div class="pos-cart-section pos-cart-section-partner">
+                            <div class="pos-cart-section-label"><i class="bi bi-person me-1"></i>Kontragent</div>
+                            <select name="partner_id" id="posPartnerSelect" class="form-select form-select-sm pos-select-premium">
                                 {% for p in pos_partners %}
                                 <option value="{{ p.id }}" {% if default_partner_id and p.id == default_partner_id %}selected{% endif %}>{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
                                 {% endfor %}
                             </select>
-                            <div class="row g-2 mt-2 align-items-end">
-                                <div class="col-6">
-                                    <label class="form-label small text-muted mb-0">Skidka</label>
-                                    <input type="number" id="posDiscountInput" class="form-control form-control-sm" value="" min="0" step="1" placeholder="0" style="width:100%;">
-                                </div>
-                                <div class="col-6">
-                                    <label class="form-label small text-muted mb-0">&nbsp;</label>
-                                    <select id="posDiscountType" class="form-select form-select-sm">
-                                        <option value="amount">so'm</option>
-                                        <option value="percent">%</option>
-                                    </select>
-                                </div>
+                        </div>
+
+                        <div class="pos-cart-section pos-cart-section-discount">
+                            <div class="pos-cart-section-label"><i class="bi bi-percent me-1"></i>Skidka</div>
+                            <div class="d-flex gap-2">
+                                <input type="number" id="posDiscountInput" class="form-control form-control-sm pos-select-premium" value="" min="0" step="1" placeholder="0" style="flex:1;">
+                                <select id="posDiscountType" class="form-select form-select-sm pos-select-premium" style="width:80px;flex:none;">
+                                    <option value="amount">so'm</option>
+                                    <option value="percent">%</option>
+                                </select>
                             </div>
                             <input type="hidden" name="discount_percent" id="posDiscountPercent" value="0">
                             <input type="hidden" name="discount_amount" id="posDiscountAmount" value="0">
-                            <div class="mt-2" id="posPaymentDueDateWrap" style="display:none;" data-default-partner-id="{{ default_partner_id or '' }}">
-                                <label class="form-label small text-muted mb-1">To'lov muddati (qarz bo'lsa)</label>
-                                <input type="date" name="payment_due_date" id="posPaymentDueDate" class="form-control form-control-sm">
+                        </div>
+
+                        <div class="pos-cart-section" id="posPaymentDueDateWrap" style="display:none;" data-default-partner-id="{{ default_partner_id or '' }}">
+                            <div class="pos-cart-section-label"><i class="bi bi-calendar-event me-1"></i>To'lov muddati</div>
+                            <input type="date" name="payment_due_date" id="posPaymentDueDate" class="form-control form-control-sm pos-select-premium">
+                        </div>
+
+                        <div class="pos-summary-premium" id="posSummaryBlock">
+                            <div class="pos-summary-row">
+                                <span class="pos-summary-label">Jami</span>
+                                <span class="pos-summary-value"><span id="posCartTotal">0</span> so'm</span>
+                            </div>
+                            <div class="pos-summary-row pos-summary-discount" id="posDiscountRow" style="display:none;">
+                                <span class="pos-summary-label">Skidka</span>
+                                <span class="pos-summary-value pos-summary-discount-val">−<span id="posDiscountDisplay">0</span> so'm</span>
+                            </div>
+                            <div class="pos-summary-divider"></div>
+                            <div class="pos-summary-row pos-summary-total">
+                                <span class="pos-summary-label">To'lov</span>
+                                <span class="pos-summary-value"><span id="posCartTotalFinal">0</span> so'm</span>
                             </div>
                         </div>
-                        <div class="pos-summary" id="posSummaryBlock">
-                            <div class="pos-total-row d-flex justify-content-between align-items-center">
-                                <span class="pos-total-label">Jami (summa)</span>
-                                <span class="pos-total-value"><span id="posCartTotal">0</span> <small>so'm</small></span>
-                            </div>
-                            <div class="pos-total-row d-flex justify-content-between align-items-center pos-discount-row" id="posDiscountRow" style="display:none;">
-                                <span class="pos-total-label text-muted">Skidka</span>
-                                <span class="pos-total-value text-muted"><span id="posDiscountDisplay">0</span> <small>so'm</small></span>
-                            </div>
-                            <div class="pos-total-row d-flex justify-content-between align-items-center pt-2 border-top border-secondary border-opacity-25">
-                                <span class="pos-total-label fw-bold">To'lov</span>
-                                <span class="pos-total-value fw-bold"><span id="posCartTotalFinal">0</span> <small>so'm</small></span>
-                            </div>
+
+                        <div class="pos-cart-buttons">
+                            <button type="button" class="pos-btn-clear-premium" id="posBtnClearCart" style="display:none;"><i class="bi bi-trash3 me-1"></i>Tozalash</button>
+                            <button type="button" class="pos-btn-sotuv-premium" id="posBtnSotuv" disabled>
+                                <i class="bi bi-cash-coin me-2"></i>Sotuv
+                                <span class="pos-btn-shortcut">F2</span>
+                            </button>
                         </div>
-                        <button type="button" class="btn btn-sm w-100 mb-2 pos-btn-clear" id="posBtnClearCart" style="display:none;"><i class="bi bi-trash me-1"></i> Savatni tozalash</button>
-                        <button type="button" class="btn w-100 pos-btn-sotuv py-3" id="posBtnSotuv" disabled><i class="bi bi-cash-coin me-2"></i>Sotuv <small class="opacity-75">(F2)</small></button>
+
                         <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2 pos-more-actions-btn" id="posMoreActionsBtn" style="display:none;">
-                            <i class="bi bi-grid-3x3-gap me-1"></i>Qo‘shimcha tugmalar
+                            <i class="bi bi-grid-3x3-gap me-1"></i>Qo'shimcha
                         </button>
-                        <div class="pos-extra-actions mt-3 pt-3 border-top border-secondary border-opacity-25">
-                            <div class="row g-2">
-                                <div class="col-4"><a href="/purchases?from=pos" class="btn btn-sm w-100 pos-action-pill text-decoration-none" title="Kirim hujjatlari — Yaratish orqali yangi kirim"><i class="bi bi-box-arrow-in-down me-1"></i>Tovar kirimi</a></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnKunlikSotuv" title="Kunlik sotuv"><i class="bi bi-calendar-day me-1"></i>Kunlik sotuv</button></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnKassaniTasdiqlash" title="Kassani tasdiqlash"><i class="bi bi-check-circle me-1"></i>Kassani tasdiqlash</button></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnChekniSaqlash" title="Chekni saqlash"><i class="bi bi-receipt me-1"></i>Chekni saqlash</button></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnXHisobot" title="X hisobot"><i class="bi bi-file-earmark-text me-1"></i>X hisobot</button></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnOmborniTasdiqlash" title="Omborni tasdiqlash"><i class="bi bi-box-seam me-1"></i>Omborni tasdiqlash</button></div>
-                                <div class="col-4"><button type="button" class="btn btn-sm w-100 pos-action-pill" id="posBtnChekniYuklash" title="Chekni yuklash"><i class="bi bi-download me-1"></i>Chekni yuklash</button></div>
+
+                        <div class="pos-extra-actions mt-3">
+                            <div class="pos-actions-group">
+                                <div class="pos-actions-group-label">Moliya</div>
+                                <div class="pos-actions-grid">
+                                    <button type="button" class="pos-action-btn-premium pos-action-blue" data-bs-toggle="modal" data-bs-target="#posPaySupplierModal"><i class="bi bi-cash-coin"></i><span>To'lov</span></button>
+                                    <button type="button" class="pos-action-btn-premium pos-action-orange" data-bs-toggle="modal" data-bs-target="#posExpenseModal"><i class="bi bi-wallet2"></i><span>Harajat</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnKassaniTasdiqlash"><i class="bi bi-safe"></i><span>Kassa</span></button>
+                                </div>
+                            </div>
+                            <div class="pos-actions-group">
+                                <div class="pos-actions-group-label">Amallar</div>
+                                <div class="pos-actions-grid">
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnKunlikSotuv"><i class="bi bi-calendar-day"></i><span>Kunlik</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnChekniSaqlash"><i class="bi bi-receipt"></i><span>Saqlash</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnChekniYuklash"><i class="bi bi-download"></i><span>Yuklash</span></button>
+                                    <a href="/purchases?from=pos" class="pos-action-btn-premium text-decoration-none"><i class="bi bi-box-arrow-in-down"></i><span>Kirimi</span></a>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnXHisobot"><i class="bi bi-file-earmark-text"></i><span>X hisobot</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnOmborniTasdiqlash"><i class="bi bi-box-seam"></i><span>Ombor</span></button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -335,56 +390,70 @@
         </div>
     </div>
 
-    <!-- To'lov turi modali -->
-    <div class="modal fade pos-payment-modal" id="posPaymentModal" tabindex="-1" aria-labelledby="posPaymentModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-dialog-sm pos-payment-dialog">
-            <div class="modal-content pos-payment-content">
-                <div class="modal-header pos-payment-header">
-                    <h5 class="modal-title mb-0" id="posPaymentModalLabel"><i class="bi bi-wallet2 me-2"></i>To'lov turi</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+    <!-- To'lov turi modali — Premium -->
+    <div class="modal fade pos-payment-modal" id="posPaymentModal" tabindex="-1" aria-labelledby="posPaymentModalLabel">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+            <div class="modal-content" style="border-radius:24px;border:none;box-shadow:0 24px 80px rgba(0,0,0,0.25);overflow:hidden;">
+                <div style="background:linear-gradient(135deg,#0d6b4b,#0a5540);padding:1.5rem 1.75rem;color:#fff;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+                                <i class="bi bi-wallet2"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:1.1rem;font-weight:700;" id="posPaymentModalLabel">To'lov turi</div>
+                                <div style="font-size:0.75rem;opacity:0.75;">Tanlang yoki raqam bosing</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
                 </div>
-                <div class="modal-body pos-payment-body py-3 px-3">
-                    <p class="text-center mb-3 opacity-75 small">
-                        <kbd class="pos-kbd">1</kbd> Naqd &nbsp; <kbd class="pos-kbd">2</kbd> Plastik &nbsp;
-                        <kbd class="pos-kbd">3</kbd> Click &nbsp; <kbd class="pos-kbd">4</kbd> Terminal
-                    </p>
+                <div style="padding:1.25rem 1.75rem;background:#fafbfc;">
+                    <div class="d-flex justify-content-center gap-2 mb-3">
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">1</kbd><span style="font-size:0.75rem;color:#8b95a1;">Naqd</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">2</kbd><span style="font-size:0.75rem;color:#8b95a1;">Plastik</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">3</kbd><span style="font-size:0.75rem;color:#8b95a1;">Click</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">4</kbd><span style="font-size:0.75rem;color:#8b95a1;">Terminal</span>
+                    </div>
                     <div id="posSplitPanel" class="pos-split-panel">
-                        <div class="pos-split-hint small text-muted mb-2">
-                            Jami: <strong><span id="posSplitTotal">0</span> so'm</strong> &nbsp; | &nbsp;
-                            Kiritildi: <strong><span id="posSplitSum">0</span> so'm</strong> &nbsp; | &nbsp;
-                            Qoldiq: <strong><span id="posSplitRemain">0</span> so'm</strong>
-                        </div>
-                        <div class="row g-2">
-                            <div class="col-12">
-                                <label class="form-label small mb-1">Naqd</label>
-                                <div class="input-group input-group-sm">
-                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitNaqd" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
-                                    <input type="number" class="form-control pos-split-amt" id="posSplitNaqd" min="0" step="1" value="0" inputmode="numeric">
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small mb-1">Plastik</label>
-                                <div class="input-group input-group-sm">
-                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitPlastik" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
-                                    <input type="number" class="form-control pos-split-amt" id="posSplitPlastik" min="0" step="1" value="0" inputmode="numeric">
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small mb-1">Click</label>
-                                <div class="input-group input-group-sm">
-                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitClick" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
-                                    <input type="number" class="form-control pos-split-amt" id="posSplitClick" min="0" step="1" value="0" inputmode="numeric">
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <label class="form-label small mb-1">Terminal</label>
-                                <div class="input-group input-group-sm">
-                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitTerminal" title="Qoldiqni to'ldirish"><i class="bi bi-plus-slash-minus"></i></button>
-                                    <input type="number" class="form-control pos-split-amt" id="posSplitTerminal" min="0" step="1" value="0" inputmode="numeric">
-                                </div>
+                        <div style="background:#f0faf5;border-radius:12px;padding:0.75rem 1rem;margin-bottom:1rem;">
+                            <div class="d-flex justify-content-between" style="font-size:0.8rem;color:#6c757d;">
+                                <span>Jami: <strong style="color:#0d6b4b;"><span id="posSplitTotal">0</span></strong></span>
+                                <span>Kiritildi: <strong style="color:#1565c0;"><span id="posSplitSum">0</span></strong></span>
+                                <span>Qoldiq: <strong style="color:#e53935;"><span id="posSplitRemain">0</span></strong></span>
                             </div>
                         </div>
-                        <button type="button" class="btn btn-success btn-sm w-100 mt-2" id="posSplitConfirm" disabled>
+                        <div class="d-flex flex-column gap-2">
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Naqd</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitNaqd" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitNaqd" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Plastik</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitPlastik" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitPlastik" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Click</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitClick" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitClick" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Terminal</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitTerminal" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitTerminal" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn w-100 mt-3" id="posSplitConfirm" disabled style="background:linear-gradient(135deg,#0d6b4b,#0a5540);color:#fff;border:none;border-radius:14px;padding:0.75rem;font-weight:700;font-size:0.95rem;box-shadow:0 4px 16px rgba(13,107,75,0.3);">
                             <i class="bi bi-check2-circle me-1"></i>Tasdiqlash
                         </button>
                     </div>
@@ -393,7 +462,127 @@
         </div>
     </div>
 
+    <!-- Ta'minotchiga to'lov modali -->
+    <div class="modal fade" id="posPaySupplierModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:var(--pos-radius);">
+                <form method="post" action="/sales/pos/pay-supplier">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <div class="modal-header" style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;border-radius:var(--pos-radius) var(--pos-radius) 0 0;">
+                        <h6 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Ta'minotchiga to'lov</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Ta'minotchi *</label>
+                            <select name="partner_id" class="form-select" required>
+                                <option value="">Tanlang...</option>
+                                {% for p in pos_partners %}
+                                <option value="{{ p.id }}">{{ p.name }}{% if p.balance and p.balance < 0 %} (qarz: {{ "{:,.0f}".format(p.balance|abs) }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Summa (so'm) *</label>
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Izoh</label>
+                            <input type="text" name="note" class="form-control" placeholder="masalan: un uchun to'lov">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>To'lov qilish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Harajat yozish modali -->
+    <div class="modal fade" id="posExpenseModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:var(--pos-radius);">
+                <form method="post" action="/sales/pos/expense">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <div class="modal-header" style="background:linear-gradient(135deg,#e65100,#f57c00);color:#fff;border-radius:var(--pos-radius) var(--pos-radius) 0 0;">
+                        <h6 class="modal-title"><i class="bi bi-wallet2 me-2"></i>Harajat yozish</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Harajat turi *</label>
+                            <select name="expense_type" class="form-select" required>
+                                <option value="">Tanlang...</option>
+                                {% for et in (pos_expense_types or []) %}
+                                <option value="{{ et.id }}">{{ et.name }}</option>
+                                {% endfor %}
+                                <option value="other">Boshqa</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Summa (so'm) *</label>
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Izoh</label>
+                            <input type="text" name="note" class="form-control" placeholder="masalan: yuk tashish, benzin">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+                        <button type="submit" class="btn" style="background:#e65100;color:#fff;"><i class="bi bi-check-lg me-1"></i>Harajat yozish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inkasatsiya modali -->
+    <div class="modal fade" id="posInkasatsiyaModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="border-radius:24px;border:none;box-shadow:0 24px 80px rgba(0,0,0,0.25);overflow:hidden;">
+                <div style="background:linear-gradient(135deg,#0d6b4b,#0a5540);padding:1.25rem 1.75rem;color:#fff;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+                                <i class="bi bi-safe"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:1.1rem;font-weight:700;">Inkasatsiya</div>
+                                <div style="font-size:0.75rem;opacity:0.75;">Kutilayotgan pul o'tkazmalar</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div style="padding:1rem 1.75rem;background:#fff;border-bottom:1px solid #f0f2f5;">
+                    <label style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#8b95a1;">Inkasator</label>
+                    <select id="posInkasatorSelect" class="form-select form-select-sm" style="border-radius:10px;max-width:300px;">
+                        <option value="">— Tanlang —</option>
+                        {% for p in pos_partners %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="padding:0;background:#fafbfc;">
+                    <table class="table mb-0" style="font-size:0.85rem;">
+                        <thead><tr style="background:#f0f2f5;"><th>Hujjat</th><th>Yo'nalish</th><th class="text-end">Summa</th><th>Izoh</th><th></th></tr></thead>
+                        <tbody id="posInkasatsiyaBody">
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Yuklanmoqda...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="padding:0.75rem 1.75rem;background:#fff;border-top:1px solid #f0f2f5;text-align:right;">
+                    <a href="/cash/transfers" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">Barcha hujjatlar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% endif %}
+
 </div>
 </div><!-- .pos-premium -->
 
@@ -406,10 +595,8 @@
     if (trigger && trigger.getAttribute('data-receipt-number')) {
         var num = trigger.getAttribute('data-receipt-number');
         var receiptUrl = '/sales/pos/receipt?number=' + encodeURIComponent(num) + '&print=1';
-        setTimeout(function() {
-            var w = window.open(receiptUrl, 'pos_receipt', 'width=320,height=520,scrollbars=yes');
-            if (!w && typeof console !== 'undefined') console.warn('Chek oynasi bloklandi. «Chekni chop etish» tugmasini bosing.');
-        }, 350);
+        var w = window.open(receiptUrl, 'pos_receipt', 'width=320,height=520,scrollbars=yes');
+        if (!w && typeof console !== 'undefined') console.warn('Chek oynasi bloklandi. Brauzerda popup ruxsat bering.');
     }
 
     /* To'liq ekran taklifi — sahifa ochilganda ko'rsatiladi */
@@ -467,6 +654,8 @@
         if (!isFullscreen() && fullscreenPrompt) fullscreenPrompt.style.display = 'none';
     });
 
+    window._posCanEditPrice = {{ 'true' if current_user and current_user.role in ('admin', 'manager') else 'false' }};
+
     var form = document.getElementById('posForm');
     var cartHidden = document.getElementById('posCartHidden');
     var cartBody = document.getElementById('posCartBody');
@@ -480,7 +669,7 @@
     var cart = [];
     var POS_CART_KEY = 'pos_savat';
     var posStockByProduct = {};
-    document.querySelectorAll('.pos-product-card').forEach(function(c) {
+    document.querySelectorAll('.pos-product-card-premium').forEach(function(c) {
         var id = c.getAttribute('data-product-id');
         var s = c.getAttribute('data-stock');
         if (id && s !== null && s !== '') { posStockByProduct[parseInt(id, 10)] = parseFloat(s) || 0; }
@@ -557,7 +746,7 @@
             var tr = document.createElement('tr');
             tr.innerHTML = '<td class="text-truncate align-middle" style="max-width:100px" title="' + (item.productName || '').replace(/"/g, '&quot;') + '">' + (item.productName || '') + '</td>' +
                 '<td class="align-middle"><div class="input-group input-group-sm" style="width:100px"><button type="button" class="btn btn-outline-secondary cart-minus" data-index="' + i + '">−</button><input type="number" class="form-control form-control-sm cart-qty text-center" data-index="' + i + '" value="' + item.quantity + '" step="0.01" min="0.01"><button type="button" class="btn btn-outline-secondary cart-plus" data-index="' + i + '">+</button></div></td>' +
-                '<td class="align-middle"><input type="number" class="form-control form-control-sm cart-price" data-index="' + i + '" value="' + item.price + '" step="0.01" min="0" style="width:75px"></td>' +
+                '<td class="align-middle"><span class="cart-price-display" style="font-size:0.85rem;font-weight:600;color:#2c3e50;white-space:nowrap;">' + (pr || 0).toLocaleString('ru-RU') + '</span><input type="hidden" class="cart-price" data-index="' + i + '" value="' + item.price + '"></td>' +
                 '<td class="cart-sum align-middle">' + (sum || 0).toLocaleString('ru-RU') + '</td>' +
                 '<td class="align-middle"><button type="button" class="btn btn-sm btn-outline-danger cart-remove" data-index="' + i + '"><i class="bi bi-trash"></i></button></td>';
             cartBody.appendChild(tr);
@@ -586,7 +775,7 @@
                 if (cart[i]) { cart[i].quantity = q; renderCart(); }
             });
         });
-        cartBody.querySelectorAll('.cart-price').forEach(function(inp) {
+        cartBody.querySelectorAll('input.cart-price[type="number"]').forEach(function(inp) {
             inp.addEventListener('change', function() {
                 var i = parseInt(this.getAttribute('data-index'), 10);
                 var p = parseFloat(this.value) || 0;
@@ -643,6 +832,8 @@
         if (totalFinalEl) totalFinalEl.textContent = totalFinal.toLocaleString('ru-RU');
         if (btnSotuv) btnSotuv.disabled = cart.length === 0;
         if (btnClearCart) btnClearCart.style.display = cart.length ? 'block' : 'none';
+        var countBadge = document.getElementById('posCartCountBadge');
+        if (countBadge) { countBadge.textContent = cart.length; countBadge.style.display = cart.length ? 'flex' : 'none'; }
         var hq = cartHidden.querySelectorAll('input[name="quantity"]');
         var hp = cartHidden.querySelectorAll('input[name="price"]');
         cart.forEach(function(item, i) {
@@ -651,11 +842,53 @@
         });
     }
 
-    document.querySelectorAll('.pos-product-card').forEach(function(card) {
-        card.addEventListener('click', function() {
-            addToCart(this.getAttribute('data-product-id'), this.getAttribute('data-name'), this.getAttribute('data-price'), 1, this.getAttribute('data-stock'));
+    // Tovar kartochkalariga click + 3D tilt
+    function initProductCards() {
+        var grid = document.getElementById('posProductGrid');
+        if (!grid) return;
+        grid.addEventListener('click', function(e) {
+            var card = e.target;
+            while (card && card !== grid) {
+                if (card.classList && card.classList.contains('pos-product-card-premium')) {
+                    addToCart(card.getAttribute('data-product-id'), card.getAttribute('data-name'), card.getAttribute('data-price'), 1, card.getAttribute('data-stock'));
+                    // Flash effekt
+                    card.style.boxShadow = '0 0 0 3px rgba(13,107,75,0.5), 0 8px 24px rgba(13,107,75,0.2)';
+                    setTimeout(function() { card.style.boxShadow = ''; }, 300);
+                    return;
+                }
+                card = card.parentElement;
+            }
         });
-    });
+        // 3D tilt effekt — sichqoncha harakatida
+        grid.addEventListener('mousemove', function(e) {
+            var card = e.target;
+            while (card && card !== grid) {
+                if (card.classList && card.classList.contains('pos-product-card-premium')) {
+                    var rect = card.getBoundingClientRect();
+                    var x = (e.clientX - rect.left) / rect.width - 0.5;
+                    var y = (e.clientY - rect.top) / rect.height - 0.5;
+                    card.style.transform = 'translateY(-6px) rotateY(' + (x * 8) + 'deg) rotateX(' + (-y * 8) + 'deg)';
+                    return;
+                }
+                card = card.parentElement;
+            }
+        });
+        grid.addEventListener('mouseleave', function(e) {
+            var cards = grid.querySelectorAll('.pos-product-card-premium');
+            for (var i = 0; i < cards.length; i++) cards[i].style.transform = '';
+        });
+        grid.addEventListener('mouseout', function(e) {
+            var card = e.target;
+            while (card && card !== grid) {
+                if (card.classList && card.classList.contains('pos-product-card-premium')) {
+                    card.style.transform = '';
+                    return;
+                }
+                card = card.parentElement;
+            }
+        });
+    }
+    initProductCards();
 
     var posWarehouseSelect = document.getElementById('posWarehouseSelect');
     if (posWarehouseSelect) {
@@ -714,7 +947,7 @@
 
     function applyCategoryFilter(catValue) {
         catValue = (catValue || '').toString();
-        document.querySelectorAll('.pos-category-pill').forEach(function(p) {
+        document.querySelectorAll('.pos-cat-pill').forEach(function(p) {
             var pCat = (p.getAttribute('data-category') || '').toString();
             p.classList.toggle('active', pCat === catValue);
         });
@@ -727,7 +960,7 @@
         if (sel) sel.value = catValue;
         if (posSearch) posSearch.dispatchEvent(new Event('input'));
     }
-    document.querySelectorAll('.pos-category-pill').forEach(function(pill) {
+    document.querySelectorAll('.pos-cat-pill').forEach(function(pill) {
         pill.addEventListener('click', function() {
             var cat = (this.getAttribute('data-category') || '').toString();
             applyCategoryFilter(cat);
@@ -743,7 +976,7 @@
     if (posSearch) {
         posSearch.addEventListener('input', function() {
             var q = (this.value || '').trim().toLowerCase();
-            var activeCat = (document.querySelector('.pos-category-pill.active') || {}).getAttribute('data-category') || '';
+            var activeCat = (document.querySelector('.pos-cat-pill.active') || {}).getAttribute('data-category') || '';
             document.querySelectorAll('.pos-product-item').forEach(function(el) {
                 var name = (el.getAttribute('data-name') || '');
                 var barcode = (el.getAttribute('data-barcode') || '');
@@ -762,7 +995,7 @@
                 if (!code) return;
                 var card = null;
                 var codeLower = code.toLowerCase();
-                document.querySelectorAll('.pos-product-card').forEach(function(c) {
+                document.querySelectorAll('.pos-product-card-premium').forEach(function(c) {
                     var b = (c.getAttribute('data-barcode') || '').trim().toLowerCase();
                     if (b && b === codeLower) card = c;
                 });
@@ -889,8 +1122,8 @@
                     sum += amt;
                 }
             });
-            if (!parts.length) { alert('Hech bo‘lmaganda bitta summa kiriting.'); return; }
-            if (Math.abs(total - sum) >= 0.01) { alert('Kiritilgan summalar yig‘indisi Jami bilan teng bo‘lishi kerak.'); return; }
+            if (!parts.length) { alert('Hech bolmaganda bitta summa kiriting.'); return; }
+            if (Math.abs(total - sum) >= 0.01) { alert('Kiritilgan summalar jami bilan teng bolishi kerak.'); return; }
             if (paymentTypeInput) paymentTypeInput.value = 'split';
             if (paymentSplitsInput) paymentSplitsInput.value = JSON.stringify(parts);
             try { sessionStorage.removeItem(POS_CART_KEY); } catch (e) {}
@@ -1020,12 +1253,79 @@
     }
     if (dailyBtnShow) dailyBtnShow.addEventListener('click', loadDailyOrders);
 
-    /* Kassani tasdiqlash — kassadan kassaga o'tkazish ro'yxati */
+    /* Inkasatsiya — kutilayotgan o'tkazmalar */
     if (document.getElementById('posBtnKassaniTasdiqlash')) {
         document.getElementById('posBtnKassaniTasdiqlash').addEventListener('click', function() {
-            window.location.href = '/cash/transfers';
+            var modal = new bootstrap.Modal(document.getElementById('posInkasatsiyaModal'));
+            loadInkasatsiya();
+            modal.show();
         });
     }
+    function loadInkasatsiya() {
+        var tbody = document.getElementById('posInkasatsiyaBody');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-muted">Yuklanmoqda...</td></tr>';
+        fetch('/cash/transfers/my-pending', { credentials: 'same-origin' })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data || !data.length) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-muted"><i class="bi bi-check-circle d-block mb-2" style="font-size:2rem;opacity:0.3;"></i>Kutilayotgan inkasatsiya yo\'q</td></tr>';
+                    return;
+                }
+                tbody.innerHTML = '';
+                data.forEach(function(t) {
+                    var tr = document.createElement('tr');
+                    var escapedNum = (t.number || '').replace(/'/g, "\\'");
+                    var escapedFrom = (t.from_cash || '').replace(/'/g, "\\'");
+                    var escapedTo = (t.to_cash || '').replace(/'/g, "\\'");
+                    tr.innerHTML = '<td><strong>' + t.number + '</strong><br><small class="text-muted">' + t.date + '</small></td>' +
+                        '<td>' + t.from_cash + ' <i class="bi bi-arrow-right text-muted"></i> ' + t.to_cash + '</td>' +
+                        '<td class="text-end fw-bold" style="color:#0d6b4b;">' + (t.amount || 0).toLocaleString('ru-RU') + '</td>' +
+                        '<td class="text-muted small">' + (t.note || '') + '</td>' +
+                        '<td><button class="btn btn-sm" style="background:#0d6b4b;color:#fff;border-radius:10px;font-weight:600;font-size:0.8rem;" onclick="confirmInkasatsiya(' + t.id + ', this, ' + (t.amount||0) + ', \'' + escapedFrom + '\', \'' + escapedTo + '\', \'' + escapedNum + '\')"><i class="bi bi-check-lg me-1"></i>Tasdiqlash</button></td>';
+                    tbody.appendChild(tr);
+                });
+            })
+            .catch(function() {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center py-3 text-danger">Yuklashda xato</td></tr>';
+            });
+    }
+    window.confirmInkasatsiya = function(id, btn, amount, fromCash, toCash, number) {
+        var inkasatorSelect = document.getElementById('posInkasatorSelect');
+        var inkasatorId = inkasatorSelect ? inkasatorSelect.value : '';
+        var inkasatorName = inkasatorSelect && inkasatorSelect.selectedOptions[0] ? inkasatorSelect.selectedOptions[0].text : '';
+        if (!inkasatorId) {
+            alert('Inkasatorni tanlang!');
+            if (inkasatorSelect) inkasatorSelect.focus();
+            return;
+        }
+        if (!confirm('Pulni ' + inkasatorName + ' ga berdingizmi? Kassadan mablag ayriladi.')) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content ||
+            (document.querySelector('input[name="csrf_token"]') || {}).value || '';
+        var fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fd.append('inkasator_id', inkasatorId);
+        fetch('/cash/transfers/' + id + '/sotuvchi-confirm', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.ok || r.status === 303) {
+                    loadInkasatsiya();
+                    // Chek ochish
+                    var receiptUrl = '/cash/transfers/' + id + '/receipt';
+                    window.open(receiptUrl, 'inkasatsiya_receipt', 'width=400,height=500,scrollbars=yes');
+                } else {
+                    alert('Xatolik yuz berdi');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Tasdiqlash';
+                }
+            })
+            .catch(function() {
+                alert('Tarmoq xatosi');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Tasdiqlash';
+            });
+    };
     /* Omborni tasdiqlash — ombordan omborga o'tkazish ro'yxati */
     if (document.getElementById('posBtnOmborniTasdiqlash')) {
         document.getElementById('posBtnOmborniTasdiqlash').addEventListener('click', function() {
@@ -1165,6 +1465,102 @@
 .pos-fullscreen-prompt .btn-success { background: #fff; color: #0d6b4b; border: none; }
 .pos-fullscreen-prompt .btn-success:hover { background: #f0f0f0; color: #0a5540; }
 
+/* Success card — premium overlay */
+.pos-success-overlay {
+    position: fixed; inset: 0; z-index: 1070;
+    background: rgba(0,0,0,0.45);
+    backdrop-filter: blur(6px);
+    display: flex; align-items: center; justify-content: center;
+    animation: posOverlayIn 0.3s ease;
+}
+.pos-success-overlay.pos-success-hiding {
+    animation: posOverlayOut 0.3s ease forwards;
+}
+@keyframes posOverlayIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes posOverlayOut { from { opacity: 1; } to { opacity: 0; } }
+.pos-success-card {
+    width: 380px; max-width: 92vw;
+    border-radius: 24px; overflow: hidden;
+    background: #fff;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.25);
+    animation: posCardIn 0.4s cubic-bezier(0.16,1,0.3,1);
+    text-align: center;
+}
+@keyframes posCardIn {
+    from { transform: scale(0.85) translateY(30px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+.pos-success-card-top {
+    padding: 2.5rem 2rem 1.5rem;
+    background: linear-gradient(135deg, #0d6b4b 0%, #0a5540 60%, #064e30 100%);
+    position: relative;
+}
+.pos-success-card-top::after {
+    content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 30px;
+    background: #fff; border-radius: 24px 24px 0 0;
+}
+.pos-success-checkmark {
+    width: 80px; height: 80px; margin: 0 auto;
+    color: #fff; position: relative; z-index: 1;
+    animation: posCheckPop 0.6s cubic-bezier(0.16,1,0.3,1) 0.2s both;
+}
+.pos-success-checkmark svg { width: 100%; height: 100%; }
+.pos-success-checkmark circle {
+    stroke-dasharray: 166; stroke-dashoffset: 166;
+    animation: posCircleDraw 0.6s ease 0.3s forwards;
+}
+.pos-success-checkmark path {
+    stroke-dasharray: 48; stroke-dashoffset: 48;
+    animation: posCheckDraw 0.4s ease 0.7s forwards;
+}
+@keyframes posCheckPop {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+@keyframes posCircleDraw { to { stroke-dashoffset: 0; } }
+@keyframes posCheckDraw { to { stroke-dashoffset: 0; } }
+.pos-success-card-body { padding: 0.5rem 2rem 1.5rem; }
+.pos-success-card-title {
+    font-size: 1.5rem; font-weight: 800; color: #1a1d21;
+    letter-spacing: -0.02em; margin-bottom: 0.4rem;
+}
+.pos-success-card-number {
+    font-size: 1rem; color: #0d6b4b; font-weight: 600;
+    background: #f0faf5; border-radius: 10px;
+    padding: 0.5rem 1rem; display: inline-block;
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    letter-spacing: 0.02em;
+}
+.pos-success-card-actions {
+    display: flex; flex-direction: column; gap: 0.6rem;
+    padding: 0 2rem 2rem;
+}
+.pos-success-card-btn {
+    display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    padding: 0.85rem 1.5rem; border-radius: 14px;
+    font-size: 0.95rem; font-weight: 700;
+    text-decoration: none; transition: all 0.2s;
+    cursor: pointer; border: none;
+}
+.pos-success-card-btn-primary {
+    background: linear-gradient(135deg, #0d6b4b, #0a5540);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(13,107,75,0.35);
+}
+.pos-success-card-btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(13,107,75,0.4);
+    color: #fff;
+}
+.pos-success-card-btn-outline {
+    background: #fff; color: #0d6b4b;
+    border: 2px solid #e0e8e4;
+}
+.pos-success-card-btn-outline:hover {
+    border-color: #0d6b4b; background: #f0faf5;
+    color: #0d6b4b;
+}
+
 /* ----- Premium Sotuv oynasi ----- */
 .pos-premium {
     --pos-primary: #0d6b4b;
@@ -1270,7 +1666,133 @@
     box-shadow: 0 0 0 3px rgba(13,107,75,0.12);
 }
 
-/* Product cards */
+/* Products header premium */
+.pos-premium .pos-products-header-premium {
+    padding: 1rem 1.25rem 0.75rem;
+    background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+    border-bottom: 1px solid var(--pos-border);
+}
+.pos-premium .pos-products-header-top {
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 0.75rem; margin-bottom: 0.75rem;
+}
+.pos-premium .pos-products-header-title {
+    font-size: 1rem; font-weight: 700; color: #1a1d21;
+}
+.pos-premium .pos-products-count {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 24px; height: 22px; border-radius: 999px;
+    background: var(--pos-primary); color: #fff;
+    font-size: 0.7rem; font-weight: 700; padding: 0 6px; margin-left: 6px;
+}
+.pos-premium .pos-products-header-controls {
+    display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
+}
+.pos-premium .pos-search-premium,
+.pos-premium .pos-barcode-premium {
+    position: relative; display: flex; align-items: center;
+}
+.pos-premium .pos-search-premium i,
+.pos-premium .pos-barcode-premium i {
+    position: absolute; left: 10px; color: #a0a8b4; font-size: 0.85rem; pointer-events: none;
+}
+.pos-premium .pos-search-premium input,
+.pos-premium .pos-barcode-premium input {
+    padding: 0.4rem 0.6rem 0.4rem 2rem;
+    border: 1.5px solid #e8ecf1; border-radius: var(--pos-radius-sm);
+    font-size: 0.82rem; width: 180px; background: #fff;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.pos-premium .pos-barcode-premium input { width: 140px; }
+.pos-premium .pos-search-premium input:focus,
+.pos-premium .pos-barcode-premium input:focus {
+    border-color: var(--pos-primary); box-shadow: 0 0 0 3px rgba(13,107,75,0.1); outline: none;
+}
+.pos-premium .pos-category-select-premium {
+    padding: 0.4rem 0.6rem; border: 1.5px solid #e8ecf1;
+    border-radius: var(--pos-radius-sm); font-size: 0.82rem;
+    background: #fff; color: #4a5568; min-width: 120px;
+}
+.pos-premium .pos-category-pills-premium {
+    display: flex; flex-wrap: wrap; gap: 0.35rem; padding-bottom: 0.5rem;
+}
+.pos-premium .pos-cat-pill {
+    padding: 0.3rem 0.75rem; border-radius: 999px; border: 1.5px solid #e8ecf1;
+    background: #fff; color: #5a6c7d; font-size: 0.75rem; font-weight: 500;
+    cursor: pointer; transition: all 0.2s;
+}
+.pos-premium .pos-cat-pill:hover { border-color: var(--pos-primary); color: var(--pos-primary); }
+.pos-premium .pos-cat-pill.active {
+    background: linear-gradient(135deg, var(--pos-primary), var(--pos-primary-dark));
+    border-color: transparent; color: #fff;
+}
+
+/* Product grid premium */
+.pos-premium .pos-product-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr));
+    gap: 0.75rem;
+}
+.pos-premium .pos-product-card-premium {
+    border: 1.5px solid #edf0f3; border-radius: var(--pos-radius);
+    background: #fff; cursor: pointer; overflow: hidden;
+    display: flex; flex-direction: column;
+    position: relative; z-index: 1;
+    user-select: none; -webkit-user-select: none;
+    transform-style: preserve-3d;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+}
+.pos-premium .pos-product-card-premium:hover {
+    transform: translateY(-6px) rotateX(2deg);
+    box-shadow: 0 16px 32px rgba(13,107,75,0.15), 0 4px 8px rgba(0,0,0,0.08);
+    border-color: rgba(13,107,75,0.35);
+}
+.pos-premium .pos-product-card-premium:active {
+    transform: translateY(-2px) scale(0.97);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    transition-duration: 0.1s;
+}
+.pos-premium .pos-product-grid {
+    perspective: 800px;
+}
+.pos-premium .pos-product-img-wrap {
+    position: relative; height: 140px;
+    background: linear-gradient(135deg, #f8f9fb 0%, #eef1f5 100%);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+}
+.pos-premium .pos-product-card-premium:hover .pos-product-img-wrap::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.3) 0%, transparent 60%);
+    pointer-events: none;
+}
+.pos-premium .pos-product-img-wrap .pos-product-img {
+    width: 100%; height: 100%; object-fit: contain; padding: 10px;
+}
+.pos-premium .pos-product-img-wrap .pos-product-placeholder {
+    font-size: 2.8rem; color: #d0d5dc;
+}
+.pos-premium .pos-product-stock-badge {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(13,107,75,0.85); color: #fff;
+    font-size: 0.65rem; font-weight: 700; padding: 2px 7px;
+    border-radius: 6px; backdrop-filter: blur(4px);
+}
+.pos-premium .pos-product-info {
+    padding: 0.6rem 0.7rem; flex: 1; display: flex; flex-direction: column;
+}
+.pos-premium .pos-product-name-premium {
+    font-size: 0.82rem; font-weight: 600; color: #2c3e50;
+    line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical; overflow: hidden; margin-bottom: 4px;
+}
+.pos-premium .pos-product-price-premium {
+    font-size: 0.9rem; font-weight: 700; color: var(--pos-primary); margin-top: auto;
+}
+.pos-premium .pos-product-price-premium small { font-weight: 400; color: #8b95a1; font-size: 0.7rem; }
+.pos-premium .pos-no-price { font-size: 0.75rem; color: #c0c5cc; font-weight: 400; }
+
+/* Keep old class for backward compat */
 .pos-premium .pos-product-card {
     border: 1px solid var(--pos-border);
     border-radius: var(--pos-radius);
@@ -1303,48 +1825,151 @@
 .pos-premium .pos-product-price { font-size: 1rem; color: var(--pos-primary); }
 .pos-premium .pos-product-stock { font-size: 0.75rem; color: #6c757d; }
 
-/* Cart */
-.pos-premium .pos-card-cart { border-radius: var(--pos-radius); }
-.pos-premium .pos-cart-header { background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-primary-dark) 100%); color: #fff; border: none; }
-.pos-premium .pos-cart-body { padding: 1rem; }
-.pos-premium .pos-cart-table thead th {
-    font-size: 0.75rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #6c757d;
-    border-bottom: 1px solid var(--pos-border);
-    padding: 0.6rem 0.5rem;
-}
-.pos-premium .pos-cart-table tbody td { padding: 0.5rem; vertical-align: middle; font-size: 0.9rem; }
-.pos-premium .pos-total-row {
-    padding: 1rem 0;
-    border-top: 2px solid var(--pos-border);
-    margin-top: 0.5rem;
-}
-.pos-premium .pos-total-label { font-size: 1.1rem; font-weight: 700; color: #2c3e50; }
-.pos-premium .pos-total-value { font-size: 1.35rem; font-weight: 700; color: var(--pos-primary); }
-.pos-premium .pos-btn-clear {
-    border-radius: var(--pos-radius-sm);
-    border: 1px solid var(--pos-border);
-    color: #6c757d;
-}
-.pos-premium .pos-btn-sotuv {
+/* Cart — Premium */
+.pos-premium .pos-card-cart { border-radius: var(--pos-radius); border: none; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+.pos-premium .pos-cart-header-premium {
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 1rem 1.25rem;
     background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-primary-dark) 100%);
-    border: none;
+    color: #fff; border: none; position: relative;
+}
+.pos-premium .pos-cart-header-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: rgba(255,255,255,0.18); backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.2rem; flex-shrink: 0;
+}
+.pos-premium .pos-cart-header-title { font-size: 1rem; font-weight: 700; letter-spacing: -0.01em; }
+.pos-premium .pos-cart-header-kassir { font-size: 0.72rem; opacity: 0.8; margin-top: 1px; }
+.pos-premium .pos-cart-header-badge {
+    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+    min-width: 26px; height: 26px; border-radius: 999px;
+    background: var(--pos-accent); color: #1a1d21;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.8rem; font-weight: 700;
+}
+.pos-premium .pos-cart-body { padding: 1rem 1.25rem; }
+.pos-premium .pos-cart-items-wrap { max-height: 220px; overflow-y: auto; }
+.pos-premium .pos-cart-items-wrap::-webkit-scrollbar { width: 4px; }
+.pos-premium .pos-cart-items-wrap::-webkit-scrollbar-thumb { background: #d0d5dc; border-radius: 4px; }
+.pos-premium .pos-cart-table thead th {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; color: #8b95a1;
+    border-bottom: 2px solid #f0f2f5; padding: 0.5rem 0.4rem;
+}
+.pos-premium .pos-cart-table tbody td {
+    padding: 0.5rem 0.4rem; vertical-align: middle;
+    font-size: 0.85rem; border-bottom: 1px solid #f5f6f8;
+}
+.pos-premium .pos-cart-table tbody tr:last-child td { border-bottom: none; }
+
+/* Cart empty state */
+.pos-premium .pos-cart-empty-state {
+    text-align: center; padding: 2rem 1rem;
+}
+.pos-premium .pos-cart-empty-icon {
+    width: 56px; height: 56px; border-radius: 50%; margin: 0 auto 0.75rem;
+    background: #f0f2f5; display: flex; align-items: center; justify-content: center;
+    font-size: 1.5rem; color: #c0c5cc;
+}
+.pos-premium .pos-cart-empty-text { font-size: 0.9rem; font-weight: 600; color: #6c757d; }
+.pos-premium .pos-cart-empty-hint { font-size: 0.75rem; color: #a0a8b4; margin-top: 4px; }
+
+/* Cart sections */
+.pos-premium .pos-cart-section { margin-bottom: 0.75rem; }
+.pos-premium .pos-cart-section-label {
+    font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.05em; color: #8b95a1; margin-bottom: 6px;
+}
+.pos-premium .pos-select-premium {
+    border-radius: var(--pos-radius-sm); border: 1.5px solid #e8ecf1;
+    font-size: 0.85rem; transition: border-color 0.2s, box-shadow 0.2s;
+}
+.pos-premium .pos-select-premium:focus {
+    border-color: var(--pos-primary);
+    box-shadow: 0 0 0 3px rgba(13,107,75,0.1);
+}
+
+/* Summary premium */
+.pos-premium .pos-summary-premium {
+    background: #f8faf9; border-radius: var(--pos-radius-sm);
+    padding: 0.85rem 1rem; margin-bottom: 1rem;
+}
+.pos-premium .pos-summary-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.3rem 0;
+}
+.pos-premium .pos-summary-label { font-size: 0.85rem; color: #6c757d; font-weight: 500; }
+.pos-premium .pos-summary-value { font-size: 0.9rem; color: #2c3e50; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pos-premium .pos-summary-discount-val { color: #e53935; }
+.pos-premium .pos-summary-divider { height: 1.5px; background: linear-gradient(90deg, transparent, #0d6b4b40, transparent); margin: 0.4rem 0; }
+.pos-premium .pos-summary-total .pos-summary-label { font-size: 1rem; color: #1a1d21; font-weight: 700; }
+.pos-premium .pos-summary-total .pos-summary-value { font-size: 1.25rem; color: var(--pos-primary); font-weight: 800; }
+
+/* Cart buttons premium */
+.pos-premium .pos-cart-buttons { display: flex; flex-direction: column; gap: 0.5rem; }
+.pos-premium .pos-btn-clear-premium {
+    width: 100%; padding: 0.5rem; border-radius: var(--pos-radius-sm);
+    border: 1.5px solid #e8ecf1; background: #fff; color: #6c757d;
+    font-size: 0.8rem; font-weight: 500; cursor: pointer;
+    transition: all 0.2s;
+}
+.pos-premium .pos-btn-clear-premium:hover { border-color: #e53935; color: #e53935; background: #fef2f2; }
+.pos-premium .pos-btn-sotuv-premium {
+    width: 100%; padding: 1rem; border: none;
     border-radius: var(--pos-radius);
-    font-weight: 700;
-    font-size: 1.1rem;
-    color: #fff;
-    box-shadow: 0 4px 14px rgba(13,107,75,0.35);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    background: linear-gradient(135deg, var(--pos-primary) 0%, var(--pos-primary-dark) 100%);
+    color: #fff; font-size: 1.1rem; font-weight: 700;
+    box-shadow: 0 4px 16px rgba(13,107,75,0.3);
+    cursor: pointer; position: relative;
+    transition: transform 0.15s, box-shadow 0.15s;
 }
-.pos-premium .pos-btn-sotuv:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(13,107,75,0.4);
-    color: #fff;
+.pos-premium .pos-btn-sotuv-premium:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(13,107,75,0.4);
 }
-.pos-premium .pos-btn-sotuv:disabled { opacity: 0.5; cursor: not-allowed; }
+.pos-premium .pos-btn-sotuv-premium:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+.pos-premium .pos-btn-shortcut {
+    position: absolute; right: 1rem; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,0.18); padding: 0.2rem 0.6rem;
+    border-radius: 6px; font-size: 0.7rem; font-weight: 600;
+}
+
+/* Action groups premium */
+.pos-premium .pos-actions-group { margin-bottom: 0.75rem; }
+.pos-premium .pos-actions-group-label {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.08em; color: #a0a8b4; margin-bottom: 0.4rem;
+    padding-left: 2px;
+}
+.pos-premium .pos-actions-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem;
+}
+.pos-premium .pos-action-btn-premium {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 4px; padding: 0.55rem 0.3rem;
+    border-radius: var(--pos-radius-sm); border: 1.5px solid #e8ecf1;
+    background: #fff; color: #4a5568; font-size: 0.7rem; font-weight: 500;
+    cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.pos-premium .pos-action-btn-premium i { font-size: 1rem; }
+.pos-premium .pos-action-btn-premium:hover {
+    border-color: var(--pos-primary); color: var(--pos-primary);
+    background: rgba(13,107,75,0.04); transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.pos-premium .pos-action-btn-premium.pos-action-blue {
+    background: #eff6ff; color: #1565c0; border-color: #bfdbfe;
+}
+.pos-premium .pos-action-btn-premium.pos-action-blue:hover {
+    background: #1565c0; color: #fff; border-color: #1565c0;
+}
+.pos-premium .pos-action-btn-premium.pos-action-orange {
+    background: #fff7ed; color: #c2410c; border-color: #fed7aa;
+}
+.pos-premium .pos-action-btn-premium.pos-action-orange:hover {
+    background: #c2410c; color: #fff; border-color: #c2410c;
+}
 
 /* Alerts */
 .pos-premium .pos-alert-success {
@@ -1493,6 +2118,18 @@
 }
 .pos-premium .pos-extra-actions .pos-action-pill i {
     font-size: 0.9em;
+}
+.pos-premium .pos-extra-actions .pos-action-blue {
+    background: #e3f2fd; color: #1565c0; border-color: #90caf9;
+}
+.pos-premium .pos-extra-actions .pos-action-blue:hover {
+    background: #1565c0; color: #fff; border-color: #1565c0;
+}
+.pos-premium .pos-extra-actions .pos-action-orange {
+    background: #fff3e0; color: #e65100; border-color: #ffcc80;
+}
+.pos-premium .pos-extra-actions .pos-action-orange:hover {
+    background: #e65100; color: #fff; border-color: #e65100;
 }
 
 /* Kunlik sotuvlar modali — Sotuvlar / Qaytarishlar tab */

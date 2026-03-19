@@ -2,243 +2,329 @@
 
 {% block content %}
 {% set show_tannarx = show_tannarx if show_tannarx is defined else (current_user and current_user.role == 'admin') %}
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h4 class="mb-0"><i class="bi bi-wallet2"></i> Qoldiqlar</h4>
-            <p class="text-muted small mb-0">Kassa, tovar va kontragent qoldiqlarini bitta joyda kiritish va tahrirlash.</p>
-        </div>
-    </div>
-    {% if request.query_params.get('success') == 'import' and request.query_params.get('doc_number') %}
-    <div class="alert alert-success alert-dismissible fade show" role="alert">
-        <i class="bi bi-check-circle"></i>
-        {% if request.query_params.get('detail') %}{{ request.query_params.get('detail') }}{% else %}Exceldan yuklandi.{% endif %}
-        {% if request.query_params.get('doc_id') %}
-        <br><small class="d-block mt-2">
-            <i class="bi bi-file-earmark-text"></i> Hujjat: <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link fw-bold">{{ request.query_params.get('doc_number') }}</a>
-            — <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link">Hujjatni ochish</a>
-        </small>
-        {% endif %}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endif %}
-    {% if request.query_params.get('error') == 'import' and request.query_params.get('detail') %}
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('detail') }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    </div>
-    {% endif %}
 
-    <ul class="nav nav-tabs mb-3" id="qoldiqTabs" role="tablist">
-        <li class="nav-item" role="presentation">
-            <button class="nav-link active" id="kassa-tab" data-bs-toggle="tab" data-bs-target="#kassa" type="button" role="tab">Kassa qoldiqlari</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="tovar-tab" data-bs-toggle="tab" data-bs-target="#tovar" type="button" role="tab">Tovar qoldiqlari</button>
-        </li>
-        <li class="nav-item" role="presentation">
-            <button class="nav-link" id="kontragent-tab" data-bs-toggle="tab" data-bs-target="#kontragent" type="button" role="tab">Kontragent qoldiqlari</button>
-        </li>
-    </ul>
-
-    <div class="tab-content" id="qoldiqTabContent">
-        <!-- Kassa qoldiqlari — forma spiska (1C uslubida) -->
-        <div class="tab-pane fade show active" id="kassa" role="tabpanel">
-            <div class="d-flex justify-content-between align-items-center mb-3">
-                <div>
-                    <a href="/qoldiqlar/kassa/hujjat/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>№</th>
-                                    <th>Sana</th>
-                                    <th>Foydalanuvchi</th>
-                                    <th>Holat</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for d in cash_docs %}
-                                <tr>
-                                    <td><a href="/qoldiqlar/kassa/hujjat/{{ d.id }}">{{ d.number }}</a></td>
-                                    <td>{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
-                                    <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
-                                    <td>
-                                        {% if d.status == 'draft' %}
-                                        <span class="badge bg-warning text-dark">Qoralama</span>
-                                        {% else %}
-                                        <span class="badge bg-success">Tasdiqlangan</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <a href="/qoldiqlar/kassa/hujjat/{{ d.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/kassa/hujjat/{{ d.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                        </form>
-                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/kassa/hujjat/{{ d.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                        </form>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="5" class="text-muted text-center py-4">
-                                        Hujjatlar yo'q. <a href="/qoldiqlar/kassa/hujjat/new">Yangi hujjat yaratish</a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tovar qoldiqlari — forma spiska (1C uslubida) -->
-        <div class="tab-pane fade" id="tovar" role="tabpanel">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <div>
-                    <a href="/qoldiqlar/tovar/hujjat/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
-                    <button type="button" class="btn btn-outline-primary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#tovarExcelImportModal">
-                        <i class="bi bi-upload"></i> Exceldan yuklash
-                    </button>
-                    <a href="/warehouse/template" class="btn btn-outline-secondary btn-sm ms-2" target="_blank" rel="noopener"><i class="bi bi-file-earmark-excel"></i> Andoza</a>
-                    <a href="/qoldiqlar/export" class="btn btn-outline-success btn-sm ms-2" target="_blank" rel="noopener"><i class="bi bi-download"></i> Joriy qoldiqlar (Excel)</a>
-                    <a href="/qoldiqlar/tarix" class="btn btn-outline-info btn-sm ms-2" title="Mahsulot qayerdan keldi va qayerga ketdi — harakatlar tarixi"><i class="bi bi-clock-history"></i> Mahsulot harakati tarixi</a>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>№</th>
-                                    <th>Sana</th>
-                                    <th>Foydalanuvchi</th>
-                                    {% if show_tannarx %}<th>Jami summa tannarx (so'm)</th>{% endif %}
-                                    <th>Jami sotuv (so'm)</th>
-                                    <th>Holat</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for d in tovar_docs %}
-                                <tr>
-                                    <td><a href="/qoldiqlar/tovar/hujjat/{{ d.id }}">{{ d.number }}</a></td>
-                                    <td>{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
-                                    <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
-                                    {% if show_tannarx %}<td>{{ "{:,.0f}".format(d.total_tannarx or 0) }}</td>{% endif %}
-                                    <td>{{ "{:,.0f}".format(d.total_sotuv or 0) }}</td>
-                                    <td>
-                                        {% if d.status == 'draft' %}
-                                        <span class="badge bg-warning text-dark">Qoralama</span>
-                                        {% else %}
-                                        <span class="badge bg-success">Tasdiqlangan</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <a href="/qoldiqlar/tovar/hujjat/{{ d.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ d.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz? Tasdiq o\'zidan bekor bo\'lmaydi — faqat admin shu tugmani bosganda bekor bo\'ladi.');">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish (faqat admin)"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                        </form>
-                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ d.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                        </form>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="{% if show_tannarx %}7{% else %}6{% endif %}" class="text-muted text-center py-4">
-                                        Hujjatlar yo'q. <a href="/qoldiqlar/tovar/hujjat/new">Yangi hujjat yaratish</a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Kontragent qoldiqlari — forma spiska (1C uslubida) -->
-        <div class="tab-pane fade" id="kontragent" role="tabpanel">
-            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                <div>
-                    <a href="/qoldiqlar/kontragent/hujjat/new" class="btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
-                    <button type="button" class="btn btn-outline-primary btn-sm ms-2" data-bs-toggle="modal" data-bs-target="#kontragentExcelImportModal">
-                        <i class="bi bi-upload"></i> Exceldan yuklash
-                    </button>
-                    <a href="/qoldiqlar/kontragent/andoza" class="btn btn-outline-secondary btn-sm ms-2" target="_blank" rel="noopener"><i class="bi bi-file-earmark-excel"></i> Andoza</a>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-body p-0">
-                    <div class="table-responsive">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>№</th>
-                                    <th>Sana</th>
-                                    <th>Foydalanuvchi</th>
-                                    <th>Holat</th>
-                                    <th></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for d in kontragent_docs %}
-                                <tr>
-                                    <td><a href="/qoldiqlar/kontragent/hujjat/{{ d.id }}">{{ d.number }}</a></td>
-                                    <td>{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
-                                    <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
-                                    <td>
-                                        {% if d.status == 'draft' %}
-                                        <span class="badge bg-warning text-dark">Qoralama</span>
-                                        {% else %}
-                                        <span class="badge bg-success">Tasdiqlangan</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <a href="/qoldiqlar/kontragent/hujjat/{{ d.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ d.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
-                                        </form>
-                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
-                                        <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ d.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
-                                            <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                        </form>
-                                        {% endif %}
-                                    </td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="5" class="text-muted text-center py-4">
-                                        Hujjatlar yo'q. <a href="/qoldiqlar/kontragent/hujjat/new">Yangi hujjat yaratish</a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+<!-- Page header -->
+<div class="page-header mb-3">
+    <h4><i class="bi bi-wallet2 text-primary"></i> Qoldiqlar</h4>
+    <p class="text-muted small mb-0">Kassa, tovar va kontragent qoldiqlarini bitta joyda kiritish va tahrirlash.</p>
 </div>
 
-<!-- Kontragent qoldiqlari: Exceldan yuklash modal -->
+<!-- Success / error alerts -->
+{% if request.query_params.get('success') == 'import' and request.query_params.get('doc_number') %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="bi bi-check-circle"></i>
+    {% if request.query_params.get('detail') %}{{ request.query_params.get('detail') }}{% else %}Exceldan yuklandi.{% endif %}
+    {% if request.query_params.get('doc_id') %}
+    <br><small class="d-block mt-2">
+        <i class="bi bi-file-earmark-text"></i> Hujjat:
+        <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link fw-bold">{{ request.query_params.get('doc_number') }}</a>
+        — <a href="/qoldiqlar/tovar/hujjat/{{ request.query_params.get('doc_id') }}" class="alert-link">Hujjatni ochish</a>
+    </small>
+    {% endif %}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('error') == 'import' and request.query_params.get('detail') %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('detail') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<!-- Tabs -->
+<ul class="nav nav-tabs mb-3" id="qoldiqTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="kassa-tab" data-bs-toggle="tab" data-bs-target="#kassa" type="button" role="tab">
+            <i class="bi bi-cash-coin me-1"></i>Kassa qoldiqlari
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tovar-tab" data-bs-toggle="tab" data-bs-target="#tovar" type="button" role="tab">
+            <i class="bi bi-box-seam me-1"></i>Tovar qoldiqlari
+        </button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="kontragent-tab" data-bs-toggle="tab" data-bs-target="#kontragent" type="button" role="tab">
+            <i class="bi bi-people me-1"></i>Kontragent qoldiqlari
+        </button>
+    </li>
+</ul>
+
+<div class="tab-content" id="qoldiqTabContent">
+
+    <!-- ===== KASSA QOLDIQLARI ===== -->
+    <div class="tab-pane fade show active" id="kassa" role="tabpanel">
+        <div class="card data-table">
+            <div class="card-header">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-cash-coin text-primary"></i> Kassa qoldiqlari hujjatlari
+                </span>
+                <a href="/qoldiqlar/kassa/hujjat/new" class="top-btn btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Yangi hujjat
+                </a>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:140px">Hujjat №</th>
+                                <th>Sana</th>
+                                <th>Foydalanuvchi</th>
+                                <th>Holat</th>
+                                <th style="width:90px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in cash_docs %}
+                            <tr>
+                                <td>
+                                    <a href="/qoldiqlar/kassa/hujjat/{{ d.id }}" class="num-cell fw-700 text-decoration-none">
+                                        {{ d.number }}
+                                    </a>
+                                </td>
+                                <td class="muted-cell">{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
+                                <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
+                                <td>
+                                    {% if d.status == 'draft' %}
+                                        <span class="badge-draft">Qoralama</span>
+                                    {% else %}
+                                        <span class="badge-done">Tasdiqlangan</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <a href="/qoldiqlar/kassa/hujjat/{{ d.id }}" class="btn-act" title="Ochish">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/kassa/hujjat/{{ d.id }}/revert" class="d-inline"
+                                              onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
+                                            <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        </form>
+                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/kassa/hujjat/{{ d.id }}/delete" class="d-inline"
+                                              onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="btn-act danger" title="O'chirish">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center muted-cell py-5">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                    Hujjatlar yo'q.
+                                    <a href="/qoldiqlar/kassa/hujjat/new">Yangi hujjat yaratish</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TOVAR QOLDIQLARI ===== -->
+    <div class="tab-pane fade" id="tovar" role="tabpanel">
+        <div class="card data-table">
+            <div class="card-header flex-wrap gap-2">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-box-seam text-primary"></i> Tovar qoldiqlari hujjatlari
+                </span>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="/qoldiqlar/tovar/hujjat/new" class="top-btn btn btn-success">
+                        <i class="bi bi-plus-circle"></i> Yangi hujjat
+                    </a>
+                    <button type="button" class="top-btn btn btn-outline-primary"
+                            data-bs-toggle="modal" data-bs-target="#tovarExcelImportModal">
+                        <i class="bi bi-upload"></i> Exceldan yuklash
+                    </button>
+                    <a href="/warehouse/template" class="top-btn btn btn-outline-secondary" target="_blank" rel="noopener">
+                        <i class="bi bi-file-earmark-excel"></i> Andoza
+                    </a>
+                    <a href="/qoldiqlar/export" class="top-btn btn btn-outline-success" target="_blank" rel="noopener">
+                        <i class="bi bi-download"></i> Joriy qoldiqlar
+                    </a>
+                    <a href="/qoldiqlar/tarix" class="top-btn btn btn-outline-info"
+                       title="Mahsulot qayerdan keldi va qayerga ketdi — harakatlar tarixi">
+                        <i class="bi bi-clock-history"></i> Harakat tarixi
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:140px">Hujjat №</th>
+                                <th>Sana</th>
+                                <th>Foydalanuvchi</th>
+                                {% if show_tannarx %}<th class="text-end">Tannarx jami (so'm)</th>{% endif %}
+                                <th class="text-end">Sotuv jami (so'm)</th>
+                                <th>Holat</th>
+                                <th style="width:90px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in tovar_docs %}
+                            <tr>
+                                <td>
+                                    <a href="/qoldiqlar/tovar/hujjat/{{ d.id }}" class="num-cell fw-700 text-decoration-none">
+                                        {{ d.number }}
+                                    </a>
+                                </td>
+                                <td class="muted-cell">{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
+                                <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
+                                {% if show_tannarx %}
+                                <td class="text-end muted-cell">{{ "{:,.0f}".format(d.total_tannarx or 0) }}</td>
+                                {% endif %}
+                                <td class="text-end sum-cell">{{ "{:,.0f}".format(d.total_sotuv or 0) }}</td>
+                                <td>
+                                    {% if d.status == 'draft' %}
+                                        <span class="badge-draft">Qoralama</span>
+                                    {% else %}
+                                        <span class="badge-done">Tasdiqlangan</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <a href="/qoldiqlar/tovar/hujjat/{{ d.id }}" class="btn-act" title="Ochish">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ d.id }}/revert" class="d-inline"
+                                              onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz? Tasdiq o\'zidan bekor bo\'lmaydi — faqat admin shu tugmani bosganda bekor bo\'ladi.');">
+                                            <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish (faqat admin)">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        </form>
+                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/tovar/hujjat/{{ d.id }}/delete" class="d-inline"
+                                              onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="btn-act danger" title="O'chirish">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="{% if show_tannarx %}7{% else %}6{% endif %}" class="text-center muted-cell py-5">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                    Hujjatlar yo'q.
+                                    <a href="/qoldiqlar/tovar/hujjat/new">Yangi hujjat yaratish</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== KONTRAGENT QOLDIQLARI ===== -->
+    <div class="tab-pane fade" id="kontragent" role="tabpanel">
+        <div class="card data-table">
+            <div class="card-header flex-wrap gap-2">
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-people text-primary"></i> Kontragent qoldiqlari hujjatlari
+                </span>
+                <div class="d-flex flex-wrap gap-2">
+                    <a href="/qoldiqlar/kontragent/hujjat/new" class="top-btn btn btn-success">
+                        <i class="bi bi-plus-circle"></i> Yangi hujjat
+                    </a>
+                    <button type="button" class="top-btn btn btn-outline-primary"
+                            data-bs-toggle="modal" data-bs-target="#kontragentExcelImportModal">
+                        <i class="bi bi-upload"></i> Exceldan yuklash
+                    </button>
+                    <a href="/qoldiqlar/kontragent/andoza" class="top-btn btn btn-outline-secondary" target="_blank" rel="noopener">
+                        <i class="bi bi-file-earmark-excel"></i> Andoza
+                    </a>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width:140px">Hujjat №</th>
+                                <th>Sana</th>
+                                <th>Foydalanuvchi</th>
+                                <th>Holat</th>
+                                <th style="width:90px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for d in kontragent_docs %}
+                            <tr>
+                                <td>
+                                    <a href="/qoldiqlar/kontragent/hujjat/{{ d.id }}" class="num-cell fw-700 text-decoration-none">
+                                        {{ d.number }}
+                                    </a>
+                                </td>
+                                <td class="muted-cell">{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
+                                <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
+                                <td>
+                                    {% if d.status == 'draft' %}
+                                        <span class="badge-draft">Qoralama</span>
+                                    {% else %}
+                                        <span class="badge-done">Tasdiqlangan</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="d-flex gap-1">
+                                        <a href="/qoldiqlar/kontragent/hujjat/{{ d.id }}" class="btn-act" title="Ochish">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ d.id }}/revert" class="d-inline"
+                                              onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
+                                            <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish">
+                                                <i class="bi bi-arrow-counterclockwise"></i>
+                                            </button>
+                                        </form>
+                                        {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
+                                        <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ d.id }}/delete" class="d-inline"
+                                              onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                                            <button type="submit" class="btn-act danger" title="O'chirish">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center muted-cell py-5">
+                                    <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                    Hujjatlar yo'q.
+                                    <a href="/qoldiqlar/kontragent/hujjat/new">Yangi hujjat yaratish</a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div><!-- /tab-content -->
+
+<!-- ===== MODALS ===== -->
+
+<!-- Kontragent: Exceldan yuklash -->
 <div class="modal fade" id="kontragentExcelImportModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -257,14 +343,14 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> Yuklash</button>
+                    <button type="submit" class="top-btn btn btn-primary"><i class="bi bi-upload"></i> Yuklash</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Tovar qoldiqlari: Exceldan yuklash modal -->
+<!-- Tovar: Exceldan yuklash -->
 <div class="modal fade" id="tovarExcelImportModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -278,7 +364,8 @@
                     <p class="small mb-2">Ustunlar: <strong>Ombor nomi (yoki kodi)</strong>, <strong>Mahsulot nomi (yoki kodi)</strong>, <strong>Qoldiq</strong>, ixtiyoriy: Tannarx (so'm), Sotuv narxi (so'm). <a href="/warehouse/template" target="_blank">Andoza yuklash</a></p>
                     <div class="mb-2">
                         <label class="form-label">Hujjat sanasi</label>
-                        <input type="date" class="form-control" name="doc_date" id="tovar-import-doc-date" title="Kerakli sanani tanlang (masalan 15.02.2026). Bo'sh qoldirilsa bugungi sana ishlatiladi.">
+                        <input type="date" class="form-control" name="doc_date" id="tovar-import-doc-date"
+                               title="Kerakli sanani tanlang. Bo'sh qoldirilsa bugungi sana ishlatiladi.">
                     </div>
                     <div class="mb-0">
                         <label class="form-label">Excel fayl (.xlsx)</label>
@@ -287,7 +374,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-upload"></i> Yuklash</button>
+                    <button type="submit" class="top-btn btn btn-primary"><i class="bi bi-upload"></i> Yuklash</button>
                 </div>
             </form>
         </div>

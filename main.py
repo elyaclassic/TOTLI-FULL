@@ -127,6 +127,8 @@ async def forbidden_handler(request: Request, exc: HTTPException):
 async def debug_500_handler(request: Request, exc: Exception):
     """500 da: brauzer uchun login ga yo'naltirish, traceback konsolda va server_error.log da."""
     tb = traceback.format_exc()
+    print("[EXCEPTION_HANDLER_500]", repr(exc), flush=True)
+    print(tb, flush=True)
     traceback.print_exc()
     for _dir in [os.path.dirname(os.path.abspath(__file__)), os.getcwd()]:
         try:
@@ -191,10 +193,11 @@ async def startup():
     """Dastur ishga tushganda"""
     init_db()
     try:
-        from app.models.database import ensure_attendance_advance_tables
+        from app.models.database import ensure_attendance_advance_tables, ensure_cash_transfer_inkasatsiya
         ensure_attendance_advance_tables()
+        ensure_cash_transfer_inkasatsiya()
     except Exception as e:
-        print("[Startup] ensure_attendance_advance_tables:", e)
+        print("[Startup] ensure_tables:", e)
     try:
         db = SessionLocal()
         try:

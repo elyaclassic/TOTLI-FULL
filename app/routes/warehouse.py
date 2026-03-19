@@ -99,7 +99,16 @@ async def warehouse_list(
             )
             productions = result.fetchall()
             for pr in productions:
-                pr_date = pr.date.strftime("%d.%m.%Y") if pr.date else ""
+                try:
+                    if pr.date and hasattr(pr.date, 'strftime'):
+                        pr_date = pr.date.strftime("%d.%m.%Y")
+                    elif pr.date:
+                        from datetime import datetime as _dt
+                        pr_date = _dt.fromisoformat(str(pr.date)[:19]).strftime("%d.%m.%Y")
+                    else:
+                        pr_date = ""
+                except Exception:
+                    pr_date = str(pr.date)[:10] if pr.date else ""
                 items.append((pr.number, "/production/orders", pr_date))
         except Exception as prod_error:
             # Database da max_stage yoki boshqa ustunlar yo'q bo'lishi mumkin - e'tiborsiz qoldiramiz

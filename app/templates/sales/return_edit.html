@@ -1,35 +1,48 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% if error and error_detail %}
-<div class="alert alert-warning alert-dismissible fade show" role="alert">
-    {{ error_detail }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-</div>
-{% endif %}
 <div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h4 class="mb-0"><i class="bi bi-pencil-square"></i> Qaytarishni tahrirlash {{ doc.number }}</h4>
-        <a href="/sales/return/document/{{ doc.number }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hujjat</a>
+
+    {# ── Alerts ── #}
+    {% if error and error_detail %}
+    <div class="alert alert-warning alert-dismissible fade show py-2 small" role="alert">
+        <i class="bi bi-exclamation-triangle"></i> {{ error_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
-    <div class="card mb-4">
-        <div class="card-header bg-light">
-            <strong>Hujjat:</strong> {{ doc.number }} &nbsp;|&nbsp;
-            <strong>Ombor:</strong> {{ doc.warehouse.name if doc.warehouse else '-' }}
-            <span class="badge bg-secondary ms-2">Bekor qilingan</span>
+    {% endif %}
+
+    {# ── Page header ── #}
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Qaytarishni tahrirlash {{ doc.number }}</h5>
+        <div class="d-flex gap-2">
+            <a href="/sales/return/document/{{ doc.number }}" class="top-btn"><i class="bi bi-arrow-left me-1"></i>Hujjat</a>
         </div>
     </div>
+
+    {# ── Document meta card ── #}
+    <div class="card data-table mb-3">
+        <div class="card-header d-flex flex-wrap gap-3 align-items-center">
+            <span><strong>Hujjat:</strong> {{ doc.number }}</span>
+            <span><strong>Ombor:</strong> {{ doc.warehouse.name if doc.warehouse else '-' }}</span>
+            <span class="badge-cancelled">Bekor qilingan</span>
+        </div>
+    </div>
+
+    {# ── Edit form ── #}
     <form method="post" action="/sales/return/update" id="returnUpdateForm">
         <input type="hidden" name="order_id" value="{{ doc.id }}">
-        <div class="card">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <span>Miqdor va narxni o'zgartiring</span>
-                <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Saqlash</button>
+
+        <div class="data-table mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span class="fw-600">Miqdor va narxni o'zgartiring</span>
+                <button type="submit" class="top-btn" style="background:#065f46;color:#fff;border-color:#065f46;">
+                    <i class="bi bi-check2 me-1"></i>Saqlash
+                </button>
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
                     <table class="table table-hover mb-0">
-                        <thead class="table-light">
+                        <thead>
                             <tr>
                                 <th>Mahsulot</th>
                                 <th>Miqdor</th>
@@ -44,7 +57,7 @@
                             {% set qty_val = (item.quantity or 0)|round(0)|int if _is_dona else (item.quantity or 0) %}
                             {% set step_attr = "1" if _is_dona else "0.001" %}
                             <tr>
-                                <td>{{ item.product.name if item.product else '-' }}</td>
+                                <td><strong>{{ item.product.name if item.product else '-' }}</strong></td>
                                 <td>
                                     <input type="hidden" name="product_id" value="{{ item.product_id }}">
                                     <input type="number" name="quantity" class="form-control form-control-sm" style="width: 100px;"
@@ -54,22 +67,26 @@
                                     <input type="number" name="price" class="form-control form-control-sm" style="width: 120px;"
                                            min="0" step="1" value="{{ item.price or 0 }}">
                                 </td>
-                                <td>{{ "{:,.0f}".format((item.quantity or 0) * (item.price or 0)) }} so'm</td>
+                                <td class="sum-cell">{{ "{:,.0f}".format((item.quantity or 0) * (item.price or 0)) }} so'm</td>
                             </tr>
                             {% else %}
-                            <tr><td colspan="4" class="text-muted text-center py-3">Hujjatda mahsulot yo'q.</td></tr>
+                            <tr><td colspan="4" class="muted-cell text-center py-4">Hujjatda mahsulot yo'q.</td></tr>
                             {% endfor %}
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
+
         {% if doc.items %}
-        <div class="mt-3">
-            <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Saqlash</button>
-            <a href="/sales/return/document/{{ doc.number }}" class="btn btn-outline-secondary ms-2">Bekor qilish</a>
+        <div class="d-flex gap-2 mt-1">
+            <button type="submit" class="top-btn" style="background:#065f46;color:#fff;border-color:#065f46;">
+                <i class="bi bi-check2 me-1"></i>Saqlash
+            </button>
+            <a href="/sales/return/document/{{ doc.number }}" class="top-btn">Bekor qilish</a>
         </div>
         {% endif %}
     </form>
+
 </div>
 {% endblock %}

@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(pip index:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(ls D:TOTLI BI/*.bat)",
+      "Bash(python -c \"from app.routes import chat; print\\(''OK''\\)\")",
+      "Bash(python -c \":*)",
+      "Bash(curl:*)",
+      "Bash(netstat -ano)",
+      "Bash(wmic process:*)",
+      "Bash(tasklist:*)",
+      "Bash(powershell -Command \"Get-Process -Id 15736 -ErrorAction SilentlyContinue | Select-Object Name, Id, Path\" 2>&1)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 8080 | Select-Object OwningProcess,State | Where-Object State -eq 'Listen'\" 2>&1)",
+      "Bash(powershell -Command \"Get-Process | Where-Object Id -eq 15736 | Select-Object Name,Id,Path,CommandLine\" 2>&1)",
+      "Bash(powershell -Command \"\\(Get-WmiObject Win32_Process -Filter 'ProcessId=15736'\\).CommandLine\" 2>&1)",
+      "Bash(powershell -Command \"Get-Process | Sort-Object Id | Where-Object {$_.Id -gt 15000 -and $_.Id -lt 16000} | Select-Object Name,Id\" 2>&1)",
+      "Bash(python -c \"from app.routes.chat import router; print\\(''Import OK, routes:'', [r.path for r in router.routes]\\)\")",
+      "Bash(schtasks //query //fo LIST //v)",
+      "Bash(powershell -Command \"Get-ScheduledTask | Where-Object {$_.TaskName -like '*totli*' -or $_.TaskName -like '*server*' -or $_.TaskName -like '*python*'} | Select-Object TaskName,State\" 2>&1)",
+      "Bash(schtasks /query /fo CSV)",
+      "Bash(python:*)",
+      "Bash(git:*)",
+      "Bash(TASKLIST)",
+      "Bash(TASKLIST /FI \"IMAGENAME eq python.exe\" /FO CSV 2>/dev/null)",
+      "Bash(cmd /c \"tasklist /fi \\\\\"imagename eq python.exe\\\\\" /fo csv\")",
+      "Bash(cmd /c \"tasklist | findstr /i python\")",
+      "Bash(cmd /c \"netstat -an | findstr :8080\")",
+      "Bash(cmd /c \"curl -s -o nul -w \\\\\"%{http_code}\\\\\" http://10.243.165.156:8080/ 2>&1\")",
+      "Bash(cmd /c \"taskkill /F /IM python.exe 2>nul; taskkill /F /IM python3.exe 2>nul; echo done\")",
+      "Bash(cmd /c \"taskkill /F /IM python.exe 2>nul & echo killed\")",
+      "Bash(ls app/*.py)",
+      "Bash(ls *.py)",
+      "Bash(ls *.bat)",
+      "Bash(ls:*)",
+      "Bash(taskkill:*)",
+      "Bash(cmd //c \"taskkill /PID 21728 /F\")"
+    ]
+  }
+}

@@ -1,16 +1,10 @@
 {% extends "base.html" %}
-{% block extra_css %}
-<link href="/static/css/production.css" rel="stylesheet">
-{% endblock %}
 {% block content %}
-<div class="container-fluid production-page">
-<div class="page-header">
-    <h4><i class="bi bi-gear-fill"></i> Ishlab chiqarish</h4>
-    <div class="btn-group-wrap">
-        <a href="/production/new" class="btn btn-primary btn-sm">
-            <i class="bi bi-plus"></i> Yangi ishlab chiqarish
-        </a>
-    </div>
+<div class="container-fluid">
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-gear-fill text-primary"></i> Ishlab chiqarish</h4>
+    <a href="/production/new" class="top-btn btn btn-primary"><i class="bi bi-plus"></i> Yangi ishlab chiqarish</a>
 </div>
 
 {% if error %}
@@ -27,58 +21,64 @@
 <!-- Statistika -->
 <div class="row g-3 mb-3">
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Retseptlar</p>
-                    <h3>{{ total_recipes }}</h3>
-                </div>
-                <div class="icon blue">
-                    <i class="bi bi-journal-text"></i>
+        <a href="/production/recipes" class="text-decoration-none">
+            <div class="mini-stat" style="cursor:pointer; border-left:4px solid #1a73e8;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num text-primary">{{ total_recipes }}</div>
+                        <div class="lbl">Retseptlar</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">Barchasi →</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#e3f2fd;color:#1a73e8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-journal-text"></i>
+                    </div>
                 </div>
             </div>
-            <a href="/production/recipes" class="text-primary small">Barchasi →</a>
-        </div>
+        </a>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
+        <div class="mini-stat" style="border-left:4px solid #2e7d32;">
+            <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <p>Bugun ishlab chiqarildi</p>
-                    <h3>{{ "%.1f"|format(today_quantity or 0) }} kg</h3>
+                    <div class="num text-success">{{ "%.1f"|format(today_quantity or 0) }} kg</div>
+                    <div class="lbl">Bugun ishlab chiqarildi</div>
+                    <div style="font-size:11px;color:#888;margin-top:2px;">Bugun →</div>
                 </div>
-                <div class="icon green">
+                <div style="width:40px;height:40px;border-radius:10px;background:#e8f5e9;color:#2e7d32;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
                     <i class="bi bi-box-seam"></i>
                 </div>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
+        <div class="mini-stat" style="border-left:4px solid #f57c00;">
+            <div class="d-flex justify-content-between align-items-start">
                 <div>
-                    <p>Kutilmoqda</p>
-                    <h3>{{ pending_productions }}</h3>
+                    <div class="num text-warning">{{ pending_productions }}</div>
+                    <div class="lbl">Kutilmoqda</div>
+                    <div style="font-size:11px;color:#888;margin-top:2px;">Jarayonda →</div>
                 </div>
-                <div class="icon orange">
+                <div style="width:40px;height:40px;border-radius:10px;background:#fff3e0;color:#f57c00;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
                     <i class="bi bi-hourglass-split"></i>
                 </div>
             </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Buyurtmalar</p>
-                    <h3>{{ recent_productions|length }}</h3>
-                </div>
-                <div class="icon purple">
-                    <i class="bi bi-clipboard-check"></i>
+        <a href="/production/orders" class="text-decoration-none">
+            <div class="mini-stat" style="cursor:pointer; border-left:4px solid #6f42c1;">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="num" style="color:#6f42c1;">{{ recent_productions|length }}</div>
+                        <div class="lbl">Buyurtmalar</div>
+                        <div style="font-size:11px;color:#888;margin-top:2px;">Barchasi (bosqichlar) →</div>
+                    </div>
+                    <div style="width:40px;height:40px;border-radius:10px;background:#f3e8ff;color:#6f42c1;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
+                        <i class="bi bi-clipboard-check"></i>
+                    </div>
                 </div>
             </div>
-            <a href="/production/orders" class="text-primary small">Barchasi (bosqichlar) →</a>
-        </div>
+        </a>
     </div>
 </div>
 
@@ -86,9 +86,7 @@
     <!-- Tezkor ishlab chiqarish -->
     <div class="col-lg-5">
         <div class="card">
-            <div class="card-header">
-                <i class="bi bi-lightning-fill text-warning"></i> Tezkor ishlab chiqarish
-            </div>
+            <div class="card-header"><span class="fw-bold"><i class="bi bi-lightning-fill text-warning"></i> Tezkor ishlab chiqarish</span></div>
             <div class="card-body">
                 <form method="POST" action="/production/create">
                     <div class="mb-3">
@@ -134,13 +132,13 @@
                 </form>
             </div>
         </div>
-        
+
         <!-- Retseptlar (operator / ishlab chiqarish / qadoqlash uchun ko'rinmasin) -->
         {% if show_recipes_section|default(true) %}
-        <div class="card">
+        <div class="card data-table">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-journal-text"></i> Retseptlar</span>
-                <a href="/production/recipes" class="btn btn-sm btn-outline-primary">Barchasi</a>
+                <a href="/production/recipes" class="top-btn btn btn-outline-primary">Barchasi</a>
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
@@ -157,13 +155,13 @@
         </div>
         {% endif %}
     </div>
-    
+
     <!-- Oxirgi ishlab chiqarishlar -->
     <div class="col-lg-7">
-        <div class="card">
+        <div class="card data-table">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-clock-history"></i> Oxirgi ishlab chiqarishlar</span>
-                <a href="/production/orders" class="btn btn-sm btn-outline-primary" title="Buyurtmalar ro'yxati va bosqichlar">Buyurtmalar (bosqichlar)</a>
+                <a href="/production/orders" class="top-btn btn btn-outline-primary" title="Buyurtmalar ro'yxati va bosqichlar">Buyurtmalar (bosqichlar)</a>
             </div>
             <div class="card-body p-0">
                 <table class="table table-hover mb-0">
@@ -197,11 +195,11 @@
                             <td>{% if prod.date %}{% if prod.date is string %}{{ prod.date[:16] }}{% else %}{{ prod.date.strftime('%d.%m.%Y %H:%M') }}{% endif %}{% else %}-{% endif %}</td>
                             <td>
                                 {% if prod.status == 'completed' %}
-                                <span class="badge bg-success">Yakunlandi</span>
+                                <span class="badge-done">Yakunlandi</span>
                                 {% elif prod.status == 'draft' %}
-                                <span class="badge bg-warning">Kutilmoqda</span>
+                                <span class="badge-waiting">Kutilmoqda</span>
                                 {% else %}
-                                <span class="badge bg-danger">Bekor</span>
+                                <span class="badge-cancelled">Bekor</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -219,12 +217,12 @@
         </div>
     </div>
 </div>
-</div><!-- .production-page -->
+</div><!-- .container-fluid -->
 
 <script>
 window.quickRecipes = [
 {% for recipe in recipes %}
-  { "id": {{ recipe.id }}, "name": {{ (recipe.name or '')|tojson }}, "unit": {{ ((recipe.product.unit.name if recipe.product and recipe.product.unit else None) or 'kg')|tojson }}, "wh": "{{ recipe.default_warehouse_id or '' }}", "whOut": "{{ recipe.default_output_warehouse_id or '' }}" }{% if not loop.last %},{% endif %}
+  { "id": {{ recipe.id }}, "name": {{ (recipe.name or '')|tojson|safe }}, "unit": {{ ((recipe.product.unit.name if recipe.product and recipe.product.unit else None) or 'kg')|tojson|safe }}, "wh": "{{ recipe.default_warehouse_id or '' }}", "whOut": "{{ recipe.default_output_warehouse_id or '' }}" }{% if not loop.last %},{% endif %}
 {% endfor %}
 ];
 </script>

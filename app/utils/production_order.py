@@ -280,7 +280,7 @@ def create_production_from_order(
     order: Order,
     insufficient_items: List[Dict],
     current_user: Optional[User] = None,
-) -> List[Production]:
+) -> Tuple[List[Production], List[str]]:
     """
     Yetarli bo'lmagan mahsulotlar uchun ishlab chiqarish buyurtmalari yaratish.
     
@@ -294,7 +294,8 @@ def create_production_from_order(
     Returns:
         List[Production]: Yaratilgan ishlab chiqarish buyurtmalari
     """
-    productions = []
+    productions: List[Production] = []
+    missing: List[str] = []
     
     # Omborlarni topish
     # Xom ashyo ombori (materiallar shu yerdan olinadi)
@@ -335,7 +336,8 @@ def create_production_from_order(
         ).first()
         
         if not recipe:
-            # Retsept topilmasa, davom etamiz
+            # Retsept topilmasa, caller xabar berishi uchun yig'amiz
+            missing.append(product.name if product and getattr(product, "name", None) else f"#{getattr(product, 'id', '')}")
             continue
         
         # Yarim tayyor mahsulot tekshiruvi
@@ -423,8 +425,8 @@ def create_production_from_order(
             product_name=product.name if product else "Mahsulot"
         )
     
-    db.commit()
-    return productions
+    # commit'ni caller qiladi (transaction nazorati shu yerda emas)
+    return productions, missing
 
 
 def _recipe_max_stage(recipe) -> int:

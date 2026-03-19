@@ -2,6 +2,7 @@
 
 {% block content %}
 <div class="container-fluid">
+
     {% if import_ok == '1' %}
     <div class="alert alert-success alert-dismissible fade show" role="alert">
         <strong>Import muvaffaqiyatli.</strong>
@@ -16,90 +17,90 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="card mb-3">
-        <div class="card-body py-3">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h5 class="mb-0"><i class="bi bi-geo-alt text-secondary"></i> Hududlar</h5>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <form action="/info/regions/export" method="get" class="d-inline">
-                        <button type="submit" class="btn btn-outline-success btn-sm">
-                            <i class="bi bi-file-earmark-excel"></i> Export
-                        </button>
-                    </form>
-                    <a href="/info/regions/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza yuklab olish">
-                        <i class="bi bi-download"></i> Andoza
-                    </a>
-                    <form action="/info/regions/import" method="post" enctype="multipart/form-data" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                        <label class="btn btn-outline-primary btn-sm mb-0">
-                            <i class="bi bi-upload"></i> Import
-                            <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
-                        </label>
-                    </form>
-                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addRegionModal">
-                        <i class="bi bi-plus-circle"></i> Yaratish
-                    </button>
-                </div>
-            </div>
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-geo-alt text-secondary me-2"></i>Hududlar</h5>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <form action="/info/regions/export" method="get" class="d-inline">
+                <button type="submit" class="top-btn btn btn-outline-success">
+                    <i class="bi bi-file-earmark-excel"></i> Export
+                </button>
+            </form>
+            <a href="/info/regions/template" class="top-btn btn btn-outline-secondary" title="Import uchun andoza yuklab olish">
+                <i class="bi bi-download"></i> Andoza
+            </a>
+            <form action="/info/regions/import" method="post" enctype="multipart/form-data" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <label class="top-btn btn btn-outline-primary mb-0">
+                    <i class="bi bi-upload"></i> Import
+                    <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
+                </label>
+            </form>
+            <button type="button" class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#addRegionModal">
+                <i class="bi bi-plus-circle"></i> Yaratish
+            </button>
         </div>
     </div>
 
-    <div class="card">
+    <div class="data-table card">
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="table-light">
                         <tr>
-                            <th>#</th>
+                            <th class="muted-cell" style="width:50px;">#</th>
                             <th>Kod</th>
                             <th>Nomi</th>
                             <th>Tavsif</th>
                             <th>Holati</th>
-                            <th></th>
+                            <th style="width:80px;"></th>
                         </tr>
                     </thead>
-                <tbody>
-                    {% if regions %}
-                    {% for region in regions %}
-                    <tr>
-                        <td>{{ region.id }}</td>
-                        <td><code>{{ region.code }}</code></td>
-                        <td><strong>{{ region.name }}</strong></td>
-                        <td><small class="text-muted">{{ region.description or '-' }}</small></td>
-                        <td>
-                            {% if region.is_active %}
-                            <span class="badge bg-success">Faol</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Nofaol</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary" title="Tahrirlash" data-id="{{ region.id }}"
-                                data-code="{{ region.code }}" data-name="{{ region.name }}"
-                                data-description="{{ region.description or '' }}" onclick="editRegion(this)">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" title="O'chirish" data-id="{{ region.id }}"
-                                data-name="{{ region.name }}" onclick="deleteRegion(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
-                            <i class="bi bi-geo-alt fs-1 d-block mb-2"></i>
-                            Hozircha hududlar yo'q<br>
-                            <small>Yuqoridagi Yaratish tugmasini bosing</small>
-                        </td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
+                    <tbody>
+                        {% if regions %}
+                        {% for region in regions %}
+                        <tr>
+                            <td class="muted-cell">{{ region.id }}</td>
+                            <td><code class="text-secondary">{{ region.code }}</code></td>
+                            <td><strong>{{ region.name }}</strong></td>
+                            <td><span class="muted-cell">{{ region.description or '—' }}</span></td>
+                            <td>
+                                {% if region.is_active %}
+                                <span class="badge-active">Faol</span>
+                                {% else %}
+                                <span class="badge-inactive">Nofaol</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <button class="btn-act" title="Tahrirlash" data-id="{{ region.id }}"
+                                        data-code="{{ region.code }}" data-name="{{ region.name }}"
+                                        data-description="{{ region.description or '' }}" onclick="editRegion(this)">
+                                        <i class="bi bi-pencil"></i>
+                                    </button>
+                                    <button class="btn-act danger" title="O'chirish" data-id="{{ region.id }}"
+                                        data-name="{{ region.name }}" onclick="deleteRegion(this)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">
+                                <i class="bi bi-geo-alt fs-1 d-block mb-2 opacity-25"></i>
+                                Hozircha hududlar yo'q<br>
+                                <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
+
 </div>
 
 <!-- Yangi hudud qo'shish modal -->
@@ -108,7 +109,7 @@
         <div class="modal-content">
             <form id="addRegionForm">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi hudud</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle me-1"></i> Yangi hudud</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">
@@ -142,7 +143,7 @@
         <div class="modal-content">
             <form id="editRegionForm" method="POST">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Hududni tahrirlash</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-pencil me-1"></i> Hududni tahrirlash</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">

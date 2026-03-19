@@ -1,197 +1,183 @@
 {% extends "base.html" %}
-
 {% block content %}
+
 {% if request.query_params.get('success') == 'confirmed' %}
-<div class="alert alert-success"><i class="bi bi-check-circle"></i> To'lov tasdiqlandi.</div>
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-check-circle"></i> To'lov tasdiqlandi. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 {% elif request.query_params.get('success') == 'cancelled' %}
-<div class="alert alert-info"><i class="bi bi-info-circle"></i> Tasdiq bekor qilindi.</div>
+<div class="alert alert-info alert-dismissible fade show py-2"><i class="bi bi-info-circle"></i> Tasdiq bekor qilindi. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 {% elif request.query_params.get('success') == 'edited' %}
-<div class="alert alert-success"><i class="bi bi-check-circle"></i> To'lov saqlandi.</div>
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-check-circle"></i> To'lov saqlandi. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 {% elif request.query_params.get('success') == 'deleted' %}
-<div class="alert alert-success"><i class="bi bi-check-circle"></i> To'lov o'chirildi.</div>
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-check-circle"></i> To'lov o'chirildi. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 {% elif request.query_params.get('success') == '1' %}
-<div class="alert alert-success"><i class="bi bi-check-circle"></i> To'lov kiritildi.</div>
+<div class="alert alert-success alert-dismissible fade show py-2"><i class="bi bi-check-circle"></i> To'lov kiritildi. <button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
 {% endif %}
 {% if request.query_params.get('error') %}
-<div class="alert alert-danger alert-dismissible fade show"><i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('error') }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<div class="alert alert-danger alert-dismissible fade show py-2"><i class="bi bi-exclamation-triangle"></i> {{ request.query_params.get('error') }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<!-- Kassa statistikasi -->
-<div class="row g-4 mb-4">
-    <div class="col-md-4">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Bugungi kirim</p>
-                    <h3 class="text-success">{{ "{:,.0f}".format(stats.today_income) }}</h3>
-                </div>
-                <div class="icon green">
-                    <i class="bi bi-arrow-down-circle"></i>
-                </div>
-            </div>
+
+<!-- Stat cards -->
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-4">
+    <div class="mini-stat">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="num text-success">{{ "{:,.0f}".format(stats.today_income) }}</div>
+          <div class="lbl">Bugungi kirim (so'm)</div>
         </div>
-    </div>
-    <div class="col-md-4">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Bugungi chiqim</p>
-                    <h3 class="text-danger">{{ "{:,.0f}".format(stats.today_expense) }}</h3>
-                </div>
-                <div class="icon red">
-                    <i class="bi bi-arrow-up-circle"></i>
-                </div>
-            </div>
+        <div style="width:44px;height:44px;border-radius:10px;background:#d1fae5;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+          <i class="bi bi-arrow-down-circle"></i>
         </div>
+      </div>
     </div>
-    <div class="col-md-4">
-        <div class="stat-card">
-            <div class="d-flex justify-content-between">
-                <div>
-                    <p>Bugungi foyda</p>
-                    <h3 class="{% if stats.today_income - stats.today_expense >= 0 %}text-success{% else %}text-danger{% endif %}">
-                        {{ "{:,.0f}".format(stats.today_income - stats.today_expense) }}
-                    </h3>
-                </div>
-                <div class="icon blue">
-                    <i class="bi bi-graph-up"></i>
-                </div>
-            </div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="mini-stat">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="num text-danger">{{ "{:,.0f}".format(stats.today_expense) }}</div>
+          <div class="lbl">Bugungi chiqim (so'm)</div>
         </div>
+        <div style="width:44px;height:44px;border-radius:10px;background:#fee2e2;color:#991b1b;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+          <i class="bi bi-arrow-up-circle"></i>
+        </div>
+      </div>
     </div>
+  </div>
+  <div class="col-6 col-md-4">
+    <div class="mini-stat">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          {% set profit = stats.today_income - stats.today_expense %}
+          <div class="num {% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(profit) }}</div>
+          <div class="lbl">Bugungi balans (so'm)</div>
+        </div>
+        <div style="width:44px;height:44px;border-radius:10px;background:#dbeafe;color:#1e40af;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+          <i class="bi bi-graph-up"></i>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Kassalar -->
-<div class="row mb-4">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-safe"></i> Kassalar</span>
-                <button class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addPaymentModal">
-                    <i class="bi bi-plus-circle"></i> To'lov kiritish
-                </button>
+<div class="card mb-3">
+  <div class="card-header">
+    <span class="fw-bold"><i class="bi bi-safe text-primary"></i> Kassalar</span>
+    <button class="btn btn-primary top-btn" data-bs-toggle="modal" data-bs-target="#addPaymentModal">
+      <i class="bi bi-plus-circle"></i> To'lov kiritish
+    </button>
+  </div>
+  <div class="card-body">
+    <div class="row g-3">
+      {% if cash_registers %}
+        {% for cash in cash_registers %}
+        <div class="col-md-4 col-6">
+          <a href="/finance/kassa/{{ cash.id }}" class="text-decoration-none">
+            <div class="mini-stat h-100" style="border-left: 4px solid {% if (cash.balance or 0) >= 0 %}#2e7d32{% else %}#dc3545{% endif %}; cursor:pointer; transition: box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
+              <div class="fw-semibold mb-1">{{ cash.name }}</div>
+              <div class="num {% if (cash.balance or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(cash.balance or 0) }}</div>
+              <div class="lbl">{{ cash.payment_type or 'Naqd' }}</div>
             </div>
-            <div class="card-body">
-                <div class="row g-3">
-                    {% if cash_registers %}
-                        {% for cash in cash_registers %}
-                        <div class="col-md-4">
-                            <a href="/finance/kassa/{{ cash.id }}" class="text-decoration-none text-body">
-                                <div class="card border-{% if (cash.balance or 0) >= 0 %}success{% else %}danger{% endif %} h-100 hover-shadow">
-                                    <div class="card-body">
-                                        <h5>{{ cash.name }}</h5>
-                                        <h3 class="{% if (cash.balance or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                            {{ "{:,.0f}".format(cash.balance) }}
-                                        </h3>
-                                        <small class="text-muted">{{ cash.payment_type or '-' }}</small>
-                                    </div>
-                                </div>
-                            </a>
-                        </div>
-                        {% endfor %}
-                    {% else %}
-                        <div class="col-12 text-center text-muted py-4">
-                            <i class="bi bi-safe fs-1 d-block mb-2"></i>
-                            Kassalar yo'q
-                        </div>
-                    {% endif %}
-                </div>
-            </div>
+          </a>
         </div>
+        {% endfor %}
+      {% else %}
+        <div class="col-12 text-center text-muted py-4">
+          <i class="bi bi-safe d-block mb-2" style="font-size:2rem;opacity:.3;"></i>Kassalar yo'q
+        </div>
+      {% endif %}
     </div>
+  </div>
 </div>
 
 <!-- So'nggi to'lovlar -->
-<div class="row">
-    <div class="col-12">
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span><i class="bi bi-clock-history"></i> So'nggi to'lovlar</span>
-                <form method="get" action="/finance" class="d-flex align-items-center gap-2">
-                    <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_from or '' }}" title="Sana dan">
-                    <span class="small text-muted">—</span>
-                    <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_to or '' }}" title="Sana gacha">
-                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
-                    <a href="/finance" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+<div class="card data-table">
+  <div class="card-header">
+    <span class="fw-bold"><i class="bi bi-clock-history text-primary"></i> So'nggi to'lovlar</span>
+    <form method="get" action="/finance" class="d-flex flex-wrap align-items-center gap-2">
+      <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_from or '' }}" title="Sana dan">
+      <span class="text-muted small">—</span>
+      <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_to or '' }}" title="Sana gacha">
+      <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel-fill"></i></button>
+      <a href="/finance" class="btn btn-outline-secondary top-btn" title="Tozalash"><i class="bi bi-x-circle"></i></a>
+    </form>
+  </div>
+  <div class="card-body p-0" style="overflow-x:auto;">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Sana</th>
+          <th>Kassa</th>
+          <th>Turi</th>
+          <th>Kontragent</th>
+          <th>Izoh</th>
+          <th class="text-end">Summa</th>
+          {% if current_user.role == 'admin' %}
+          <th>Holat</th>
+          <th style="width:120px;"></th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% if payments %}
+          {% for payment in payments %}
+          {% set p_status = payment.status|default('confirmed', true) %}
+          <tr class="{% if p_status == 'cancelled' %}opacity-50{% endif %}">
+            <td class="text-muted">{{ loop.index }}</td>
+            <td class="muted-cell">{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '—' }}</td>
+            <td class="muted-cell">{% if payment.cash_register %}{{ payment.cash_register.name or 'Kassa ' ~ payment.cash_register_id }}{% else %}—{% endif %}</td>
+            <td>
+              {% if payment.type == 'income' %}
+              <span class="badge-done">Kirim</span>
+              {% else %}
+              <span class="badge-cancelled">Chiqim</span>
+              {% endif %}
+            </td>
+            <td>{{ payment.partner.name if payment.partner else '—' }}</td>
+            <td class="muted-cell">{{ payment.description or '—' }}</td>
+            <td class="text-end fw-semibold {% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %}">
+              {% if payment.type == 'income' %}+{% else %}−{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
+            </td>
+            {% if current_user.role == 'admin' %}
+            <td>
+              {% if p_status == 'cancelled' %}<span class="badge-cancelled">Bekor</span>
+              {% else %}<span class="badge-done">Tasdiqlangan</span>{% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1">
+                {% if p_status == 'cancelled' %}
+                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash?');">
+                  <button type="submit" class="btn-act" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
                 </form>
-            </div>
-            <div class="card-body p-0">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th width="50">#</th>
-                            <th>Sana</th>
-                            <th>Kassa</th>
-                            <th>Turi</th>
-                            <th>Kontragent</th>
-                            <th>Izoh</th>
-                            <th>Summa</th>
-                            {% if current_user.role == 'admin' %}
-                            <th>Holat</th>
-                            <th width="200">Amallar</th>
-                            {% endif %}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% if payments %}
-                            {% for payment in payments %}
-                            {% set p_status = payment.status|default('confirmed', true) %}
-                            <tr class="{% if p_status == 'cancelled' %}table-secondary opacity-75{% endif %}">
-                                <td>{{ loop.index }}</td>
-                                <td>{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '-' }}</td>
-                                <td><small>{% if payment.cash_register %}{{ payment.cash_register.name or payment.cash_register.code or 'Kassa ' ~ payment.cash_register_id }}{% else %}-{% endif %}</small></td>
-                                <td>
-                                    {% if payment.type == 'income' %}
-                                        <span class="badge bg-success">Kirim</span>
-                                    {% else %}
-                                        <span class="badge bg-danger">Chiqim</span>
-                                    {% endif %}
-                                </td>
-                                <td>{{ payment.partner.name if payment.partner else '-' }}</td>
-                                <td>{{ payment.description or '-' }}</td>
-                                <td class="{% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %} fw-bold">
-                                    {% if payment.type == 'income' %}+{% else %}-{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
-                                </td>
-                                {% if current_user.role == 'admin' %}
-                                <td>
-                                    {% if p_status == 'cancelled' %}
-                                        <span class="badge bg-secondary">Bekor qilindi</span>
-                                    {% else %}
-                                        <span class="badge bg-success">Tasdiqlangan</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if p_status == 'cancelled' %}
-                                    <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassa balansiga qayta hisoblanadi.');">
-                                        <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
-                                    </form>
-                                    <a href="/finance/payment/{{ payment.id }}/edit" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
-                                    <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu to\'lovni o\'chirmoqchimisiz? Kassa balansi yangilanadi.');">
-                                        <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                                    </form>
-                                    {% else %}
-                                    <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — kassa balansidan chiqariladi. Davom etasizmi?');">
-                                        <button type="submit" class="btn btn-sm btn-warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
-                                    </form>
-                                    {% endif %}
-                                </td>
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                        {% else %}
-                            <tr>
-                                <td colspan="{% if current_user.role == 'admin' %}9{% else %}7{% endif %}" class="text-center text-muted py-5">
-                                    <i class="bi bi-cash-stack fs-1 d-block mb-2"></i>
-                                    Hozircha to'lovlar yo'q
-                                </td>
-                            </tr>
-                        {% endif %}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+                {% else %}
+                <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');">
+                  <button type="submit" class="btn-act warning" title="Bekor qilish"><i class="bi bi-x-circle"></i></button>
+                </form>
+                {% endif %}
+                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirish?');">
+                  <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                </form>
+              </div>
+            </td>
+            {% endif %}
+          </tr>
+          {% endfor %}
+        {% else %}
+        <tr>
+          <td colspan="{% if current_user.role == 'admin' %}9{% else %}7{% endif %}" class="text-center text-muted py-5">
+            <i class="bi bi-cash-stack d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
+            Hozircha to'lovlar yo'q
+          </td>
+        </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
 </div>
 
 <script>
@@ -207,61 +193,61 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 </script>
+
 <!-- To'lov kiritish modal -->
 <div class="modal fade" id="addPaymentModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form action="/finance/payment" method="POST">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-cash"></i> To'lov kiritish</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row g-3">
-                        <div class="col-12">
-                            <label class="form-label">Turi *</label>
-                            <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="type" id="income" value="income" checked>
-                                <label class="btn btn-outline-success" for="income">Kirim</label>
-                                <input type="radio" class="btn-check" name="type" id="expense" value="expense">
-                                <label class="btn btn-outline-danger" for="expense">Chiqim</label>
-                            </div>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Summa *</label>
-                            <input type="number" class="form-control form-control-lg" name="amount" required step="1000">
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Kontragent</label>
-                            <select class="form-select" name="partner_id">
-                                <option value="">— Kimga / kimdan (ixtiyoriy) —</option>
-                                {% for p in partners or [] %}
-                                <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
-                                {% endfor %}
-                            </select>
-                            <small class="text-muted d-block">Chiqim qaysi kontragentga yoki kirim qaysi kontragentdan — hisob-kitob va solishtirish uchun.</small>
-                            <small class="text-muted d-block mt-1" id="expenseCounterpartyHint" style="display: none;"><i class="bi bi-info-circle"></i> Oylik to'lovi uchun kontragent tanlanmaydi (ixtiyoriy).</small>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Kassa</label>
-                            <select class="form-select" name="cash_register_id">
-                                {% for cash in cash_registers %}
-                                <option value="{{ cash.id }}">{{ cash.name }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-12">
-                            <label class="form-label">Izoh</label>
-                            <textarea class="form-control" name="description" rows="2" placeholder="Masalan: xarid to'lovi, ofis xarajati"></textarea>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
-                </div>
-            </form>
+  <div class="modal-dialog">
+    <div class="modal-content" style="border-radius:16px;border:none;box-shadow:0 10px 40px rgba(0,0,0,.15);">
+      <form action="/finance/payment" method="POST">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold"><i class="bi bi-cash text-primary"></i> To'lov kiritish</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
+        <div class="modal-body">
+          <div class="row g-3">
+            <div class="col-12">
+              <label class="form-label fw-semibold">Turi *</label>
+              <div class="btn-group w-100" role="group">
+                <input type="radio" class="btn-check" name="type" id="income" value="income" checked>
+                <label class="btn btn-outline-success" for="income">Kirim</label>
+                <input type="radio" class="btn-check" name="type" id="expense" value="expense">
+                <label class="btn btn-outline-danger" for="expense">Chiqim</label>
+              </div>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Summa *</label>
+              <input type="number" class="form-control form-control-lg" name="amount" required step="1000" style="border-radius:10px;">
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Kontragent</label>
+              <select class="form-select" name="partner_id" style="border-radius:10px;">
+                <option value="">— Kimga / kimdan (ixtiyoriy) —</option>
+                {% for p in partners or [] %}
+                <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                {% endfor %}
+              </select>
+              <small class="text-muted" id="expenseCounterpartyHint" style="display:none;"><i class="bi bi-info-circle"></i> Oylik to'lovi uchun kontragent tanlanmaydi (ixtiyoriy).</small>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Kassa</label>
+              <select class="form-select" name="cash_register_id" style="border-radius:10px;">
+                {% for cash in cash_registers %}
+                <option value="{{ cash.id }}">{{ cash.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">Izoh</label>
+              <textarea class="form-control" name="description" rows="2" placeholder="Masalan: xarid to'lovi, ofis xarajati" style="border-radius:10px;"></textarea>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:10px;">Bekor</button>
+          <button type="submit" class="btn btn-primary" style="border-radius:10px;"><i class="bi bi-check-lg"></i> Saqlash</button>
+        </div>
+      </form>
     </div>
+  </div>
 </div>
 {% endblock %}

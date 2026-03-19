@@ -1,145 +1,302 @@
 {% extends "base.html" %}
-
 {% block content %}
+
 {% if msg %}
-<div class="alert alert-info alert-dismissible fade show" role="alert">
-    {{ msg }}
-    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+<div class="alert alert-info alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-info-circle"></i> {{ msg }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="card mb-3">
-    <div class="card-body">
-        <form method="get" action="/reports/stock" class="row g-2 align-items-end">
-            <div class="col-auto">
-                <label class="form-label small mb-0">Sana bo'yicha qoldiq</label>
-                <input type="date" name="report_date" class="form-control form-control-sm" value="{{ report_date or '' }}" max="{{ today }}" placeholder="{{ today }}" title="Sana tanlansa — shu sanadagi qoldiq, bo'sh — joriy qoldiq">
-            </div>
-            <div class="col-auto">
-                <label class="form-label small mb-0">Ombor</label>
-                <select name="warehouse_id" class="form-select form-select-sm" style="min-width: 180px;">
-                    <option value="">Barcha omborlar</option>
-                    {% for w in warehouses %}
-                    <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel"></i> Ko'rsatish</button>
-            </div>
-            {% if report_date %}
-            <div class="col-auto">
-                <a href="/reports/stock{% if selected_warehouse_id %}?warehouse_id={{ selected_warehouse_id }}{% endif %}" class="btn btn-outline-secondary btn-sm">Joriy qoldiq</a>
-            </div>
-            {% endif %}
-        </form>
-        {% if report_date %}
-        <p class="text-muted small mb-0 mt-2"><i class="bi bi-calendar-check"></i> Qoldiq <strong>{{ report_date }}</strong> sanasi oxiridagi harakatlar bo'yicha</p>
-        {% endif %}
+
+<style>
+.stock-filter-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.07); padding: 18px 20px; margin-bottom: 16px; }
+.stock-stat { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.06); padding: 14px 18px; }
+.stock-stat .num { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
+.stock-stat .lbl { font-size: 12px; color: #666; margin-top: 3px; }
+.stock-table thead th { background: #f8f9fa; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; color: #555; border-bottom: 2px solid #e9ecef; white-space: nowrap; padding: 10px 12px; position: sticky; top: 0; z-index: 10; }
+.stock-table tbody td { padding: 9px 12px; vertical-align: middle; font-size: 13px; border-bottom: 1px solid #f1f3f5; }
+.stock-table tbody tr:hover td { background: #f8fbff; }
+.stock-table tbody tr.low-stock td { background: #fff8f0; }
+.stock-table tbody tr.low-stock:hover td { background: #fff3e6; }
+.badge-low { background: #ff6b35; color: #fff; border-radius: 6px; font-size: 10px; padding: 2px 6px; font-weight: 600; }
+.qty-cell { font-size: 13px; font-weight: 700; color: #1a73e8; }
+.qty-cell.negative { color: #e53935; }
+.sum-cell { font-size: 13px; font-weight: 600; color: #2e7d32; }
+.product-code { background: #f0f4ff; color: #3949ab; border-radius: 5px; padding: 1px 6px; font-size: 11px; font-family: monospace; }
+.action-btn { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #dee2e6; background: white; color: #555; transition: all .15s; text-decoration: none; }
+.action-btn:hover { background: #1a73e8; color: white; border-color: #1a73e8; }
+.top-btn { border-radius: 10px; padding: 7px 14px; font-size: 13px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.search-wrap { position: relative; }
+.search-wrap input { padding-left: 34px; border-radius: 10px; border: 1px solid #ddd; font-size: 13px; }
+.search-wrap i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #aaa; }
+</style>
+
+<!-- Filter -->
+<div class="stock-filter-card">
+  <form method="get" action="/reports/stock" class="row g-2 align-items-end">
+    <div class="col-auto">
+      <label class="form-label small fw-semibold mb-1">📅 Sana bo'yicha</label>
+      <input type="date" name="report_date" class="form-control form-control-sm" style="border-radius:10px;"
+             value="{{ report_date or '' }}" max="{{ today }}"
+             title="Bo'sh qolsa — joriy qoldiq ko'rsatiladi">
     </div>
-</div>
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span><i class="bi bi-boxes"></i> {% if report_date %}Qoldiq hisoboti — {{ report_date }}{% else %}Qoldiq hisoboti (joriy){% endif %}</span>
-        <div class="btn-group btn-group-sm">
-            <a href="/reports/stock/andoza" class="btn btn-outline-secondary" title="Import uchun andoza yuklab olish"><i class="bi bi-file-earmark-arrow-down"></i> Andoza</a>
-            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#importStockModal" title="Exceldan qoldiqlarni yuklash"><i class="bi bi-upload"></i> Import</button>
-            <a href="/reports/stock/export?{% if report_date %}report_date={{ report_date }}&{% endif %}{% if selected_warehouse_id %}warehouse_id={{ selected_warehouse_id }}{% endif %}" class="btn btn-success"><i class="bi bi-file-earmark-excel"></i> Excel</a>
-            <a href="/reports/stock/no-history" class="btn btn-outline-warning" title="Qoldigi bor lekin harakat tarixi yo'q mahsulotlar"><i class="bi bi-exclamation-triangle"></i> Tarixsiz qoldiqlar</a>
-            {% if current_user and current_user.role == 'admin' %}
-            <form method="post" action="/reports/stock/cleanup-orphan-movements" class="d-inline" onsubmit="return confirm('O\'chirilgan ombordan omborga, ishlab chiqarish, kirim, qoldiq tuzatish hujjatlariga tegishli harakatlarni o\'chirib qoldiqni qaytarishni xohlaysizmi? (Do\'kon 1 va boshqa omborlardagi \"qayerdan keldi\" nomalum qoldiqlar tozalanadi.)');">
-                <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirilgan hujjatlar — ombordan omborga, ishlab chiqarish, kirim, qoldiq tuzatish"><i class="bi bi-arrow-counterclockwise"></i> O'chirilgan hujjatlar harakatlarini tozalash</button>
-            </form>
-            <form method="post" action="/reports/stock/cleanup-orphan-sale-movements" class="d-inline" onsubmit="return confirm('O\'chirilgan sotuv/qaytish hujjatlariga tegishli harakatlarni o\'chirib, qoldiqni qaytarishni xohlaysizmi?');">
-                <button type="submit" class="btn btn-outline-danger btn-sm" title="Hujjati o'chirilgan sotuv harakatlarini tozalash"><i class="bi bi-arrow-counterclockwise"></i> O'chirilgan sotuv harakatlarini tozalash</button>
-            </form>
-            <form method="post" action="/reports/stock/cleanup-orphans" class="d-inline" onsubmit="return confirm('O\'chirilgan tovar/ombor/hujjatlarga tegishli yozuvlarni o\'chirishni xohlaysizmi?');">
-                <button type="submit" class="btn btn-outline-warning" title="O'chirilgan tovar/ombor/hujjatlarga tegishli Stock va harakat yozuvlarini o'chirish"><i class="bi bi-trash"></i> O'chirilgan ma'lumotlarni tozalash</button>
-            </form>
-            {% endif %}
-        </div>
+    <div class="col-auto">
+      <label class="form-label small fw-semibold mb-1">🏭 Ombor</label>
+      <select name="warehouse_id" class="form-select form-select-sm" style="min-width:200px; border-radius:10px;">
+        <option value="">Barcha omborlar</option>
+        {% for w in warehouses %}
+        <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+        {% endfor %}
+      </select>
     </div>
-    <div class="card-body p-0">
-        <table class="table table-hover">
-            <thead class="table-light">
-                <tr>
-                    <th>#</th>
-                    <th>Kodi</th>
-                    <th>Tovar nomi</th>
-                    <th>Ombor</th>
-                    <th>Qoldiq</th>
-                    <th>Min</th>
-                    <th>Kamligi</th>
-                    <th>O'lchov</th>
-                    <th>Tannarx</th>
-                    <th>Summa</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% if stocks %}
-                    {% for stock in stocks %}
-                    {% set _uc = (stock.product.unit.code or '')|lower if (stock.product and stock.product.unit) else '' %}
-                    {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
-                    <tr class="{% if stock.quantity <= stock.product.min_stock %}table-warning{% endif %}">
-                        <td>{{ loop.index }}</td>
-                        <td><code>{{ stock.product.barcode or stock.product.code or '-' }}</code></td>
-                        <td>
-                            <strong>{{ stock.product.name }}</strong>
-                            {% if stock.quantity <= stock.product.min_stock %}
-                            <br><small class="text-danger">Kam qoldi!</small>
-                            {% endif %}
-                        </td>
-                        <td>{{ stock.warehouse.name }}</td>
-                        <td class="fw-bold">{{ "{:,.0f}".format((stock.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.quantity) }}</td>
-                        <td class="text-muted">{{ "{:,.0f}".format((stock.product.min_stock or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.product.min_stock or 0) }}</td>
-                        <td class="fw-semibold {% if stock.quantity <= stock.product.min_stock %}text-danger{% else %}text-muted{% endif %}">
-                            {% set _def = (stock.product.min_stock or 0) - (stock.quantity or 0) %}
-                            {% if _def > 0 %}
-                                {{ "{:,.0f}".format((_def)|round(0)|int) if _is_dona else "{:,.3f}".format(_def) }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>{{ stock.product.unit.code if stock.product.unit else '-' }}</td>
-                        <td>{{ "{:,.0f}".format(stock.product.purchase_price or 0) }}</td>
-                        <td class="text-success">{{ "{:,.0f}".format(stock.quantity * (stock.product.purchase_price or 0)) }}</td>
-                        <td>
-                            <a href="/reports/stock/source?warehouse_id={{ stock.warehouse.id }}&product_id={{ stock.product.id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi — qayerdan qo'shilgan / chiqarilgan"><i class="bi bi-clock-history"></i></a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="11" class="text-center text-muted py-5">
-                            <i class="bi bi-boxes fs-1 d-block mb-2"></i>
-                            Qoldiqlar topilmadi
-                        </td>
-                    </tr>
-                {% endif %}
-            </tbody>
-        </table>
+    <div class="col-auto">
+      <button type="submit" class="btn btn-primary top-btn">
+        <i class="bi bi-funnel-fill"></i> Ko'rsatish
+      </button>
     </div>
+    {% if report_date %}
+    <div class="col-auto">
+      <a href="/reports/stock{% if selected_warehouse_id %}?warehouse_id={{ selected_warehouse_id }}{% endif %}"
+         class="btn btn-outline-secondary top-btn">
+        <i class="bi bi-arrow-clockwise"></i> Joriy qoldiq
+      </a>
+    </div>
+    {% endif %}
+  </form>
+  {% if report_date %}
+  <div class="mt-2 text-muted small"><i class="bi bi-calendar-check text-primary"></i>
+    <strong>{{ report_date }}</strong> sanasidagi qoldiq ko'rsatilmoqda
+  </div>
+  {% endif %}
 </div>
 
-<!-- Exceldan qoldiqlarni yuklash -->
-<div class="modal fade" id="importStockModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form method="POST" action="/reports/stock/import" enctype="multipart/form-data">
-                <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-upload"></i> Qoldiqlarni Exceldan yuklash</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small">Andoza ustunlari: <strong>Ombor nomi (yoki kodi)</strong>, <strong>Mahsulot nomi (yoki kodi)</strong>, <strong>Qoldiq</strong>. Ixtiyoriy: <strong>Tannarx (so'm)</strong>, <strong>Sotuv narxi (so'm)</strong>. Birinchi qator sarlavha bo'lsin.</p>
-                    <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-primary">Yuklash</button>
-                </div>
-            </form>
-        </div>
+<!-- Statistika -->
+{% if stocks %}
+{% set total_products = stocks|length %}
+{% set low_ns = namespace(c=0) %}
+{% for s in stocks %}
+  {% set ms = (s.product.min_stock or 0) if s.product else 0 %}
+  {% if ms > 0 and s.quantity < ms %}{% set low_ns.c = low_ns.c + 1 %}
+  {% elif ms <= 0 and s.quantity > 0 and s.quantity < 10 %}{% set low_ns.c = low_ns.c + 1 %}
+  {% endif %}
+{% endfor %}
+{% set low_count = low_ns.c %}
+{% set total_sum = namespace(v=0) %}
+{% for s in stocks %}{% set total_sum.v = total_sum.v + (s.quantity * (s.product.purchase_price or 0)) %}{% endfor %}
+<div class="row g-3 mb-3">
+  <div class="col-6 col-md-3">
+    <div class="stock-stat">
+      <div class="num text-primary">{{ total_products }}</div>
+      <div class="lbl">Jami pozitsiyalar</div>
     </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="/reports/stock?low=1{% if selected_warehouse_id %}&warehouse_id={{ selected_warehouse_id }}{% endif %}" class="text-decoration-none">
+      <div class="stock-stat" style="cursor:pointer;border-left:3px solid #dc3545;">
+        <div class="num text-danger">{{ low_count }}</div>
+        <div class="lbl">Kam qolgan</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stock-stat">
+      <div class="num text-success">{{ "{:,.0f}".format(total_sum.v) }}</div>
+      <div class="lbl">Jami summa (so'm)</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="stock-stat">
+      <div class="num text-info">{{ warehouses|length }}</div>
+      <div class="lbl">Omborlar</div>
+    </div>
+  </div>
 </div>
+{% endif %}
+
+<!-- Asosiy card -->
+<div class="card border-0" style="border-radius:16px; box-shadow:0 2px 12px rgba(0,0,0,.08); overflow:hidden;">
+  <div class="card-header bg-white border-bottom d-flex flex-wrap gap-2 align-items-center justify-content-between py-3 px-3">
+    <div class="d-flex align-items-center gap-2">
+      <span class="fw-bold fs-6">
+        <i class="bi bi-boxes text-primary"></i>
+        {% if report_date %}Qoldiq — {{ report_date }}{% else %}Joriy qoldiq{% endif %}
+      </span>
+      {% if stocks %}
+      <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill">{{ stocks|length }} ta</span>
+      {% endif %}
+    </div>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+      <!-- Qidiruv -->
+      <div class="search-wrap">
+        <i class="bi bi-search"></i>
+        <input type="text" id="stockSearch" class="form-control form-control-sm" placeholder="Mahsulot qidirish…" style="width:180px;" oninput="filterStock(this.value)">
+      </div>
+      <!-- Tugmalar -->
+      <a href="/reports/stock/andoza" class="btn btn-outline-secondary top-btn" title="Andoza yuklab olish">
+        <i class="bi bi-file-earmark-arrow-down"></i> Andoza
+      </a>
+      <button type="button" class="btn btn-outline-primary top-btn" data-bs-toggle="modal" data-bs-target="#importStockModal">
+        <i class="bi bi-upload"></i> Import
+      </button>
+      <a href="/reports/stock/export?{% if report_date %}report_date={{ report_date }}&{% endif %}{% if selected_warehouse_id %}warehouse_id={{ selected_warehouse_id }}{% endif %}"
+         class="btn btn-success top-btn">
+        <i class="bi bi-file-earmark-excel-fill"></i> Excel
+      </a>
+      <a href="/reports/stock/no-history" class="btn btn-outline-warning top-btn" title="Tarixi yo'q qoldiqlar">
+        <i class="bi bi-exclamation-triangle-fill"></i> Tarixsiz
+      </a>
+      {% if current_user and current_user.role == 'admin' %}
+      <div class="dropdown">
+        <button class="btn btn-outline-danger top-btn dropdown-toggle" data-bs-toggle="dropdown">
+          <i class="bi bi-tools"></i> Tozalash
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end shadow border-0" style="border-radius:12px; min-width:260px;">
+          <li>
+            <form method="post" action="/reports/stock/cleanup-orphan-movements"
+                  onsubmit="return confirm('O\'chirilgan hujjatlar harakatlarini tozalash?');">
+              <button type="submit" class="dropdown-item text-danger py-2">
+                <i class="bi bi-arrow-counterclockwise me-2"></i> O'chirilgan hujjatlar harakatlari
+              </button>
+            </form>
+          </li>
+          <li>
+            <form method="post" action="/reports/stock/cleanup-orphan-sale-movements"
+                  onsubmit="return confirm('O\'chirilgan sotuv harakatlarini tozalash?');">
+              <button type="submit" class="dropdown-item text-danger py-2">
+                <i class="bi bi-arrow-counterclockwise me-2"></i> O'chirilgan sotuv harakatlari
+              </button>
+            </form>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form method="post" action="/reports/stock/cleanup-orphans"
+                  onsubmit="return confirm('O\'chirilgan ma\'lumotlarni tozalash?');">
+              <button type="submit" class="dropdown-item text-danger py-2">
+                <i class="bi bi-trash me-2"></i> Barcha o'chirilganlarni tozalash
+              </button>
+            </form>
+          </li>
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card-body p-0" style="overflow-x:auto;">
+    <table class="table stock-table mb-0" id="stockTable">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>Tovar nomi</th>
+          <th>Ombor</th>
+          <th class="text-end">Qoldiq</th>
+          <th class="text-end">Min</th>
+          <th class="text-end">Kamligi</th>
+          <th>O'lchov</th>
+          <th class="text-end">Tannarx</th>
+          <th class="text-end">Summa</th>
+          <th style="width:40px;"></th>
+        </tr>
+      </thead>
+      <tbody id="stockBody">
+        {% if stocks %}
+          {% for stock in stocks %}
+          {% set _uc = (stock.product.unit.code or '')|lower if (stock.product and stock.product.unit) else '' %}
+          {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
+          {% set _low = stock.quantity <= stock.product.min_stock %}
+          {% set _def = (stock.product.min_stock or 0) - (stock.quantity or 0) %}
+          <tr class="{% if _low %}low-stock{% endif %}">
+            <td class="text-muted">{{ loop.index }}</td>
+            <td>
+              <div class="fw-semibold">{{ stock.product.name }}</div>
+              {% if stock.product.barcode or stock.product.code %}
+              <span class="product-code">{{ stock.product.barcode or stock.product.code }}</span>
+              {% endif %}
+              {% if _low %}
+              <span class="badge-low ms-1">Kam!</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="text-muted small">{{ stock.warehouse.name }}</span>
+            </td>
+            <td class="text-end">
+              <span class="qty-cell {% if (stock.quantity or 0) < 0 %}negative{% endif %}">
+                {{ "{:,.0f}".format((stock.quantity or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.quantity or 0) }}
+              </span>
+            </td>
+            <td class="text-end text-muted small">
+              {{ "{:,.0f}".format((stock.product.min_stock or 0)|round(0)|int) if _is_dona else "{:,.3f}".format(stock.product.min_stock or 0) }}
+            </td>
+            <td class="text-end">
+              {% if _def > 0 %}
+              <span class="fw-semibold text-danger">
+                {{ "{:,.0f}".format(_def|round(0)|int) if _is_dona else "{:,.3f}".format(_def) }}
+              </span>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td><span class="text-muted small">{{ stock.product.unit.code if stock.product.unit else '—' }}</span></td>
+            <td class="text-end text-muted small">{{ "{:,.0f}".format(stock.product.purchase_price or 0) }}</td>
+            <td class="text-end sum-cell">{{ "{:,.0f}".format((stock.quantity or 0) * (stock.product.purchase_price or 0)) }}</td>
+            <td>
+              <a href="/reports/stock/source?warehouse_id={{ stock.warehouse.id }}&product_id={{ stock.product.id }}"
+                 class="action-btn" title="Harakat tarixi">
+                <i class="bi bi-clock-history" style="font-size:13px;"></i>
+              </a>
+            </td>
+          </tr>
+          {% endfor %}
+        {% else %}
+          <tr>
+            <td colspan="10" class="text-center text-muted py-5">
+              <i class="bi bi-boxes d-block mb-2" style="font-size:3rem; opacity:.3;"></i>
+              Qoldiqlar topilmadi
+            </td>
+          </tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- Import modal -->
+<div class="modal fade" id="importStockModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content" style="border-radius:16px; border:none; box-shadow:0 10px 40px rgba(0,0,0,.15);">
+      <form method="POST" action="/reports/stock/import" enctype="multipart/form-data">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold"><i class="bi bi-upload text-primary"></i> Exceldan yuklash</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small mb-3">
+            Ustunlar: <strong>Ombor nomi</strong>, <strong>Mahsulot nomi</strong>, <strong>Qoldiq</strong>.
+            Ixtiyoriy: <strong>Tannarx</strong>, <strong>Sotuv narxi</strong>.
+            Birinchi qator sarlavha bo'lsin.
+          </p>
+          <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required style="border-radius:10px;">
+        </div>
+        <div class="modal-footer border-0">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:10px;">Bekor</button>
+          <button type="submit" class="btn btn-primary" style="border-radius:10px;">
+            <i class="bi bi-upload"></i> Yuklash
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+function filterStock(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#stockBody tr').forEach(function(tr) {
+    if (!tr.cells || tr.cells.length < 3) return;
+    var name = (tr.cells[1].textContent || '').toLowerCase();
+    var wh   = (tr.cells[2].textContent || '').toLowerCase();
+    tr.style.display = (!q || name.includes(q) || wh.includes(q)) ? '' : 'none';
+  });
+}
+</script>
 {% endblock %}

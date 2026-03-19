@@ -5,67 +5,59 @@
     #addUserScopeTabs .nav-link, #editUserScopeTabs .nav-link { font-size: 0.8rem; }
     #addUserScopeContent .tab-pane, #editUserScopeContent .tab-pane { min-height: 2.5rem; }
 </style>
-<div class="container-fluid">
-    {% if error %}
-    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-        <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
-        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Yopish"></button>
-    </div>
-    {% endif %}
-    <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="bi bi-people"></i> Foydalanuvchilar</h5>
-            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addUserModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
-        </div>
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Login</th>
-                            <th>To'liq ism</th>
-                            <th>Rol</th>
-                            <th>Holat</th>
-                            <th>Yaratilgan</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for user in users %}
-                <tr>
-                    <td>{{ user.id }}</td>
-                    <td>{{ user.username }}</td>
-                    <td>{{ user.full_name }}</td>
-                    <td>
-                        {% if user.role == 'admin' %}
-                        <span class="badge bg-danger">Administrator</span>
-                        {% elif user.role == 'manager' %}
-                        <span class="badge bg-warning">Menejer</span>
-                        {% elif user.role == 'production' %}
-                        <span class="badge bg-primary">Ishlab chiqarish</span>
-                        {% elif user.role == 'qadoqlash' %}
-                        <span class="badge bg-success">Qadoqlash</span>
-                        {% elif user.role == 'sotuvchi' %}
-                        <span class="badge bg-success">Sotuvchi</span>
-                        {% elif user.role == 'agent' %}
-                        <span class="badge bg-info">Agent (PWA)</span>
-                        {% elif user.role == 'driver' %}
-                        <span class="badge bg-secondary">Haydovchi (PWA)</span>
-                        {% else %}
-                        <span class="badge bg-info">Foydalanuvchi</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if user.is_active %}
-                        <span class="badge bg-success">Faol</span>
-                        {% else %}
-                        <span class="badge bg-secondary">Faol emas</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ user.created_at.strftime('%d.%m.%Y %H:%M') if user.created_at else '-' }}</td>
-                    <td>
-                        <button class="btn btn-sm btn-warning"
+{% if error %}
+<div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+  <i class="bi bi-exclamation-triangle me-2"></i>{{ error }}
+  <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="card data-table">
+  <div class="card-header">
+    <span class="fw-bold fs-6"><i class="bi bi-people text-primary"></i> Foydalanuvchilar
+      <span class="badge bg-primary bg-opacity-10 text-primary rounded-pill ms-1">{{ users|length }} ta</span>
+    </span>
+    <button class="btn btn-primary top-btn" data-bs-toggle="modal" data-bs-target="#addUserModal">
+      <i class="bi bi-plus-circle"></i> Yaratish
+    </button>
+  </div>
+  <div class="card-body p-0" style="overflow-x:auto;">
+    <table class="table mb-0">
+      <thead>
+        <tr>
+          <th style="width:50px;">#</th>
+          <th>Login</th>
+          <th>To'liq ism</th>
+          <th>Rol</th>
+          <th>Holat</th>
+          <th>Yaratilgan</th>
+          <th style="width:110px;"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for user in users %}
+        <tr>
+          <td class="text-muted">{{ user.id }}</td>
+          <td class="fw-semibold">{{ user.username }}</td>
+          <td>{{ user.full_name or '—' }}</td>
+          <td>
+            {% if user.role == 'admin' %}<span class="badge-cancelled">Administrator</span>
+            {% elif user.role == 'manager' %}<span class="badge-draft">Menejer</span>
+            {% elif user.role == 'production' %}<span class="badge-waiting">Ishlab chiqarish</span>
+            {% elif user.role == 'qadoqlash' %}<span class="badge-active">Qadoqlash</span>
+            {% elif user.role == 'sotuvchi' %}<span class="badge-active">Sotuvchi</span>
+            {% elif user.role == 'agent' %}<span class="badge-waiting">Agent</span>
+            {% elif user.role == 'driver' %}<span class="badge-inactive">Haydovchi</span>
+            {% else %}<span class="badge-inactive">{{ user.role or 'Foydalanuvchi' }}</span>{% endif %}
+          </td>
+          <td>
+            {% if user.is_active %}<span class="badge-active">Faol</span>
+            {% else %}<span class="badge-inactive">Faol emas</span>{% endif %}
+          </td>
+          <td class="muted-cell">{{ user.created_at.strftime('%d.%m.%Y') if user.created_at else '—' }}</td>
+          <td>
+            <div class="d-flex gap-1">
+              <button class="btn-act"
                             data-user-id="{{ user.id }}"
                             data-username="{{ user.username }}"
                             data-full-name="{{ user.full_name }}"
@@ -81,31 +73,31 @@
                             data-cash-register-names="{% if user.cash_registers_list %}{% for c in user.cash_registers_list %}{{ c.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
                             data-partner-ids="{% if user.partners_list %}{% for p in user.partners_list %}{{ p.id }}{% if not loop.last %},{% endif %}{% endfor %}{% endif %}"
                             data-partner-names="{% if user.partners_list %}{% for p in user.partners_list %}{{ p.name }}{% if not loop.last %}|||{% endif %}{% endfor %}{% endif %}"
-                            onclick="editUserFromBtn(this)">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button class="btn btn-sm btn-info"
-                            onclick="changePassword({{ user.id }}, {{ user.username | tojson }})">
-                            <i class="fas fa-key"></i>
-                        </button>
-                        {% if user.id != current_user.id %}
-                        <button class="btn btn-sm btn-danger"
-                            onclick="deleteUser({{ user.id }}, {{ user.username | tojson }})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                        {% endif %}
-                    </td>
-                </tr>
-                        {% else %}
-                        <tr>
-                            <td colspan="7" class="text-muted text-center py-4">Hozircha foydalanuvchilar yo'q. Yangi qo'shish uchun yuqoridagi Yaratish tugmasini bosing.</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                onclick="editUserFromBtn(this)" title="Tahrirlash">
+                <i class="bi bi-pencil"></i>
+              </button>
+              <button class="btn-act" onclick="changePassword({{ user.id }}, {{ user.username | tojson }})" title="Parol o'zgartirish">
+                <i class="bi bi-key"></i>
+              </button>
+              {% if user.id != current_user.id %}
+              <button class="btn-act danger" onclick="deleteUser({{ user.id }}, {{ user.username | tojson }})" title="O'chirish">
+                <i class="bi bi-trash"></i>
+              </button>
+              {% endif %}
             </div>
-        </div>
-    </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted py-5">
+            <i class="bi bi-people d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
+            Hozircha foydalanuvchilar yo'q
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </div>
 {% endblock %}
 

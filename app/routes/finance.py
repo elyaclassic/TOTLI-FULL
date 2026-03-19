@@ -6,7 +6,7 @@ from typing import Optional
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func, text
 from sqlalchemy.exc import OperationalError, IntegrityError
@@ -829,42 +829,53 @@ async def cash_transfiers_redirect():
     return RedirectResponse(url="/cash/transfers", status_code=301)
 
 
+def _user_owns_cash_register(user, cash_register_id):
+    """Foydalanuvchi shu kassaga tegishlimi?"""
+    if not user or not cash_register_id:
+        return False
+    if getattr(user, "cash_register_id", None) == cash_register_id:
+        return True
+    for cr in (getattr(user, "cash_registers_list", None) or []):
+        if cr.id == cash_register_id:
+            return True
+    return False
+
+
 @cash_router.get("/transfers", response_class=HTMLResponse)
 async def cash_transfers_list(
     request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Kassadan kassaga o'tkazish hujjatlari ro'yxati"""
-    try:
-        transfers = (
-            db.query(CashTransfer)
-            .options(
-                joinedload(CashTransfer.from_cash),
-                joinedload(CashTransfer.to_cash),
-                joinedload(CashTransfer.user),
-                joinedload(CashTransfer.approved_by),
-            )
-            .order_by(CashTransfer.created_at.desc())
-            .limit(100)
-            .all()
+    """Inkasatsiya hujjatlari ro'yxati"""
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    q = (
+        db.query(CashTransfer)
+        .options(
+            joinedload(CashTransfer.from_cash),
+            joinedload(CashTransfer.to_cash),
+            joinedload(CashTransfer.user),
+            joinedload(CashTransfer.approved_by),
         )
-    except Exception as e:
-        err = str(e).lower()
-        if "payment_type" in err or "no such column" in err or "operationalerror" in err:
-            return HTMLResponse(
-                "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Migratsiya kerak</title></head><body style='font-family:sans-serif;padding:2rem;'>"
-                "<h2>Bazada yangi ustun yo'q</h2><p>Kassalar jadvaliga <code>payment_type</code> qo'shilishi kerak. "
-                "Loyiha ildizida terminalda bajariladi:</p><pre>alembic upgrade head</pre>"
-                "<p><a href='/cash/transfers'>Qayta urinish</a> &nbsp; <a href='/'>Bosh sahifa</a></p></body></html>",
-                status_code=500,
-            )
-        raise
+        .order_by(CashTransfer.created_at.desc())
+    )
+    # Sotuvchi faqat o'z kassasiga tegishli hujjatlarni ko'radi
+    if role not in ("admin", "manager", "menejer", "rahbar", "raxbar"):
+        user_cash_ids = []
+        if getattr(current_user, "cash_register_id", None):
+            user_cash_ids.append(current_user.cash_register_id)
+        for cr in (getattr(current_user, "cash_registers_list", None) or []):
+            user_cash_ids.append(cr.id)
+        if user_cash_ids:
+            q = q.filter(CashTransfer.from_cash_id.in_(user_cash_ids))
+        else:
+            q = q.filter(CashTransfer.id == -1)  # hech narsa ko'rsatma
+    transfers = q.limit(100).all()
     return templates.TemplateResponse("cash/transfers_list.html", {
         "request": request,
         "transfers": transfers,
         "current_user": current_user,
-        "page_title": "Kassadan kassaga o'tkazish",
+        "page_title": "Inkasatsiya — kassadan kassaga o'tkazish",
     })
 
 
@@ -872,16 +883,16 @@ async def cash_transfers_list(
 async def cash_transfer_new(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
-    """Yangi kassadan kassaga o'tkazish (qoralama)"""
+    """Yangi inkasatsiya hujjati yaratish (faqat admin)"""
     cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
     return templates.TemplateResponse("cash/transfer_form.html", {
         "request": request,
         "transfer": None,
         "cash_registers": cash_registers,
         "current_user": current_user,
-        "page_title": "Kassadan kassaga o'tkazish (yaratish)",
+        "page_title": "Inkasatsiya yaratish",
     })
 
 
@@ -893,15 +904,13 @@ async def cash_transfer_create(
     amount: float = Form(...),
     note: str = Form(""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
+    """Admin inkasatsiya hujjat yaratadi — status: pending"""
     if from_cash_id == to_cash_id:
-        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Qayerdan va qayerga kassa bir xil bo'lmasin."), status_code=303)
+        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Qayerdan va qayerga kassa bir xil bolmasin."), status_code=303)
     if amount <= 0:
-        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bo'lishi kerak."), status_code=303)
-    from_cash = db.query(CashRegister).filter(CashRegister.id == from_cash_id).first()
-    if not from_cash or (from_cash.balance or 0) < amount:
-        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Kassada yetarli mablag' yo'q."), status_code=303)
+        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
     last_t = db.query(CashTransfer).order_by(CashTransfer.id.desc()).first()
     num = f"KK-{datetime.now().strftime('%Y%m%d')}-{(last_t.id + 1) if last_t else 1:04d}"
     t = CashTransfer(
@@ -909,13 +918,59 @@ async def cash_transfer_create(
         from_cash_id=from_cash_id,
         to_cash_id=to_cash_id,
         amount=amount,
-        status="draft",
+        status="pending",
         user_id=current_user.id if current_user else None,
         note=note or None,
     )
     db.add(t)
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{t.id}", status_code=303)
+
+
+@cash_router.get("/transfers/my-pending")
+async def cash_transfers_my_pending(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuvchining kassasiga tegishli kutilayotgan inkasatsiya hujjatlari (JSON)"""
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    # Admin/manager barcha pending hujjatlarni ko'radi
+    if role in ("admin", "manager", "menejer", "rahbar", "raxbar"):
+        transfers = (
+            db.query(CashTransfer)
+            .options(joinedload(CashTransfer.from_cash), joinedload(CashTransfer.to_cash))
+            .filter(CashTransfer.status == "pending")
+            .order_by(CashTransfer.created_at.desc())
+            .all()
+        )
+    else:
+        user_cash_ids = []
+        if getattr(current_user, "cash_register_id", None):
+            user_cash_ids.append(current_user.cash_register_id)
+        for cr in (getattr(current_user, "cash_registers_list", None) or []):
+            user_cash_ids.append(cr.id)
+        if not user_cash_ids:
+            return JSONResponse([])
+        transfers = (
+            db.query(CashTransfer)
+            .options(joinedload(CashTransfer.from_cash), joinedload(CashTransfer.to_cash))
+            .filter(CashTransfer.from_cash_id.in_(user_cash_ids), CashTransfer.status == "pending")
+            .order_by(CashTransfer.created_at.desc())
+            .all()
+        )
+    result = []
+    for t in transfers:
+        result.append({
+            "id": t.id,
+            "number": t.number,
+            "amount": t.amount or 0,
+            "from_cash": t.from_cash.name if t.from_cash else "?",
+            "to_cash": t.to_cash.name if t.to_cash else "?",
+            "note": t.note or "",
+            "date": t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "",
+        })
+    return JSONResponse(result)
 
 
 @cash_router.get("/transfers/{transfer_id}", response_class=HTMLResponse)
@@ -934,56 +989,160 @@ async def cash_transfer_view(
         "transfer": transfer,
         "cash_registers": cash_registers,
         "current_user": current_user,
-        "page_title": f"Kassadan kassaga {transfer.number}",
+        "page_title": f"Inkasatsiya {transfer.number}",
     })
 
 
-@cash_router.post("/transfers/{transfer_id}/send")
-async def cash_transfer_send(
+@cash_router.post("/transfers/{transfer_id}/sotuvchi-confirm")
+async def cash_transfer_sotuvchi_confirm(
     transfer_id: int,
+    request: Request = None,
+    inkasator_id: Optional[int] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Jo'natuvchi yuboradi — hujjat tasdiqlash kutilmoqdaga o'tadi"""
+    """Sotuvchi tasdiqlaydi — pulni inkasatorga berdi. Status: pending -> in_transit"""
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if t.status != "draft":
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat qoralamani yuborish mumkin."), status_code=303)
+    if t.status != "pending":
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat kutilayotgan hujjatni tasdiqlash mumkin."), status_code=303)
+    # Sotuvchi faqat o'z kassasidan tasdiqlashi mumkin
+    if not _user_owns_cash_register(current_user, t.from_cash_id):
+        role = (getattr(current_user, "role", None) or "").strip().lower()
+        if role not in ("admin", "manager", "menejer"):
+            return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Bu kassa sizga tegishli emas."), status_code=303)
     from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).first()
-    if not from_cash or (from_cash.balance or 0) < (t.amount or 0):
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassada yetarli mablag' yo'q."), status_code=303)
-    t.status = "pending_approval"
+    if not from_cash:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassa topilmadi."), status_code=303)
+    amount = t.amount or 0
+    if (from_cash.balance or 0) < amount:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassada yetarli mablag yoq."), status_code=303)
+    # Inkasator ma'lumotini saqlash (note ga qo'shish)
+    if inkasator_id:
+        inkasator = db.query(Partner).filter(Partner.id == inkasator_id).first()
+        if inkasator:
+            ink_note = f"Inkasator: {inkasator.name}"
+            t.note = (t.note + " | " + ink_note) if t.note else ink_note
+    # Mablag' kassadan ayriladi
+    from_cash.balance = (from_cash.balance or 0) - amount
+    t.status = "in_transit"
+    t.sent_by_user_id = current_user.id
+    t.sent_at = datetime.now()
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?sent=1", status_code=303)
 
 
-@cash_router.post("/transfers/{transfer_id}/confirm")
-async def cash_transfer_confirm(
+@cash_router.get("/transfers/{transfer_id}/receipt", response_class=HTMLResponse)
+async def cash_transfer_receipt(
     transfer_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Qabul qiluvchi tasdiqlaydi — from_cash dan ayiriladi, to_cash ga qo'shiladi"""
+    """Inkasatsiya cheki — chop etish uchun"""
+    t = db.query(CashTransfer).options(
+        joinedload(CashTransfer.from_cash),
+        joinedload(CashTransfer.to_cash),
+        joinedload(CashTransfer.user),
+        joinedload(CashTransfer.sent_by),
+    ).filter(CashTransfer.id == transfer_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    html = f"""<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<title>Inkasatsiya cheki {t.number}</title>
+<style>
+* {{ box-sizing: border-box; margin: 0; padding: 0; }}
+body {{ font-family: 'Segoe UI', Arial, sans-serif; width: 350px; margin: 0 auto; padding: 20px 15px; color: #1a1d21; }}
+.header {{ text-align: center; padding-bottom: 15px; border-bottom: 2px dashed #ccc; margin-bottom: 15px; }}
+.header h1 {{ font-size: 18px; font-weight: 800; color: #0d6b4b; margin-bottom: 4px; }}
+.header .subtitle {{ font-size: 12px; color: #888; }}
+.row {{ display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #f0f0f0; }}
+.row .label {{ color: #666; }}
+.row .value {{ font-weight: 600; text-align: right; }}
+.amount-row {{ padding: 12px 0; margin: 10px 0; border-top: 2px solid #0d6b4b; border-bottom: 2px solid #0d6b4b; }}
+.amount-row .label {{ font-size: 14px; font-weight: 700; }}
+.amount-row .value {{ font-size: 20px; font-weight: 800; color: #0d6b4b; }}
+.footer {{ text-align: center; margin-top: 20px; padding-top: 15px; border-top: 2px dashed #ccc; }}
+.footer .sign {{ margin-top: 30px; display: flex; justify-content: space-between; }}
+.footer .sign div {{ text-align: center; flex: 1; }}
+.footer .sign .line {{ border-bottom: 1px solid #333; height: 25px; margin-bottom: 4px; }}
+.footer .sign .name {{ font-size: 10px; color: #888; }}
+.status {{ display: inline-block; background: #fff3cd; color: #856404; padding: 3px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; }}
+@media print {{ .no-print {{ display: none !important; }} body {{ padding: 10px; }} }}
+</style>
+</head>
+<body>
+<div class="no-print" style="margin-bottom:15px;">
+    <button onclick="window.print();" style="padding:8px 20px;background:#0d6b4b;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;">Chop etish</button>
+</div>
+<div class="header">
+    <h1>INKASATSIYA CHEKI</h1>
+    <div class="subtitle">Kassadan kassaga pul o'tkazish</div>
+</div>
+<div class="row"><span class="label">Hujjat №</span><span class="value">{t.number}</span></div>
+<div class="row"><span class="label">Sana</span><span class="value">{t.created_at.strftime('%d.%m.%Y %H:%M') if t.created_at else '-'}</span></div>
+<div class="row"><span class="label">Qayerdan</span><span class="value">{t.from_cash.name if t.from_cash else '-'}</span></div>
+<div class="row"><span class="label">Qayerga</span><span class="value">{t.to_cash.name if t.to_cash else '-'}</span></div>
+<div class="row"><span class="label">Status</span><span class="value"><span class="status">{'Yolda' if t.status == 'in_transit' else t.status}</span></span></div>
+<div class="row"><span class="label">Jo'natuvchi</span><span class="value">{t.sent_by.full_name or t.sent_by.username if t.sent_by else '-'}</span></div>
+<div class="row"><span class="label">Jo'natish vaqti</span><span class="value">{t.sent_at.strftime('%d.%m.%Y %H:%M') if t.sent_at else '-'}</span></div>
+{('<div class="row"><span class="label">Izoh</span><span class="value">' + (t.note or '') + '</span></div>') if t.note else ''}
+<div class="row amount-row"><span class="label">SUMMA</span><span class="value">{t.amount:,.0f} som</span></div>
+<div class="footer">
+    <div class="sign">
+        <div><div class="line"></div><div class="name">Berdi (sotuvchi)</div></div>
+        <div><div class="line"></div><div class="name">Oldi (inkasator)</div></div>
+    </div>
+</div>
+<script>window.onload=function(){{ try {{ window.print(); }} catch(e){{}} }};</script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+@cash_router.post("/transfers/{transfer_id}/admin-confirm")
+async def cash_transfer_admin_confirm(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin qabul qiladi — inkasator pulni yetkazdi. Status: in_transit -> completed"""
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if t.status != "pending_approval":
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat tasdiqlash kutilayotgan hujjatni tasdiqlash mumkin."), status_code=303)
-    from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).first()
+    if t.status != "in_transit":
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat yoldagi hujjatni qabul qilish mumkin."), status_code=303)
     to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
-    if not from_cash or not to_cash:
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassa topilmadi."), status_code=303)
-    amount = t.amount or 0
-    if (from_cash.balance or 0) < amount:
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Jo'natuvchi kassada yetarli mablag' yo'q."), status_code=303)
-    from_cash.balance = (from_cash.balance or 0) - amount
-    to_cash.balance = (to_cash.balance or 0) + amount
-    t.status = "confirmed"
-    t.approved_by_user_id = current_user.id if current_user else None
+    if not to_cash:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qabul kassasi topilmadi."), status_code=303)
+    # Mablag' qabul kassasiga qo'shiladi
+    to_cash.balance = (to_cash.balance or 0) + (t.amount or 0)
+    t.status = "completed"
+    t.approved_by_user_id = current_user.id
     t.approved_at = datetime.now()
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?confirmed=1", status_code=303)
+
+
+# Eski endpoint nomini saqlaymiz (backward compat)
+@cash_router.post("/transfers/{transfer_id}/confirm")
+async def cash_transfer_confirm_legacy(
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Legacy confirm — statusga qarab sotuvchi yoki admin confirm ga yo'naltiradi"""
+    t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if t.status == "pending":
+        return await cash_transfer_sotuvchi_confirm(transfer_id, db=db, current_user=current_user)
+    elif t.status == "in_transit":
+        return await cash_transfer_admin_confirm(transfer_id, db=db, current_user=current_user)
+    return RedirectResponse(url=f"/cash/transfers/{transfer_id}", status_code=303)
 
 
 @cash_router.post("/transfers/{transfer_id}/revert")
@@ -992,20 +1151,29 @@ async def cash_transfer_revert(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Tasdiqni bekor qilish (faqat admin): balanslarni qaytarish"""
+    """Tasdiqni bekor qilish (faqat admin)"""
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
-    if not t or t.status != "confirmed":
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin."), status_code=303)
+    if not t:
+        return RedirectResponse(url="/cash/transfers?error=" + quote("Hujjat topilmadi."), status_code=303)
     amount = t.amount or 0
-    from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).first()
-    to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
-    if from_cash:
-        from_cash.balance = (from_cash.balance or 0) + amount
-    if to_cash:
-        to_cash.balance = max(0, (to_cash.balance or 0) - amount)
-    t.status = "pending_approval"
-    t.approved_by_user_id = None
-    t.approved_at = None
+    if t.status == "completed":
+        # completed -> in_transit: qabul kassasidan qaytarish
+        to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
+        if to_cash:
+            to_cash.balance = max(0, (to_cash.balance or 0) - amount)
+        t.status = "in_transit"
+        t.approved_by_user_id = None
+        t.approved_at = None
+    elif t.status == "in_transit":
+        # in_transit -> pending: jo'natuvchi kassaga qaytarish
+        from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).first()
+        if from_cash:
+            from_cash.balance = (from_cash.balance or 0) + amount
+        t.status = "pending"
+        t.sent_by_user_id = None
+        t.sent_at = None
+    else:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Bu statusda bekor qilib bolmaydi."), status_code=303)
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?reverted=1", status_code=303)
 
@@ -1014,13 +1182,13 @@ async def cash_transfer_revert(
 async def cash_transfer_delete(
     transfer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if t.status != "draft":
-        return RedirectResponse(url=f"/cash/transfers?error=" + quote("Faqat qoralamani o'chirish mumkin."), status_code=303)
+    if t.status not in ("pending", "draft"):
+        return RedirectResponse(url="/cash/transfers?error=" + quote("Faqat kutilayotgan hujjatni o'chirish mumkin."), status_code=303)
     db.delete(t)
     db.commit()
     return RedirectResponse(url="/cash/transfers?deleted=1", status_code=303)

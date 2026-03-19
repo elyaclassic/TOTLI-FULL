@@ -1,90 +1,83 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="card mb-3">
-        <div class="card-body py-3">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                <h5 class="mb-0"><i class="bi bi-signpost-split text-secondary"></i> Yo'nalishlar</h5>
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    <form action="/info/directions/export" method="get" class="d-inline">
-                        <button type="submit" class="btn btn-outline-success btn-sm">
-                            <i class="bi bi-file-earmark-excel"></i> Export
-                        </button>
-                    </form>
-                    <a href="/info/directions/template" class="btn btn-outline-secondary btn-sm" title="Import uchun andoza yuklab olish">
-                        <i class="bi bi-download"></i> Andoza
-                    </a>
-                    <form action="/info/directions/import" method="post" enctype="multipart/form-data" class="d-inline">
-                        <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
-                        <label class="btn btn-outline-primary btn-sm mb-0">
-                            <i class="bi bi-upload"></i> Import
-                            <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
-                        </label>
-                    </form>
-                    <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#addDirectionModal">
-                        <i class="bi bi-plus-circle"></i> Yaratish
-                    </button>
-                </div>
-            </div>
-        </div>
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-signpost-split"></i> Yo'nalishlar</h5>
+    <div class="d-flex flex-wrap gap-2 align-items-center">
+        <form action="/info/directions/export" method="get" class="d-inline">
+            <button type="submit" class="btn-act" title="Export">
+                <i class="bi bi-file-earmark-excel"></i>
+            </button>
+        </form>
+        <a href="/info/directions/template" class="btn-act" title="Import uchun andoza yuklab olish">
+            <i class="bi bi-download"></i>
+        </a>
+        <form action="/info/directions/import" method="post" enctype="multipart/form-data" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+            <label class="btn-act mb-0" title="Import" style="cursor:pointer;">
+                <i class="bi bi-upload"></i>
+                <input type="file" name="excel_file" accept=".xlsx" class="d-none" onchange="this.form.submit()">
+            </label>
+        </form>
+        <button type="button" class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDirectionModal">
+            <i class="bi bi-plus-circle"></i> Yaratish
+        </button>
     </div>
+</div>
 
-    <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Kod</th>
-                            <th>Nomi</th>
-                            <th>Tavsif</th>
-                            <th>Holati</th>
-                            <th></th>
-                        </tr>
-                    </thead>
-                <tbody>
-                    {% if directions %}
-                    {% for dir in directions %}
-                    <tr>
-                        <td>{{ dir.id }}</td>
-                        <td><code>{{ dir.code }}</code></td>
-                        <td><strong>{{ dir.name }}</strong></td>
-                        <td><small class="text-muted">{{ dir.description or '-' }}</small></td>
-                        <td>
-                            {% if dir.is_active %}
-                            <span class="badge bg-success">Faol</span>
-                            {% else %}
-                            <span class="badge bg-secondary">Nofaol</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <button class="btn btn-sm btn-outline-primary" title="Tahrirlash" data-id="{{ dir.id }}"
-                                data-code="{{ dir.code }}" data-name="{{ dir.name }}"
-                                data-description="{{ dir.description or '' }}" onclick="editDirection(this)">
-                                <i class="bi bi-pencil"></i>
-                            </button>
-                            <button class="btn btn-sm btn-outline-danger" title="O'chirish" data-id="{{ dir.id }}"
-                                data-name="{{ dir.name }}" onclick="deleteDirection(this)">
-                                <i class="bi bi-trash"></i>
-                            </button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                    {% else %}
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-5">
-                            <i class="bi bi-signpost-split fs-1 d-block mb-2"></i>
-                            Hozircha yo'nalishlar yo'q<br>
-                            <small>Yuqoridagi Yaratish tugmasini bosing</small>
-                        </td>
-                    </tr>
-                    {% endif %}
-                </tbody>
-            </table>
-            </div>
-        </div>
+<div class="card data-table">
+    <div class="card-header"><span class="fw-bold">Yo'nalishlar ro'yxati</span></div>
+    <div class="card-body p-0">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Kod</th>
+                    <th>Nomi</th>
+                    <th>Tavsif</th>
+                    <th>Holati</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if directions %}
+                {% for dir in directions %}
+                <tr>
+                    <td>{{ dir.id }}</td>
+                    <td><code>{{ dir.code }}</code></td>
+                    <td><strong>{{ dir.name }}</strong></td>
+                    <td><span class="muted-cell">{{ dir.description or '-' }}</span></td>
+                    <td>
+                        {% if dir.is_active %}
+                        <span class="badge-active">Faol</span>
+                        {% else %}
+                        <span class="badge-inactive">Nofaol</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn-act" title="Tahrirlash" data-id="{{ dir.id }}"
+                            data-code="{{ dir.code }}" data-name="{{ dir.name }}"
+                            data-description="{{ dir.description or '' }}" onclick="editDirection(this)">
+                            <i class="bi bi-pencil"></i>
+                        </button>
+                        <button class="btn-act danger" title="O'chirish" data-id="{{ dir.id }}"
+                            data-name="{{ dir.name }}" onclick="deleteDirection(this)">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-5">
+                        <i class="bi bi-signpost-split fs-1 d-block mb-2"></i>
+                        Hozircha yo'nalishlar yo'q<br>
+                        <small>Yuqoridagi Yaratish tugmasini bosing</small>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
     </div>
 </div>
 
@@ -94,7 +87,7 @@
         <div class="modal-content">
             <form id="addDirectionForm">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi yo'nalish</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-plus-circle"></i> Yangi yo'nalish</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">
@@ -129,7 +122,7 @@
         <div class="modal-content">
             <form id="editDirectionForm" method="POST">
                 <div class="modal-header py-2">
-                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Yo'nalishni tahrirlash</h5>
+                    <h6 class="modal-title mb-0"><i class="bi bi-pencil"></i> Yo'nalishni tahrirlash</h6>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body py-2">

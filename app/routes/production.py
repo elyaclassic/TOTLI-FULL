@@ -398,9 +398,9 @@ async def production_index_page(
             recipes_map = {}
             product_ids = []
             if recipe_ids:
-                recipes = db.query(Recipe).filter(Recipe.id.in_(recipe_ids)).all()
-                recipes_map = {r.id: r for r in recipes}
-                product_ids = [r.product_id for r in recipes if r.product_id]
+                recent_recipes = db.query(Recipe).filter(Recipe.id.in_(recipe_ids)).all()
+                recipes_map = {r.id: r for r in recent_recipes}
+                product_ids = [r.product_id for r in recent_recipes if r.product_id]
 
             products_map = {}
             unit_ids = []
@@ -457,7 +457,8 @@ async def production_index_page(
     except Exception as template_error:
         import traceback
         error_msg = str(template_error)
-        pass  # logged above
+        print(f"[PRODUCTION] Template render error: {error_msg}", flush=True)
+        traceback.print_exc()
         # Xavfsiz fallback
         resp = templates.TemplateResponse("production/index.html", {
             "request": request,
@@ -997,9 +998,11 @@ async def production_orders(
     )
     current_user_employee = db.query(Employee).filter(Employee.user_id == current_user.id).first() if current_user else None
     role = (getattr(current_user, "role", None) or "").strip().lower()
-    is_operator_role = role in ("production", "qadoqlash", "rahbar", "raxbar", "operator")
-    # Operator: faqat o'zi ishlab chiqargan buyurtmalarni ko'radi (operator_id = joriy xodim)
-    if current_user and role != "admin":
+    # Operator rollari: faqat o'zi operator bo'lgan buyurtmalar
+    is_operator_role = role in ("production", "qadoqlash", "operator")
+    # Keng ko'ruv huquqi bor rollar (admin/rahbar/menejer) — ro'yxatni to'liq ko'radi
+    can_view_all = role in ("admin", "rahbar", "raxbar", "manager", "menejer")
+    if current_user and not can_view_all:
         if is_operator_role and current_user_employee and (operator_id is None or int(operator_id or 0) == 0):
             q = q.filter(Production.operator_id == current_user_employee.id)
         elif not is_operator_role:
@@ -1501,7 +1504,14 @@ async def delete_production(
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
-    # Shu buyurtmaga bog'liq barcha StockMovement yozuvlarini topib, qoldiqni teskari yangilash va yozuvlarni o'chirish
+    # Tasdiqlangan buyurtmani avval revert qilish kerak
+    if production.status == "completed":
+        from urllib.parse import quote
+        return RedirectResponse(
+            url=f"/production/orders?error=delete_completed&detail={quote('Tasdiqlangan buyurtmani o`chirish uchun avval «Tasdiqni bekor qilish» bosing.')}",
+            status_code=303,
+        )
+    # Qoralama/bekor qilingan buyurtma uchun — stock movementlarni tozalash va o'chirish
     movements = db.query(StockMovement).filter(
         StockMovement.document_type == "Production",
         StockMovement.document_id == prod_id,
@@ -1512,7 +1522,6 @@ async def delete_production(
             Stock.product_id == m.product_id,
         ).first()
         if stock:
-            # Harakatni bekor qilish: qoldiqdan quantity_change ni ayirish
             new_qty = (stock.quantity or 0) - (m.quantity_change or 0)
             stock.quantity = max(0.0, new_qty)
         db.delete(m)

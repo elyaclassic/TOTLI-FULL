@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-chat-dots"></i> Chat</h5>
+    <a href="/chat/support" class="top-btn btn btn-outline-primary"><i class="bi bi-life-preserver"></i> Support</a>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-5">
+        <div class="card data-table">
+            <div class="card-header">Suhbatlar</div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    {% for it in items %}
+                    <a class="list-group-item list-group-item-action d-flex justify-content-between align-items-start" href="/chat/thread/{{ it.thread.id }}">
+                        <div class="me-2">
+                            <div class="fw-semibold">{{ it.title }}</div>
+                            <div class="text-muted small">
+                                {% if it.last %}
+                                    {{ it.last.body[:60] }}{% if it.last.body|length > 60 %}…{% endif %}
+                                {% else %}
+                                    Hali xabar yo'q
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="text-end">
+                            {% if it.unread %}
+                            <span class="badge bg-danger">{{ it.unread }}</span>
+                            {% endif %}
+                        </div>
+                    </a>
+                    {% else %}
+                    <div class="p-3 text-muted">Hali suhbat yo'q.</div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7">
+        <div class="filter-card">
+            <div class="mb-2 fw-semibold">Yangi DM (foydalanuvchi ↔ foydalanuvchi)</div>
+            <form method="POST" action="/chat/direct" class="row g-2 align-items-end">
+                <div class="col-12 col-md-8">
+                    <label class="form-label">Foydalanuvchi</label>
+                    <select class="form-select" name="other_id" required>
+                        <option value="">Tanlang...</option>
+                        {% for u in users %}
+                          {% if current_user and u.id != current_user.id %}
+                            <option value="{{ u.id }}">{{ u.full_name or u.username }} ({{ u.username }})</option>
+                          {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <button type="submit" class="top-btn btn btn-success w-100"><i class="bi bi-chat-left-text"></i> Ochish</button>
+                </div>
+            </form>
+            <div class="text-muted small mt-2">
+                Eslatma: Support uchun <a href="/chat/support">Support</a> tugmasidan foydalaning.
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

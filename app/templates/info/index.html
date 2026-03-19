@@ -1,47 +1,69 @@
 {% extends "base.html" %}
-
 {% block content %}
-<div class="container py-4">
-    <h2 class="mb-4 text-danger">Ma'lumotlar</h2>
-    <div class="row">
-        <div class="col-md-3">
-            <h4 class="text-danger">Tashkilot ma'lumotlari</h4>
-            <ul class="list-unstyled">
-                <li><a href="/info/cash" class="btn btn-outline-dark w-100 mb-2">Kassa</a></li>
-                <li><a href="/info/departments" class="btn btn-outline-dark w-100 mb-2">Bo'limlar</a></li>
-                <li><a href="/info/warehouses" class="btn btn-outline-dark w-100 mb-2">Omborlar</a></li>
-                <li><a href="/info/directions" class="btn btn-outline-dark w-100 mb-2">Yo'nalishlar</a></li>
-            </ul>
-        </div>
-        <div class="col-md-3">
-            <h4 class="text-danger">Xodimlar ma'lumotlari</h4>
-            <ul class="list-unstyled">
-                <li><a href="/info/positions" class="btn btn-outline-dark w-100 mb-2">Lavozimlar</a></li>
-                <li><a href="/info/piecework-tasks" class="btn btn-outline-dark w-100 mb-2">Bo'lak ishlar</a></li>
-                <li><a href="/employees" class="btn btn-outline-dark w-100 mb-2">Xodimlar</a></li>
-                <li><a href="/info/production-groups" class="btn btn-outline-dark w-100 mb-2">Ishlab chiqarish guruhlari (qiyomchilar)</a></li>
-                {% if current_user and current_user.role == "admin" %}
-                <li><a href="/info/users" class="btn btn-outline-dark w-100 mb-2">Foydalanuvchi</a></li>
-                {% endif %}
-            </ul>
-        </div>
-        <div class="col-md-3">
-            <h4 class="text-danger">Tovar ma'lumotlari</h4>
-            <ul class="list-unstyled">
-                <li><a href="/products" class="btn btn-outline-dark w-100 mb-2">Tovarlar</a></li>
-                <li><a href="/info/price-types" class="btn btn-outline-dark w-100 mb-2">Narx turlari</a></li>
-                <li><a href="/info/prices" class="btn btn-outline-dark w-100 mb-2">Narxni o'rnatish</a></li>
-                <li><a href="/info/units" class="btn btn-outline-dark w-100 mb-2">O'lchov birligi</a></li>
-                <li><a href="/info/categories" class="btn btn-outline-dark w-100 mb-2">Kategoriyalar</a></li>
-            </ul>
-        </div>
-        <div class="col-md-3">
-            <h4 class="text-danger">Qo'shimcha ma'lumotlar</h4>
-            <ul class="list-unstyled">
-                <li><a href="/info/regions" class="btn btn-outline-dark w-100 mb-2">Hududlar (Viloyatlar)</a></li>
-                <li><a href="/partners" class="btn btn-outline-dark w-100 mb-2">Kontragentlar</a></li>
-            </ul>
-        </div>
+
+<style>
+.info-group { background:#fff; border-radius:14px; box-shadow:0 2px 10px rgba(0,0,0,.07); padding:20px; height:100%; }
+.info-group h6 { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#017449; margin-bottom:12px; padding-bottom:8px; border-bottom:2px solid #e9ecef; }
+.info-link {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 12px; border-radius:10px;
+    text-decoration:none; color:#333; font-size:13px; font-weight:500;
+    transition:all .15s; margin-bottom:4px;
+    background:#f8f9fa;
+}
+.info-link:hover { background:#017449; color:#fff; }
+.info-link i { font-size:15px; width:20px; text-align:center; }
+</style>
+
+<div class="page-header mb-4">
+  <h4><i class="bi bi-database text-primary"></i> Ma'lumotnomalar</h4>
+</div>
+
+<div class="row g-3">
+  <!-- Tashkilot -->
+  <div class="col-md-3 col-6">
+    <div class="info-group">
+      <h6><i class="bi bi-building me-1"></i> Tashkilot</h6>
+      <a href="/info/cash" class="info-link"><i class="bi bi-safe"></i> Kassalar</a>
+      <a href="/info/departments" class="info-link"><i class="bi bi-diagram-3"></i> Bo'limlar</a>
+      <a href="/info/warehouses" class="info-link"><i class="bi bi-house-gear"></i> Omborlar</a>
+      <a href="/info/directions" class="info-link"><i class="bi bi-signpost-split"></i> Yo'nalishlar</a>
     </div>
+  </div>
+
+  <!-- Xodimlar -->
+  <div class="col-md-3 col-6">
+    <div class="info-group">
+      <h6><i class="bi bi-people me-1"></i> Xodimlar</h6>
+      <a href="/info/positions" class="info-link"><i class="bi bi-person-badge"></i> Lavozimlar</a>
+      <a href="/info/piecework-tasks" class="info-link"><i class="bi bi-list-task"></i> Bo'lak ishlar</a>
+      <a href="/employees" class="info-link"><i class="bi bi-person-lines-fill"></i> Xodimlar</a>
+      <a href="/info/production-groups" class="info-link"><i class="bi bi-people-fill"></i> Ishlab chiqarish guruhlari</a>
+      {% if current_user and current_user.role == "admin" %}
+      <a href="/info/users" class="info-link"><i class="bi bi-person-gear"></i> Foydalanuvchilar</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Tovarlar -->
+  <div class="col-md-3 col-6">
+    <div class="info-group">
+      <h6><i class="bi bi-box-seam me-1"></i> Tovarlar</h6>
+      <a href="/products" class="info-link"><i class="bi bi-grid"></i> Tovarlar ro'yxati</a>
+      <a href="/info/price-types" class="info-link"><i class="bi bi-tags"></i> Narx turlari</a>
+      <a href="/info/prices" class="info-link"><i class="bi bi-currency-dollar"></i> Narxni o'rnatish</a>
+      <a href="/info/units" class="info-link"><i class="bi bi-rulers"></i> O'lchov birligi</a>
+      <a href="/info/categories" class="info-link"><i class="bi bi-folder"></i> Kategoriyalar</a>
+    </div>
+  </div>
+
+  <!-- Boshqa -->
+  <div class="col-md-3 col-6">
+    <div class="info-group">
+      <h6><i class="bi bi-three-dots me-1"></i> Boshqa</h6>
+      <a href="/info/regions" class="info-link"><i class="bi bi-geo-alt"></i> Hududlar (Viloyatlar)</a>
+      <a href="/partners" class="info-link"><i class="bi bi-person-rolodex"></i> Kontragentlar</a>
+    </div>
+  </div>
 </div>
 {% endblock %}

@@ -1,72 +1,75 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="row mb-4">
-    <!-- Agent info -->
+<div class="page-header mb-3">
+    <div>
+        <h5 class="mb-0"><i class="bi bi-person-circle"></i> {{ agent.full_name }}</h5>
+        <p class="text-muted mb-0 small">{{ agent.region or 'Hudud ko\'rsatilmagan' }}</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        {% if agent.telegram_id %}
+        <a href="https://t.me/{{ agent.telegram_id }}" class="top-btn btn btn-outline-info btn-sm" target="_blank">
+            <i class="bi bi-telegram"></i> Telegram
+        </a>
+        {% endif %}
+        <a href="/map?agent={{ agent.id }}" class="top-btn">
+            <i class="bi bi-geo-alt"></i> Xaritada ko'rish
+        </a>
+    </div>
+</div>
+
+<!-- Agent info + stat mini cards -->
+<div class="row g-3 mb-3">
     <div class="col-md-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <div class="mb-3">
-                    <i class="bi bi-person-circle" style="font-size: 4rem; color: var(--primary-color);"></i>
+        <div class="mini-stat text-center" style="border-left: 4px solid #017449;">
+            <div class="mb-3">
+                <i class="bi bi-person-circle" style="font-size: 4rem; color: var(--primary-color);"></i>
+            </div>
+            <h5 class="mb-1">{{ agent.full_name }}</h5>
+            <p class="muted-cell mb-3">{{ agent.region or 'Hudud ko\'rsatilmagan' }}</p>
+            <div class="d-flex justify-content-around">
+                <div>
+                    <strong>{{ agent.code }}</strong><br>
+                    <small class="muted-cell">Kod</small>
                 </div>
-                <h4>{{ agent.full_name }}</h4>
-                <p class="text-muted">{{ agent.region or 'Hudud ko\'rsatilmagan' }}</p>
-                
-                <div class="d-flex justify-content-around mb-3">
-                    <div>
-                        <strong>{{ agent.code }}</strong><br>
-                        <small class="text-muted">Kod</small>
-                    </div>
-                    <div>
-                        <strong>{{ agent.phone or '-' }}</strong><br>
-                        <small class="text-muted">Telefon</small>
-                    </div>
+                <div>
+                    <strong>{{ agent.phone or '-' }}</strong><br>
+                    <small class="muted-cell">Telefon</small>
                 </div>
-                
-                {% if agent.telegram_id %}
-                <a href="https://t.me/{{ agent.telegram_id }}" class="btn btn-info btn-sm" target="_blank">
-                    <i class="bi bi-telegram"></i> Telegram
-                </a>
-                {% endif %}
-                
-                <a href="/map?agent={{ agent.id }}" class="btn btn-primary btn-sm">
-                    <i class="bi bi-geo-alt"></i> Xaritada ko'rish
-                </a>
             </div>
         </div>
     </div>
-    
-    <!-- Statistika -->
+
     <div class="col-md-8">
         <div class="row g-3">
-            <div class="col-md-4">
-                <div class="stat-card">
-                    <p>Bugungi tashriflar</p>
-                    <h3>{{ visits|selectattr('visit_date', 'ge', today)|list|length if today is defined else visits|length }}</h3>
+            <div class="col-6 col-md-4">
+                <div class="mini-stat" style="border-left: 4px solid #ffc107;">
+                    <div class="num text-warning">{{ visits|selectattr('visit_date', 'ge', today)|list|length if today is defined else visits|length }}</div>
+                    <div class="lbl"><i class="bi bi-calendar-day"></i> Bugungi tashriflar</div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="stat-card">
-                    <p>Jami tashriflar</p>
-                    <h3>{{ visits|length }}</h3>
+            <div class="col-6 col-md-4">
+                <div class="mini-stat" style="border-left: 4px solid #1a73e8;">
+                    <div class="num text-primary">{{ visits|length }}</div>
+                    <div class="lbl"><i class="bi bi-calendar-check"></i> Jami tashriflar</div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="stat-card">
-                    <p>Oxirgi faollik</p>
-                    <h3>
+            <div class="col-6 col-md-4">
+                <div class="mini-stat" style="border-left: 4px solid #2e7d32;">
+                    <div class="num text-success">
                         {% if locations %}
                             {{ locations[0].recorded_at.strftime('%H:%M') }}
                         {% else %}
                             -
                         {% endif %}
-                    </h3>
+                    </div>
+                    <div class="lbl"><i class="bi bi-clock"></i> Oxirgi faollik</div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Mini xarita -->
-        <div class="card mt-3">
+        <div class="data-table mt-3">
             <div class="card-header">
                 <i class="bi bi-geo-alt"></i> Oxirgi joylashuv
             </div>
@@ -84,16 +87,16 @@
     </div>
 </div>
 
-<!-- Lokatsiya tarixi -->
-<div class="row">
+<!-- Lokatsiya tarixi va Tashriflar -->
+<div class="row g-3">
     <div class="col-md-6">
-        <div class="card">
+        <div class="data-table">
             <div class="card-header">
                 <i class="bi bi-clock-history"></i> Lokatsiya tarixi
             </div>
             <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
-                <table class="table table-sm">
-                    <thead class="table-light sticky-top">
+                <table class="table table-sm mb-0">
+                    <thead>
                         <tr>
                             <th>Vaqt</th>
                             <th>Koordinatalar</th>
@@ -103,9 +106,9 @@
                     <tbody>
                         {% for loc in locations %}
                         <tr>
-                            <td>{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
                             <td>
-                                <small>{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small>
+                                <small class="muted-cell">{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small>
                             </td>
                             <td>
                                 <i class="bi bi-battery-{% if loc.battery > 50 %}full{% elif loc.battery > 20 %}half{% else %}low text-danger{% endif %}"></i>
@@ -122,15 +125,15 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-6">
-        <div class="card">
+        <div class="data-table">
             <div class="card-header">
                 <i class="bi bi-calendar-check"></i> Tashriflar
             </div>
             <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
-                <table class="table table-sm">
-                    <thead class="table-light sticky-top">
+                <table class="table table-sm mb-0">
+                    <thead>
                         <tr>
                             <th>Sana</th>
                             <th>Mijoz</th>
@@ -140,15 +143,15 @@
                     <tbody>
                         {% for visit in visits %}
                         <tr>
-                            <td>{{ visit.visit_date.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ visit.visit_date.strftime('%d.%m %H:%M') }}</td>
                             <td>Mijoz #{{ visit.partner_id }}</td>
                             <td>
                                 {% if visit.status == 'visited' %}
-                                <span class="badge bg-success">Tashrif</span>
+                                <span class="badge-done">Tashrif</span>
                                 {% elif visit.status == 'skipped' %}
-                                <span class="badge bg-danger">O'tkazib yuborildi</span>
+                                <span class="badge-cancelled">O'tkazib yuborildi</span>
                                 {% else %}
-                                <span class="badge bg-warning">Rejada</span>
+                                <span class="badge-waiting">Rejada</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -177,7 +180,7 @@
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap'
     }).addTo(map);
-    
+
     L.marker([{{ locations[0].latitude }}, {{ locations[0].longitude }}])
         .addTo(map)
         .bindPopup('<b>{{ agent.full_name }}</b><br>{{ locations[0].recorded_at.strftime("%H:%M") }}');

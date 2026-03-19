@@ -1,94 +1,102 @@
 {% extends "base.html" %}
 
 {% block content %}
-<nav aria-label="breadcrumb" class="mb-3">
-    <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/finance">Moliya</a></li>
-        <li class="breadcrumb-item active">{{ cash.name or 'Kassa' }}</li>
-    </ol>
-</nav>
+<div class="container-fluid">
 
-<div class="card mb-3">
-    <div class="card-body">
-        <h5 class="mb-1"><i class="bi bi-safe"></i> {{ cash.name or 'Kassa' }}</h5>
-        <h3 class="mb-0 {% if (computed_balance or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">
-            {{ "{:,.0f}".format(computed_balance or 0) }} so'm
-        </h3>
-        <small class="text-muted">Joriy balans — faqat tasdiqlangan kirim va chiqimlar yig'indisidan (kirim − chiqim)</small>
-        <div class="mt-2 small text-muted">
-            Barcha vaqt bo'yicha: jami kirim <strong class="text-success">{{ "{:,.0f}".format(total_income_all_time or 0) }}</strong> so'm,
-            jami chiqim <strong class="text-danger">{{ "{:,.0f}".format(total_expense_all_time or 0) }}</strong> so'm.
-        </div>
-        {% if balance_mismatch and current_user.role == 'admin' %}
-        <p class="mb-0 mt-1 small text-warning">
-            <i class="bi bi-exclamation-triangle"></i> Bazadagi balans ({{ "{:,.0f}".format(stored_balance or 0) }} so'm) bu yig'indidan farq qiladi.
-            <form method="post" action="/info/cash/recalculate/{{ cash.id }}" class="d-inline" onsubmit="return confirm('Kassa balansini tasdiqlangan to\'lovlar yig\'indisiga moslashtirilsinmi?');">
-                <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Qayta hisoblash</button>
-            </form>
-        </p>
-        {% endif %}
-        <p class="mb-0 mt-1 small text-muted">
-            <i class="bi bi-info-circle"></i> Quyidagi jadvalda harakatlar <strong>sahifalab</strong> ko'rsatiladi (sahifada {{ per_page|default(100) }} ta). To'liq tarix uchun sahifalash tugmalaridan foydalaning yoki filterni tozalang.
-        </p>
-    </div>
-</div>
+    <!-- Breadcrumb -->
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/finance">Moliya</a></li>
+            <li class="breadcrumb-item active">{{ cash.name or 'Kassa' }}</li>
+        </ol>
+    </nav>
 
-{% if payments %}
-<div class="row g-2 mb-3">
-    <div class="col-md-6">
-        <div class="card border-success">
-            <div class="card-body py-2">
-                <small class="text-muted">Ro'yxat bo'yicha jami kirim</small>
-                <div class="text-success fw-bold">{{ "{:,.0f}".format(total_income or 0) }} so'm</div>
+    <!-- Kassa balance card -->
+    <div class="filter-card mb-3">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+            <div>
+                <div class="fw-semibold mb-1" style="font-size:15px;"><i class="bi bi-safe text-muted me-1"></i>{{ cash.name or 'Kassa' }}</div>
+                <div class="fw-bold mb-1 {% if (computed_balance or 0) >= 0 %}text-success{% else %}text-danger{% endif %}" style="font-size:26px;">
+                    {{ "{:,.0f}".format(computed_balance or 0) }} so'm
+                </div>
+                <div class="muted-cell" style="font-size:12px;">Joriy balans — faqat tasdiqlangan kirim va chiqimlar yig'indisidan (kirim − chiqim)</div>
+                <div class="mt-1" style="font-size:12px; color:#888;">
+                    Barcha vaqt: jami kirim <strong class="text-success">{{ "{:,.0f}".format(total_income_all_time or 0) }}</strong> so'm,
+                    jami chiqim <strong class="text-danger">{{ "{:,.0f}".format(total_expense_all_time or 0) }}</strong> so'm
+                </div>
+                {% if balance_mismatch and current_user.role == 'admin' %}
+                <div class="mt-1" style="font-size:12px; color:#b45309;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    Bazadagi balans ({{ "{:,.0f}".format(stored_balance or 0) }} so'm) bu yig'indidan farq qiladi.
+                    <form method="post" action="/info/cash/recalculate/{{ cash.id }}" class="d-inline" onsubmit="return confirm('Kassa balansini tasdiqlangan to\'lovlar yig\'indisiga moslashtirilsinmi?');">
+                        <button type="submit" class="btn btn-link btn-sm p-0 align-baseline">Qayta hisoblash</button>
+                    </form>
+                </div>
+                {% endif %}
+                <div class="mt-1" style="font-size:12px; color:#888;">
+                    <i class="bi bi-info-circle"></i>
+                    Quyidagi jadvalda harakatlar <strong>sahifalab</strong> ko'rsatiladi (sahifada {{ per_page|default(100) }} ta).
+                </div>
             </div>
         </div>
     </div>
-    <div class="col-md-6">
-        <div class="card border-danger">
-            <div class="card-body py-2">
-                <small class="text-muted">Ro'yxat bo'yicha jami chiqim</small>
-                <div class="text-danger fw-bold">{{ "{:,.0f}".format(total_expense or 0) }} so'm</div>
-            </div>
+
+    <!-- Mini stats (shown only when payments exist) -->
+    {% if payments %}
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        <div class="mini-stat">
+            <div class="num text-success">{{ "{:,.0f}".format(total_income or 0) }}</div>
+            <div class="lbl">Ro'yxat bo'yicha jami kirim (so'm)</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num text-danger">{{ "{:,.0f}".format(total_expense or 0) }}</div>
+            <div class="lbl">Ro'yxat bo'yicha jami chiqim (so'm)</div>
         </div>
     </div>
-</div>
-{% endif %}
+    {% endif %}
 
-<div class="card mb-3">
-    <div class="card-header py-2"><span class="small text-muted"><i class="bi bi-funnel"></i> Filtr</span></div>
-    <div class="card-body py-2">
+    <!-- Filter card -->
+    <div class="filter-card mb-3">
         <form method="get" action="/finance/kassa/{{ cash.id }}" class="d-flex flex-wrap align-items-center gap-2" id="filterForm">
-            <label class="form-label mb-0 small">Sana:</label>
-            <input type="date" name="date_from" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_from or '' }}" title="Dan">
+            <i class="bi bi-funnel text-muted"></i>
+            <span class="small text-muted">Sana:</span>
+            <div class="search-wrap">
+                <input type="date" name="date_from" class="form-control form-control-sm" value="{{ filter_date_from or '' }}" title="Dan">
+            </div>
             <span class="small text-muted">—</span>
-            <input type="date" name="date_to" class="form-control form-control-sm" style="width: auto;" value="{{ filter_date_to or '' }}" title="Gacha">
-            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
-            <a href="/finance/kassa/{{ cash.id }}" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+            <div class="search-wrap">
+                <input type="date" name="date_to" class="form-control form-control-sm" value="{{ filter_date_to or '' }}" title="Gacha">
+            </div>
+            <button type="submit" class="top-btn btn btn-primary"><i class="bi bi-search"></i> Qidirish</button>
+            <a href="/finance/kassa/{{ cash.id }}" class="top-btn btn btn-outline-secondary">Tozalash</a>
         </form>
     </div>
-</div>
 
-<div class="card">
-    <div class="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <span><i class="bi bi-list-ul"></i> Kirim va chiqimlar — qayerdan keldi / qayerga ketdi (hujjatlar ro'yxati)</span>
-        {% if total_count is defined and total_count > 0 %}
-        <span class="small text-muted">Harakatlar {{ ((page|default(1)) - 1) * (per_page|default(100)) + 1 }}–{{ ((page|default(1)) - 1) * (per_page|default(100)) + payments|length }} (jami {{ total_count }})</span>
-        {% endif %}
-    </div>
-    <div class="card-body p-0">
+    <!-- Transactions table -->
+    <div class="data-table">
+        <div class="d-flex align-items-center justify-content-between gap-2 px-3 pt-3 pb-2 border-bottom flex-wrap">
+            <span class="fw-semibold" style="font-size:13px;">
+                <i class="bi bi-list-ul text-muted me-1"></i>Kirim va chiqimlar — qayerdan keldi / qayerga ketdi
+            </span>
+            {% if total_count is defined and total_count > 0 %}
+            <span class="muted-cell" style="font-size:12px;">
+                Harakatlar {{ ((page|default(1)) - 1) * (per_page|default(100)) + 1 }}–{{ ((page|default(1)) - 1) * (per_page|default(100)) + payments|length }} (jami {{ total_count }})
+            </span>
+            {% endif %}
+        </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
-                <thead class="table-light">
+                <thead>
                     <tr>
                         <th width="50">#</th>
                         <th>Sana</th>
                         <th>Turi</th>
                         <th>Kontragent</th>
                         <th>Hujjat / Izoh</th>
-                        <th>Summa</th>
+                        <th class="sum-cell">Summa</th>
                         {% if current_user.role == 'admin' %}
                         <th>Holat</th>
-                        <th width="180">Amallar</th>
+                        <th width="120">Amallar</th>
                         {% endif %}
                     </tr>
                 </thead>
@@ -97,49 +105,51 @@
                         {% for payment in payments %}
                         {% set p_status = payment.status|default('confirmed', true) %}
                         <tr class="{% if p_status == 'cancelled' %}table-secondary opacity-75{% endif %}">
-                            <td>{{ ((page|default(1)) - 1) * (per_page|default(100)) + loop.index }}</td>
-                            <td>{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '-' }}</td>
+                            <td class="muted-cell">{{ ((page|default(1)) - 1) * (per_page|default(100)) + loop.index }}</td>
+                            <td class="muted-cell">{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '—' }}</td>
                             <td>
                                 {% if payment.type == 'income' %}
-                                    <span class="badge bg-success">Kirim</span>
+                                    <span class="badge-done">Kirim</span>
                                 {% else %}
-                                    <span class="badge bg-danger">Chiqim</span>
+                                    <span class="badge-cancelled">Chiqim</span>
                                 {% endif %}
                             </td>
-                            <td>{{ payment.partner.name if payment.partner else '-' }}</td>
-                            <td><small>{{ payment.description or '-' }}</small></td>
-                            <td class="{% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %} fw-bold">
+                            <td>{{ payment.partner.name if payment.partner else '—' }}</td>
+                            <td class="muted-cell"><small>{{ payment.description or '—' }}</small></td>
+                            <td class="sum-cell {% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %}">
                                 {% if payment.type == 'income' %}+{% else %}-{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
                             </td>
                             {% if current_user.role == 'admin' %}
                             <td>
                                 {% if p_status == 'cancelled' %}
-                                    <span class="badge bg-secondary">Bekor qilindi</span>
+                                    <span class="badge-cancelled">Bekor qilindi</span>
                                 {% else %}
-                                    <span class="badge bg-success">Tasdiqlangan</span>
+                                    <span class="badge-done">Tasdiqlangan</span>
                                 {% endif %}
                             </td>
                             <td>
+                                <div class="d-flex gap-1">
                                 {% if p_status == 'cancelled' %}
                                 <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassa balansiga qayta hisoblanadi.');">
-                                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                                    <button type="submit" class="btn-act" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
                                 </form>
-                                <a href="/finance/payment/{{ payment.id }}/edit" class="btn btn-sm btn-outline-primary" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                                 <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu to\'lovni o\'chirmoqchimisiz?');">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                 </form>
                                 {% else %}
                                 <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — kassa balansidan chiqariladi. Davom etasizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
+                                    <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish"><i class="bi bi-x-circle"></i></button>
                                 </form>
                                 {% endif %}
+                                </div>
                             </td>
                             {% endif %}
                         </tr>
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="{% if current_user.role == 'admin' %}9{% else %}6{% endif %}" class="text-center text-muted py-5">
+                            <td colspan="{% if current_user.role == 'admin' %}8{% else %}6{% endif %}" class="text-center text-muted py-5">
                                 <i class="bi bi-cash-stack fs-1 d-block mb-2"></i>
                                 Ushbu kassada hozircha to'lovlar yo'q
                             </td>
@@ -148,21 +158,24 @@
                 </tbody>
             </table>
         </div>
+
+        <!-- Pagination -->
         {% if total_pages is defined and total_pages > 1 %}
-        <div class="card-footer py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <span class="small text-muted">Sahifa {{ page|default(1) }} / {{ total_pages|default(1) }}</span>
-            <nav>
+        <div class="px-3 py-2 border-top d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <span class="muted-cell" style="font-size:12px;">Sahifa {{ page|default(1) }} / {{ total_pages|default(1) }}</span>
+            <nav class="d-flex align-items-center gap-1">
                 {% set base = '/finance/kassa/' ~ cash.id %}
                 {% set sep = (pagination_query and '&' or '?') %}
                 {% set prefix = (('?' ~ pagination_query) if pagination_query else '') %}
-                <a href="{{ base }}{{ prefix }}{{ sep }}page=1" class="btn btn-sm btn-outline-secondary" title="Birinchi sahifa">«</a>
-                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ [1, (page|default(1)) - 1] | max }}" class="btn btn-sm btn-outline-secondary ms-1" title="Oldingi">‹</a>
-                <span class="mx-2 small">{{ page|default(1) }} / {{ total_pages|default(1) }}</span>
-                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ [(total_pages|default(1)), (page|default(1)) + 1] | min }}" class="btn btn-sm btn-outline-secondary" title="Keyingi">›</a>
-                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ total_pages|default(1) }}" class="btn btn-sm btn-outline-secondary ms-1" title="Oxirgi sahifa">»</a>
+                <a href="{{ base }}{{ prefix }}{{ sep }}page=1" class="top-btn btn btn-outline-secondary" title="Birinchi sahifa">«</a>
+                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ [1, (page|default(1)) - 1] | max }}" class="top-btn btn btn-outline-secondary" title="Oldingi">‹</a>
+                <span class="muted-cell mx-1" style="font-size:12px;">{{ page|default(1) }} / {{ total_pages|default(1) }}</span>
+                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ [(total_pages|default(1)), (page|default(1)) + 1] | min }}" class="top-btn btn btn-outline-secondary" title="Keyingi">›</a>
+                <a href="{{ base }}{{ prefix }}{{ sep }}page={{ total_pages|default(1) }}" class="top-btn btn btn-outline-secondary" title="Oxirgi sahifa">»</a>
             </nav>
         </div>
         {% endif %}
     </div>
+
 </div>
 {% endblock %}

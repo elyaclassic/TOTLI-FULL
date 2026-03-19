@@ -2,85 +2,106 @@
 
 {% block content %}
 <div class="container-fluid">
-    <div class="row mb-3">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <h4><i class="bi bi-currency-exchange"></i> Narxni o'rnatish</h4>
-                <div class="d-flex gap-2">
-                    <a href="/info/prices/history" class="btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> Narx o'zgarishlari tarixi</a>
-                    <a href="/info" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Ma'lumotnomalar</a>
-                </div>
-            </div>
-            <p class="text-muted mb-0 small">Mahsulot tannarxi (sotib olish) va har bir <strong>narx turi</strong> bo'yicha sotuv narxini shu yerdan o'rnating. Savdo vaqtida narx turini tanlaysiz. <strong>Tannarx</strong> avtomatik to'ldiriladi: tovar kirimi yoki qoldiq hujjatida qo'yilgan tannarxdan olinadi. Har bir saqlash <a href="/info/prices/history">hujjat sifatida tarixda</a> qayd etiladi (avvalgi va yangi narx).</p>
+
+    <!-- Page Header -->
+    <div class="page-header">
+        <h4><i class="bi bi-currency-exchange"></i> Narxni o'rnatish</h4>
+        <div class="d-flex gap-2">
+            <a href="/info/prices/history" class="btn top-btn btn-outline-secondary">
+                <i class="bi bi-clock-history"></i> Tarix
+            </a>
+            <a href="/info" class="btn top-btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Ma'lumotnomalar
+            </a>
         </div>
     </div>
 
+    <p class="text-muted small mb-3">
+        Mahsulot tannarxi (sotib olish) va har bir <strong>narx turi</strong> bo'yicha sotuv narxini shu yerdan o'rnating.
+        Savdo vaqtida narx turini tanlaysiz. <strong>Tannarx</strong> avtomatik to'ldiriladi: tovar kirimi yoki qoldiq hujjatida qo'yilgan tannarxdan olinadi.
+        Har bir saqlash <a href="/info/prices/history">hujjat sifatida tarixda</a> qayd etiladi (avvalgi va yangi narx).
+    </p>
+
+    <!-- Narx turi tanlash -->
     {% if price_types %}
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <label class="form-label me-2 mb-0">Narx turi:</label>
-            <div class="d-flex flex-wrap gap-2">
-                {% for pt in price_types %}
-                <a href="/info/prices?price_type_id={{ pt.id }}" class="btn btn-sm {% if current_price_type_id == pt.id %}btn-primary{% else %}btn-outline-secondary{% endif %}">{{ pt.name }}</a>
-                {% endfor %}
-            </div>
-            <small class="text-muted">Narx turlarini <a href="/info/price-types">bu yerdan</a> boshqaring.</small>
+    <div class="filter-card">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <span class="form-label mb-0 me-1">Narx turi:</span>
+            {% for pt in price_types %}
+            <a href="/info/prices?price_type_id={{ pt.id }}"
+               class="btn btn-sm {% if current_price_type_id == pt.id %}btn-primary{% else %}btn-outline-secondary{% endif %}"
+               style="border-radius:8px; font-size:13px; padding:4px 12px;">
+                {{ pt.name }}
+            </a>
+            {% endfor %}
+            <small class="text-muted ms-2">Narx turlarini <a href="/info/price-types">bu yerdan</a> boshqaring.</small>
         </div>
     </div>
     {% endif %}
 
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <form method="get" action="/info/prices" class="row g-2 align-items-end flex-wrap">
-                <input type="hidden" name="price_type_id" value="{{ current_price_type_id or '' }}">
-                <div class="col-12 col-md-3">
-                    <label class="form-label small mb-0">Mahsulot nomi yoki barkod</label>
-                    <input type="text" name="search" class="form-control form-control-sm" value="{{ filter_search|default('', true) }}" placeholder="Qidirish...">
+    <!-- Filtr -->
+    <div class="filter-card">
+        <form method="get" action="/info/prices" class="row g-2 align-items-end">
+            <input type="hidden" name="price_type_id" value="{{ current_price_type_id or '' }}">
+            <div class="col-12 col-md-4">
+                <label class="form-label">Mahsulot nomi yoki barkod</label>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" name="search" class="form-control form-control-sm"
+                           value="{{ filter_search|default('', true) }}" placeholder="Qidirish...">
                 </div>
-                <div class="col-12 col-md-2">
-                    <label class="form-label small mb-0">Turi</label>
-                    <select name="type_filter" class="form-select form-select-sm">
-                        <option value="">Barchasi</option>
-                        <option value="tayyor" {% if filter_type == 'tayyor' %}selected{% endif %}>Tayyor</option>
-                        <option value="yarim_tayyor" {% if filter_type == 'yarim_tayyor' %}selected{% endif %}>Yarim tayyor</option>
-                        <option value="hom_ashyo" {% if filter_type == 'hom_ashyo' %}selected{% endif %}>Xom ashyo</option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-2">
-                    <label class="form-label small mb-0">Sotuv narxi</label>
-                    <select name="price_status" class="form-select form-select-sm">
-                        <option value="all" {% if filter_price_status == 'all' %}selected{% endif %}>Barchasi</option>
-                        <option value="set" {% if filter_price_status == 'set' %}selected{% endif %}>O'rnatilgan</option>
-                        <option value="not_set" {% if filter_price_status == 'not_set' %}selected{% endif %}>O'rnatilmagan</option>
-                    </select>
-                </div>
-                <div class="col-12 col-md-2">
-                    <button type="submit" class="btn btn-sm btn-primary w-100"><i class="bi bi-funnel"></i> Filtrlash</button>
-                </div>
-                {% if filter_search or filter_type or (filter_price_status and filter_price_status != 'all') %}
-                <div class="col-12 col-md-2">
-                    <a href="/info/prices?price_type_id={{ current_price_type_id or '' }}" class="btn btn-sm btn-outline-secondary w-100">Filtrni tozalash</a>
-                </div>
-                {% endif %}
-            </form>
-        </div>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Turi</label>
+                <select name="type_filter" class="form-select form-select-sm">
+                    <option value="">Barchasi</option>
+                    <option value="tayyor" {% if filter_type == 'tayyor' %}selected{% endif %}>Tayyor</option>
+                    <option value="yarim_tayyor" {% if filter_type == 'yarim_tayyor' %}selected{% endif %}>Yarim tayyor</option>
+                    <option value="hom_ashyo" {% if filter_type == 'hom_ashyo' %}selected{% endif %}>Xom ashyo</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <label class="form-label">Sotuv narxi</label>
+                <select name="price_status" class="form-select form-select-sm">
+                    <option value="all" {% if filter_price_status == 'all' %}selected{% endif %}>Barchasi</option>
+                    <option value="set" {% if filter_price_status == 'set' %}selected{% endif %}>O'rnatilgan</option>
+                    <option value="not_set" {% if filter_price_status == 'not_set' %}selected{% endif %}>O'rnatilmagan</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-2">
+                <button type="submit" class="btn btn-sm btn-primary w-100" style="border-radius:10px;">
+                    <i class="bi bi-funnel"></i> Filtrlash
+                </button>
+            </div>
+            {% if filter_search or filter_type or (filter_price_status and filter_price_status != 'all') %}
+            <div class="col-6 col-md-2">
+                <a href="/info/prices?price_type_id={{ current_price_type_id or '' }}"
+                   class="btn btn-sm btn-outline-secondary w-100" style="border-radius:10px;">
+                    <i class="bi bi-x-circle"></i> Tozalash
+                </a>
+            </div>
+            {% endif %}
+        </form>
     </div>
 
-    <div class="card">
-        <div class="card-body p-0">
-            <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
-                        <tr>
-                            <th>#</th>
-                            <th>Mahsulot</th>
-                            <th>Turi</th>
-                            <th>O'lchov</th>
-                            <th>Tannarx (so'm)</th>
-                            <th>Sotuv narxi (so'm) {% if current_price_type_id %}<small class="text-muted">— tanlangan narx turi</small>{% endif %}</th>
-                            <th></th>
-                        </tr>
-                    </thead>
+    <!-- Jadval -->
+    <div class="card data-table">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Mahsulot</th>
+                        <th>Turi</th>
+                        <th>O'lchov</th>
+                        <th>Tannarx (so'm)</th>
+                        <th>
+                            Sotuv narxi (so'm)
+                            {% if current_price_type_id %}<span class="muted-cell ms-1">— tanlangan narx turi</span>{% endif %}
+                        </th>
+                        <th></th>
+                    </tr>
+                </thead>
                 <tbody>
                     {% if products %}
                     {% for product in products %}
@@ -92,30 +113,46 @@
                     {% set sale_fmt = "%.0f"|format(sale_price_val or 0) if _is_dona else "%.2f"|format(sale_price_val or 0) %}
                     {% set sale_step = "1" if _is_dona else "0.01" %}
                     <tr>
-                        <td>{{ loop.index }}</td>
+                        <td class="muted-cell">{{ loop.index }}</td>
                         <td>
                             <strong>{{ product.name }}</strong>
-                            {% if product.barcode %}<br><small class="text-muted"><code>{{ product.barcode }}</code></small>{% endif %}
+                            {% if product.barcode %}<br><small class="muted-cell"><code>{{ product.barcode }}</code></small>{% endif %}
                         </td>
                         <td>
-                            {% if product.type == 'tayyor' %}Tayyor{% elif product.type == 'yarim_tayyor' %}Yarim tayyor{% elif product.type == 'hom_ashyo' %}Xom ashyo{% else %}-{% endif %}
+                            {% if product.type == 'tayyor' %}
+                                <span class="badge-active">Tayyor</span>
+                            {% elif product.type == 'yarim_tayyor' %}
+                                <span class="badge-waiting">Yarim tayyor</span>
+                            {% elif product.type == 'hom_ashyo' %}
+                                <span class="badge-draft">Xom ashyo</span>
+                            {% else %}
+                                <span class="muted-cell">—</span>
+                            {% endif %}
                         </td>
-                        <td><small class="text-muted">{{ product.unit.code if product.unit else '-' }}</small></td>
-                        <td>{{ "{:,.2f}".format(tannarx_val or 0) }} <small class="text-muted">(kirim/qoldiq)</small></td>
+                        <td class="muted-cell">{{ product.unit.code if product.unit else '—' }}</td>
                         <td>
-                            <form method="post" action="/info/prices/edit/{{ product.id }}" class="d-inline-flex align-items-center gap-1" style="max-width:180px">
+                            <span class="num-cell">{{ "{:,.2f}".format(tannarx_val or 0) }}</span>
+                            <span class="muted-cell">(kirim/qoldiq)</span>
+                        </td>
+                        <td>
+                            <form method="post" action="/info/prices/edit/{{ product.id }}"
+                                  class="d-inline-flex align-items-center gap-1" style="max-width:180px">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                                 <input type="hidden" name="purchase_price" value="{{ tannarx_val or 0 }}">
                                 <input type="hidden" name="price_type_id" value="{{ current_price_type_id or '' }}">
                                 <input type="hidden" name="redirect_search" value="{{ filter_search|default('', true) }}">
                                 <input type="hidden" name="redirect_type_filter" value="{{ filter_type|default('', true) }}">
                                 <input type="hidden" name="redirect_price_status" value="{{ filter_price_status|default('all', true) }}">
-                                <input type="number" name="sale_price" class="form-control form-control-sm" step="{{ sale_step }}" min="0" value="{{ sale_fmt }}" style="width:100px" title="{% if _is_dona %}Donalik — butun summa{% endif %}">
-                                <button type="submit" class="btn btn-sm btn-success" title="Sotuv narxini saqlash"><i class="bi bi-check-lg"></i></button>
+                                <input type="number" name="sale_price" class="form-control form-control-sm"
+                                       step="{{ sale_step }}" min="0" value="{{ sale_fmt }}" style="width:100px; border-radius:8px;"
+                                       title="{% if _is_dona %}Donalik — butun summa{% endif %}">
+                                <button type="submit" class="btn-act" title="Sotuv narxini saqlash" style="background:#d1fae5; border-color:#6ee7b7; color:#065f46;">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
                             </form>
                         </td>
                         <td>
-                            <button type="button" class="btn btn-sm btn-outline-primary" title="Tannarx va sotuv narxini tahrirlash"
+                            <button type="button" class="btn-act" title="Tannarx va sotuv narxini tahrirlash"
                                 onclick='editPrice({{ product.id }}, {{ product.name|tojson }}, {{ tannarx_val or 0 }}, {{ sale_fmt }}, {{ current_price_type_id if current_price_type_id is not none else "null" }}, {{ "true" if _is_dona else "false" }})'>
                                 <i class="bi bi-pencil"></i>
                             </button>
@@ -125,7 +162,7 @@
                     {% else %}
                     <tr>
                         <td colspan="7" class="text-center text-muted py-5">
-                            <i class="bi bi-currency-exchange fs-1 d-block mb-2"></i>
+                            <i class="bi bi-currency-exchange fs-1 d-block mb-2 opacity-25"></i>
                             {% if not price_types %}
                             Avval <a href="/info/price-types">Narx turlari</a>ni qo'shing, keyin mahsulot narxlarini kiriting.
                             {% else %}
@@ -136,7 +173,6 @@
                     {% endif %}
                 </tbody>
             </table>
-            </div>
         </div>
     </div>
 </div>
@@ -171,7 +207,7 @@
                     <div class="col-3"><button type="button" class="btn btn-outline-secondary w-100 price-calc-btn" data-calc="+">+</button></div>
                     <div class="col-6"><button type="button" class="btn btn-secondary w-100 price-calc-btn" data-calc="=">=</button></div>
                 </div>
-                <p class="small text-muted mb-0">Natijani maydonga qo‘yish: <kbd>=</kbd> yoki <kbd>Enter</kbd></p>
+                <p class="small text-muted mb-0">Natijani maydonga qo'yish: <kbd>=</kbd> yoki <kbd>Enter</kbd></p>
             </div>
         </div>
     </div>

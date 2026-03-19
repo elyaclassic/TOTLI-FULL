@@ -2,149 +2,262 @@
 
 {% block content %}
 <div class="container-fluid">
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <h4 class="mb-0"><i class="bi bi-truck"></i> Haydovchilar va yetkazish</h4>
-    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#addDriverModal"><i class="bi bi-plus-circle"></i> Yaratish</button>
-</div>
 
-<div class="card">
-    <div class="card-body p-0">
-        <table class="table table-hover mb-0">
-            <thead class="table-light">
-                <tr>
-                    <th>Haydovchi</th>
-                    <th>Transport</th>
-                    <th>Raqami</th>
-                    <th>Yetkazishlar</th>
-                    <th>Holat</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for driver in drivers %}
-                <tr>
-                    <td>
-                        <strong>{{ driver.full_name }}</strong><br>
-                        <small class="text-muted">{{ driver.phone or 'Telefon yo\'q' }}</small>
-                    </td>
-                    <td>{{ driver.vehicle_type or 'Noma\'lum' }}</td>
-                    <td>{{ driver.vehicle_number or '-' }}</td>
-                    <td>
-                        <span class="badge bg-success">{{ driver.deliveries|selectattr('status', 'eq', 'delivered')|list|length }}</span>
-                        /
-                        <span class="badge bg-warning">{{ driver.deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</span>
-                        /
-                        <span class="badge bg-secondary">{{ driver.deliveries|length }}</span>
-                    </td>
-                    <td>
-                        {% if driver.is_active %}
-                        <span class="badge bg-success">Faol</span>
-                        {% else %}
-                        <span class="badge bg-secondary">Nofaol</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <a href="/delivery/{{ driver.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
-                        <a href="/map?driver={{ driver.id }}" class="btn btn-sm btn-outline-info">
-                            <i class="bi bi-geo-alt"></i>
-                        </a>
-                    </td>
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
-                        <i class="bi bi-truck fs-1"></i><br>
-                        Haydovchilar yo'q
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <!-- Page header -->
+    <div class="page-header">
+        <h5><i class="bi bi-truck"></i> Haydovchilar va yetkazish</h5>
+        <button class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#addDriverModal">
+            <i class="bi bi-plus-circle"></i> Haydovchi qo'shish
+        </button>
     </div>
-</div>
 
-<!-- Faol yetkazishlar -->
-<h5 class="mt-4 mb-3"><i class="bi bi-box-seam"></i> Faol yetkazishlar</h5>
-<div class="row g-3">
-    {% for delivery in deliveries %}
-    {% if delivery.status in ['pending', 'picked_up', 'in_transit'] %}
-    <div class="col-md-4">
-        <div class="card border-{% if delivery.status == 'pending' %}warning{% elif delivery.status == 'in_transit' %}primary{% else %}info{% endif %}">
-            <div class="card-body">
-                <div class="d-flex justify-content-between">
-                    <h6>#{{ delivery.id }}</h6>
-                    <span class="badge bg-{% if delivery.status == 'pending' %}warning{% elif delivery.status == 'in_transit' %}primary{% else %}info{% endif %}">
-                        {% if delivery.status == 'pending' %}Kutilmoqda
-                        {% elif delivery.status == 'picked_up' %}Olib ketildi
-                        {% elif delivery.status == 'in_transit' %}Yo'lda
-                        {% endif %}
-                    </span>
+    <!-- Mini stats -->
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num text-primary">{{ drivers | length }}</div>
+                <div class="lbl">Jami haydovchilar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#065f46;">{{ drivers | selectattr('is_active') | list | length }}</div>
+                <div class="lbl">Faol haydovchilar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#1a73e8;">
+                    {{ deliveries | selectattr('status', 'in', ['pending', 'picked_up', 'in_transit']) | list | length }}
                 </div>
-                <p class="mb-1"><i class="bi bi-geo"></i> {{ delivery.delivery_address }}</p>
-                <p class="mb-1 text-muted">
-                    <small><i class="bi bi-clock"></i> {{ delivery.created_at.strftime('%d.%m %H:%M') }}</small>
-                </p>
-                {% if delivery.driver %}
-                <p class="mb-0">
-                    <small><i class="bi bi-person"></i> {{ delivery.driver.full_name }}</small>
-                </p>
-                {% endif %}
+                <div class="lbl">Faol yetkazishlar</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="mini-stat">
+                <div class="num" style="color:#856404;">
+                    {{ deliveries | selectattr('status', 'eq', 'in_transit') | list | length }}
+                </div>
+                <div class="lbl">Yo'lda</div>
             </div>
         </div>
     </div>
-    {% endif %}
-    {% endfor %}
-</div>
+
+    <!-- Filter card -->
+    <div class="filter-card">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-5">
+                <label class="form-label">Qidirish</label>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" class="form-control" id="drvSearch" placeholder="Haydovchi ismi, telefon, raqam...">
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <label class="form-label">Transport turi</label>
+                <select class="form-select" id="vehicleFilter">
+                    <option value="">Barchasi</option>
+                    <option value="car">Yengil</option>
+                    <option value="van">Furgon</option>
+                    <option value="truck">Yuk mashinasi</option>
+                    <option value="motorcycle">Mototsikl</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-3">
+                <label class="form-label">Holat</label>
+                <select class="form-select" id="statusFilter">
+                    <option value="">Barchasi</option>
+                    <option value="active">Faol</option>
+                    <option value="inactive">Nofaol</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drivers data table -->
+    <div class="card data-table mb-4">
+        <div class="card-header">
+            <span style="font-size:13px; font-weight:600;">
+                <i class="bi bi-people"></i> Haydovchilar ro'yxati
+            </span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover mb-0" id="drvTable">
+                    <thead>
+                        <tr>
+                            <th>Haydovchi</th>
+                            <th>Transport</th>
+                            <th>Raqami</th>
+                            <th>Yetkazishlar</th>
+                            <th>Holat</th>
+                            <th width="100"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for driver in drivers %}
+                        <tr data-name="{{ driver.full_name | lower }}" data-phone="{{ driver.phone or '' | lower }}" data-vehicle="{{ driver.vehicle_type or '' | lower }}" data-active="{{ 'active' if driver.is_active else 'inactive' }}">
+                            <td>
+                                <strong>{{ driver.full_name }}</strong>
+                                <br><span class="muted-cell">{{ driver.phone or 'Telefon yo\'q' }}</span>
+                            </td>
+                            <td>{{ driver.vehicle_type or 'Noma\'lum' }}</td>
+                            <td><code>{{ driver.vehicle_number or '-' }}</code></td>
+                            <td>
+                                <span class="badge-done me-1" title="Yetkazilgan">{{ driver.deliveries|selectattr('status', 'eq', 'delivered')|list|length }}</span>
+                                <span class="badge-waiting me-1" title="Yo'lda">{{ driver.deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</span>
+                                <span class="badge-inactive" title="Jami">{{ driver.deliveries|length }}</span>
+                            </td>
+                            <td>
+                                {% if driver.is_active %}
+                                <span class="badge-active">Faol</span>
+                                {% else %}
+                                <span class="badge-inactive">Nofaol</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="/delivery/{{ driver.id }}" class="btn-act" title="Ochish"><i class="bi bi-eye"></i></a>
+                                    <a href="/map?driver={{ driver.id }}" class="btn-act" title="Xaritada ko'rish"><i class="bi bi-geo-alt"></i></a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">
+                                <i class="bi bi-truck fs-2 d-block mb-2 opacity-25"></i>
+                                Haydovchilar yo'q. «Haydovchi qo'shish» tugmasini bosing.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active deliveries -->
+    <div class="page-header mb-3">
+        <h5><i class="bi bi-box-seam"></i> Faol yetkazishlar</h5>
+    </div>
+
+    <div class="row g-3">
+        {% set active_found = namespace(v=false) %}
+        {% for delivery in deliveries %}
+        {% if delivery.status in ['pending', 'picked_up', 'in_transit'] %}
+        {% set active_found.v = true %}
+        <div class="col-md-4">
+            <div class="card data-table h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="num-cell">#{{ delivery.id }}</span>
+                        {% if delivery.status == 'pending' %}
+                        <span class="badge-draft">Kutilmoqda</span>
+                        {% elif delivery.status == 'picked_up' %}
+                        <span class="badge-waiting">Olib ketildi</span>
+                        {% elif delivery.status == 'in_transit' %}
+                        <span class="badge-active">Yo'lda</span>
+                        {% endif %}
+                    </div>
+                    <p class="mb-1" style="font-size:13px;"><i class="bi bi-geo text-muted me-1"></i>{{ delivery.delivery_address }}</p>
+                    <p class="mb-1 muted-cell"><i class="bi bi-clock me-1"></i>{{ delivery.created_at.strftime('%d.%m %H:%M') }}</p>
+                    {% if delivery.driver %}
+                    <p class="mb-0 muted-cell"><i class="bi bi-person me-1"></i>{{ delivery.driver.full_name }}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+        {% endfor %}
+        {% if not active_found.v %}
+        <div class="col-12">
+            <div class="card data-table">
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-box-seam fs-2 d-block mb-2 opacity-25"></i>
+                    Hozircha faol yetkazishlar yo'q.
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
 
 </div><!-- /container-fluid -->
 
-<!-- Modal -->
+<!-- Yangi haydovchi modal -->
 <div class="modal fade" id="addDriverModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
             <form method="POST" action="/delivery/add-driver">
-                <div class="modal-header">
-                    <h5 class="modal-title">Yangi haydovchi</h5>
+                <div class="modal-header py-2">
+                    <h5 class="modal-title"><i class="bi bi-person-plus"></i> Yangi haydovchi</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">F.I.O</label>
-                        <input type="text" class="form-control" name="full_name" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Telefon</label>
-                        <input type="text" class="form-control" name="phone" placeholder="+998901234567">
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Transport turi</label>
-                                <select class="form-select" name="vehicle_type">
-                                    <option value="car">Avtomobil</option>
-                                    <option value="truck">Yuk mashinasi</option>
-                                    <option value="motorcycle">Mototsikl</option>
-                                </select>
-                            </div>
+                <div class="modal-body py-2 small">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <label class="form-label mb-0">F.I.O *</label>
+                            <input type="text" class="form-control form-control-sm" name="full_name" required>
                         </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Davlat raqami</label>
-                                <input type="text" class="form-control" name="vehicle_number" placeholder="01A123BC">
-                            </div>
+                        <div class="col-12">
+                            <label class="form-label mb-0">Telefon</label>
+                            <input type="text" class="form-control form-control-sm" name="phone" placeholder="+998901234567">
                         </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Telegram ID</label>
-                        <input type="text" class="form-control" name="telegram_id" placeholder="@username">
+                        <div class="col-6">
+                            <label class="form-label mb-0">Transport turi</label>
+                            <select class="form-select form-select-sm" name="vehicle_type">
+                                <option value="car">Avtomobil</option>
+                                <option value="truck">Yuk mashinasi</option>
+                                <option value="motorcycle">Mototsikl</option>
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label mb-0">Davlat raqami</label>
+                            <input type="text" class="form-control form-control-sm" name="vehicle_number" placeholder="01A123BC">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label mb-0">Telegram ID</label>
+                            <input type="text" class="form-control form-control-sm" name="telegram_id" placeholder="@username">
+                        </div>
                     </div>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor qilish</button>
-                    <button type="submit" class="btn btn-primary">Saqlash</button>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor qilish</button>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Saqlash</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<script>
+// Client-side filter for drivers table
+(function() {
+    var searchInput  = document.getElementById('drvSearch');
+    var vehicleFilter = document.getElementById('vehicleFilter');
+    var statusFilter  = document.getElementById('statusFilter');
+    var rows = document.querySelectorAll('#drvTable tbody tr[data-name]');
+
+    function applyFilters() {
+        var q       = (searchInput.value || '').toLowerCase().trim();
+        var vehicle = (vehicleFilter.value || '').toLowerCase();
+        var status  = (statusFilter.value || '');
+        rows.forEach(function(row) {
+            var name    = (row.dataset.name   || '');
+            var phone   = (row.dataset.phone  || '');
+            var vtype   = (row.dataset.vehicle || '');
+            var active  = (row.dataset.active  || '');
+
+            var matchQ       = !q       || name.includes(q) || phone.includes(q);
+            var matchVehicle = !vehicle || vtype === vehicle;
+            var matchStatus  = !status  || active === status;
+
+            row.style.display = (matchQ && matchVehicle && matchStatus) ? '' : 'none';
+        });
+    }
+
+    if (searchInput)   searchInput.addEventListener('input', applyFilters);
+    if (vehicleFilter) vehicleFilter.addEventListener('change', applyFilters);
+    if (statusFilter)  statusFilter.addEventListener('change', applyFilters);
+})();
+</script>
 {% endblock %}

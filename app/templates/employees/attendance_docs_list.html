@@ -2,6 +2,8 @@
 
 {% block content %}
 <div class="container-fluid">
+
+    {# ── Alerts ── #}
     {% if request.query_params.get('confirmed') %}
     <div class="alert alert-success alert-dismissible fade show py-2 small">
         <i class="bi bi-check-circle"></i> Tabel tasdiqlandi. Ro'yxatda tasdiqlangan holda ko'rasiz.
@@ -32,72 +34,119 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Tabel forma spiskasi</h5>
+
+    {# ── Page header ── #}
+    <div class="page-header mb-3">
+        <h5><i class="bi bi-file-earmark-text"></i> Tabel forma spiskasi</h5>
         <div class="d-flex gap-2">
-            <a href="/employees/attendance/form" class="btn btn-success btn-sm"><i class="bi bi-plus-lg"></i> Yaratish</a>
-            <a href="/employees/attendance/records" class="btn btn-outline-secondary btn-sm"><i class="bi bi-list-ul"></i> Barcha yozuvlar</a>
+            <a href="/employees/attendance/records" class="top-btn"><i class="bi bi-list-ul"></i> Barcha yozuvlar</a>
+            <a href="/employees/attendance/form" class="top-btn"><i class="bi bi-plus-lg"></i> Yaratish</a>
         </div>
     </div>
 
-    <div class="card mb-3">
-        <div class="card-body py-2">
-            <form method="get" class="d-flex gap-2 align-items-end flex-wrap">
-                <input type="hidden" name="sort" value="{{ sort or 'date' }}">
-                <input type="hidden" name="order" value="{{ order or 'asc' }}">
-                <div>
-                    <label class="form-label small mb-1">Sanadan</label>
-                    <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}" style="width: auto;">
-                </div>
-                <div>
-                    <label class="form-label small mb-1">Sanagacha</label>
-                    <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}" style="width: auto;">
-                </div>
-                <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
-            </form>
-        </div>
+    {# ── Filter card ── #}
+    <div class="filter-card mb-3">
+        <form method="get" class="d-flex gap-2 align-items-end flex-wrap">
+            <input type="hidden" name="sort" value="{{ sort or 'date' }}">
+            <input type="hidden" name="order" value="{{ order or 'asc' }}">
+            <div>
+                <label class="form-label">Sanadan</label>
+                <input type="date" name="start_date" class="form-control form-control-sm" value="{{ start_date }}">
+            </div>
+            <div>
+                <label class="form-label">Sanagacha</label>
+                <input type="date" name="end_date" class="form-control form-control-sm" value="{{ end_date }}">
+            </div>
+            <div class="d-flex gap-2 align-self-end">
+                <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Ko'rsatish</button>
+                <a href="/employees/attendance" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x"></i> Tozalash</a>
+            </div>
+        </form>
     </div>
 
-    <div class="card">
+    {# ── Data table card ── #}
+    <div class="data-table">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-3">
+                <span class="fw-600">Hujjatlar ro'yxati</span>
+                <div class="search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="text" id="docsSearch" class="form-control form-control-sm" placeholder="Qidirish...">
+                </div>
+            </div>
+            <span class="muted-cell">Jami: {{ docs | length }} ta hujjat</span>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
-                <table class="table table-hover mb-0">
-                    <thead class="table-light">
+                {% set base_url = '/employees/attendance?start_date=' ~ (start_date|e) ~ '&end_date=' ~ (end_date|e) %}
+                <table class="table table-hover mb-0" id="docsTable">
+                    <thead>
                         <tr>
-                            {% set base_url = '/employees/attendance?start_date=' ~ (start_date|e) ~ '&end_date=' ~ (end_date|e) %}
-                            <th><a href="{{ base_url }}&sort=number&order={% if sort == 'number' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">Hujjat raqami {% if sort == 'number' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="{{ base_url }}&sort=date&order={% if sort == 'date' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">Sana {% if sort == 'date' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="{{ base_url }}&sort=count&order={% if sort == 'count' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">Yozuvlar soni {% if sort == 'count' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th><a href="{{ base_url }}&sort=confirmed_at&order={% if sort == 'confirmed_at' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">Tasdiqlangan vaqti {% if sort == 'confirmed_at' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}</a></th>
-                            <th width="280">Amallar</th>
+                            <th>
+                                <a href="{{ base_url }}&sort=number&order={% if sort == 'number' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                    Hujjat raqami
+                                    {% if sort == 'number' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="{{ base_url }}&sort=date&order={% if sort == 'date' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                    Sana
+                                    {% if sort == 'date' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="{{ base_url }}&sort=count&order={% if sort == 'count' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                    Yozuvlar soni
+                                    {% if sort == 'count' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th>
+                                <a href="{{ base_url }}&sort=confirmed_at&order={% if sort == 'confirmed_at' and order == 'desc' %}asc{% else %}desc{% endif %}" class="text-dark text-decoration-none">
+                                    Holat
+                                    {% if sort == 'confirmed_at' %}<i class="bi bi-arrow-{{ 'down' if order == 'desc' else 'up' }}"></i>{% else %}<i class="bi bi-arrow-down-up text-muted small"></i>{% endif %}
+                                </a>
+                            </th>
+                            <th style="width:220px;">Amallar</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for doc in docs %}
                         <tr>
-                            <td><strong>{{ doc.number }}</strong></td>
-                            <td>{{ doc.date.strftime('%d.%m.%Y') }}</td>
-                            <td>{{ count_by_doc.get(doc.id, 0) }}</td>
-                            <td>{% if doc.confirmed_at %}{{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') }}{% else %}-{% endif %}</td>
+                            <td class="fw-600">{{ doc.number }}</td>
+                            <td class="muted-cell">{{ doc.date.strftime('%d.%m.%Y') }}</td>
+                            <td class="num-cell">{{ count_by_doc.get(doc.id, 0) }}</td>
                             <td>
-                                <a href="/employees/attendance/doc/{{ doc.id }}" class="btn btn-sm btn-outline-primary" title="Hujjatni ko'rish"><i class="bi bi-eye"></i> Ko'rish</a>
-                                {% if current_user and current_user.role == 'admin' %}
-                                {% if not doc.confirmed_at %}
-                                <a href="/employees/attendance/records?start_date={{ doc.date.strftime('%Y-%m-%d') }}&end_date={{ doc.date.strftime('%Y-%m-%d') }}" class="btn btn-sm btn-outline-secondary" title="O'zgartirish"><i class="bi bi-pencil"></i> O'zgartirish</a>
-                                <form action="/employees/attendance/doc/{{ doc.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Hujjatni ro\'yxatdan butunlay o\'chirishni xohlaysizmi? Davomat yozuvlari (Keldi/Ketdi) saqlanadi, faqat tabel hujjati o\'chiriladi.');">
-                                    <button type="submit" class="btn btn-sm btn-danger" title="O'chirish"><i class="bi bi-trash"></i> O'chirish</button>
-                                </form>
+                                {% if doc.confirmed_at %}
+                                <span class="badge-done" title="{{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') }}">
+                                    <i class="bi bi-check-circle"></i> {{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') }}
+                                </span>
                                 {% else %}
-                                <form action="/employees/attendance/doc/{{ doc.id }}/cancel-confirm" method="POST" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
-                                    <button type="submit" class="btn btn-sm btn-warning" title="Tasdiqlashni bekor qilish"><i class="bi bi-x-circle"></i> Bekor qilish</button>
-                                </form>
+                                <span class="badge-draft"><i class="bi bi-hourglass-split"></i> Tasdiqlanmagan</span>
                                 {% endif %}
-                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="/employees/attendance/doc/{{ doc.id }}" class="btn-act" title="Hujjatni ko'rish"><i class="bi bi-eye"></i></a>
+                                    {% if current_user and current_user.role == 'admin' %}
+                                    {% if not doc.confirmed_at %}
+                                    <a href="/employees/attendance/records?start_date={{ doc.date.strftime('%Y-%m-%d') }}&end_date={{ doc.date.strftime('%Y-%m-%d') }}" class="btn-act" title="O'zgartirish"><i class="bi bi-pencil"></i></a>
+                                    <form action="/employees/attendance/doc/{{ doc.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Hujjatni ro\'yxatdan butunlay o\'chirishni xohlaysizmi? Davomat yozuvlari (Keldi/Ketdi) saqlanadi, faqat tabel hujjati o\'chiriladi.');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                    {% else %}
+                                    <form action="/employees/attendance/doc/{{ doc.id }}/cancel-confirm" method="POST" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                                        <button type="submit" class="btn-act warning" title="Tasdiqlashni bekor qilish"><i class="bi bi-x-circle"></i></button>
+                                    </form>
+                                    {% endif %}
+                                    {% endif %}
+                                </div>
                             </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">Tanlangan oralikda hujjat yo'q.</td>
+                            <td colspan="5" class="muted-cell text-center py-4">Tanlangan oralikda hujjat yo'q.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -105,15 +154,28 @@
             </div>
         </div>
     </div>
+
 </div>
 <script>
 (function() {
-    var alertEl = document.querySelector('.container-fluid .alert-dismissible');
-    if (alertEl) {
+    // Auto-dismiss alerts after 5s
+    document.querySelectorAll('.container-fluid .alert-dismissible').forEach(function(alertEl) {
         setTimeout(function() {
             var btn = alertEl.querySelector('.btn-close');
             if (btn) btn.click();
         }, 5000);
+    });
+
+    // Live search
+    var searchInput = document.getElementById('docsSearch');
+    var table = document.getElementById('docsTable');
+    if (searchInput && table) {
+        searchInput.addEventListener('input', function() {
+            var q = this.value.toLowerCase();
+            table.querySelectorAll('tbody tr').forEach(function(row) {
+                row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
     }
 })();
 </script>

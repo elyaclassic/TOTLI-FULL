@@ -11,44 +11,53 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="card mb-3">
-    <div class="card-body">
-        <a href="/reports/stock" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiq hisoboti</a>
-        <a href="/qoldiqlar/tarix" class="btn btn-outline-secondary btn-sm ms-2"><i class="bi bi-clock-history"></i> Qoldiqlar → Tarix</a>
+
+<div class="page-header mb-3">
+    <div>
+        <h5 class="mb-0"><i class="bi bi-exclamation-triangle text-warning"></i> Tarixsiz qoldiqlar</h5>
+        <p class="text-muted mb-0 small">Qoldigi bor, harakati yo'q mahsulotlar</p>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <a href="/reports/stock" class="top-btn btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiq hisoboti</a>
+        <a href="/qoldiqlar/tarix" class="top-btn btn btn-outline-secondary btn-sm"><i class="bi bi-clock-history"></i> Qoldiqlar → Tarix</a>
     </div>
 </div>
 
-<div class="card">
-    <div class="card-header">
-        <i class="bi bi-exclamation-triangle text-warning"></i> Tarixsiz qoldiqlar — faqat qoldigi bor, harakati yo'q
-    </div>
-    <div class="card-body">
-        <p class="text-muted small mb-3">Tanlangan omborda <strong>qoldigi &gt; 0</strong> bo‘lgan, lekin <strong>StockMovement</strong> (harakat tarixi) yozuvi yo‘q mahsulotlar. Bunday qoldiq eski tizimdan, importdan yoki harakat yozilmagan operatsiyadan qolgan bo‘lishi mumkin.</p>
-        <form method="get" action="/reports/stock/no-history" class="row g-2 align-items-end mb-3">
-            <div class="col-auto">
-                <label class="form-label small mb-0">Ombor</label>
-                <select name="warehouse_id" class="form-select form-select-sm" style="min-width: 220px;" onchange="this.form.submit()">
-                    <option value="">— Tanlang —</option>
-                    {% for wh in warehouses %}
-                    <option value="{{ wh.id }}" {% if selected_warehouse_id and wh.id == selected_warehouse_id %}selected{% endif %}>{{ wh.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-auto">
-                <button type="submit" class="btn btn-sm btn-primary">Ko'rsatish</button>
-            </div>
-        </form>
-        {% if warehouse %}
-        <p class="mb-2"><strong>Ombor:</strong> {{ warehouse.name }} &nbsp;— &nbsp;<strong>{{ rows|length }} ta</strong> mahsulotda qoldiq bor, tarixi yo'q.</p>
+<div class="filter-card mb-3">
+    <p class="text-muted small mb-2">Tanlangan omborda <strong>qoldigi &gt; 0</strong> bo'lgan, lekin <strong>StockMovement</strong> (harakat tarixi) yozuvi yo'q mahsulotlar. Bunday qoldiq eski tizimdan, importdan yoki harakat yozilmagan operatsiyadan qolgan bo'lishi mumkin.</p>
+    <form method="get" action="/reports/stock/no-history" class="d-flex flex-wrap align-items-end gap-2">
+        <div>
+            <label class="form-label small mb-0">Ombor</label>
+            <select name="warehouse_id" class="form-select form-select-sm" style="min-width: 220px;" onchange="this.form.submit()">
+                <option value="">— Tanlang —</option>
+                {% for wh in warehouses %}
+                <option value="{{ wh.id }}" {% if selected_warehouse_id and wh.id == selected_warehouse_id %}selected{% endif %}>{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <button type="submit" class="top-btn">Ko'rsatish</button>
+        </div>
+    </form>
+</div>
+
+{% if warehouse %}
+<div class="data-table">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-list-ul"></i> {{ warehouse.name }} — <strong>{{ rows|length }} ta</strong> mahsulotda qoldiq bor, tarixi yo'q</span>
         {% if rows %}
-        <form method="post" action="/reports/stock/no-history/create-inventory" class="mb-3" onsubmit="return confirm('Shu {{ rows|length }} ta mahsulot uchun inventarizatsiya hujjati yaratilsinmi? Keyin tahrir sahifasida «Haqiqiy qoldiq»ni 0 qilsangiz — qoldiq tozalanadi, tasdiqlanganda harakat tarixi yoziladi.');">
+        <form method="post" action="/reports/stock/no-history/create-inventory" class="mb-0" onsubmit="return confirm('Shu {{ rows|length }} ta mahsulot uchun inventarizatsiya hujjati yaratilsinmi? Keyin tahrir sahifasida «Haqiqiy qoldiq»ni 0 qilsangiz — qoldiq tozalanadi, tasdiqlanganda harakat tarixi yoziladi.');">
             <input type="hidden" name="warehouse_id" value="{{ selected_warehouse_id }}">
-            <button type="submit" class="btn btn-warning"><i class="bi bi-clipboard-check"></i> Inventarizatsiya bilan tozalash</button>
+            <button type="submit" class="top-btn" style="background:#ffc107;color:#333;border-color:#ffc107;"><i class="bi bi-clipboard-check"></i> Inventarizatsiya bilan tozalash</button>
         </form>
-        <p class="text-muted small mb-2">Tugma bosilsa: yangi inventarizatsiya hujjati yaratiladi (shu mahsulotlar bilan). Tahrir sahifasida <strong>Haqiqiy qoldiq</strong>ni <strong>0</strong> qilsangiz — qoldiq nolga tushadi; haqiqiy qoldiq mavjud bo‘lsa shu miqdorni kiriting va tasdiqlang — harakat tarixi yoziladi.</p>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        {% if rows %}
+        <p class="text-muted small px-3 pt-2 mb-2">Tugma bosilsa: yangi inventarizatsiya hujjati yaratiladi (shu mahsulotlar bilan). Tahrir sahifasida <strong>Haqiqiy qoldiq</strong>ni <strong>0</strong> qilsangiz — qoldiq nolga tushadi; haqiqiy qoldiq mavjud bo'lsa shu miqdorni kiriting va tasdiqlang — harakat tarixi yoziladi.</p>
         <div class="table-responsive">
-            <table class="table table-sm table-hover">
-                <thead class="table-light">
+            <table class="table table-sm table-hover mb-0">
+                <thead>
                     <tr>
                         <th>№</th>
                         <th>Mahsulot</th>
@@ -59,11 +68,11 @@
                 <tbody>
                     {% for r in rows %}
                     <tr>
-                        <td>{{ loop.index }}</td>
+                        <td class="muted-cell">{{ loop.index }}</td>
                         <td><strong>{{ r.product.name }}</strong>{% if r.product.code %} <small class="text-muted">({{ r.product.code }})</small>{% endif %}</td>
-                        <td class="text-end">{{ "{:,.3f}".format(r.quantity) }}</td>
+                        <td class="text-end num-cell">{{ "{:,.3f}".format(r.quantity) }}</td>
                         <td>
-                            <a href="/reports/stock/source?warehouse_id={{ selected_warehouse_id }}&product_id={{ r.product_id }}" class="btn btn-sm btn-outline-info" title="Harakat tarixi (bo'sh bo'lishi mumkin)" target="_blank"><i class="bi bi-clock-history"></i></a>
+                            <a href="/reports/stock/source?warehouse_id={{ selected_warehouse_id }}&product_id={{ r.product_id }}" class="btn-act" title="Harakat tarixi (bo'sh bo'lishi mumkin)" target="_blank"><i class="bi bi-clock-history"></i></a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -71,9 +80,12 @@
             </table>
         </div>
         {% else %}
-        <p class="text-success mb-0">Bu omborda barcha qoldiqlar uchun harakat tarixi mavjud.</p>
-        {% endif %}
+        <div class="text-center text-success py-4">
+            <i class="bi bi-check-circle fs-3 d-block mb-1"></i>
+            Bu omborda barcha qoldiqlar uchun harakat tarixi mavjud.
+        </div>
         {% endif %}
     </div>
 </div>
+{% endif %}
 {% endblock %}
