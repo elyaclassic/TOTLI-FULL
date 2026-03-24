@@ -562,6 +562,157 @@
         /* ===== CARD GLOBAL ===== */
         .card { border: none; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,.07); }
         .card-header { background: #fff; border-bottom: 1px solid #e9ecef; font-weight: 600; border-radius: 14px 14px 0 0 !important; }
+
+        /* ===== MOBILE RESPONSIVE (768px va kichik) ===== */
+        @media screen and (max-width: 768px) {
+            /* Jadvallar horizontal scroll */
+            .data-table .card-body,
+            .card-body,
+            .table-responsive {
+                overflow-x: auto !important;
+                -webkit-overflow-scrolling: touch;
+            }
+            .data-table .table {
+                min-width: 600px;
+            }
+
+            /* Page header — tugmalar pastga tushsin */
+            .page-header {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 8px;
+            }
+            .page-header .d-flex {
+                flex-wrap: wrap;
+                gap: 6px !important;
+                width: 100%;
+            }
+            .page-header h4, .page-header h5 {
+                font-size: 1rem !important;
+            }
+
+            /* Top buttons kichikroq */
+            .top-btn {
+                padding: 5px 10px !important;
+                font-size: 11px !important;
+            }
+
+            /* Filter card */
+            .filter-card {
+                padding: 12px 14px !important;
+            }
+            .filter-card .row {
+                flex-direction: column;
+            }
+            .filter-card .col-md-2,
+            .filter-card .col-md-3,
+            .filter-card .col-md-4,
+            .filter-card .col-md-6,
+            .filter-card .col-md-8 {
+                width: 100% !important;
+                max-width: 100% !important;
+                flex: 0 0 100% !important;
+            }
+
+            /* Stat cards 2 ta qatorda */
+            .stat-card h3 {
+                font-size: 1.2rem !important;
+            }
+            .stat-card p {
+                font-size: 0.7rem !important;
+            }
+
+            /* Form elementlar kattaroq (barmoq bilan bosish oson) */
+            .form-control, .form-select, .btn {
+                font-size: 14px !important;
+                min-height: 40px;
+            }
+
+            /* Card header mobilda */
+            .data-table .card-header {
+                flex-direction: column;
+                align-items: flex-start !important;
+                gap: 6px;
+                padding: 10px 12px !important;
+            }
+
+            /* Mini stat cards */
+            .mini-stat .num {
+                font-size: 1.2rem !important;
+            }
+
+            /* Row g-3 to g-2 */
+            .row.g-3 {
+                --bs-gutter-x: 0.5rem;
+                --bs-gutter-y: 0.5rem;
+            }
+
+            /* Modal to'liq ekran */
+            .modal-dialog {
+                margin: 8px !important;
+                max-width: calc(100% - 16px) !important;
+            }
+            .modal-body {
+                padding: 12px !important;
+                max-height: 70vh;
+                overflow-y: auto;
+            }
+
+            /* Chat mobil optimizatsiya */
+            #chatMessages {
+                height: 50vh !important;
+            }
+
+            /* Top bar */
+            .top-bar {
+                padding: 10px 12px !important;
+                margin: -10px -10px 10px -10px !important;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+            .top-bar h5 {
+                font-size: 1.1rem !important;
+            }
+
+            /* Badge action buttons */
+            .btn-act {
+                width: 28px !important;
+                height: 28px !important;
+                font-size: 12px !important;
+            }
+
+            /* Col-lg split — mobilda full width */
+            .col-lg-5, .col-lg-7, .col-lg-6, .col-lg-4, .col-lg-8 {
+                width: 100% !important;
+                max-width: 100% !important;
+                flex: 0 0 100% !important;
+            }
+        }
+
+        /* Kichik telefonlar (480px) */
+        @media screen and (max-width: 480px) {
+            .main-content {
+                padding: 6px !important;
+                padding-top: 54px !important;
+            }
+            .page-header h4, .page-header h5 {
+                font-size: 0.9rem !important;
+            }
+            .top-btn {
+                padding: 4px 8px !important;
+                font-size: 10px !important;
+            }
+            .stat-card {
+                padding: 10px !important;
+                min-height: 90px !important;
+            }
+            .stat-card h3 {
+                font-size: 1rem !important;
+            }
+            .filter-card {
+                padding: 10px !important;
+            }
+        }
     </style>
 
     {% block extra_css %}{% endblock %}
@@ -633,7 +784,7 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if 'Buyurtma' in (page_title or '') or 'Yetkazish' in (page_title or '') %}active{% endif %}" href="/delivery">
+                <a class="nav-link {% if 'Buyurtma' in (page_title or '') or 'Yetkazib' in (page_title or '') or 'Yetkazish' in (page_title or '') %}active{% endif %}" href="/delivery">
                     <i class="bi bi-truck"></i> Buyurtmalar
                 </a>
             </li>
@@ -700,6 +851,12 @@
                             <a class="nav-link {% if 'Foydalanuvchi' in page_title %}active{% endif %}"
                                 href="/info/users">
                                 <i class="bi bi-person-circle"></i> Foydalanuvchilar
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if 'Audit' in page_title %}active{% endif %}"
+                                href="/audit">
+                                <i class="bi bi-journal-text"></i> Audit log
                             </a>
                         </li>
                         {% endif %}

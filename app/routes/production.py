@@ -36,6 +36,7 @@ from app.deps import require_auth, require_admin, get_current_user
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
+from app.utils.audit import log_action
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -246,6 +247,8 @@ async def production_index_page(
     recipes = []
     total_recipes = 0
     today_quantity = 0
+    today_qty_semi = 0.0
+    today_qty_finished = 0.0
     pending_productions = 0
     recent_productions = []
     current_user_employee = db.query(Employee).filter(Employee.user_id == current_user.id).first() if current_user else None
@@ -290,36 +293,41 @@ async def production_index_page(
         
         today = datetime.now().date()
         
-        # Bugungi ishlab chiqarishlar — operator bo'lsa faqat o'zining; miqdor kg da (recipe_kg_per_unit)
+        # Bugungi ishlab chiqarishlar — yarim tayyor va tayyor alohida
+        today_qty_semi = 0.0
+        today_qty_finished = 0.0
         try:
             from sqlalchemy import text
             today_sql = """
-                SELECT p.id, p.number, p.date, p.recipe_id, p.warehouse_id, p.output_warehouse_id,
-                       p.quantity, p.status, p.current_stage, p.max_stage, p.user_id, p.operator_id, p.note, p.created_at
+                SELECT p.id, p.recipe_id, p.quantity, p.output_warehouse_id, w.name as wh_name
                 FROM productions p
                 LEFT JOIN warehouses w ON p.output_warehouse_id = w.id
                 WHERE DATE(p.date) = :today_date
                   AND p.status = :status
                   AND p.output_warehouse_id IS NOT NULL
                   AND w.id IS NOT NULL
-                  AND (
-                      (w.name IS NOT NULL AND (LOWER(w.name) LIKE '%yarim%' OR LOWER(w.name) LIKE '%semi%' OR LOWER(w.name) LIKE '%tayyor%' OR LOWER(w.name) LIKE '%finished%'))
-                      OR (w.code IS NOT NULL AND (LOWER(w.code) LIKE '%yarim%' OR LOWER(w.code) LIKE '%semi%' OR LOWER(w.code) LIKE '%tayyor%' OR LOWER(w.code) LIKE '%finished%'))
-                  )
             """
             params = {"today_date": today, "status": "completed"}
             if filter_by_operator:
                 today_sql += " AND p.operator_id = :operator_id"
                 params["operator_id"] = current_user_employee.id
             today_productions_result = db.execute(text(today_sql), params).fetchall()
-            today_quantity = 0.0
-            if today_productions_result:
-                for row in today_productions_result:
-                    rec = db.query(Recipe).filter(Recipe.id == row.recipe_id).first() if row.recipe_id else None
-                    kg_per = recipe_kg_per_unit(rec) if rec else 1.0
-                    today_quantity += float(row.quantity or 0) * (kg_per if kg_per and kg_per > 0 else 1.0)
+            for row in today_productions_result:
+                rec = db.query(Recipe).filter(Recipe.id == row.recipe_id).first() if row.recipe_id else None
+                kg_per = recipe_kg_per_unit(rec) if rec else 1.0
+                qty_kg = float(row.quantity or 0) * (kg_per if kg_per and kg_per > 0 else 1.0)
+                wh_name = (row.wh_name or "").lower()
+                if "yarim" in wh_name or "semi" in wh_name:
+                    today_qty_semi += qty_kg
+                elif "tayyor" in wh_name or "finished" in wh_name:
+                    today_qty_finished += qty_kg
+                else:
+                    today_qty_semi += qty_kg  # boshqa omborlar yarim tayyor sifatida
+            today_quantity = today_qty_semi + today_qty_finished
         except Exception as e:
             today_quantity = 0
+            today_qty_semi = 0.0
+            today_qty_finished = 0.0
             logger.warning("Today productions query error: %s", e)
         
         # Kutilmoqdagi buyurtmalar — operator bo'lsa faqat o'zining
@@ -444,6 +452,8 @@ async def production_index_page(
             "current_user": current_user,
             "total_recipes": total_recipes,
             "today_quantity": today_quantity,
+            "today_qty_semi": today_qty_semi,
+            "today_qty_finished": today_qty_finished,
             "pending_productions": pending_productions,
             "recent_productions": recent_productions,
             "recipes": recipes,
@@ -465,6 +475,8 @@ async def production_index_page(
             "current_user": current_user,
             "total_recipes": 0,
             "today_quantity": 0,
+            "today_qty_semi": 0,
+            "today_qty_finished": 0,
             "pending_productions": 0,
             "recent_productions": [],
             "recipes": [],
@@ -1225,6 +1237,39 @@ async def production_orders_bulk_complete(
     return RedirectResponse(url="/production/orders?bulk_completed=" + str(completed), status_code=303)
 
 
+@router.post("/orders/bulk-delete")
+async def production_orders_bulk_delete(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Tanlangan ishlab chiqarish buyurtmalarini o'chirish (faqat admin, faqat draft/cancelled)."""
+    form = await request.form()
+    prod_ids = form.getlist("prod_ids")
+    prod_ids = [int(x) for x in prod_ids if str(x).strip().isdigit()]
+    deleted = 0
+    skipped = 0
+    deleted_numbers = []
+    for pid in prod_ids:
+        production = db.query(Production).filter(Production.id == pid).first()
+        if production and production.status in ("draft", "cancelled", "pending"):
+            deleted_numbers.append(f"{production.number}(status={production.status})")
+            log_action(db, user=current_user, action="delete", entity_type="production",
+                       entity_id=pid, entity_number=production.number,
+                       details=f"Bulk delete. Status: {production.status}",
+                       ip_address=request.client.host if request.client else "")
+            db.delete(production)
+            deleted += 1
+        elif production:
+            skipped += 1
+    if deleted:
+        db.commit()
+    msg = f"bulk_deleted={deleted}"
+    if skipped:
+        msg += f"&bulk_skip={skipped}"
+    return RedirectResponse(url="/production/orders?" + msg, status_code=303)
+
+
 @router.get("/new", response_class=HTMLResponse)
 async def production_new(
     request: Request,
@@ -1284,10 +1329,21 @@ async def create_production(
         effective_operator_id = current_user_employee.id if current_user_employee else None
     max_stage = _recipe_max_stage(recipe)
     today = datetime.now()
-    count = db.query(Production).filter(
-        Production.date >= today.replace(hour=0, minute=0, second=0)
-    ).count()
-    number = f"PR-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(3)}"
+    today_prefix = f"PR-{today.strftime('%Y%m%d')}-"
+    last_prod = (
+        db.query(Production)
+        .filter(Production.number.like(f"{today_prefix}%"))
+        .order_by(Production.id.desc())
+        .first()
+    )
+    if last_prod and last_prod.number:
+        try:
+            last_seq = int(last_prod.number.split("-")[-1])
+        except (ValueError, IndexError):
+            last_seq = 0
+    else:
+        last_seq = 0
+    number = f"{today_prefix}{str(last_seq + 1).zfill(3)}"
     production = Production(
         number=number,
         recipe_id=recipe_id,
@@ -1317,6 +1373,12 @@ async def create_production(
                 quantity=item.quantity * quantity,
             ))
         db.commit()
+    recipe_name = recipe.name if recipe else f"#{recipe_id}"
+    log_action(db, user=current_user, action="create", entity_type="production",
+               entity_id=production.id, entity_number=production.number,
+               details=f"Retsept: {recipe_name}, Miqdor: {quantity}",
+               ip_address=request.client.host if request.client else "")
+    db.commit()
     return RedirectResponse(url="/production/orders", status_code=303)
 
 

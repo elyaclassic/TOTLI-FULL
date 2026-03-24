@@ -84,10 +84,18 @@ def get_pos_warehouses_for_user(db: Session, current_user: User):
 
 
 def get_pos_warehouse_for_user(db: Session, current_user: User):
-    """Sotuvchi uchun ombor: foydalanuvchining warehouses_list (yoki departments_list) bo'yicha. Admin/menejer: get_sales_warehouse."""
+    """Foydalanuvchi uchun default ombor: avval user.warehouse_id, keyin fallback."""
     if not current_user:
         return None
     role = (current_user.role or "").strip()
+    # Avval foydalanuvchiga biriktirilgan omborni qaytarish
+    if current_user.warehouse_id:
+        wh = db.query(Warehouse).filter(
+            Warehouse.id == current_user.warehouse_id,
+            Warehouse.is_active == True
+        ).first()
+        if wh:
+            return wh
     if role == "admin" or role == "manager":
         return get_sales_warehouse(db)
     if role != "sotuvchi":

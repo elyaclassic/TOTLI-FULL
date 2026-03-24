@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-journal-text"></i> Audit log — operatsiyalar tarixi</h4>
+</div>
+
+<div class="filter-card mb-3">
+    <form method="get" action="/audit" class="row g-2 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label small">Boshlanish</label>
+            <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Tugash</label>
+            <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Amal</label>
+            <select name="action" class="form-select form-select-sm">
+                <option value="">Barchasi</option>
+                {% for a in ['create', 'update', 'delete', 'confirm', 'revert', 'login'] %}
+                <option value="{{ a }}" {% if current_action == a %}selected{% endif %}>{{ a }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Bo'lim</label>
+            <select name="entity_type" class="form-select form-select-sm">
+                <option value="">Barchasi</option>
+                {% for t in ['sale', 'production', 'purchase', 'payment', 'partner', 'stock', 'delivery', 'user'] %}
+                <option value="{{ t }}" {% if current_entity_type == t %}selected{% endif %}>{{ t }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small">Foydalanuvchi</label>
+            <select name="user_id" class="form-select form-select-sm">
+                <option value="">Barchasi</option>
+                {% for u in users %}
+                <option value="{{ u.id }}" {% if current_user_id == u.id %}selected{% endif %}>{{ u.full_name or u.username }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> Qidirish</button>
+        </div>
+    </form>
+</div>
+
+<div class="card data-table">
+    <div class="card-header">
+        <span><i class="bi bi-list-ul"></i> Loglar</span>
+        <span class="badge bg-secondary">{{ logs|length }} ta</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:150px">Sana/vaqt</th>
+                        <th>Foydalanuvchi</th>
+                        <th>Amal</th>
+                        <th>Bo'lim</th>
+                        <th>Hujjat</th>
+                        <th>Tafsilot</th>
+                        <th>IP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr data-entity="{{ log.entity_type or '' }}" data-eid="{{ log.entity_id or '' }}" class="audit-row">
+                        <td class="muted-cell" style="white-space:nowrap; font-size:0.8rem;">{{ log.timestamp.strftime('%d.%m.%Y %H:%M:%S') if log.timestamp else '' }}</td>
+                        <td><strong>{{ log.user_name or '—' }}</strong></td>
+                        <td>
+                            {% if log.action == 'create' %}
+                            <span class="badge bg-success bg-opacity-10 text-success">yaratish</span>
+                            {% elif log.action == 'update' %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary">tahrirlash</span>
+                            {% elif log.action == 'delete' %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger">o'chirish</span>
+                            {% elif log.action == 'confirm' %}
+                            <span class="badge bg-info bg-opacity-10 text-info">tasdiqlash</span>
+                            {% elif log.action == 'revert' %}
+                            <span class="badge bg-warning bg-opacity-10 text-warning">bekor qilish</span>
+                            {% else %}
+                            <span class="badge bg-secondary bg-opacity-10 text-secondary">{{ log.action }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.entity_type or '' }}</td>
+                        <td><code class="audit-link">{{ log.entity_number or '' }}</code></td>
+                        <td class="muted-cell" style="max-width:300px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ log.details or '' }}">{{ log.details or '' }}</td>
+                        <td class="muted-cell" style="font-size:0.75rem;">{{ log.ip_address or '' }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">Loglar topilmadi.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<style>
+tr.audit-row.clickable { cursor: pointer; }
+tr.audit-row.clickable:hover td { background: rgba(13, 110, 253, 0.06) !important; }
+tr.audit-row.clickable .audit-link { color: #0d6efd; text-decoration: underline; }
+</style>
+<script>
+(function() {
+    var urlMap = {
+        'sale': '/sales/edit/',
+        'production': '/production/orders',
+        'purchase': '/purchases/edit/',
+        'payment': '/finance',
+        'partner': '/partners',
+        'delivery': '/delivery/',
+        'stock': '/warehouse',
+        'user': '/info/users'
+    };
+    document.querySelectorAll('tr.audit-row').forEach(function(row) {
+        var entity = row.getAttribute('data-entity');
+        var eid = row.getAttribute('data-eid');
+        if (!entity || !urlMap[entity]) return;
+        var base = urlMap[entity];
+        var url = base;
+        if (eid && base.endsWith('/')) {
+            url = base + eid;
+        }
+        row.classList.add('clickable');
+        row.addEventListener('click', function() {
+            window.location.href = url;
+        });
+    });
+})();
+</script>
+{% endblock %}

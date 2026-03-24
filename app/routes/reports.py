@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
-from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice
+from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog
 from app.deps import get_current_user, require_auth, require_admin
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
@@ -1187,23 +1187,8 @@ async def report_debts(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    # Faqat savdodan qarzi bor mijozlar (balance > 0) va ta'minotchilarga qarzimiz (balance < 0) alohida
-    # Savdodan haqiqiy qarzdor partner ID lari
-    sale_debtor_ids = [
-        r[0] for r in db.query(Order.partner_id).filter(
-            Order.type == "sale",
-            Order.debt > 0,
-            Order.partner_id.isnot(None),
-        ).distinct().all() if r and r[0]
-    ]
-    # Ta'minotchilarga qarzimiz (balance < 0) — kirimdan qarz
-    supplier_debt_ids = [
-        p.id for p in db.query(Partner).filter(Partner.balance < 0).all()
-    ]
-    all_ids = list(set(sale_debtor_ids + supplier_debt_ids))
-    if not all_ids:
-        all_ids = [-1]
-    q = db.query(Partner).filter(Partner.id.in_(all_ids), Partner.balance != 0)
+    # Barcha kontragentlar — balans != 0 (savdo, xarid, qoldiq hujjati — barchasi)
+    q = db.query(Partner).filter(Partner.is_active == True, Partner.balance != 0)
     if overdue_days and int(overdue_days) > 0:
         cutoff = datetime.now() - timedelta(days=int(overdue_days))
         overdue_partner_ids = (
@@ -1222,9 +1207,9 @@ async def report_debts(
             q = q.filter(Partner.id.in_(ids))
         else:
             q = q.filter(Partner.id == -1)
-    debtors = q.all()
-    # Mijozlar qarzi (balance > 0 va savdosi bor)
-    total_debt = sum(p.balance for p in debtors if p.balance > 0 and p.id in sale_debtor_ids)
+    debtors = q.order_by(Partner.name).all()
+    # Mijozlar qarzi (balance > 0)
+    total_debt = sum(p.balance for p in debtors if p.balance > 0)
     # Ta'minotchilarga qarzimiz (balance < 0)
     total_credit = sum(abs(p.balance) for p in debtors if p.balance < 0)
     return templates.TemplateResponse("reports/debts.html", {
@@ -1242,7 +1227,7 @@ async def report_debts_export(request: Request, db: Session = Depends(get_db), c
     _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    debtors = db.query(Partner).filter(Partner.balance != 0).order_by(Partner.name).all()
+    debtors = db.query(Partner).filter(Partner.is_active == True, Partner.balance != 0).order_by(Partner.name).all()
     wb = Workbook()
     ws = wb.active
     ws.title = "Qarzdorlik"
@@ -1288,10 +1273,11 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
     date_to_end = date_to.replace(hour=23, minute=59, second=59, microsecond=999999)
     rows = []
 
-    # Sotuvlar (debit) va qaytarishlar (credit)
+    # Sotuvlar (debit) va qaytarishlar (credit) — bekor qilinganlar bundan mustasno
     q_orders = db.query(Order).filter(
         Order.partner_id == partner_id,
         Order.type.in_(["sale", "return_sale"]),
+        Order.status.notin_(["cancelled", "draft"]),
     )
     if period_only:
         q_orders = q_orders.filter(Order.date >= date_from_start, Order.date <= date_to_end)
@@ -1339,8 +1325,11 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
                 "credit": 0.0,
             })
 
-    # Xaridlar (biz yetkazuvchiga qarzdormiz — credit)
-    q_purchases = db.query(Purchase).filter(Purchase.partner_id == partner_id)
+    # Xaridlar (biz yetkazuvchiga qarzdormiz — credit) — faqat tasdiqlangan
+    q_purchases = db.query(Purchase).filter(
+        Purchase.partner_id == partner_id,
+        Purchase.status == "confirmed",
+    )
     if period_only:
         q_purchases = q_purchases.filter(Purchase.date >= date_from_start, Purchase.date <= date_to_end)
     for p in q_purchases.order_by(Purchase.date):
@@ -1354,6 +1343,36 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
             "doc_url": f"/purchases/edit/{p.id}",
             "debit": 0.0,
             "credit": total_val,
+        })
+
+    # Kontragent qoldiq hujjatlari (tasdiqlangan) — boshlang'ich qoldiq kiritish
+    q_balance_items = (
+        db.query(PartnerBalanceDocItem, PartnerBalanceDoc)
+        .join(PartnerBalanceDoc, PartnerBalanceDocItem.doc_id == PartnerBalanceDoc.id)
+        .filter(
+            PartnerBalanceDocItem.partner_id == partner_id,
+            PartnerBalanceDoc.status == "confirmed",
+        )
+    )
+    if period_only:
+        q_balance_items = q_balance_items.filter(
+            PartnerBalanceDoc.date >= date_from_start,
+            PartnerBalanceDoc.date <= date_to_end,
+        )
+    for item, doc in q_balance_items.order_by(PartnerBalanceDoc.date):
+        # Kiritilgan qoldiq summasi (to'liq) — musbat = uning qarzi (debit), manfiy = bizning qarzimiz (credit)
+        bal = float(item.balance or 0)
+        debit = bal if bal > 0 else 0.0
+        credit = -bal if bal < 0 else 0.0
+        doc_label = f"Qoldiq kiritish {doc.number or ''} {doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else ''}".strip()
+        rows.append({
+            "date": doc.date,
+            "doc_type": "Qoldiq kiritish",
+            "doc_number": doc.number or "",
+            "doc_label": doc_label,
+            "doc_url": f"/qoldiqlar/kontragent/hujjat/{doc.id}",
+            "debit": debit,
+            "credit": credit,
         })
 
     rows.sort(key=lambda r: r["date"])
@@ -1372,13 +1391,18 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
 @router.get("/partner-reconciliation", response_class=HTMLResponse)
 async def report_partner_reconciliation(
     request: Request,
-    partner_id: int = None,
+    partner_id: Optional[str] = None,
     date_from: str = None,
     date_to: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Kontragentlar hisob-kitobini solishtirish hisoboti (1C uslubida)."""
+    # partner_id bo'sh string yoki noto'g'ri kelishi mumkin
+    try:
+        partner_id = int(partner_id) if partner_id and str(partner_id).strip() else None
+    except (ValueError, TypeError):
+        partner_id = None
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
     allowed = get_allowed_report_types(current_user)
@@ -1400,8 +1424,30 @@ async def report_partner_reconciliation(
     opening_debit = opening_credit = 0.0
     total_debit = total_credit = 0.0
     partner_obj = None
-    products_purchased = []  # kontragentdan xarid qilingan mahsulotlar (analitika)
-    products_sold = []       # kontragentga sotilgan mahsulotlar (analitika)
+    products_purchased = []
+    products_sold = []
+    # Umumiy hisobot (barcha kontragentlar)
+    summary_rows = []
+    if not partner_id:
+        # Barcha kontragentlar bo'yicha umumiy
+        all_partners = db.query(Partner).filter(Partner.is_active == True, Partner.balance != 0).order_by(Partner.name).all()
+        grand_total_debit = 0.0
+        grand_total_credit = 0.0
+        for p in all_partners:
+            p_rows, p_od, p_oc = _build_partner_movements(db, p.id, dt_from, dt_to, period_only=False)
+            p_total_debit = sum(r["debit"] for r in p_rows)
+            p_total_credit = sum(r["credit"] for r in p_rows)
+            p_opening = p_od - p_oc
+            p_closing = p_opening + p_total_debit - p_total_credit
+            grand_total_debit += p_total_debit
+            grand_total_credit += p_total_credit
+            summary_rows.append({
+                "partner": p,
+                "opening_balance": p_opening,
+                "total_debit": p_total_debit,
+                "total_credit": p_total_credit,
+                "closing_balance": p_closing,
+            })
     if partner_id:
         partner_obj = db.query(Partner).filter(Partner.id == partner_id).first()
         if partner_obj:
@@ -1410,13 +1456,13 @@ async def report_partner_reconciliation(
             total_credit = sum(r["credit"] for r in rows)
             date_from_start = dt_from.replace(hour=0, minute=0, second=0, microsecond=0)
             date_to_end = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
-            # Kontragentdan xarid qilingan mahsulotlar (davr bo'yicha)
             purchases_in_period = (
                 db.query(PurchaseItem, Product)
                 .join(Purchase, PurchaseItem.purchase_id == Purchase.id)
                 .join(Product, PurchaseItem.product_id == Product.id)
                 .filter(
                     Purchase.partner_id == partner_id,
+                    Purchase.status == "confirmed",
                     Purchase.date >= date_from_start,
                     Purchase.date <= date_to_end,
                 )
@@ -1429,7 +1475,6 @@ async def report_partner_reconciliation(
                 by_product_purchase[key]["quantity"] += float(pi.quantity or 0)
                 by_product_purchase[key]["total"] += float(pi.total or 0)
             products_purchased = sorted(by_product_purchase.values(), key=lambda x: -x["total"])
-            # Kontragentga sotilgan mahsulotlar (davr bo'yicha)
             orders_in_period = (
                 db.query(OrderItem, Product)
                 .join(Order, OrderItem.order_id == Order.id)
@@ -1437,6 +1482,7 @@ async def report_partner_reconciliation(
                 .filter(
                     Order.partner_id == partner_id,
                     Order.type == "sale",
+                    Order.status.notin_(["cancelled", "draft"]),
                     Order.date >= date_from_start,
                     Order.date <= date_to_end,
                 )
@@ -1467,6 +1513,7 @@ async def report_partner_reconciliation(
         "opening_credit": opening_credit,
         "products_purchased": products_purchased,
         "products_sold": products_sold,
+        "summary_rows": summary_rows,
         "page_title": "Kontragentlar hisob-kitobini solishtirish",
         "current_user": current_user,
     })
@@ -1638,3 +1685,215 @@ async def report_partner_reconciliation_export(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ==========================================
+# FOYDA HISOBOTI
+# ==========================================
+
+@router.get("/profit", response_class=HTMLResponse)
+async def report_profit(
+    request: Request,
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    allowed = get_allowed_report_types(current_user)
+    if "profit" not in allowed:
+        return RedirectResponse(url="/reports", status_code=303)
+
+    today = datetime.now()
+    if not date_from:
+        date_from = today.replace(day=1).strftime("%Y-%m-%d")
+    if not date_to:
+        date_to = today.strftime("%Y-%m-%d")
+    try:
+        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except (ValueError, TypeError):
+        dt_from = today.replace(day=1)
+        dt_to = today.replace(hour=23, minute=59, second=59)
+
+    # ===== 1. SOTUV DAROMADI =====
+    sale_orders = (
+        db.query(Order)
+        .filter(
+            Order.type == "sale",
+            Order.status != "cancelled",
+            Order.date >= dt_from,
+            Order.date <= dt_to,
+        ).all()
+    )
+    revenue = sum(float(o.total or 0) for o in sale_orders)
+    sale_count = len(sale_orders)
+
+    # ===== 2. SOTUV TANNARXI (COGS) =====
+    sale_order_ids = [o.id for o in sale_orders]
+    cogs = 0.0
+    if sale_order_ids:
+        items = (
+            db.query(OrderItem, Product)
+            .join(Product, OrderItem.product_id == Product.id)
+            .filter(OrderItem.order_id.in_(sale_order_ids))
+            .all()
+        )
+        for oi, prod in items:
+            cost_price = float(prod.purchase_price or 0)
+            qty = float(oi.quantity or 0)
+            cogs += cost_price * qty
+
+    gross_profit = revenue - cogs
+
+    # ===== 3. QAYTARISHLAR =====
+    return_orders = (
+        db.query(Order)
+        .filter(
+            Order.type == "return_sale",
+            Order.status != "cancelled",
+            Order.date >= dt_from,
+            Order.date <= dt_to,
+        ).all()
+    )
+    returns_total = sum(float(o.total or 0) for o in return_orders)
+
+    # ===== 4. XARID XARAJATLARI =====
+    purchases = (
+        db.query(Purchase)
+        .filter(
+            Purchase.status == "confirmed",
+            Purchase.date >= dt_from,
+            Purchase.date <= dt_to,
+        ).all()
+    )
+    purchase_total = sum(float(p.total or 0) for p in purchases)
+    purchase_expenses = sum(float(p.total_expenses or 0) for p in purchases)
+
+    # ===== 5. OPERATSION XARAJATLAR (ExpenseDoc) =====
+    expense_docs = (
+        db.query(ExpenseDoc)
+        .filter(
+            ExpenseDoc.status == "confirmed",
+            ExpenseDoc.date >= dt_from,
+            ExpenseDoc.date <= dt_to,
+        ).all()
+    )
+    expense_doc_ids = [e.id for e in expense_docs]
+    expense_items = []
+    expense_by_type = {}
+    if expense_doc_ids:
+        expense_items = (
+            db.query(ExpenseDocItem)
+            .filter(ExpenseDocItem.expense_doc_id.in_(expense_doc_ids))
+            .all()
+        )
+        for ei in expense_items:
+            et = ei.expense_type
+            type_name = et.name if et else "Boshqa"
+            category = et.category if et else "Boshqa"
+            if type_name not in expense_by_type:
+                expense_by_type[type_name] = {"name": type_name, "category": category, "amount": 0.0}
+            expense_by_type[type_name]["amount"] += float(ei.amount or 0)
+    total_expenses = sum(v["amount"] for v in expense_by_type.values())
+    expense_list = sorted(expense_by_type.values(), key=lambda x: -x["amount"])
+
+    # ===== 6. ISH HAQI =====
+    # Davr oylari uchun
+    salary_months = set()
+    d = dt_from.replace(day=1)
+    while d <= dt_to:
+        salary_months.add((d.year, d.month))
+        if d.month == 12:
+            d = d.replace(year=d.year + 1, month=1)
+        else:
+            d = d.replace(month=d.month + 1)
+
+    salary_total = 0.0
+    if salary_months:
+        for y, m in salary_months:
+            sals = db.query(Salary).filter(Salary.year == y, Salary.month == m).all()
+            salary_total += sum(float(s.total or 0) for s in sals)
+
+    # ===== 7. TO'LOVLAR (Payment) — qo'shimcha income/expense =====
+    payments_income = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0))
+        .filter(
+            Payment.type == "income",
+            Payment.status != "cancelled",
+            Payment.date >= dt_from,
+            Payment.date <= dt_to,
+        ).scalar()
+    ) or 0
+
+    payments_expense = (
+        db.query(func.coalesce(func.sum(Payment.amount), 0))
+        .filter(
+            Payment.type == "expense",
+            Payment.status != "cancelled",
+            Payment.date >= dt_from,
+            Payment.date <= dt_to,
+        ).scalar()
+    ) or 0
+
+    # ===== HISOBLASH =====
+    net_revenue = revenue - returns_total
+    operating_expenses = total_expenses + salary_total
+    net_profit = gross_profit - returns_total - operating_expenses
+
+    # ===== KUNLIK TREND =====
+    daily_data = {}
+    for o in sale_orders:
+        day_key = o.date.strftime("%Y-%m-%d") if o.date else ""
+        if day_key:
+            if day_key not in daily_data:
+                daily_data[day_key] = {"revenue": 0.0, "cogs": 0.0}
+            daily_data[day_key]["revenue"] += float(o.total or 0)
+
+    # COGS kunlik
+    if sale_order_ids:
+        for oi, prod in items:
+            order = next((o for o in sale_orders if o.id == oi.order_id), None)
+            if order and order.date:
+                day_key = order.date.strftime("%Y-%m-%d")
+                if day_key in daily_data:
+                    daily_data[day_key]["cogs"] += float(prod.purchase_price or 0) * float(oi.quantity or 0)
+
+    daily_labels = sorted(daily_data.keys())
+    daily_revenue = [daily_data[d]["revenue"] for d in daily_labels]
+    daily_profit = [daily_data[d]["revenue"] - daily_data[d]["cogs"] for d in daily_labels]
+
+    return templates.TemplateResponse("reports/profit.html", {
+        "request": request,
+        "page_title": "Foyda hisoboti",
+        "current_user": current_user,
+        "date_from": date_from,
+        "date_to": date_to,
+        # Asosiy ko'rsatkichlar
+        "revenue": revenue,
+        "net_revenue": net_revenue,
+        "cogs": cogs,
+        "gross_profit": gross_profit,
+        "returns_total": returns_total,
+        "sale_count": sale_count,
+        # Xarajatlar
+        "purchase_total": purchase_total,
+        "purchase_expenses": purchase_expenses,
+        "total_expenses": total_expenses,
+        "salary_total": salary_total,
+        "operating_expenses": operating_expenses,
+        "expense_list": expense_list,
+        # Natija
+        "net_profit": net_profit,
+        # To'lovlar
+        "payments_income": float(payments_income),
+        "payments_expense": float(payments_expense),
+        # Grafik
+        "daily_labels": daily_labels,
+        "daily_revenue": daily_revenue,
+        "daily_profit": daily_profit,
+        # Margin
+        "gross_margin": round((gross_profit / revenue * 100) if revenue else 0, 1),
+        "net_margin": round((net_profit / revenue * 100) if revenue else 0, 1),
+    })

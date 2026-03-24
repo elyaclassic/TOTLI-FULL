@@ -30,6 +30,12 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+{% if request.query_params.get('msg') %}
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="bi bi-info-circle"></i> {{ request.query_params.get('msg') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-3" id="qoldiqTabs" role="tablist">
@@ -243,6 +249,14 @@
                     <a href="/qoldiqlar/kontragent/hujjat/new" class="top-btn btn btn-success">
                         <i class="bi bi-plus-circle"></i> Yangi hujjat
                     </a>
+                    {% if current_user and current_user.role == 'admin' %}
+                    <form method="post" action="/qoldiqlar/kontragent/recalculate" class="d-inline"
+                          onsubmit="return confirm('Barcha kontragent balanslarini qayta hisoblash — sotuvlar, xaridlar, to\'lovlar va qoldiq hujjatlaridan. Davom etasizmi?');">
+                        <button type="submit" class="top-btn btn btn-outline-warning">
+                            <i class="bi bi-arrow-repeat"></i> Balanslarni qayta hisoblash
+                        </button>
+                    </form>
+                    {% endif %}
                     <button type="button" class="top-btn btn btn-outline-primary"
                             data-bs-toggle="modal" data-bs-target="#kontragentExcelImportModal">
                         <i class="bi bi-upload"></i> Exceldan yuklash

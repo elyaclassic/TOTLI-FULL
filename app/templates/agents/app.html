@@ -236,6 +236,9 @@ var allProducts = [];
 var orderItems = {}; // product_id -> qty
 var currentOrderPartnerId = null;
 var leafletMap = null;
+var gpsWatchId = null;
+var gpsIntervalId = null;
+var lastGpsPos = null;
 
 // ── UTILS ──────────────────────────────────────────────────────────────────
 function fmt(n) {
@@ -244,11 +247,16 @@ function fmt(n) {
 }
 function fmtDate(s) {
   if (!s) return '';
-  return (s||'').slice(0,16).replace('T',' ');
+  var raw = (s||'');
+  if (raw.length >= 16) {
+    var parts = raw.slice(0,10).split('-');
+    return parts[2] + '.' + parts[1] + '.' + parts[0] + ' ' + raw.slice(11,16);
+  }
+  return raw;
 }
 function statusBadge(s) {
-  var map = {new:'s-new',confirmed:'s-confirmed',delivered:'s-delivered',cancelled:'s-cancelled',production:'s-production',waiting_production:'s-production'};
-  var labels = {new:'Yangi',confirmed:'Tasdiqlangan',delivered:'Yetkazilgan',cancelled:'Bekor',production:"Ishlab chiqarishda",waiting_production:"Kutilmoqda"};
+  var map = {draft:'s-new',new:'s-new',confirmed:'s-confirmed',delivered:'s-delivered',cancelled:'s-cancelled',production:'s-production',waiting_production:'s-production'};
+  var labels = {draft:'Draft',new:'Yangi',confirmed:'Tasdiqlangan',delivered:'Yetkazilgan',cancelled:'Bekor',production:"Ishlab chiqarishda",waiting_production:"Kutilmoqda"};
   return '<span class="s-badge '+(map[s]||'')+'">'+( labels[s]||s)+'</span>';
 }
 function api(path, opts) {
@@ -274,7 +282,7 @@ function doLogin() {
   fd.append('username', phone);
   fd.append('password', pass);
   fetch('/api/login', { method: 'POST', body: fd }).then(function(r){ return r.json(); }).then(function(d){
-    if (!d || d.error || d.detail || !d.token) { showLoginErr(d && (d.error || d.detail) || 'Login yoki parol xato'); return; }
+    if (!d || !d.success || d.error || d.detail || !d.token) { showLoginErr(d && (d.error || d.detail) || 'Login yoki parol xato'); return; }
     if (d.role !== 'agent') { showLoginErr('Faqat agentlar kirishi mumkin'); return; }
     TOKEN = d.token;
     localStorage.setItem('agent_token', TOKEN);
@@ -290,12 +298,54 @@ function showLoginErr(msg) {
 }
 
 function doLogout() {
+  stopGpsTracking();
   localStorage.removeItem('agent_token');
   TOKEN = ''; agentInfo = null;
   document.getElementById('app').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
 }
 window.doLogout = doLogout;
+
+// ── GPS TRACKING ────────────────────────────────────────────────────────────
+function startGpsTracking() {
+  if (!navigator.geolocation) { console.warn('Geolocation not supported'); return; }
+  // Doimiy GPS tracking
+  gpsWatchId = navigator.geolocation.watchPosition(
+    function(pos) {
+      lastGpsPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
+    },
+    function(err) { console.warn('GPS error:', err.message); },
+    { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
+  );
+  // Har 60 sekundda serverga yuborish
+  sendGpsLocation(); // darhol birinchi marta
+  gpsIntervalId = setInterval(sendGpsLocation, 60000);
+}
+
+function stopGpsTracking() {
+  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
+  if (gpsIntervalId !== null) { clearInterval(gpsIntervalId); gpsIntervalId = null; }
+  lastGpsPos = null;
+}
+
+function sendGpsLocation() {
+  if (!lastGpsPos || !TOKEN) return;
+  var fd = new FormData();
+  fd.append('latitude', lastGpsPos.lat);
+  fd.append('longitude', lastGpsPos.lng);
+  fd.append('accuracy', lastGpsPos.accuracy || 0);
+  fd.append('token', TOKEN);
+  // Battery API (agar mavjud bo'lsa)
+  var sendIt = function(battery) {
+    if (battery !== null) fd.append('battery', battery);
+    fetch('/api/agent/location', { method: 'POST', body: fd }).catch(function(e){ console.warn('GPS send error:', e); });
+  };
+  if (navigator.getBattery) {
+    navigator.getBattery().then(function(b){ sendIt(Math.round(b.level * 100)); }).catch(function(){ sendIt(null); });
+  } else {
+    sendIt(null);
+  }
+}
 
 function startApp() {
   document.getElementById('loginScreen').style.display = 'none';
@@ -308,6 +358,7 @@ function startApp() {
   loadClients();
   loadProducts();
   showPage('homePage','tabHome');
+  startGpsTracking();
 }
 
 // Auto-login (URL token yoki localStorage)
@@ -504,11 +555,13 @@ function renderProducts(list) {
   if (!list.length) { el.innerHTML = '<div class="text-muted small text-center py-3">Mahsulotlar yo\'q</div>'; return; }
   el.innerHTML = list.map(function(p){
     var qty = orderItems[p.id] || 0;
+    var stockNum = p.stock != null ? Number(p.stock) : null;
+    var stockHtml = stockNum !== null ? '<span class="' + (stockNum > 0 ? 'text-success' : 'text-danger') + '" style="font-size:11px;font-weight:600;">Qoldiq: ' + fmt(stockNum) + '</span>' : '';
     return '<div class="product-row" id="prow_'+p.id+'">' +
       '<div class="d-flex justify-content-between align-items-center">' +
         '<div>' +
           '<div class="p-name">' + (p.name||'—') + '</div>' +
-          '<div class="p-price">' + fmt(p.price) + ' so\'m / ' + (p.unit||'dona') + '</div>' +
+          '<div class="p-price">' + fmt(p.price) + ' so\'m / ' + (p.unit||'dona') + ' ' + stockHtml + '</div>' +
         '</div>' +
         '<div class="qty-ctrl">' +
           '<button onclick="changeQty('+p.id+',-1)">−</button>' +
@@ -583,8 +636,8 @@ function submitOrder() {
     body: JSON.stringify(payload)
   }).then(function(r){ return r.json(); }).then(function(d){
     btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Buyurtma berish';
-    if (d.error || d.detail) { alert(d.error || d.detail || 'Xatolik'); return; }
-    alert('Buyurtma #' + (d.order_number||'') + ' muvaffaqiyatli yuborildi!');
+    if (d.error || d.detail || !d.success) { alert(d.error || d.detail || 'Xatolik'); return; }
+    alert('Buyurtma #' + (d.order_number||'') + ' draft sifatida yuborildi.\nAdmin tasdiqlashini kutmoqda.');
     orderItems = {};
     updateOrderTotal();
     showPage('clientsPage','tabClients');

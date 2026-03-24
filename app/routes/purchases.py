@@ -27,6 +27,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin
 from app.utils.notifications import check_low_stock_and_notify
+from app.utils.audit import log_action
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.product_price import get_suggested_price
 from fastapi.responses import JSONResponse
@@ -381,6 +382,10 @@ async def purchase_confirm(
         partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()
         if partner:
             partner.balance -= total_with_expenses
+    log_action(db, user=current_user, action="confirm", entity_type="purchase",
+               entity_id=purchase.id, entity_number=purchase.number,
+               details=f"Summa: {total_with_expenses:,.0f}",
+               ip_address=request.client.host if request.client else "")
     db.commit()
     check_low_stock_and_notify(db)
     return RedirectResponse(url="/purchases", status_code=303)

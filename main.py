@@ -1,4 +1,4 @@
-
+# reload: 2026-03-24
 # --- Importlar ---
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +30,7 @@ from app.routes import api_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
 from app.routes import admin as admin_routes
+from app.routes import audit_routes
 
 app = FastAPI(title="TOTLI HOLVA", description="Biznes boshqaruv tizimi", version="1.0")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -57,6 +58,7 @@ app.include_router(api_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(audit_routes.router)
 
 
 # ==========================================
@@ -212,6 +214,11 @@ async def startup():
         start_scheduler()
     except Exception as e:
         print("[Startup] Scheduler ishga tushmadi:", e)
+    try:
+        from app.utils.telegram_bot import start_telegram_bot
+        start_telegram_bot()
+    except Exception as e:
+        print("[Startup] Telegram bot ishga tushmadi:", e)
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)

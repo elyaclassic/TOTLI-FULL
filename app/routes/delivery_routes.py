@@ -47,6 +47,7 @@ async def delivery_list(request: Request, db: Session = Depends(get_db), current
     deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(50).all()
     return templates.TemplateResponse("delivery/list.html", {
         "request": request,
+        "current_user": current_user,
         "drivers": drivers,
         "deliveries": deliveries,
         "page_title": "Yetkazib berish",
@@ -106,6 +107,7 @@ async def driver_detail(
     )
     return templates.TemplateResponse("delivery/detail.html", {
         "request": request,
+        "current_user": current_user,
         "driver": driver,
         "locations": locations,
         "deliveries": deliveries,
@@ -177,6 +179,7 @@ async def map_view(request: Request, db: Session = Depends(get_db), current_user
         yandex_apikey = ""
     return templates.TemplateResponse("map/index.html", {
         "request": request,
+        "current_user": current_user,
         "agents": agents,
         "drivers": drivers,
         "partner_locations": partner_locations,
@@ -245,6 +248,7 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
     recent_deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(10).all()
     return templates.TemplateResponse("supervisor/dashboard.html", {
         "request": request,
+        "current_user": current_user,
         "stats": stats,
         "agents": agents,
         "drivers": drivers,
@@ -293,10 +297,27 @@ async def add_delivery_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
+    # Yetkazish raqami generatsiya: DLV-YYYYMMDD-NNN
+    today = datetime.now()
+    prefix = f"DLV-{today.strftime('%Y%m%d')}"
+    last = db.query(Delivery).filter(Delivery.number.like(f"{prefix}%")).order_by(Delivery.id.desc()).first()
+    if last and last.number:
+        try:
+            seq = int(last.number.split("-")[-1]) + 1
+        except Exception:
+            seq = 1
+    else:
+        seq = 1
+    delivery_number = f"{prefix}-{seq:03d}"
+    # order_id topish (agar mavjud bo'lsa)
+    order = db.query(Order).filter(Order.number == order_number).first()
     delivery = Delivery(
+        number=delivery_number,
         driver_id=driver_id,
+        order_id=order.id if order else None,
         order_number=order_number,
         delivery_address=delivery_address,
+        planned_date=today,
         notes=notes,
         status="pending",
     )

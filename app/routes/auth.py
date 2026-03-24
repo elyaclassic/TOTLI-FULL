@@ -94,18 +94,37 @@ async def login(
         # Agent uchun: session cookie o'rniga Bearer token bilan /agent ga redirect
         if role == "agent":
             from app.models.database import Agent as AgentModel
-            from sqlalchemy import or_, text as _text
-            # user_id ustuni orqali agent topish (asosiy), phone yoki username bo'yicha zaxira
+            from sqlalchemy import or_
+            # employee_id yoki phone orqali agent topish
             agent = db.query(AgentModel).filter(
                 AgentModel.is_active == True,
-                AgentModel.user_id == user.id
+                AgentModel.employee_id == user.id,
             ).first()
+            if not agent and user.phone:
+                agent = db.query(AgentModel).filter(
+                    AgentModel.is_active == True,
+                    AgentModel.phone == user.phone,
+                ).first()
             if not agent:
                 agent = db.query(AgentModel).filter(
                     AgentModel.is_active == True,
-                    or_(AgentModel.phone == user.username, AgentModel.phone == user.phone)
+                    or_(AgentModel.phone == user.username, AgentModel.full_name == user.full_name),
                 ).first()
-            agent_token = create_session_token(agent.id if agent else user.id, "agent")
+            if not agent:
+                # Agent avtomatik yaratish
+                last_agent = db.query(AgentModel).order_by(AgentModel.id.desc()).first()
+                seq = (last_agent.id + 1) if last_agent else 1
+                agent = AgentModel(
+                    code=f"AG{seq:03d}",
+                    full_name=user.full_name or user.username,
+                    phone=user.phone or "",
+                    is_active=True,
+                    employee_id=user.id,
+                )
+                db.add(agent)
+                db.commit()
+                db.refresh(agent)
+            agent_token = create_session_token(agent.id, "agent")
             resp = RedirectResponse(url=f"/agent?token={agent_token}", status_code=303)
             resp.set_cookie("session_token", token, path="/", httponly=True, max_age=86400,
                             samesite="lax", secure=use_https)

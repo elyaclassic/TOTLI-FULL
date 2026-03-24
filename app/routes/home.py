@@ -122,11 +122,17 @@ async def home(
             # birth_date ustuni mavjud emas bo'lishi mumkin (eski bazalar)
             pass
         overdue_cutoff = datetime.now() - timedelta(days=7)
-        overdue_debts_count = db.query(Order).filter(
-            Order.type == "sale",
-            Order.debt > 0,
-            Order.created_at < overdue_cutoff,
-        ).count()
+        overdue_debts_count = (
+            db.query(Order.partner_id)
+            .filter(
+                Order.type == "sale",
+                Order.debt > 0,
+                Order.partner_id.isnot(None),
+                Order.created_at < overdue_cutoff,
+            )
+            .distinct()
+            .count()
+        )
     except Exception as e:
         import traceback
         print(f"[Home] Statistika yuklashda xato: {e}")

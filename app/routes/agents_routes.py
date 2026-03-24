@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core import templates
-from app.models.database import get_db, Agent, AgentLocation, Visit, User
+from app.models.database import get_db, Agent, AgentLocation, Visit, User, Order
 from app.deps import require_auth, require_admin
 
 router = APIRouter(tags=["agents"])
@@ -93,11 +93,19 @@ async def agent_detail(
         .limit(30)
         .all()
     )
+    orders = (
+        db.query(Order)
+        .filter(Order.agent_id == agent_id)
+        .order_by(Order.id.desc())
+        .limit(50)
+        .all()
+    )
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
         "agent": agent,
         "locations": locations,
         "visits": visits,
+        "orders": orders,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
     })

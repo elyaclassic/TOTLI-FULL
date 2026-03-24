@@ -1,0 +1,286 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-graph-up-arrow"></i> Foyda hisoboti</h4>
+    <div class="d-flex gap-2">
+        <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+    </div>
+</div>
+
+<!-- Filtr -->
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/profit" class="row g-2 align-items-end">
+        <div class="col-6 col-md-3">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="date_from" class="form-control" value="{{ date_from }}">
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="date_to" class="form-control" value="{{ date_to }}">
+        </div>
+        <div class="col-12 col-md-2">
+            <button type="submit" class="top-btn btn btn-primary w-100"><i class="bi bi-search"></i> Ko'rsatish</button>
+        </div>
+    </form>
+</div>
+
+<!-- Asosiy ko'rsatkichlar -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat" style="border-left: 4px solid #1a73e8;">
+            <div class="num text-primary">{{ "{:,.0f}".format(revenue) }}</div>
+            <div class="lbl">Sotuv daromadi</div>
+            <div style="font-size:11px;color:#888;">{{ sale_count }} ta sotuv</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat" style="border-left: 4px solid #f57c00;">
+            <div class="num" style="color:#f57c00;">{{ "{:,.0f}".format(cogs) }}</div>
+            <div class="lbl">Sotuv tannarxi</div>
+            <div style="font-size:11px;color:#888;">Mahsulot xarid narxi</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat" style="border-left: 4px solid {% if gross_profit >= 0 %}#2e7d32{% else %}#d32f2f{% endif %};">
+            <div class="num {% if gross_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(gross_profit) }}</div>
+            <div class="lbl">Yalpi foyda</div>
+            <div style="font-size:11px;color:#888;">Marja: {{ gross_margin }}%</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat" style="border-left: 4px solid {% if net_profit >= 0 %}#2e7d32{% else %}#d32f2f{% endif %};">
+            <div class="num {% if net_profit >= 0 %}text-success{% else %}text-danger{% endif %}" style="font-size:1.4rem;">{{ "{:,.0f}".format(net_profit) }}</div>
+            <div class="lbl fw-bold">SOF FOYDA</div>
+            <div style="font-size:11px;color:#888;">Marja: {{ net_margin }}%</div>
+        </div>
+    </div>
+</div>
+
+<!-- Batafsil jadval -->
+<div class="row g-3 mb-3">
+    <div class="col-lg-7">
+        <div class="card data-table">
+            <div class="card-header">
+                <span><i class="bi bi-calculator"></i> Foyda-zarar hisobi</span>
+                <span class="text-muted small">{{ date_from | fmt_date }} — {{ date_to | fmt_date }}</span>
+            </div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <tbody>
+                        <tr class="table-light">
+                            <td colspan="2" class="fw-bold"><i class="bi bi-arrow-up-circle text-primary"></i> DAROMADLAR</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-4">Sotuv daromadi ({{ sale_count }} ta)</td>
+                            <td class="text-end num-cell">{{ "{:,.0f}".format(revenue) }}</td>
+                        </tr>
+                        {% if returns_total %}
+                        <tr>
+                            <td class="ps-4 text-danger">Qaytarishlar (minus)</td>
+                            <td class="text-end text-danger">-{{ "{:,.0f}".format(returns_total) }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="fw-bold">
+                            <td class="ps-4">Sof daromad</td>
+                            <td class="text-end num-cell">{{ "{:,.0f}".format(net_revenue) }}</td>
+                        </tr>
+
+                        <tr class="table-light">
+                            <td colspan="2" class="fw-bold"><i class="bi bi-arrow-down-circle text-danger"></i> XARAJATLAR</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-4">Sotuv tannarxi (mahsulot xarid narxi)</td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(cogs) }}</td>
+                        </tr>
+
+                        <tr class="table-warning fw-bold">
+                            <td>YALPI FOYDA</td>
+                            <td class="text-end {% if gross_profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(gross_profit) }}</td>
+                        </tr>
+
+                        <tr class="table-light">
+                            <td colspan="2" class="fw-bold"><i class="bi bi-building"></i> OPERATSION XARAJATLAR</td>
+                        </tr>
+                        {% if salary_total %}
+                        <tr>
+                            <td class="ps-4">Ish haqi</td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(salary_total) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% for exp in expense_list %}
+                        <tr>
+                            <td class="ps-4">
+                                {{ exp.name }}
+                                {% if exp.category %}<span class="text-muted small">({{ exp.category }})</span>{% endif %}
+                            </td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(exp.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not salary_total and not expense_list %}
+                        <tr>
+                            <td class="ps-4 text-muted" colspan="2">Davrda operatsion xarajat yo'q</td>
+                        </tr>
+                        {% endif %}
+                        <tr class="fw-bold">
+                            <td class="ps-4">Jami operatsion xarajatlar</td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(operating_expenses) }}</td>
+                        </tr>
+
+                        <tr class="table-{% if net_profit >= 0 %}success{% else %}danger{% endif %} fw-bold" style="font-size:1.1rem;">
+                            <td>SOF FOYDA</td>
+                            <td class="text-end">{{ "{:,.0f}".format(net_profit) }} so'm</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-5">
+        <!-- Xarid ma'lumotlari -->
+        <div class="card data-table mb-3">
+            <div class="card-header"><i class="bi bi-cart-down"></i> Xarid ma'lumotlari</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <tbody>
+                        <tr>
+                            <td>Xarid summasi</td>
+                            <td class="text-end num-cell">{{ "{:,.0f}".format(purchase_total) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Qo'shimcha xarajatlar (transport va h.k.)</td>
+                            <td class="text-end num-cell">{{ "{:,.0f}".format(purchase_expenses) }}</td>
+                        </tr>
+                        <tr class="fw-bold">
+                            <td>Jami xarid</td>
+                            <td class="text-end num-cell">{{ "{:,.0f}".format(purchase_total + purchase_expenses) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pul oqimi -->
+        <div class="card data-table mb-3">
+            <div class="card-header"><i class="bi bi-cash-stack"></i> Pul oqimi (to'lovlar)</div>
+            <div class="card-body p-0">
+                <table class="table mb-0">
+                    <tbody>
+                        <tr>
+                            <td><i class="bi bi-arrow-down-left text-success"></i> Kirim (tushum)</td>
+                            <td class="text-end sum-cell">{{ "{:,.0f}".format(payments_income) }}</td>
+                        </tr>
+                        <tr>
+                            <td><i class="bi bi-arrow-up-right text-danger"></i> Chiqim (to'lovlar)</td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(payments_expense) }}</td>
+                        </tr>
+                        <tr class="fw-bold">
+                            <td>Sof pul oqimi</td>
+                            <td class="text-end {% if payments_income - payments_expense >= 0 %}sum-cell{% else %}text-danger{% endif %}">
+                                {{ "{:,.0f}".format(payments_income - payments_expense) }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Margin -->
+        <div class="card data-table">
+            <div class="card-header"><i class="bi bi-percent"></i> Rentabellik</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold">Yalpi marja</span>
+                        <span class="small fw-bold">{{ gross_margin }}%</span>
+                    </div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar {% if gross_margin >= 30 %}bg-success{% elif gross_margin >= 15 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ [gross_margin, 100] | min }}%"></div>
+                    </div>
+                </div>
+                <div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="small fw-bold">Sof marja</span>
+                        <span class="small fw-bold">{{ net_margin }}%</span>
+                    </div>
+                    <div class="progress" style="height:10px;">
+                        <div class="progress-bar {% if net_margin >= 20 %}bg-success{% elif net_margin >= 10 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ [net_margin, 100] | min if net_margin > 0 else 0 }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Kunlik grafik -->
+{% if daily_labels %}
+<div class="card data-table mb-3">
+    <div class="card-header"><i class="bi bi-bar-chart"></i> Kunlik sotuv va foyda</div>
+    <div class="card-body">
+        <canvas id="profitChart" height="80"></canvas>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+    var ctx = document.getElementById('profitChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ daily_labels | tojson }},
+            datasets: [
+                {
+                    label: 'Sotuv',
+                    data: {{ daily_revenue | tojson }},
+                    backgroundColor: 'rgba(26,115,232,0.3)',
+                    borderColor: '#1a73e8',
+                    borderWidth: 1,
+                    order: 2,
+                },
+                {
+                    label: 'Yalpi foyda',
+                    data: {{ daily_profit | tojson }},
+                    type: 'line',
+                    borderColor: '#2e7d32',
+                    backgroundColor: 'rgba(46,125,50,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    order: 1,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(v) {
+                            if (v >= 1000000) return (v/1000000).toFixed(1) + 'M';
+                            if (v >= 1000) return (v/1000).toFixed(0) + 'K';
+                            return v;
+                        }
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) {
+                            return ctx.dataset.label + ': ' + Number(ctx.raw).toLocaleString('uz') + " so'm";
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -12,7 +12,7 @@
     <form method="get" action="/reports/partner-reconciliation" class="row g-3 align-items-end" id="reconciliationForm">
         <div class="col-md-4 position-relative">
             <label class="form-label">Kontragent <span class="text-danger">*</span></label>
-            <input type="hidden" name="partner_id" id="partnerId" value="{{ partner_id or '' }}" required>
+            <input type="hidden" name="partner_id" id="partnerId" value="{{ partner_id or '' }}">
             <input type="text" class="form-control" id="partnerSearch" autocomplete="off"
                    placeholder="Nomini yoki kodini yozib qidiring..."
                    value="{% if partner %}{{ partner.name }}{% if partner.code %} ({{ partner.code }}){% endif %}{% endif %}">
@@ -41,7 +41,7 @@
             <div class="num {% if opening_balance > 0 %}text-danger{% elif opening_balance < 0 %}text-success{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
                 {{ "{:,.0f}".format(opening_balance) }}
             </div>
-            <div class="lbl">Davr boshiga qoldiq ({{ date_from }})</div>
+            <div class="lbl">Davr boshiga qoldiq ({{ date_from | fmt_date }})</div>
         </div>
     </div>
     <div class="col-6 col-md-3">
@@ -61,7 +61,7 @@
             <div class="num {% if closing_balance > 0 %}text-danger{% elif closing_balance < 0 %}text-success{% else %}text-muted{% endif %}" style="font-size:1.1rem;">
                 {{ "{:,.0f}".format(closing_balance) }}
             </div>
-            <div class="lbl">Davr oxiriga qoldiq ({{ date_to }})</div>
+            <div class="lbl">Davr oxiriga qoldiq ({{ date_to | fmt_date }})</div>
         </div>
     </div>
 </div>
@@ -87,7 +87,7 @@
 
 <div class="card data-table mb-3">
     <div class="card-header">
-        <span><i class="bi bi-arrow-left-right"></i> Hisob kitoblarni solishtirish — <strong>{{ partner.name }}</strong> &nbsp;|&nbsp; {{ date_from }} – {{ date_to }}</span>
+        <span><i class="bi bi-arrow-left-right"></i> Hisob kitoblarni solishtirish — <strong>{{ partner.name }}</strong> &nbsp;|&nbsp; {{ date_from | fmt_date }} – {{ date_to | fmt_date }}</span>
         <div>
             <a href="/reports/partner-reconciliation/export?partner_id={{ partner.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="top-btn">
                 <i class="bi bi-file-earmark-excel"></i> Excel
@@ -113,7 +113,7 @@
                 </thead>
                 <tbody>
                     <tr class="table-info">
-                        <td><strong>Davr boshiga qoldiq ({{ date_from }})</strong></td>
+                        <td><strong>Davr boshiga qoldiq ({{ date_from | fmt_date }})</strong></td>
                         <td class="text-end border-start sum-cell">{% if opening_balance > 0 %}{{ "{:,.0f}".format(opening_balance) }}{% else %}—{% endif %}</td>
                         <td class="text-end sum-cell">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
                         <td class="text-end border-start sum-cell">{% if opening_balance < 0 %}{{ "{:,.0f}".format(-opening_balance) }}{% else %}—{% endif %}</td>
@@ -138,7 +138,7 @@
                         </tr>
                     {% endif %}
                     <tr class="table-info fw-bold">
-                        <td><strong>Davr oxiriga qoldiq ({{ date_to }})</strong></td>
+                        <td><strong>Davr oxiriga qoldiq ({{ date_to | fmt_date }})</strong></td>
                         <td class="text-end border-start sum-cell">{% if closing_balance > 0 %}{{ "{:,.0f}".format(closing_balance) }}{% else %}—{% endif %}</td>
                         <td class="text-end sum-cell">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
                         <td class="text-end border-start sum-cell">{% if closing_balance < 0 %}{{ "{:,.0f}".format(-closing_balance) }}{% else %}—{% endif %}</td>
@@ -246,9 +246,115 @@
 <p class="muted-cell mt-2 mb-0">
     <i class="bi bi-info-circle"></i> Debet — kontragent bizga qarzdor (sotuv, biz to'lagan to'lov). Kredit — to'lov (kirim), qaytarish, xarid.
 </p>
+{% elif summary_rows %}
+{# Umumiy hisobot — barcha kontragentlar #}
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set grand_debit = summary_rows | map(attribute='total_debit') | sum %}
+            <div class="num text-primary" style="font-size:1.1rem;">{{ "{:,.0f}".format(grand_debit) }}</div>
+            <div class="lbl">Jami debet (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set grand_credit = summary_rows | map(attribute='total_credit') | sum %}
+            <div class="num text-success" style="font-size:1.1rem;">{{ "{:,.0f}".format(grand_credit) }}</div>
+            <div class="lbl">Jami kredit (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set grand_receivable = summary_rows | selectattr('closing_balance', 'gt', 0) | map(attribute='closing_balance') | sum %}
+            <div class="num text-danger" style="font-size:1.1rem;">{{ "{:,.0f}".format(grand_receivable) }}</div>
+            <div class="lbl">Jami oladigan (qarzdorlar)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            {% set grand_payable_list = [] %}
+            {% for sr in summary_rows %}
+                {% if sr.closing_balance < 0 %}
+                    {% if grand_payable_list.append(sr.closing_balance) %}{% endif %}
+                {% endif %}
+            {% endfor %}
+            {% set grand_payable = grand_payable_list | sum | abs %}
+            <div class="num text-warning" style="font-size:1.1rem;">{{ "{:,.0f}".format(grand_payable) }}</div>
+            <div class="lbl">Jami beradigan (avanslar)</div>
+        </div>
+    </div>
+</div>
+
+<div class="card data-table mb-3">
+    <div class="card-header">
+        <span><i class="bi bi-people"></i> Barcha kontragentlar — umumiy solishtirish &nbsp;|&nbsp; {{ date_from | fmt_date }} – {{ date_to | fmt_date }}</span>
+        <span class="badge bg-secondary">{{ summary_rows | length }} ta</span>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:40px">#</th>
+                        <th>Kontragent</th>
+                        <th class="text-end">Davr boshiga</th>
+                        <th class="text-end">Debet</th>
+                        <th class="text-end">Kredit</th>
+                        <th class="text-end">Davr oxiriga</th>
+                        <th>Holat</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sr in summary_rows | sort(attribute='closing_balance', reverse=true) %}
+                    <tr>
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td>
+                            <a href="/reports/partner-reconciliation?partner_id={{ sr.partner.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="text-decoration-none">
+                                <strong>{{ sr.partner.name }}</strong>
+                            </a>
+                            {% if sr.partner.code %}<code class="muted-cell ms-1">{{ sr.partner.code }}</code>{% endif %}
+                        </td>
+                        <td class="text-end {% if sr.opening_balance > 0 %}text-danger{% elif sr.opening_balance < 0 %}text-success{% else %}text-muted{% endif %}">
+                            {{ "{:,.0f}".format(sr.opening_balance) }}
+                        </td>
+                        <td class="text-end num-cell">{% if sr.total_debit %}{{ "{:,.0f}".format(sr.total_debit) }}{% else %}—{% endif %}</td>
+                        <td class="text-end sum-cell">{% if sr.total_credit %}{{ "{:,.0f}".format(sr.total_credit) }}{% else %}—{% endif %}</td>
+                        <td class="text-end fw-bold {% if sr.closing_balance > 0 %}text-danger{% elif sr.closing_balance < 0 %}text-success{% else %}text-muted{% endif %}">
+                            {{ "{:,.0f}".format(sr.closing_balance) }}
+                        </td>
+                        <td>
+                            {% if sr.closing_balance > 0 %}
+                                <span class="badge-cancelled">Qarzdor</span>
+                            {% elif sr.closing_balance < 0 %}
+                                <span class="badge-done">Avans</span>
+                            {% else %}
+                                <span class="badge-inactive">Hisob-kitob</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="table-secondary fw-bold">
+                        <td colspan="2" class="text-end">JAMI:</td>
+                        <td class="text-end">{{ "{:,.0f}".format(summary_rows | map(attribute='opening_balance') | sum) }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(summary_rows | map(attribute='total_debit') | sum) }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(summary_rows | map(attribute='total_credit') | sum) }}</td>
+                        <td class="text-end">{{ "{:,.0f}".format(summary_rows | map(attribute='closing_balance') | sum) }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<p class="muted-cell mt-2 mb-0">
+    <i class="bi bi-info-circle"></i> Kontragent nomini bosib batafsil hisobotni ko'ring. Qizil = biz olishimiz kerak. Yashil = biz berishimiz kerak.
+</p>
 {% else %}
 <div class="alert alert-info">
-    <i class="bi bi-info-circle"></i> Hisobotni ko'rish uchun kontragentni tanlang va «Ko'rsatish» tugmasini bosing.
+    <i class="bi bi-info-circle"></i> Hisobotni ko'rish uchun kontragentni tanlang va «Ko'rsatish» tugmasini bosing, yoki kontragentsiz «Ko'rsatish» bosib umumiy hisobotni ko'ring.
 </div>
 {% endif %}
 
@@ -333,18 +439,7 @@
         });
     });
 
-    var form = document.getElementById('reconciliationForm');
-    if (form) {
-        form.addEventListener('submit', function(e) {
-            if (!hiddenId.value || hiddenId.value === '') {
-                e.preventDefault();
-                searchInput.focus();
-                searchInput.placeholder = 'Kontragentni ro\'yxatdan tanlang yoki qidiring...';
-                showDropdown(partners.length ? partners.slice(0, 50) : []);
-                return false;
-            }
-        });
-    }
+    // Kontragent tanlanmasa ham formni yuborish mumkin (umumiy hisobot)
 })();
 </script>
 {% endblock %}

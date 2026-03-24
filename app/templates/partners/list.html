@@ -82,6 +82,67 @@
         </div>
     </div>
 
+    <!-- Bulk edit panel -->
+    <div class="filter-card mb-3 d-none" id="bulkAssignPanel">
+        <form method="post" action="/partners/bulk-assign-agent" id="bulkAssignForm">
+            <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+                <span class="fw-semibold"><i class="bi bi-check2-square"></i> <span id="selectedCount">0</span> ta tanlandi</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-auto" onclick="clearSelection()"><i class="bi bi-x-lg"></i> Bekor qilish</button>
+            </div>
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label small mb-1">Agent</label>
+                    <select name="agent_id" class="form-select form-select-sm">
+                        <option value="">— O'zgartirmaslik —</option>
+                        {% for a in agents %}
+                        <option value="{{ a.id }}">{{ a.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Tashrif kuni</label>
+                    <select name="visit_day" class="form-select form-select-sm">
+                        <option value="">— O'zgartirmaslik —</option>
+                        <option value="1">Dushanba</option>
+                        <option value="2">Seshanba</option>
+                        <option value="3">Chorshanba</option>
+                        <option value="4">Payshanba</option>
+                        <option value="5">Juma</option>
+                        <option value="6">Shanba</option>
+                        <option value="0">Yakshanba</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Kategoriya</label>
+                    <select name="category" class="form-select form-select-sm">
+                        <option value="">— O'zgartirmaslik —</option>
+                        <option value="A">A - VIP</option>
+                        <option value="B">B - Katta</option>
+                        <option value="C">C - O'rta</option>
+                        <option value="D">D - Kichik</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small mb-1">Hudud</label>
+                    <select name="region" class="form-select form-select-sm">
+                        <option value="">— O'zgartirmaslik —</option>
+                        <option value="tashkent">Toshkent</option>
+                        <option value="samarkand">Samarqand</option>
+                        <option value="bukhara">Buxoro</option>
+                        <option value="andijan">Andijon</option>
+                        <option value="fergana">Farg'ona</option>
+                        <option value="namangan">Namangan</option>
+                        <option value="other">Boshqa</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-check-circle"></i> Saqlash</button>
+                </div>
+            </div>
+            <div id="bulkPartnerIds"></div>
+        </form>
+    </div>
+
     <!-- Data Table Card -->
     <div class="data-table">
         <div class="card-header d-flex justify-content-between align-items-center px-3 py-2">
@@ -93,11 +154,12 @@
                 <table class="table table-hover mb-0" id="partnersTable">
                     <thead class="table-light">
                         <tr>
+                            <th style="width:32px"><input type="checkbox" id="selectAllPartners" title="Hammasini tanlash" onchange="toggleAllPartners(this)"></th>
                             <th style="width:42px">#</th>
                             <th>Nomi</th>
                             <th>Turi</th>
+                            <th>Agent</th>
                             <th>Telefon</th>
-                            <th>Manzil</th>
                             <th class="text-end">Balans</th>
                             <th style="width:80px"></th>
                         </tr>
@@ -106,6 +168,7 @@
                         {% if partners %}
                         {% for partner in partners %}
                         <tr>
+                            <td><input type="checkbox" class="partner-checkbox" value="{{ partner.id }}"></td>
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td>
                                 <strong>{{ partner.name or '-' }}</strong>
@@ -120,6 +183,15 @@
                                 <span class="badge-waiting">Yetkazib beruvchi</span>
                                 {% else %}
                                 <span class="badge-draft">Ikkalasi</span>
+                                {% endif %}
+                            </td>
+                            <td class="muted-cell small">
+                                {% if partner.agent_id %}
+                                    {% for a in agents if a.id == partner.agent_id %}
+                                        <span class="badge bg-primary bg-opacity-10 text-primary">{{ a.full_name }}</span>
+                                    {% endfor %}
+                                {% else %}
+                                    <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
                             <td class="muted-cell">{{ partner.phone or '-' }}</td>
@@ -146,6 +218,7 @@
                                         data-partner-address="{{ partner.address or '' }}"
                                         data-partner-credit="{{ partner.credit_limit if partner.credit_limit is not none else 0 }}"
                                         data-partner-discount="{{ partner.discount_percent if partner.discount_percent is not none else 0 }}"
+                                        data-partner-agent-id="{{ partner.agent_id or '' }}"
                                         onclick="editPartnerFromData(this)">
                                         <i class="bi bi-pencil"></i>
                                     </button>
@@ -160,7 +233,7 @@
                         {% endfor %}
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-5">
+                            <td colspan="9" class="text-center text-muted py-5">
                                 <i class="bi bi-people fs-1 d-block mb-2"></i>
                                 Hozircha kontragentlar yo'q<br>
                                 <small>Yuqoridagi Yaratish tugmasini bosing</small>
@@ -249,8 +322,8 @@
 
                         <!-- Visit Schedule & Categories (majburiy faqat Mijoz/Ikkalasi uchun) -->
                         <div class="col-md-4">
-                            <label class="form-label" id="add_visit_day_label">*Tashrif kuni</label>
-                            <select class="form-select" name="visit_day" id="add_visit_day" required>
+                            <label class="form-label" id="add_visit_day_label">Tashrif kuni</label>
+                            <select class="form-select" name="visit_day" id="add_visit_day">
                                 <option value="">Tanlang</option>
                                 <option value="1">Dushanba</option>
                                 <option value="2">Seshanba</option>
@@ -262,8 +335,8 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" id="add_category_label">*Kategoriya</label>
-                            <select class="form-select" name="category" id="add_category" required>
+                            <label class="form-label" id="add_category_label">Kategoriya</label>
+                            <select class="form-select" name="category" id="add_category">
                                 <option value="">Tanlang</option>
                                 <option value="A">A - VIP</option>
                                 <option value="B">B - Katta</option>
@@ -272,8 +345,8 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" id="add_region_label">*Hudud</label>
-                            <select class="form-select" name="region" id="add_region" required>
+                            <label class="form-label" id="add_region_label">Hudud</label>
+                            <select class="form-select" name="region" id="add_region">
                                 <option value="">Tanlang</option>
                                 <option value="tashkent">Toshkent</option>
                                 <option value="samarkand">Samarqand</option>
@@ -493,8 +566,8 @@
 
                         <!-- Visit Schedule & Categories (majburiy faqat Mijoz/Ikkalasi uchun) -->
                         <div class="col-md-4">
-                            <label class="form-label" id="edit_visit_day_label">*Tashrif kuni</label>
-                            <select class="form-select" name="visit_day" id="edit_visit_day" required>
+                            <label class="form-label" id="edit_visit_day_label">Tashrif kuni</label>
+                            <select class="form-select" name="visit_day" id="edit_visit_day">
                                 <option value="">Tanlang</option>
                                 <option value="1">Dushanba</option>
                                 <option value="2">Seshanba</option>
@@ -506,8 +579,8 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" id="edit_category_label">*Kategoriya</label>
-                            <select class="form-select" name="category" id="edit_category" required>
+                            <label class="form-label" id="edit_category_label">Kategoriya</label>
+                            <select class="form-select" name="category" id="edit_category">
                                 <option value="">Tanlang</option>
                                 <option value="A">A - VIP</option>
                                 <option value="B">B - Katta</option>
@@ -516,8 +589,8 @@
                             </select>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label" id="edit_region_label">*Hudud</label>
-                            <select class="form-select" name="region" id="edit_region" required>
+                            <label class="form-label" id="edit_region_label">Hudud</label>
+                            <select class="form-select" name="region" id="edit_region">
                                 <option value="">Tanlang</option>
                                 <option value="tashkent">Toshkent</option>
                                 <option value="samarkand">Samarqand</option>
@@ -579,13 +652,24 @@
                             </select>
                         </div>
 
+                        <!-- Agent -->
+                        <div class="col-md-4">
+                            <label class="form-label">Agent</label>
+                            <select class="form-select" name="agent_id" id="edit_agent_id">
+                                <option value="">— Biriktirilmagan —</option>
+                                {% for a in agents %}
+                                <option value="{{ a.id }}">{{ a.full_name }} ({{ a.code }})</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
                         <!-- Financial -->
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">Kredit limiti</label>
                             <input type="number" class="form-control" name="credit_limit" id="edit_credit_limit"
                                 value="0" step="100000">
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">Chegirma %</label>
                             <input type="number" class="form-control" name="discount_percent" id="edit_discount_percent"
                                 value="0" step="0.5" max="100">
@@ -703,41 +787,9 @@
         if (badge) badge.textContent = visible + ' ta';
     }
 
-    // Turi "Yetkazib beruvchi" bo'lganda Tashrif kuni, Kategoriya, Hudud ixtiyoriy
-    function updateAddPartnerRequired() {
-        var typeSelect = document.getElementById('add_partner_type');
-        var isSupplier = typeSelect && typeSelect.value === 'supplier';
-        var ids = ['add_visit_day', 'add_category', 'add_region'];
-        var labels = ['add_visit_day_label', 'add_category_label', 'add_region_label'];
-        var titles = ['Tashrif kuni', 'Kategoriya', 'Hudud'];
-        ids.forEach(function (id, i) {
-            var el = document.getElementById(id);
-            var labelEl = document.getElementById(labels[i]);
-            if (el) {
-                el.required = !isSupplier;
-            }
-            if (labelEl) {
-                labelEl.textContent = (isSupplier ? '' : '*') + titles[i] + (isSupplier ? ' (ixtiyoriy)' : '');
-            }
-        });
-    }
-    function updateEditPartnerRequired() {
-        var typeSelect = document.getElementById('edit_type');
-        var isSupplier = typeSelect && typeSelect.value === 'supplier';
-        var ids = ['edit_visit_day', 'edit_category', 'edit_region'];
-        var labels = ['edit_visit_day_label', 'edit_category_label', 'edit_region_label'];
-        var titles = ['Tashrif kuni', 'Kategoriya', 'Hudud'];
-        ids.forEach(function (id, i) {
-            var el = document.getElementById(id);
-            var labelEl = document.getElementById(labels[i]);
-            if (el) {
-                el.required = !isSupplier;
-            }
-            if (labelEl) {
-                labelEl.textContent = (isSupplier ? '' : '*') + titles[i] + (isSupplier ? ' (ixtiyoriy)' : '');
-            }
-        });
-    }
+    // Tashrif kuni, Kategoriya, Hudud — ixtiyoriy (barcha turlar uchun)
+    function updateAddPartnerRequired() {}
+    function updateEditPartnerRequired() {}
     document.getElementById('add_partner_type').addEventListener('change', updateAddPartnerRequired);
     document.getElementById('edit_type').addEventListener('change', updateEditPartnerRequired);
     document.getElementById('addPartnerModal').addEventListener('shown.bs.modal', function () {
@@ -824,9 +876,10 @@
         var address = btn.getAttribute('data-partner-address') || '';
         var credit = btn.getAttribute('data-partner-credit') || '0';
         var discount = btn.getAttribute('data-partner-discount') || '0';
-        editPartner(id, name, type, phone, address, parseFloat(credit) || 0, parseFloat(discount) || 0);
+        var agentId = btn.getAttribute('data-partner-agent-id') || '';
+        editPartner(id, name, type, phone, address, parseFloat(credit) || 0, parseFloat(discount) || 0, agentId);
     }
-    function editPartner(id, name, type, phone, address, credit_limit, discount_percent) {
+    function editPartner(id, name, type, phone, address, credit_limit, discount_percent, agentId) {
         document.getElementById('editPartnerForm').action = '/partners/edit/' + id;
         document.getElementById('edit_name').value = name || '';
         document.getElementById('edit_type').value = type || 'customer';
@@ -834,6 +887,7 @@
         document.getElementById('edit_address').value = address || '';
         document.getElementById('edit_credit_limit').value = credit_limit != null ? credit_limit : 0;
         document.getElementById('edit_discount_percent').value = discount_percent != null ? discount_percent : 0;
+        document.getElementById('edit_agent_id').value = agentId || '';
 
         // Clear other fields (will be populated from backend if needed)
         document.getElementById('edit_legal_name').value = '';
@@ -1132,6 +1186,40 @@
         modal.hide();
 
         showNotification('Lokatsiya tanlandi!', 'success');
+    }
+
+    // === Bulk agent assign ===
+    function toggleAllPartners(master) {
+        document.querySelectorAll('.partner-checkbox').forEach(function(cb) {
+            cb.checked = master.checked;
+        });
+        updateBulkPanel();
+    }
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('partner-checkbox')) updateBulkPanel();
+    });
+    function updateBulkPanel() {
+        var checked = document.querySelectorAll('.partner-checkbox:checked');
+        var panel = document.getElementById('bulkAssignPanel');
+        var countEl = document.getElementById('selectedCount');
+        var idsEl = document.getElementById('bulkPartnerIds');
+        if (checked.length > 0) {
+            panel.classList.remove('d-none');
+            countEl.textContent = checked.length;
+            idsEl.innerHTML = '';
+            checked.forEach(function(cb) {
+                var inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = 'partner_ids'; inp.value = cb.value;
+                idsEl.appendChild(inp);
+            });
+        } else {
+            panel.classList.add('d-none');
+        }
+    }
+    function clearSelection() {
+        document.querySelectorAll('.partner-checkbox').forEach(function(cb) { cb.checked = false; });
+        document.getElementById('selectAllPartners').checked = false;
+        updateBulkPanel();
     }
 </script>
 {% endblock %}

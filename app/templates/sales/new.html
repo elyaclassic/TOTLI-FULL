@@ -93,6 +93,12 @@
                 </div>
                 <p class="text-muted small mb-2" id="sales_warehouse_hint">Omborni tanlang — shu ombordagi tovarlar ro'yxatda ko'rsatiladi. Tovarga bosib savatga qo'shing. Mahsulot qayerdan keldi? <a href="/qoldiqlar/tarix" target="_blank">Harakat tarixi</a> da ombor va mahsulotni tanlab barcha kirim/chiqim hujjatlarini ko'ring.</p>
                 {% set show_tannarx = current_user and current_user.role == 'admin' %}
+                <div class="mb-3" id="sales_product_search_wrap" style="display: none;">
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="sales_product_search" placeholder="Tovar nomini yozing..." autocomplete="off">
+                    </div>
+                </div>
                 <div class="row g-3" id="sales_product_cards" style="display: none;">
                     {% for product in products %}
                     {% set _pt = product_prices_by_type.get(product.id) if product_prices_by_type is defined else none %}
@@ -292,6 +298,10 @@
         if (selectWhMsg) selectWhMsg.style.display = whId ? 'none' : 'block';
         if (noStockMsg) noStockMsg.style.display = 'none';
         if (productCardsWrap) productCardsWrap.style.display = whId ? 'flex' : 'none';
+        var searchWrap = document.getElementById('sales_product_search_wrap');
+        if (searchWrap) searchWrap.style.display = whId ? 'block' : 'none';
+        var searchInput = document.getElementById('sales_product_search');
+        if (searchInput) searchInput.value = '';
         if (warehouseHint) warehouseHint.style.display = whId ? 'none' : 'block';
         var qtyKey = whId;
         var qtyByWh = (warehouseStockQuantities && qtyKey) ? (warehouseStockQuantities[qtyKey] || {}) : {};
@@ -302,6 +312,7 @@
             var pidInt = parseInt(pid, 10);
             var show = !whId || productIds.indexOf(pidInt) !== -1;
             el.style.display = show ? '' : 'none';
+            el.setAttribute('data-wh-hidden', show ? '0' : '1');
             if (show) {
                 visible++;
                 var qtyEl = el.querySelector('.sales-card-qty');
@@ -487,6 +498,28 @@
                 return;
             }
             window.open('/reports/stock/source?warehouse_id=' + encodeURIComponent(whId) + '&product_id=' + encodeURIComponent(productId), '_blank');
+        });
+    });
+})();
+
+// Tovar qidiruv
+(function() {
+    var searchInput = document.getElementById('sales_product_search');
+    if (!searchInput) return;
+    searchInput.addEventListener('input', function() {
+        var term = (this.value || '').trim().toLowerCase();
+        var cards = document.querySelectorAll('.sales-product-card');
+        cards.forEach(function(card) {
+            if (card.style.display === 'none' && !term) return; // ombor filtri bilan yashirilgan
+            var name = (card.querySelector('h6') || {}).textContent || '';
+            var matchesSearch = !term || name.toLowerCase().indexOf(term) !== -1;
+            // Ombor filtri bilan yashirilganlarni ko'rsatmaslik
+            var isHiddenByWarehouse = card.getAttribute('data-wh-hidden') === '1';
+            if (isHiddenByWarehouse) {
+                card.style.display = 'none';
+            } else {
+                card.style.display = matchesSearch ? '' : 'none';
+            }
         });
     });
 })();

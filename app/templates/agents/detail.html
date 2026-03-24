@@ -87,6 +87,65 @@
     </div>
 </div>
 
+<!-- Agent buyurtmalari -->
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="data-table">
+            <div class="card-header">
+                <i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Raqam</th>
+                            <th>Sana</th>
+                            <th>Mijoz</th>
+                            <th>Jami</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                        <tr>
+                            <td><a href="/sales/edit/{{ order.id }}">{{ order.number }}</a></td>
+                            <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
+                            <td>{{ order.partner.name if order.partner else '-' }}</td>
+                            <td class="fw-bold">{{ "{:,.0f}".format(order.total or 0) }}</td>
+                            <td>
+                                {% if order.status == 'draft' %}
+                                <span class="badge-waiting">Draft</span>
+                                {% elif order.status == 'confirmed' %}
+                                <span class="badge-done">Tasdiqlangan</span>
+                                {% elif order.status == 'completed' %}
+                                <span class="badge-done">Yakunlangan</span>
+                                {% elif order.status == 'cancelled' %}
+                                <span class="badge-cancelled">Bekor</span>
+                                {% else %}
+                                <span class="badge-waiting">{{ order.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if order.status == 'draft' %}
+                                <a href="/sales/edit/{{ order.id }}" class="btn btn-sm btn-outline-success py-0 px-2">
+                                    <i class="bi bi-check-lg"></i> Tasdiqlash
+                                </a>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-3">Buyurtmalar yo'q</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Lokatsiya tarixi va Tashriflar -->
 <div class="row g-3">
     <div class="col-md-6">
@@ -106,7 +165,7 @@
                     <tbody>
                         {% for loc in locations %}
                         <tr>
-                            <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m.%Y %H:%M') }}</td>
                             <td>
                                 <small class="muted-cell">{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small>
                             </td>
@@ -143,7 +202,7 @@
                     <tbody>
                         {% for visit in visits %}
                         <tr>
-                            <td class="muted-cell">{{ visit.visit_date.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ visit.visit_date.strftime('%d.%m.%Y %H:%M') }}</td>
                             <td>Mijoz #{{ visit.partner_id }}</td>
                             <td>
                                 {% if visit.status == 'visited' %}

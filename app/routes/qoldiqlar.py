@@ -30,6 +30,9 @@ from app.models.database import (
     CashBalanceDocItem,
     PartnerBalanceDoc,
     PartnerBalanceDocItem,
+    Order,
+    Purchase,
+    Payment,
 )
 from app.deps import require_auth, require_admin
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
@@ -355,11 +358,13 @@ async def qoldiqlar_kontragent_hujjat_new(
 ):
     """Yangi kontragent balans hujjati"""
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
+    today_str = datetime.now().strftime("%Y-%m-%d")
     return templates.TemplateResponse("qoldiqlar/kontragent_hujjat_form.html", {
         "request": request,
         "doc": None,
         "partners": partners,
         "current_user": current_user,
+        "today_str": today_str,
         "page_title": "Kontragent qoldiqlari — yangi hujjat",
     })
 
@@ -374,6 +379,16 @@ async def qoldiqlar_kontragent_hujjat_create(
     form = await request.form()
     partner_ids = form.getlist("partner_id")
     balances = form.getlist("balance")
+
+    # Formadan sanani olish
+    doc_date_str = form.get("doc_date", "")
+    if doc_date_str:
+        try:
+            doc_date = datetime.strptime(doc_date_str, "%Y-%m-%d")
+        except ValueError:
+            doc_date = datetime.now()
+    else:
+        doc_date = datetime.now()
 
     items_data = []
     for i, pid in enumerate(partner_ids):
@@ -392,15 +407,15 @@ async def qoldiqlar_kontragent_hujjat_create(
     if not items_data:
         return RedirectResponse(url="/qoldiqlar/kontragent/hujjat/new", status_code=303)
 
-    today = datetime.now()
     count = db.query(PartnerBalanceDoc).filter(
-        PartnerBalanceDoc.date >= today.replace(hour=0, minute=0, second=0)
+        PartnerBalanceDoc.date >= doc_date.replace(hour=0, minute=0, second=0),
+        PartnerBalanceDoc.date < doc_date.replace(hour=23, minute=59, second=59)
     ).count()
-    number = f"KNT-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    number = f"KNT-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
 
     doc = PartnerBalanceDoc(
         number=number,
-        date=today,
+        date=doc_date,
         user_id=current_user.id if current_user else None,
         status="draft",
     )
@@ -451,7 +466,7 @@ async def qoldiqlar_kontragent_hujjat_tasdiqlash(
         partner = db.query(Partner).filter(Partner.id == item.partner_id).first()
         if partner:
             item.previous_balance = partner.balance
-            partner.balance = item.balance
+            partner.balance = (partner.balance or 0) + item.balance  # Mavjud balansga QO'SHISH
     doc.status = "confirmed"
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
@@ -518,6 +533,81 @@ async def qoldiqlar_tovar_save(
         db.add(stock)
     db.commit()
     return RedirectResponse(url="/qoldiqlar#tovar", status_code=303)
+
+
+@router.post("/kontragent/recalculate")
+async def qoldiqlar_kontragent_recalculate(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Barcha kontragent balanslarini qayta hisoblash (admin).
+    Hisoblash: sotuvlar qarz + qoldiq hujjatlari - xaridlar - kirim to'lovlar + chiqim to'lovlar - qaytarishlar
+    """
+    from sqlalchemy import or_
+    partners = db.query(Partner).filter(Partner.is_active == True).all()
+    updated = 0
+    for partner in partners:
+        bal = 0.0
+        # 1. Sotuvlar — qarz (confirmed/completed)
+        sale_debt = db.query(func.coalesce(func.sum(Order.debt), 0)).filter(
+            Order.partner_id == partner.id,
+            Order.type == "sale",
+            Order.status.in_(["confirmed", "completed"]),
+        ).scalar()
+        bal += float(sale_debt or 0)
+
+        # 2. Qaytarishlar — kredit (confirmed/completed)
+        return_total = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
+            Order.partner_id == partner.id,
+            Order.type == "return_sale",
+            Order.status.in_(["confirmed", "completed"]),
+        ).scalar()
+        bal -= float(return_total or 0)
+
+        # 3. Xaridlar — kredit (confirmed)
+        purchase_total = db.query(func.coalesce(func.sum(Purchase.total + func.coalesce(Purchase.total_expenses, 0)), 0)).filter(
+            Purchase.partner_id == partner.id,
+            Purchase.status == "confirmed",
+        ).scalar()
+        bal -= float(purchase_total or 0)
+
+        # 4. To'lovlar (confirmed)
+        income_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.partner_id == partner.id,
+            Payment.type == "income",
+            or_(Payment.status == "confirmed", Payment.status == None),
+        ).scalar()
+        bal -= float(income_total or 0)
+
+        expense_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.partner_id == partner.id,
+            Payment.type == "expense",
+            or_(Payment.status == "confirmed", Payment.status == None),
+        ).scalar()
+        bal += float(expense_total or 0)
+
+        # 5. Qoldiq hujjatlari (confirmed) — qo'shish
+        balance_doc_total = (
+            db.query(func.coalesce(func.sum(PartnerBalanceDocItem.balance), 0))
+            .join(PartnerBalanceDoc, PartnerBalanceDocItem.doc_id == PartnerBalanceDoc.id)
+            .filter(
+                PartnerBalanceDocItem.partner_id == partner.id,
+                PartnerBalanceDoc.status == "confirmed",
+            )
+            .scalar()
+        )
+        bal += float(balance_doc_total or 0)
+
+        old_bal = partner.balance or 0
+        if abs(old_bal - bal) > 0.01:
+            partner.balance = bal
+            updated += 1
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/qoldiqlar?msg={updated} ta kontragent balansi qayta hisoblandi",
+        status_code=303,
+    )
 
 
 @router.post("/kontragent/{partner_id}")

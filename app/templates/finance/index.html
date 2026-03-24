@@ -24,8 +24,8 @@
     <div class="mini-stat">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <div class="num text-success">{{ "{:,.0f}".format(stats.today_income) }}</div>
-          <div class="lbl">Bugungi kirim (so'm)</div>
+          <div class="num text-success">{{ "{:,.0f}".format(stats.income) }}</div>
+          <div class="lbl">{{ stats.label }} kirim (so'm)</div>
         </div>
         <div style="width:44px;height:44px;border-radius:10px;background:#d1fae5;color:#065f46;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
           <i class="bi bi-arrow-down-circle"></i>
@@ -37,8 +37,8 @@
     <div class="mini-stat">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <div class="num text-danger">{{ "{:,.0f}".format(stats.today_expense) }}</div>
-          <div class="lbl">Bugungi chiqim (so'm)</div>
+          <div class="num text-danger">{{ "{:,.0f}".format(stats.expense) }}</div>
+          <div class="lbl">{{ stats.label }} chiqim (so'm)</div>
         </div>
         <div style="width:44px;height:44px;border-radius:10px;background:#fee2e2;color:#991b1b;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
           <i class="bi bi-arrow-up-circle"></i>
@@ -50,9 +50,9 @@
     <div class="mini-stat">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          {% set profit = stats.today_income - stats.today_expense %}
+          {% set profit = stats.income - stats.expense %}
           <div class="num {% if profit >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(profit) }}</div>
-          <div class="lbl">Bugungi balans (so'm)</div>
+          <div class="lbl">{{ stats.label }} balans (so'm)</div>
         </div>
         <div style="width:44px;height:44px;border-radius:10px;background:#dbeafe;color:#1e40af;display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
           <i class="bi bi-graph-up"></i>
@@ -72,14 +72,18 @@
   </div>
   <div class="card-body">
     <div class="row g-3">
-      {% if cash_registers %}
-        {% for cash in cash_registers %}
+      {% if cash_data %}
+        {% for cd in cash_data %}
         <div class="col-md-4 col-6">
-          <a href="/finance/kassa/{{ cash.id }}" class="text-decoration-none">
-            <div class="mini-stat h-100" style="border-left: 4px solid {% if (cash.balance or 0) >= 0 %}#2e7d32{% else %}#dc3545{% endif %}; cursor:pointer; transition: box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
-              <div class="fw-semibold mb-1">{{ cash.name }}</div>
-              <div class="num {% if (cash.balance or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(cash.balance or 0) }}</div>
-              <div class="lbl">{{ cash.payment_type or 'Naqd' }}</div>
+          <a href="/finance/kassa/{{ cd.cash.id }}" class="text-decoration-none">
+            <div class="mini-stat h-100" style="border-left: 4px solid {% if cd.balance >= 0 %}#2e7d32{% else %}#dc3545{% endif %}; cursor:pointer; transition: box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
+              <div class="fw-semibold mb-1">{{ cd.cash.name }}</div>
+              <div class="num {% if cd.balance >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(cd.balance) }}</div>
+              {% if cd.is_filtered %}
+              <div class="lbl"><span class="text-success">+{{ "{:,.0f}".format(cd.income) }}</span> / <span class="text-danger">-{{ "{:,.0f}".format(cd.expense) }}</span></div>
+              {% else %}
+              <div class="lbl">{{ cd.cash.payment_type or 'Naqd' }}</div>
+              {% endif %}
             </div>
           </a>
         </div>

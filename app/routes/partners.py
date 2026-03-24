@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 import openpyxl
 
 from app.core import templates
-from app.models.database import get_db, User, Partner, Order, Purchase
+from app.models.database import get_db, User, Partner, Order, Purchase, Agent
 from app.deps import require_auth, require_admin
 
 router = APIRouter(prefix="/partners", tags=["partners"])
@@ -30,9 +30,11 @@ async def partners_list(
         yandex_apikey = YANDEX_MAPS_API_KEY or ""
     except Exception:
         yandex_apikey = ""
+    agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
     return templates.TemplateResponse("partners/list.html", {
         "request": request,
         "partners": partners,
+        "agents": agents,
         "current_type": type,
         "current_user": current_user,
         "page_title": "Kontragentlar",
@@ -86,6 +88,7 @@ async def partner_edit(
     address: str = Form(""),
     credit_limit: float = Form(0),
     discount_percent: float = Form(0),
+    agent_id: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -109,7 +112,47 @@ async def partner_edit(
     partner.address = address
     partner.credit_limit = credit_limit
     partner.discount_percent = discount_percent
+    try:
+        partner.agent_id = int(agent_id) if agent_id and str(agent_id).strip().isdigit() else None
+    except (ValueError, TypeError):
+        partner.agent_id = None
     db.commit()
+    return RedirectResponse(url="/partners", status_code=303)
+
+
+@router.post("/bulk-assign-agent")
+async def partner_bulk_assign_agent(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Tanlangan kontragentlarni ommaviy tahrirlash (agent, tashrif kuni, kategoriya, hudud)"""
+    form = await request.form()
+    partner_ids = form.getlist("partner_ids")
+    partner_ids = [int(x) for x in partner_ids if str(x).isdigit()]
+    if not partner_ids:
+        return RedirectResponse(url="/partners", status_code=303)
+
+    updates = {}
+    agent_id = form.get("agent_id", "").strip()
+    visit_day = form.get("visit_day", "").strip()
+    category = form.get("category", "").strip()
+    region = form.get("region", "").strip()
+
+    if agent_id:
+        agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+        if agent:
+            updates[Partner.agent_id] = agent.id
+    if visit_day != "":
+        updates[Partner.visit_day] = visit_day if visit_day != "__clear__" else None
+    if category:
+        updates[Partner.category] = category if category != "__clear__" else None
+    if region:
+        updates[Partner.region] = region if region != "__clear__" else None
+
+    if updates:
+        db.query(Partner).filter(Partner.id.in_(partner_ids)).update(updates, synchronize_session="fetch")
+        db.commit()
     return RedirectResponse(url="/partners", status_code=303)
 
 

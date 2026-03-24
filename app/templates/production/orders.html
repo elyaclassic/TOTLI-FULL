@@ -89,6 +89,12 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+{% if request.query_params.get('bulk_deleted') %}
+<div class="alert alert-success alert-dismissible fade show py-2 small">
+    <i class="bi bi-trash"></i> O'chirildi: {{ request.query_params.get('bulk_deleted') }} ta buyurtma.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 {% set _display_total_t = total_output_kg|default(0)|float %}
 {% set _display_total_y = total_yarim_tayyor_kg|default(0)|float %}
 {% if (_display_total_t == 0 and _display_total_y == 0) and productions %}
@@ -223,6 +229,11 @@
                 <button type="submit" formaction="/production/orders/bulk-complete" class="btn btn-sm btn-outline-success" title="Tanlangan kutilmoqda/jarayondagi buyurtmalarni yakunlash">
                     <i class="bi bi-check-all"></i> Tasdiqlash
                 </button>
+                <button type="submit" formaction="/production/orders/bulk-delete" class="btn btn-sm btn-outline-danger"
+                    onclick="return confirm('Tanlangan buyurtmalarni o\'chirmoqchimisiz? Bu amalni qaytarib bo\'lmaydi!');"
+                    title="Tanlangan buyurtmalarni o'chirish">
+                    <i class="bi bi-trash"></i> O'chirish
+                </button>
             </form>
             {% endif %}
         </div>
@@ -260,7 +271,7 @@
                         </td>
                         {% endif %}
                         <td><strong>{{ prod.number }}</strong></td>
-                        <td class="col-sana" title="{{ prod.date.strftime('%d.%m.%Y %H:%M') }}">{{ prod.date.strftime('%d.%m.%y %H:%M') }}</td>
+                        <td class="col-sana" title="{{ prod.date.strftime('%d.%m.%Y %H:%M') }}">{{ prod.date.strftime('%d.%m.%Y %H:%M') }}</td>
                         <td class="col-retsept" title="{{ prod.recipe.name if prod.recipe else '' }}">
                             {% if prod.recipe %}
                             <a href="/production/{{ prod.id }}/materials">{{ prod.recipe.name }}</a>

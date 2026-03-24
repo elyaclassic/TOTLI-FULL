@@ -5,11 +5,11 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, func
 
 from app.core import templates
 from app.deps import get_current_user, require_auth
-from app.models.database import get_db, User, ChatThread, ChatParticipant, ChatMessage
+from app.models.database import get_db, User, ChatThread, ChatParticipant, ChatMessage, ChatTelegramLink
 from app.utils.auth import get_user_from_token
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -31,6 +31,8 @@ def _thread_title(db: Session, t: ChatThread, me_id: int) -> str:
         if su:
             return f"Support: {su.full_name or su.username}"
         return "Support"
+    if t.type == "group":
+        return t.name or "Guruh"
     # direct
     other_id = t.user2_id if t.user1_id == me_id else t.user1_id
     other = db.query(User).filter(User.id == other_id).first() if other_id else None
@@ -300,17 +302,237 @@ async def chat_send_message(
     db.commit()
     db.refresh(msg)
     _bump_unread_for_others(db, tid, me.id)
+    sender = db.query(User).filter(User.id == msg.sender_id).first()
     await hub.broadcast(tid, {
         "type": "message",
         "thread_id": tid,
         "message": {
             "id": msg.id,
             "sender_id": msg.sender_id,
+            "sender_name": (sender.full_name or sender.username) if sender else "",
             "body": msg.body,
             "created_at": msg.created_at.isoformat(),
         },
     })
+    # Telegram ga relay
+    try:
+        from app.utils.telegram_bot import relay_to_telegram
+        sender_name = (sender.full_name or sender.username) if sender else "Noma'lum"
+        await relay_to_telegram(tid, sender_name, text)
+    except Exception:
+        pass
     return {"ok": True}
+
+
+@router.post("/group/create")
+async def chat_create_group(
+    request: Request,
+    group_name: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    name = (group_name or "").strip()
+    if not name:
+        return RedirectResponse(url="/chat", status_code=303)
+
+    # form dan member_ids olish
+    form = await request.form()
+    member_ids = form.getlist("member_ids")
+    member_ids = [int(x) for x in member_ids if str(x).isdigit() and int(x) != me.id]
+
+    if not member_ids:
+        return RedirectResponse(url="/chat", status_code=303)
+
+    t = ChatThread(type="group", name=name, created_by_id=me.id)
+    db.add(t)
+    db.commit()
+    db.refresh(t)
+
+    # yaratuvchini admin sifatida qo'shish
+    db.add(ChatParticipant(thread_id=t.id, user_id=me.id, role="admin", last_read_at=datetime.now(), unread_count=0))
+    # a'zolarni qo'shish
+    for uid in member_ids:
+        u = db.query(User).filter(User.id == uid, User.is_active == True).first()
+        if u:
+            db.add(ChatParticipant(thread_id=t.id, user_id=u.id, role="member", last_read_at=None, unread_count=0))
+    db.commit()
+    return RedirectResponse(url=f"/chat/thread/{t.id}", status_code=303)
+
+
+@router.get("/group/{thread_id}/info", response_class=HTMLResponse)
+async def chat_group_info(
+    thread_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    t = db.query(ChatThread).filter(ChatThread.id == thread_id, ChatThread.type == "group").first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Guruh topilmadi")
+    if not _is_participant(db, thread_id, me.id):
+        raise HTTPException(status_code=403, detail="Ruxsat yo'q")
+    participants = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id).all()
+    members = []
+    for p in participants:
+        u = db.query(User).filter(User.id == p.user_id).first()
+        if u:
+            members.append({"user": u, "role": p.role})
+    my_role = next((p.role for p in participants if p.user_id == me.id), "member")
+    all_users = db.query(User).filter(User.is_active == True).order_by(User.full_name).all()
+    tg_links = db.query(ChatTelegramLink).filter(
+        ChatTelegramLink.thread_id == thread_id,
+        ChatTelegramLink.is_active == True,
+    ).all()
+    return templates.TemplateResponse("chat/group_info.html", {
+        "request": request,
+        "current_user": me,
+        "page_title": t.name or "Guruh",
+        "thread": t,
+        "members": members,
+        "my_role": my_role,
+        "all_users": all_users,
+        "tg_links": tg_links,
+        "unread_total": _total_unread(db, me.id),
+    })
+
+
+@router.post("/group/{thread_id}/add-member")
+async def chat_group_add_member(
+    thread_id: int,
+    user_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    t = db.query(ChatThread).filter(ChatThread.id == thread_id, ChatThread.type == "group").first()
+    if not t:
+        raise HTTPException(status_code=404)
+    my_part = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == me.id).first()
+    if not my_part or my_part.role != "admin":
+        raise HTTPException(status_code=403, detail="Faqat admin a'zo qo'sha oladi")
+    if not _is_participant(db, thread_id, int(user_id)):
+        u = db.query(User).filter(User.id == int(user_id), User.is_active == True).first()
+        if u:
+            db.add(ChatParticipant(thread_id=thread_id, user_id=u.id, role="member", last_read_at=None, unread_count=0))
+            db.commit()
+    return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+
+
+@router.post("/group/{thread_id}/remove-member")
+async def chat_group_remove_member(
+    thread_id: int,
+    user_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    t = db.query(ChatThread).filter(ChatThread.id == thread_id, ChatThread.type == "group").first()
+    if not t:
+        raise HTTPException(status_code=404)
+    my_part = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == me.id).first()
+    if not my_part or my_part.role != "admin":
+        raise HTTPException(status_code=403, detail="Faqat admin a'zoni o'chira oladi")
+    if int(user_id) == me.id:
+        return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+    p = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == int(user_id)).first()
+    if p:
+        db.delete(p)
+        db.commit()
+    return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+
+
+@router.post("/group/{thread_id}/rename")
+async def chat_group_rename(
+    thread_id: int,
+    group_name: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    t = db.query(ChatThread).filter(ChatThread.id == thread_id, ChatThread.type == "group").first()
+    if not t:
+        raise HTTPException(status_code=404)
+    my_part = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == me.id).first()
+    if not my_part or my_part.role != "admin":
+        raise HTTPException(status_code=403, detail="Faqat admin nomini o'zgartira oladi")
+    name = (group_name or "").strip()
+    if name:
+        t.name = name
+        db.commit()
+    return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+
+
+@router.post("/group/{thread_id}/add-telegram")
+async def chat_group_add_telegram(
+    thread_id: int,
+    telegram_id: str = Form(...),
+    telegram_name: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    t = db.query(ChatThread).filter(ChatThread.id == thread_id, ChatThread.type == "group").first()
+    if not t:
+        raise HTTPException(status_code=404)
+    my_part = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == me.id).first()
+    if not my_part or my_part.role != "admin":
+        raise HTTPException(status_code=403, detail="Faqat admin Telegram foydalanuvchi qo'sha oladi")
+
+    tg_id = (telegram_id or "").strip()
+    if not tg_id:
+        return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+
+    # Mavjud linkni tekshirish
+    existing = db.query(ChatTelegramLink).filter(
+        ChatTelegramLink.thread_id == thread_id,
+        ChatTelegramLink.telegram_chat_id == tg_id,
+    ).first()
+    if existing:
+        existing.is_active = True
+        if telegram_name.strip():
+            existing.telegram_full_name = telegram_name.strip()
+        db.commit()
+    else:
+        link = ChatTelegramLink(
+            thread_id=thread_id,
+            telegram_chat_id=tg_id,
+            telegram_full_name=telegram_name.strip() or None,
+            is_active=True,
+        )
+        db.add(link)
+        db.commit()
+
+    # Telegram foydalanuvchiga xabar yuborish
+    try:
+        from app.utils.telegram_bot import send_telegram_message
+        await send_telegram_message(tg_id,
+            f"Siz <b>{t.name or 'Guruh'}</b> chatiga qo'shildingiz!\n"
+            "Endi shu yerda xabar yozsangiz, chatga tushadi."
+        )
+    except Exception:
+        pass
+
+    return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
+
+
+@router.post("/group/{thread_id}/remove-telegram")
+async def chat_group_remove_telegram(
+    thread_id: int,
+    link_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    me = _require_user(current_user)
+    my_part = db.query(ChatParticipant).filter(ChatParticipant.thread_id == thread_id, ChatParticipant.user_id == me.id).first()
+    if not my_part or my_part.role != "admin":
+        raise HTTPException(status_code=403)
+    link = db.query(ChatTelegramLink).filter(ChatTelegramLink.id == int(link_id), ChatTelegramLink.thread_id == thread_id).first()
+    if link:
+        db.delete(link)
+        db.commit()
+    return RedirectResponse(url=f"/chat/group/{thread_id}/info", status_code=303)
 
 
 @router.websocket("/ws/{thread_id}")
@@ -352,16 +574,25 @@ async def chat_ws(thread_id: int, websocket: WebSocket):
                 db.commit()
                 db.refresh(msg)
                 _bump_unread_for_others(db, int(thread_id), user_id)
+                ws_sender = db.query(User).filter(User.id == user_id).first()
                 await hub.broadcast(int(thread_id), {
                     "type": "message",
                     "thread_id": int(thread_id),
                     "message": {
                         "id": msg.id,
                         "sender_id": msg.sender_id,
+                        "sender_name": (ws_sender.full_name or ws_sender.username) if ws_sender else "",
                         "body": msg.body,
                         "created_at": msg.created_at.isoformat(),
                     },
                 })
+                # Telegram ga relay
+                try:
+                    from app.utils.telegram_bot import relay_to_telegram
+                    sn = (ws_sender.full_name or ws_sender.username) if ws_sender else "Noma'lum"
+                    await relay_to_telegram(int(thread_id), sn, body)
+                except Exception:
+                    pass
     except WebSocketDisconnect:
         pass
     finally:

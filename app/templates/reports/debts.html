@@ -12,7 +12,7 @@
     <div class="col-6 col-md-4">
         <div class="mini-stat">
             <div class="num text-success">{{ "{:,.0f}".format(total_credit) }}</div>
-            <div class="lbl"><i class="bi bi-arrow-up-circle me-1 text-success"></i>Jami avans (so'm)</div>
+            <div class="lbl"><i class="bi bi-arrow-up-circle me-1 text-success"></i>Jami bizning qarzimiz (so'm)</div>
         </div>
     </div>
     <div class="col-6 col-md-4">
@@ -51,10 +51,13 @@
                 <tbody>
                     {% if debtors %}
                         {% for partner in debtors %}
-                        <tr>
+                        {% set now = partner.created_at.now() %}
+                        {% set month_start = now.strftime('%Y-%m-01') %}
+                        {% set today = now.strftime('%Y-%m-%d') %}
+                        <tr style="cursor:pointer;" onclick="window.location.href='/reports/partner-reconciliation?partner_id={{ partner.id }}&date_from={{ month_start }}&date_to={{ today }}'">
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td><code class="num-cell">{{ partner.code }}</code></td>
-                            <td><strong>{{ partner.name }}</strong></td>
+                            <td><strong>{{ partner.name }}</strong> <i class="bi bi-box-arrow-up-right small text-muted"></i></td>
                             <td>
                                 {% if partner.type == 'customer' %}
                                     <span class="badge-active">Mijoz</span>
@@ -66,14 +69,14 @@
                             </td>
                             <td class="muted-cell">{{ partner.phone or '-' }}</td>
                             <td class="text-end fw-700
-                                {% if partner.balance > 0 %} text-danger{% else %} sum-cell{% endif %}">
-                                {{ "{:,.0f}".format(partner.balance) }}
+                                {% if partner.balance > 0 %} text-danger{% else %} text-success{% endif %}">
+                                {{ "{:,.0f}".format(partner.balance|abs) }}
                             </td>
                             <td>
                                 {% if partner.balance > 0 %}
-                                    <span class="badge-cancelled">Qarzdor</span>
+                                    <span class="badge-cancelled">Uning qarzi</span>
                                 {% else %}
-                                    <span class="badge-done">Avans</span>
+                                    <span class="badge-done">Bizning qarzimiz</span>
                                 {% endif %}
                             </td>
                         </tr>
@@ -91,4 +94,7 @@
         </div>
     </div>
 </div>
+<style>
+tr[onclick]:hover td { background: rgba(13, 110, 253, 0.06) !important; }
+</style>
 {% endblock %}

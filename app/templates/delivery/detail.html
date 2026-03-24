@@ -67,7 +67,7 @@
             </div>
             <div class="col-6 col-md-3">
                 <div class="mini-stat">
-                    <div class="num" style="color:#1d4ed8;">{{ deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</div>
+                    <div class="num" style="color:#1d4ed8;">{{ deliveries|selectattr('status', 'eq', 'in_progress')|list|length }}</div>
                     <div class="lbl"><i class="bi bi-truck"></i> Yo'lda</div>
                 </div>
             </div>
@@ -113,7 +113,7 @@
                                 <span class="badge-waiting">Kutilmoqda</span>
                                 {% elif d.status == 'picked_up' %}
                                 <span class="badge-draft">Olindi</span>
-                                {% elif d.status == 'in_transit' %}
+                                {% elif d.status == 'in_progress' %}
                                 <span class="badge-draft" style="background:#dbeafe;color:#1d4ed8;">Yo'lda</span>
                                 {% elif d.status == 'delivered' %}
                                 <span class="badge-done">Yetkazildi</span>
@@ -121,7 +121,7 @@
                                 <span class="badge-cancelled">Bekor</span>
                                 {% endif %}
                             </td>
-                            <td class="muted-cell">{{ d.created_at.strftime('%d.%m %H:%M') }}</td>
+                            <td class="muted-cell">{{ d.created_at.strftime('%d.%m.%Y %H:%M') }}</td>
                         </tr>
                         {% else %}
                         <tr>
@@ -151,7 +151,7 @@
             <tbody>
                 {% for loc in locations[:20] %}
                 <tr>
-                    <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m %H:%M') }}</td>
+                    <td class="muted-cell">{{ loc.recorded_at.strftime('%d.%m.%Y %H:%M') }}</td>
                     <td class="muted-cell"><small>{{ "%.5f"|format(loc.latitude) }}, {{ "%.5f"|format(loc.longitude) }}</small></td>
                     <td class="num-cell">
                         {% if loc.speed %}{{ "%.0f"|format(loc.speed) }} km/h{% else %}-{% endif %}

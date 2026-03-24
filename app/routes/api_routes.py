@@ -23,7 +23,10 @@ from app.models.database import (
     AgentLocation,
     DriverLocation,
     User,
+    Visit,
+    Delivery,
 )
+from sqlalchemy import func as sa_func
 from app.deps import require_auth, get_current_user
 from app.utils.notifications import get_unread_count, get_user_notifications, mark_as_read
 from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
@@ -395,28 +398,68 @@ async def agent_login(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Eski API - backward compatibility"""
+    """Agent login — User (username+parol) yoki Agent (telefon) orqali"""
     try:
         blocked, remaining = is_blocked(request)
         if blocked:
             minutes = remaining // 60
             seconds = remaining % 60
             return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
-        agent = db.query(Agent).filter(Agent.phone == username).first()
-        if not agent or not agent.is_active:
-            record_failure(request)
-            return {"success": False, "error": "Agent topilmadi yoki faol emas"}
-        if password != agent.phone:
-            record_failure(request)
-            return {"success": False, "error": "Parol noto'g'ri"}
-        record_success(request)
-        token = create_session_token(agent.id, "agent")
-        return {
-            "success": True,
-            "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone},
-            "token": token,
-        }
+
+        # 1) User jadvalidan qidirish (username + parol)
+        user = db.query(User).filter(
+            User.username == username.strip(),
+            User.is_active == True,
+            User.role.in_(["agent", "admin", "manager"]),
+        ).first()
+        if user and verify_password(password, user.password_hash):
+            # User ga bog'langan agent bormi?
+            agent = db.query(Agent).filter(Agent.employee_id == user.id, Agent.is_active == True).first()
+            if not agent:
+                # Agent jadvalida telefon bo'yicha
+                if user.phone:
+                    agent = db.query(Agent).filter(Agent.phone == user.phone, Agent.is_active == True).first()
+            if not agent:
+                # Agent avtomatik yaratish (agent roli uchun)
+                if user.role == "agent":
+                    last_agent = db.query(Agent).order_by(Agent.id.desc()).first()
+                    seq = (last_agent.id + 1) if last_agent else 1
+                    agent = Agent(
+                        code=f"AG{seq:03d}",
+                        full_name=user.full_name or user.username,
+                        phone=user.phone or "",
+                        is_active=True,
+                        employee_id=user.id,
+                    )
+                    db.add(agent)
+                    db.commit()
+                    db.refresh(agent)
+                else:
+                    record_failure(request)
+                    return {"success": False, "error": "Agent profili topilmadi"}
+            record_success(request)
+            token = create_session_token(agent.id, "agent")
+            return {
+                "success": True,
+                "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone or ""},
+                "token": token,
+            }
+
+        # 2) Agent jadvalidan telefon bilan qidirish (eski usul)
+        agent = db.query(Agent).filter(Agent.phone == username.strip()).first()
+        if agent and agent.is_active and password == agent.phone:
+            record_success(request)
+            token = create_session_token(agent.id, "agent")
+            return {
+                "success": True,
+                "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone},
+                "token": token,
+            }
+
+        record_failure(request)
+        return {"success": False, "error": "Login yoki parol noto'g'ri"}
     except Exception as e:
+        logger.error(f"Agent login error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 
@@ -454,6 +497,7 @@ async def driver_login(
             "token": token,
         }
     except Exception as e:
+        logger.error(f"Driver login error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 
@@ -494,26 +538,105 @@ async def agent_partners(token: str = None, db: Session = Depends(get_db)):
 
 
 @router.get("/agent/visits")
-async def agent_visits(token: str = None, db: Session = Depends(get_db)):
+async def agent_visits(request: Request, token: str = None, db: Session = Depends(get_db)):
     """Agent uchun tashriflar ro'yxati"""
     try:
-        if not token:
-            return {"success": False, "error": "Token talab qilinadi"}
-        
-        user_data = get_user_from_token(token)
-        if not user_data or user_data.get("user_type") != "agent":
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
             return {"success": False, "error": "Invalid token"}
-        
-        agent_id = user_data.get("user_id")
-        
-        # Tashriflar jadvali bo'lmasa, bo'sh ro'yxat qaytaramiz
-        # Keyinchalik visits jadvali qo'shilganda, bu yerda query qo'shiladi
-        return {
-            "success": True,
-            "visits": []
-        }
+
+        visits = (
+            db.query(Visit)
+            .filter(Visit.agent_id == agent.id)
+            .order_by(Visit.visit_date.desc())
+            .limit(50)
+            .all()
+        )
+        result = []
+        for v in visits:
+            partner = db.query(Partner).filter(Partner.id == v.partner_id).first() if v.partner_id else None
+            result.append({
+                "id": v.id,
+                "partner_id": v.partner_id,
+                "partner_name": partner.name if partner else "",
+                "visit_date": v.visit_date.isoformat() if v.visit_date else "",
+                "status": v.status or "planned",
+                "latitude": v.latitude,
+                "longitude": v.longitude,
+                "notes": v.notes or "",
+                "order_id": v.order_id,
+            })
+        return {"success": True, "visits": result}
     except Exception as e:
         logger.error(f"Agent visits error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/visit/checkin")
+async def agent_visit_checkin(
+    request: Request,
+    partner_id: int = Form(...),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    notes: str = Form(""),
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Agent mijozga tashrif boshlanishi (check-in)"""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+
+        visit = Visit(
+            agent_id=agent.id,
+            partner_id=int(partner_id),
+            visit_date=datetime.now(),
+            check_in_time=datetime.now(),
+            latitude=latitude,
+            longitude=longitude,
+            status="visited",
+            notes=notes,
+        )
+        db.add(visit)
+        db.commit()
+        db.refresh(visit)
+        return {"success": True, "visit_id": visit.id}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Agent checkin error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/visit/checkout")
+async def agent_visit_checkout(
+    request: Request,
+    visit_id: int = Form(...),
+    notes: str = Form(""),
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Agent tashrifni tugatishi (check-out)"""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+
+        visit = db.query(Visit).filter(Visit.id == int(visit_id), Visit.agent_id == agent.id).first()
+        if not visit:
+            return {"success": False, "error": "Tashrif topilmadi"}
+
+        visit.check_out_time = datetime.now()
+        if notes:
+            visit.notes = (visit.notes or "") + "\n" + notes if visit.notes else notes
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Agent checkout error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 
@@ -545,6 +668,139 @@ async def agent_location_update(
         return {"success": True, "location_id": location.id}
     except Exception as e:
         db.rollback()
+        return {"success": False, "error": "Server xatosi"}
+
+
+def _driver_from_token(token: str, db: Session):
+    """Token dan driver olish."""
+    if not token:
+        return None
+    user_data = get_user_from_token(token)
+    if not user_data or user_data.get("user_type") != "driver":
+        return None
+    return db.query(Driver).filter(Driver.id == user_data["user_id"], Driver.is_active == True).first()
+
+
+@router.get("/driver/deliveries")
+async def driver_deliveries(request: Request, token: str = None, db: Session = Depends(get_db)):
+    """Haydovchiga tayinlangan yetkazishlar ro'yxati"""
+    try:
+        tk = token or (request.headers.get("Authorization", "")[7:] if request.headers.get("Authorization", "").startswith("Bearer ") else None)
+        driver = _driver_from_token(tk, db)
+        if not driver:
+            return {"success": False, "error": "Invalid token"}
+
+        deliveries = (
+            db.query(Delivery)
+            .filter(Delivery.driver_id == driver.id)
+            .order_by(Delivery.created_at.desc())
+            .limit(50)
+            .all()
+        )
+        result = []
+        for d in deliveries:
+            order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None
+            partner_name = ""
+            if order and order.partner_id:
+                p = db.query(Partner).filter(Partner.id == order.partner_id).first()
+                partner_name = p.name if p else ""
+            result.append({
+                "id": d.id,
+                "number": d.number,
+                "order_number": d.order_number or (order.number if order else ""),
+                "delivery_address": d.delivery_address or "",
+                "partner_name": partner_name,
+                "status": d.status or "pending",
+                "planned_date": d.planned_date.isoformat() if d.planned_date else "",
+                "delivered_at": d.delivered_at.isoformat() if d.delivered_at else "",
+                "notes": d.notes or "",
+                "total": float(order.total or 0) if order else 0,
+            })
+        return {"success": True, "deliveries": result}
+    except Exception as e:
+        logger.error(f"Driver deliveries error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/driver/delivery/{delivery_id}/status")
+async def driver_delivery_status(
+    delivery_id: int,
+    status: str = Form(...),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    notes: str = Form(""),
+    token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Haydovchi yetkazish statusini yangilaydi"""
+    try:
+        user_data = get_user_from_token(token)
+        if not user_data or user_data.get("user_type") != "driver":
+            return {"success": False, "error": "Invalid token"}
+        driver_id = user_data["user_id"]
+
+        delivery = db.query(Delivery).filter(
+            Delivery.id == delivery_id,
+            Delivery.driver_id == driver_id,
+        ).first()
+        if not delivery:
+            return {"success": False, "error": "Yetkazish topilmadi"}
+
+        allowed_statuses = ["pending", "picked_up", "in_progress", "delivered", "failed"]
+        new_status = (status or "").strip()
+        if new_status not in allowed_statuses:
+            return {"success": False, "error": "Noto'g'ri status"}
+
+        delivery.status = new_status
+        if notes:
+            delivery.notes = (delivery.notes or "") + "\n" + notes if delivery.notes else notes
+
+        if new_status == "delivered":
+            delivery.delivered_at = datetime.now()
+            if latitude:
+                delivery.latitude = latitude
+            if longitude:
+                delivery.longitude = longitude
+
+        db.commit()
+        return {"success": True, "status": delivery.status}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Delivery status update error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/driver/stats")
+async def driver_stats(request: Request, token: str = None, db: Session = Depends(get_db)):
+    """Haydovchi statistikasi"""
+    try:
+        tk = token or (request.headers.get("Authorization", "")[7:] if request.headers.get("Authorization", "").startswith("Bearer ") else None)
+        driver = _driver_from_token(tk, db)
+        if not driver:
+            return {"success": False, "error": "Invalid token"}
+
+        today = datetime.now().date()
+        pending = db.query(Delivery).filter(Delivery.driver_id == driver.id, Delivery.status.in_(["pending", "picked_up"])).count()
+        in_progress = db.query(Delivery).filter(Delivery.driver_id == driver.id, Delivery.status == "in_progress").count()
+        today_delivered = db.query(Delivery).filter(
+            Delivery.driver_id == driver.id,
+            Delivery.status == "delivered",
+            sa_func.date(Delivery.delivered_at) == today,
+        ).count()
+        total = db.query(Delivery).filter(Delivery.driver_id == driver.id).count()
+
+        return {
+            "success": True,
+            "driver": {"id": driver.id, "code": driver.code, "full_name": driver.full_name},
+            "stats": {
+                "pending": pending,
+                "in_progress": in_progress,
+                "today_delivered": today_delivered,
+                "total": total,
+            },
+        }
+    except Exception as e:
+        logger.error(f"Driver stats error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 
@@ -741,23 +997,29 @@ async def agent_partner_detail(request: Request, partner_id: int, token: str = N
 
 @router.get("/agent/products")
 async def agent_products(request: Request, token: str = None, search: str = None, db: Session = Depends(get_db)):
-    """Mahsulotlar ro'yxati (agent buyurtma uchun)."""
+    """Mahsulotlar ro'yxati (agent buyurtma uchun) — stock va ProductPrice bilan."""
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
-        q = db.query(Product).filter(Product.is_active == True, Product.type == "product")
+        q = db.query(Product).filter(Product.is_active == True, Product.type == "tayyor")
         if search:
             q = q.filter(Product.name.ilike(f"%{search}%"))
         products = q.order_by(Product.name).all()
         result = []
         for prod in products:
             unit_name = prod.unit.name if prod.unit else ""
+            # ProductPrice dan narx olish (agar mavjud bo'lsa)
+            pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
+            price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
+            # Barcha omborlardan umumiy qoldiq
+            total_stock = db.query(sa_func.coalesce(sa_func.sum(Stock.quantity), 0)).filter(Stock.product_id == prod.id).scalar()
             result.append({
                 "id": prod.id,
                 "name": prod.name,
                 "unit": unit_name,
-                "price": float(prod.sale_price or 0),
+                "price": price,
+                "stock": float(total_stock),
             })
         return {"success": True, "products": result}
     except Exception as e:
@@ -770,9 +1032,8 @@ async def agent_create_order(
     request: Request,
     db: Session = Depends(get_db),
 ):
-    """Agent yangi buyurtma yaratadi (JSON body)."""
+    """Agent yangi buyurtma yaratadi (JSON body). Draft status — admin tasdiqlaydi."""
     try:
-        import json as _json
         body = await request.json()
         tok = _extract_token(request, body.get("token"))
         agent = _agent_from_token(tok, db)
@@ -787,11 +1048,15 @@ async def agent_create_order(
             return {"success": False, "error": "Klient topilmadi"}
         if not items:
             return {"success": False, "error": "Mahsulot tanlang"}
-        # Ombor — birinchi faol ombor
-        warehouse = db.query(Warehouse).filter(Warehouse.is_active == True).first()
+        # Ombor — Tayyor mahsulot ombori
+        warehouse = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+        if not warehouse:
+            warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
+        if not warehouse:
+            warehouse = db.query(Warehouse).filter(Warehouse.is_active == True).first()
         if not warehouse:
             return {"success": False, "error": "Ombor topilmadi"}
-        # Buyurtma raqami
+        # Buyurtma raqami: AGT-YYYYMMDD-NNN
         today = datetime.now()
         prefix = f"AGT-{today.strftime('%Y%m%d')}"
         last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
@@ -803,6 +1068,8 @@ async def agent_create_order(
         else:
             seq = 1
         order_number = f"{prefix}-{seq:03d}"
+        # Partner chegirmasi
+        partner_discount = float(partner.discount_percent or 0)
         subtotal = 0.0
         order_items = []
         for it in items:
@@ -810,18 +1077,22 @@ async def agent_create_order(
             if not prod:
                 continue
             qty = float(it.get("qty", it.get("quantity", 1)))
-            price = float(it.get("price", prod.sale_price or 0))
+            # ProductPrice dan narx olish, fallback: Product.sale_price
+            pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
+            price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
             total_line = qty * price
             subtotal += total_line
             order_items.append(OrderItem(
                 product_id=prod.id,
                 quantity=qty,
                 price=price,
-                discount_percent=0,
-                total=total_line,
+                discount_percent=partner_discount,
+                total=total_line * (1 - partner_discount / 100),
             ))
         if not order_items:
             return {"success": False, "error": "Mahsulot topilmadi"}
+        discount_amount = subtotal * partner_discount / 100
+        total = subtotal - discount_amount
         order = Order(
             number=order_number,
             date=today,
@@ -829,12 +1100,14 @@ async def agent_create_order(
             partner_id=partner.id,
             warehouse_id=warehouse.id,
             user_id=None,
+            agent_id=agent.id,
+            source="agent",
             subtotal=subtotal,
-            discount_percent=float(partner.discount_percent or 0),
-            discount_amount=0,
-            total=subtotal,
+            discount_percent=partner_discount,
+            discount_amount=discount_amount,
+            total=total,
             paid=0,
-            debt=subtotal,
+            debt=total,
             status="draft",
             payment_type=payment_type,
             note=f"Agent: {agent.code} — {agent.full_name}" + (f". {note}" if note else ""),
@@ -844,19 +1117,10 @@ async def agent_create_order(
         for oi in order_items:
             oi.order_id = order.id
             db.add(oi)
-        # agent_id va source ustunlariga yozish (SQLite raw)
-        from sqlalchemy import text as _text
+        # Draft — partner balance o'zgartirMAYMIZ (faqat tasdiqlangandan keyin)
         db.commit()
-        try:
-            with db.bind.begin() as conn:
-                conn.execute(_text("UPDATE orders SET agent_id=:aid, source='agent' WHERE id=:oid"),
-                             {"aid": agent.id, "oid": order.id})
-        except Exception:
-            pass
-        # Partner balansini yangilash
-        partner.balance = float(partner.balance or 0) + subtotal
-        db.commit()
-        return {"success": True, "order_id": order.id, "order_number": order_number, "total": subtotal}
+        logger.info(f"Agent order created: #{order_number}, agent={agent.code}, partner={partner.name}, total={total}")
+        return {"success": True, "order_id": order.id, "order_number": order_number, "total": total}
     except Exception as e:
         db.rollback()
         logger.error(f"agent_create_order: {e}")
@@ -865,18 +1129,18 @@ async def agent_create_order(
 
 @router.get("/agent/my-orders")
 async def agent_my_orders(request: Request, token: str = None, db: Session = Depends(get_db)):
-    """Agent yaratgan buyurtmalar."""
+    """Agent yaratgan buyurtmalar (ORM)."""
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
-        from sqlalchemy import text as _text
-        rows = db.execute(
-            _text("SELECT id FROM orders WHERE agent_id=:aid ORDER BY id DESC LIMIT 50"),
-            {"aid": agent.id}
-        ).fetchall()
-        order_ids = [r[0] for r in rows]
-        orders = db.query(Order).filter(Order.id.in_(order_ids)).order_by(Order.id.desc()).all() if order_ids else []
+        orders = (
+            db.query(Order)
+            .filter(Order.agent_id == agent.id)
+            .order_by(Order.id.desc())
+            .limit(50)
+            .all()
+        )
         return {
             "success": True,
             "orders": [
@@ -901,26 +1165,28 @@ async def agent_my_orders(request: Request, token: str = None, db: Session = Dep
 
 @router.get("/agent/stats")
 async def agent_stats(request: Request, token: str = None, db: Session = Depends(get_db)):
-    """Agent bugungi statistika."""
+    """Agent bugungi statistika (ORM)."""
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
         today = datetime.now().date()
-        from sqlalchemy import text as _text, func
         partners_count = db.query(Partner).filter(Partner.agent_id == agent.id, Partner.is_active == True).count()
-        today_orders = db.execute(
-            _text("SELECT COUNT(*), COALESCE(SUM(total),0) FROM orders WHERE agent_id=:aid AND date(created_at)=:d"),
-            {"aid": agent.id, "d": str(today)}
-        ).fetchone()
-        total_debt = db.query(func.sum(Partner.balance)).filter(Partner.agent_id == agent.id, Partner.is_active == True).scalar() or 0
+        today_orders_q = (
+            db.query(sa_func.count(Order.id), sa_func.coalesce(sa_func.sum(Order.total), 0))
+            .filter(Order.agent_id == agent.id, sa_func.date(Order.created_at) == today)
+            .first()
+        )
+        today_count = int(today_orders_q[0] or 0)
+        today_total = float(today_orders_q[1] or 0)
+        total_debt = db.query(sa_func.coalesce(sa_func.sum(Partner.balance), 0)).filter(Partner.agent_id == agent.id, Partner.is_active == True).scalar() or 0
         return {
             "success": True,
             "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone or "", "region": agent.region or ""},
             "stats": {
                 "partners_count": partners_count,
-                "today_orders": int(today_orders[0] or 0),
-                "today_total": float(today_orders[1] or 0),
+                "today_orders": today_count,
+                "today_total": today_total,
                 "total_debt": float(total_debt),
             },
         }

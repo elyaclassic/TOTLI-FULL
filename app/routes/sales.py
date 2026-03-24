@@ -45,6 +45,7 @@ def _check_order_access(order: Order, current_user: User):
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
+from app.utils.audit import log_action
 from app.utils.production_order import (
     create_production_from_order,
     get_semi_finished_warehouse,
@@ -71,6 +72,7 @@ async def sales_list(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     warehouse_id: Optional[str] = None,
+    status: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -90,6 +92,9 @@ async def sales_list(
             pass
     if wh_id is not None and wh_id > 0:
         q = q.filter(Order.warehouse_id == wh_id)
+    status_filter = (status or "").strip()
+    if status_filter:
+        q = q.filter(Order.status == status_filter)
     sort_col = (sort_by or "date").strip().lower()
     sort_order = (sort_dir or "desc").strip().lower()
     if sort_order not in ("asc", "desc"):
@@ -126,6 +131,7 @@ async def sales_list(
             ("date_from", (date_from or "").strip()[:10] or None),
             ("date_to", (date_to or "").strip()[:10] or None),
             ("warehouse_id", wh_id if wh_id else None),
+            ("status", status_filter or None),
         ] if v is not None
     })
     return templates.TemplateResponse("sales/list.html", {
@@ -136,6 +142,7 @@ async def sales_list(
         "date_from": (date_from or "").strip()[:10] or None,
         "date_to": (date_to or "").strip()[:10] or None,
         "selected_warehouse_id": wh_id,
+        "selected_status": status_filter,
         "sort_by": sort_by_val,
         "sort_dir": sort_order,
         "filter_params": filter_params,
@@ -714,21 +721,14 @@ async def sales_pos(
             "error_detail": detail_msg,
             "number": request.query_params.get("number", ""),
         })
-    # Admin/menejer: barcha tegishli omborlardagi mahsulotlar; sotuvchi: faqat tanlangan ombordagi
-    if role in ("admin", "manager") and pos_user_warehouses:
-        wh_ids = [w.id for w in pos_user_warehouses]
+    # Faqat tanlangan ombordagi mahsulotlar (admin/menejer/sotuvchi — hammasi uchun bir xil)
+    if not sales_warehouse:
+        stock_rows = []
+    else:
         stock_rows = db.query(Stock.product_id, Stock.quantity).filter(
-            Stock.warehouse_id.in_(wh_ids),
+            Stock.warehouse_id == sales_warehouse.id,
             Stock.quantity > 0,
         ).all()
-    else:
-        if not sales_warehouse:
-            stock_rows = []
-        else:
-            stock_rows = db.query(Stock.product_id, Stock.quantity).filter(
-                Stock.warehouse_id == sales_warehouse.id,
-                Stock.quantity > 0,
-            ).all()
     stock_by_product = {}
     for r in stock_rows:
         pid, qty = r[0], float(r[1] or 0)
@@ -1146,16 +1146,26 @@ async def sales_pos_complete(
             else:
                 parts = [{"type": payment_type, "amount": total_to_pay}]
 
+            today_str = datetime.now().strftime('%Y%m%d')
             today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-            pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
-            seq = pay_count + 1
+            last_pay = db.query(Payment).filter(
+                Payment.number.like(f"PAY-{today_str}-%"),
+                Payment.created_at >= today_start,
+            ).order_by(Payment.id.desc()).first()
+            if last_pay and last_pay.number:
+                try:
+                    seq = int(last_pay.number.split("-")[-1]) + 1
+                except (ValueError, IndexError):
+                    seq = db.query(Payment).filter(Payment.created_at >= today_start).count() + 1
+            else:
+                seq = 1
             for part in parts:
                 pt = part["type"]
                 amt = float(part["amount"] or 0)
                 cash_register = _get_pos_cash_register(db, pt, department_id)
                 if not cash_register:
                     return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
-                pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{seq:04d}"
+                pay_number = f"PAY-{today_str}-{seq:04d}"
                 seq += 1
                 db.add(Payment(
                     number=pay_number,
@@ -1175,6 +1185,11 @@ async def sales_pos_complete(
     else:
         partner.balance = (partner.balance or 0) + (order.total or 0)
         db.commit()
+    log_action(db, user=current_user, action="create", entity_type="sale",
+               entity_id=order.id, entity_number=order.number,
+               details=f"Summa: {order.total:,.0f}, To'lov: {payment_type}, Partner: {partner.name}",
+               ip_address=request.client.host if request.client else "")
+    db.commit()
     check_low_stock_and_notify(db)
     return RedirectResponse(url="/sales/pos?success=1&number=" + order.number, status_code=303)
 
@@ -1341,10 +1356,13 @@ async def sales_return_create(
             )
     from datetime import date as date_type
     today_start = date_type.today()
-    return_warehouse_id = sale.warehouse_id
-    if not return_warehouse_id:
-        default_wh = db.query(Warehouse).order_by(Warehouse.id).first()
-        return_warehouse_id = default_wh.id if default_wh else None
+    # Do'kon omborlaridan qaytarilsa — o'sha omborga, qolganlaridan — Vozvrat omboriga
+    sale_wh = db.query(Warehouse).filter(Warehouse.id == sale.warehouse_id).first()
+    if sale_wh and "do'kon" in (sale_wh.name or "").lower():
+        return_warehouse_id = sale.warehouse_id
+    else:
+        vozvrat_wh = db.query(Warehouse).filter(Warehouse.name.ilike("%vozvrat%"), Warehouse.is_active == True).first()
+        return_warehouse_id = vozvrat_wh.id if vozvrat_wh else sale.warehouse_id
     if not return_warehouse_id:
         return RedirectResponse(
             url="/sales/returns?error=no_warehouse&detail=" + quote("Ombor topilmadi. Avval ombor yarating."),

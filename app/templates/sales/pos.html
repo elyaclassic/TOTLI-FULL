@@ -976,7 +976,8 @@
     if (posSearch) {
         posSearch.addEventListener('input', function() {
             var q = (this.value || '').trim().toLowerCase();
-            var activeCat = (document.querySelector('.pos-cat-pill.active') || {}).getAttribute('data-category') || '';
+            var activePill = document.querySelector('.pos-cat-pill.active');
+            var activeCat = activePill ? (activePill.getAttribute('data-category') || '') : '';
             document.querySelectorAll('.pos-product-item').forEach(function(el) {
                 var name = (el.getAttribute('data-name') || '');
                 var barcode = (el.getAttribute('data-barcode') || '');
@@ -2158,24 +2159,33 @@
     body { overflow: hidden; }
     .sidebar { display: none !important; }
     .main-content { margin-left: 0 !important; }
-    .main-content { height: 100vh; overflow: hidden; padding: 8px !important; }
+    .main-content { height: 100vh; overflow: hidden; padding: 4px !important; }
     /* Kichik ekranda yuqoridagi fullscreen banner joy yemasin */
     .pos-fullscreen-prompt { display: none !important; }
-    .pos-premium .pos-container { max-width: 100%; padding: 0.75rem 0.5rem 0.5rem; }
-    .pos-premium .pos-header { margin-bottom: 0.75rem; padding-bottom: 0.6rem; }
-    .pos-premium .pos-title { font-size: 1.15rem; }
-    .pos-premium .pos-card-header { padding: 0.5rem 0.75rem; }
-    .pos-premium .pos-card-body { padding: 0.85rem; }
-    .pos-premium .pos-product-image-wrap { height: 95px; min-height: 95px; }
-    .pos-premium .pos-product-name { font-size: 0.82rem; }
-    .pos-premium .pos-product-price { font-size: 0.9rem; }
-    .pos-premium .pos-cart-body { padding: 0.55rem; }
-    .pos-premium .pos-total-label { font-size: 0.82rem; }
-    .pos-premium .pos-total-value { font-size: 0.95rem; }
-    .pos-premium .pos-btn-sotuv { font-size: 0.88rem; padding-top: 0.6rem !important; padding-bottom: 0.6rem !important; }
+    .pos-premium .pos-container { max-width: 100%; padding: 0.4rem 0.4rem 0.3rem; }
+    .pos-premium .pos-header { margin-bottom: 0.4rem; padding-bottom: 0.3rem; }
+    .pos-premium .pos-title { font-size: 1rem; }
+    .pos-premium .pos-card-header { padding: 0.35rem 0.5rem; }
+    .pos-premium .pos-card-body { padding: 0.5rem; }
+    .pos-premium .pos-product-image-wrap { height: 80px; min-height: 80px; }
+    .pos-premium .pos-product-name { font-size: 0.78rem; }
+    .pos-premium .pos-product-price { font-size: 0.85rem; }
+    .pos-premium .pos-cart-body { padding: 0.35rem; }
+    .pos-premium .pos-total-label { font-size: 0.78rem; }
+    .pos-premium .pos-total-value { font-size: 0.88rem; }
+    .pos-premium .pos-btn-sotuv { font-size: 0.82rem; padding-top: 0.45rem !important; padding-bottom: 0.45rem !important; }
 
     /* Savat panelini ixchamlashtirish */
-    .pos-premium .pos-kassir { padding: 0.28rem 0.45rem; font-size: 0.75rem; }
+    .pos-premium .pos-kassir { padding: 0.2rem 0.35rem; font-size: 0.7rem; }
+    .pos-premium .pos-cart-header-premium { padding: 0.35rem 0.5rem; }
+    .pos-premium .pos-cart-header-title { font-size: 0.85rem; }
+    .pos-premium .pos-cart-section { margin-bottom: 0.25rem; }
+    .pos-premium .pos-cart-section-label { font-size: 0.7rem; margin-bottom: 0.15rem; }
+    .pos-premium .pos-cart-section .form-select-sm,
+    .pos-premium .pos-cart-section .form-control-sm { font-size: 0.72rem; padding: 0.15rem 0.3rem; height: 26px; }
+    .pos-premium .pos-cart-items-wrap { margin-bottom: 0.3rem !important; }
+    .pos-premium .pos-summary-premium { padding: 0.3rem 0; }
+    .pos-premium .pos-summary-row { padding: 0.15rem 0; }
     .pos-premium .pos-cart-table thead th {
         font-size: 0.62rem;
         padding: 0.35rem 0.25rem;
@@ -2236,20 +2246,23 @@
         appearance: textfield;
     }
     .pos-premium .pos-payment-pills .pos-payment-pill {
-        font-size: 0.7rem;
-        min-width: 74px;
-        padding: 0.25rem 0.35rem;
+        font-size: 0.68rem;
+        min-width: 64px;
+        padding: 0.2rem 0.3rem;
     }
-    .pos-premium .pos-partner-discount .form-label { font-size: 0.7rem; margin-bottom: 0.15rem; }
+    .pos-premium .pos-partner-discount .form-label { font-size: 0.68rem; margin-bottom: 0.1rem; }
     .pos-premium .pos-partner-discount .form-select,
     .pos-premium .pos-partner-discount .form-control {
-        font-size: 0.74rem;
-        padding: 0.18rem 0.35rem;
+        font-size: 0.72rem;
+        padding: 0.15rem 0.3rem;
     }
-    .pos-premium .pos-btn-clear { font-size: 0.74rem; padding: 0.25rem 0.4rem; margin-bottom: 0.35rem !important; }
-    .pos-premium .pos-summary .pos-total-row { padding: 0.6rem 0; }
-    .pos-premium .pos-payment-pills .small { font-size: 0.72rem; }
-    .pos-premium .pos-extra-actions { margin-top: 0.6rem !important; padding-top: 0.6rem !important; }
+    .pos-premium .pos-btn-clear { font-size: 0.7rem; padding: 0.2rem 0.35rem; margin-bottom: 0.2rem !important; }
+    .pos-premium .pos-summary .pos-total-row { padding: 0.3rem 0; }
+    .pos-premium .pos-payment-pills .small { font-size: 0.68rem; }
+    .pos-premium .pos-extra-actions { margin-top: 0.3rem !important; padding-top: 0.3rem !important; }
+    .pos-premium .pos-cart-empty-icon { font-size: 1.5rem; }
+    .pos-premium .pos-cart-empty-text { font-size: 0.8rem; }
+    .pos-premium .pos-cart-empty-hint { font-size: 0.68rem; }
     .pos-premium .pos-extra-actions .row.g-2 { --bs-gutter-y: 0.35rem; --bs-gutter-x: 0.35rem; }
 
     /* Sahifa scroll bo'lmasin: chap/o'ng kartalar ichidan scroll bo'lsin */

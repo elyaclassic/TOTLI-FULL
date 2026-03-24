@@ -69,18 +69,29 @@
                     <tr>
                         <th>N</th>
                         <th>Kontragent</th>
-                        <th class="text-end">Yangi balans (so'm)</th>
+                        <th class="text-end">Summa (so'm)</th>
+                        <th>Tur</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for item in doc.items %}
+                    {% set bal = item.balance or 0 %}
                     <tr>
                         <td class="muted-cell">{{ loop.index }}</td>
                         <td>{{ item.partner.name if item.partner else '-' }}</td>
-                        <td class="text-end num-cell">{{ "{:,.0f}".format(item.balance or 0) }}</td>
+                        <td class="text-end num-cell">{{ "{:,.0f}".format(bal|abs) }}</td>
+                        <td>
+                            {% if bal > 0 %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger">Uning qarzi</span>
+                            {% elif bal < 0 %}
+                            <span class="badge bg-success bg-opacity-10 text-success">Bizning qarzimiz</span>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% else %}
-                    <tr><td colspan="3" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
+                    <tr><td colspan="4" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -96,6 +107,13 @@
             </div>
             <form method="post" action="/qoldiqlar/kontragent/hujjat" id="kontragentDocForm">
                 <div class="filter-card mx-3 mb-3">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-3">
+                            <label class="form-label small">Hujjat sanasi</label>
+                            <input type="date" name="doc_date" id="doc_date" class="form-control form-control-sm"
+                                   value="{{ today_str }}" required>
+                        </div>
+                    </div>
                     <div class="row g-2 align-items-end">
                         <div class="col-md-4 position-relative">
                             <label class="form-label small">Kontragent</label>
@@ -129,7 +147,8 @@
                         <tr>
                             <th>N</th>
                             <th>Kontragent</th>
-                            <th class="text-end">Yangi balans (so'm)</th>
+                            <th class="text-end">Summa (so'm)</th>
+                            <th>Tur</th>
                             <th style="width:50px;"></th>
                         </tr>
                     </thead>
@@ -222,9 +241,12 @@
             return;
         }
         rowIndex++;
+        var typeLabel = typeMul === -1
+            ? '<span class="badge bg-success bg-opacity-10 text-success">Bizning qarzimiz</span>'
+            : '<span class="badge bg-danger bg-opacity-10 text-danger">Uning qarzi</span>';
         var tr = document.createElement('tr');
         tr.className = 'doc-row';
-        tr.innerHTML = '<td class="row-n muted-cell">' + rowIndex + '</td><td class="partner-name">' + (name || '-') + '</td><td class="text-end"><input type="hidden" name="partner_id" value="' + pid + '"><input type="number" name="balance" class="form-control form-control-sm text-end" step="0.01" value="' + bal + '" placeholder="0"></td><td class="text-center"><button type="button" class="btn-act danger remove-doc-row"><i class="bi bi-trash"></i></button></td>';
+        tr.innerHTML = '<td class="row-n muted-cell">' + rowIndex + '</td><td class="partner-name">' + (name || '-') + '</td><td class="text-end"><input type="hidden" name="partner_id" value="' + pid + '"><input type="number" name="balance" class="form-control form-control-sm text-end" step="0.01" value="' + bal + '" placeholder="0"></td><td>' + typeLabel + '</td><td class="text-center"><button type="button" class="btn-act danger remove-doc-row"><i class="bi bi-trash"></i></button></td>';
         tr.querySelector('.remove-doc-row').addEventListener('click', function() {
             tr.remove();
             tbody.querySelectorAll('tr.doc-row').forEach(function(r, i) { var n = r.querySelector('.row-n'); if (n) n.textContent = i + 1; });

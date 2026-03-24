@@ -2,6 +2,9 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime
 import os
+import logging
+
+logger = logging.getLogger("database")
 
 Base = declarative_base()
 
@@ -148,7 +151,8 @@ class ChatThread(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    type = Column(String(20), default="direct")  # direct | support
+    type = Column(String(20), default="direct")  # direct | support | group
+    name = Column(String(200), nullable=True)  # group uchun nom
     created_at = Column(DateTime, default=datetime.now)
     created_by_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
@@ -189,12 +193,31 @@ class ChatMessage(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     thread_id = Column(Integer, ForeignKey("chat_threads.id"), index=True)
-    sender_id = Column(Integer, ForeignKey("users.id"), index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # NULL = Telegram user
     body = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.now, index=True)
+    telegram_sender_name = Column(String(200), nullable=True)  # Telegram dan kelgan xabar uchun
 
     thread = relationship("ChatThread", back_populates="messages")
     sender = relationship("User")
+
+
+class ChatTelegramLink(Base):
+    """Telegram foydalanuvchini chat threadga bog'lash"""
+    __tablename__ = "chat_telegram_links"
+    __table_args__ = (
+        UniqueConstraint("thread_id", "telegram_chat_id", name="uq_tg_thread_chat"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    thread_id = Column(Integer, ForeignKey("chat_threads.id"), index=True)
+    telegram_chat_id = Column(String(50), index=True)  # Telegram user yoki group chat_id
+    telegram_username = Column(String(100), nullable=True)
+    telegram_full_name = Column(String(200), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    thread = relationship("ChatThread")
 
 
 # ==========================================
@@ -762,13 +785,16 @@ class Order(Base):
     payment_type = Column(String(20), nullable=True)  # naqd, plastik — to'lov turi (POS sotuvlar uchun)
     payment_due_date = Column(Date, nullable=True)  # Qarz bo'lganda to'lov muddati (boshqa kontragent)
     note = Column(Text)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    source = Column(String(20), default="web")  # "web" | "agent"
     created_at = Column(DateTime, default=datetime.now)
-    
+
     partner = relationship("Partner", back_populates="orders")
     warehouse = relationship("Warehouse")
     items = relationship("OrderItem", back_populates="order")
     price_type = relationship("PriceType")
     user = relationship("User", foreign_keys=[user_id])
+    agent = relationship("Agent", foreign_keys=[agent_id])
 
 
 class OrderItem(Base):
@@ -1122,6 +1148,7 @@ class Agent(Base):
     locations = relationship("AgentLocation", back_populates="agent", order_by="AgentLocation.recorded_at.desc()")
     routes = relationship("Route", back_populates="agent")
     visits = relationship("Visit", back_populates="agent")
+    orders = relationship("Order", foreign_keys="Order.agent_id", back_populates="agent")
 
 
 class AgentLocation(Base):
@@ -1194,6 +1221,7 @@ class Visit(Base):
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
     
     agent = relationship("Agent", back_populates="visits")
+    partner = relationship("Partner", lazy="select")
 
 
 # ==========================================
@@ -1527,18 +1555,18 @@ def ensure_agent_order_columns():
         with engine.begin() as conn:
             try:
                 conn.execute(text("ALTER TABLE orders ADD COLUMN agent_id INTEGER REFERENCES agents(id)"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"orders.agent_id already exists: {e}")
             try:
                 conn.execute(text("ALTER TABLE orders ADD COLUMN source VARCHAR(20) DEFAULT 'web'"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"orders.source already exists: {e}")
             try:
                 conn.execute(text("ALTER TABLE agents ADD COLUMN user_id INTEGER REFERENCES users(id)"))
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"agents.user_id already exists: {e}")
     except Exception as e:
-        print(f"ensure_agent_order_columns: {e}")
+        logger.error(f"ensure_agent_order_columns: {e}")
 
 
 def init_db():
@@ -1648,6 +1676,23 @@ def ensure_cash_transfer_inkasatsiya():
             conn.execute(text("UPDATE cash_transfers SET status='pending' WHERE status='draft'"))
     except Exception as e:
         print(f"ensure_cash_transfer_inkasatsiya: {e}")
+
+
+class AuditLog(Base):
+    """Audit log — barcha muhim operatsiyalar tarixi"""
+    __tablename__ = "audit_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.now, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    user_name = Column(String(200))  # Tez qidirish uchun
+    action = Column(String(50), index=True)  # create, update, delete, confirm, revert, login
+    entity_type = Column(String(50), index=True)  # production, order, partner, payment, ...
+    entity_id = Column(Integer, nullable=True)
+    entity_number = Column(String(100), nullable=True)  # Hujjat raqami
+    details = Column(Text, nullable=True)  # Batafsil ma'lumot (JSON yoki matn)
+    ip_address = Column(String(50), nullable=True)
+
+    user = relationship("User", foreign_keys=[user_id])
 
 
 if __name__ == "__main__":

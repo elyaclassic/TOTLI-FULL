@@ -38,10 +38,10 @@
       <label class="form-label">📋 Holat</label>
       <select name="status" class="form-select form-select-sm" style="min-width:150px;">
         <option value="">Barchasi</option>
-        <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Qoralama</option>
-        <option value="completed" {% if status_filter == 'completed' %}selected{% endif %}>Bajarildi</option>
-        <option value="waiting_production" {% if status_filter == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
-        <option value="cancelled" {% if status_filter == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
+        <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Qoralama</option>
+        <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Bajarildi</option>
+        <option value="waiting_production" {% if selected_status == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
+        <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
       </select>
     </div>
     <div class="col-auto d-flex gap-2">

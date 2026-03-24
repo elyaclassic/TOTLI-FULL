@@ -361,24 +361,27 @@
         });
     }
 
-    document.getElementById('addRow').onclick = function() { addRow('', '', '', null, null); };
+    var addRowBtn = document.getElementById('addRow');
+    if (addRowBtn) addRowBtn.onclick = function() { addRow('', '', '', null, null); };
     itemsBody.querySelectorAll('.item-row').forEach(function(tr) {
-        tr.querySelector('.rm-row').onclick = function() { tr.remove(); renum(); };
+        var rmBtn = tr.querySelector('.rm-row');
+        if (rmBtn) rmBtn.onclick = function() { tr.remove(); renum(); };
         var inp = tr.querySelector('.combo-input');
         if (inp) bindCombo(inp, inp.dataset.row);
         var qtyInp = tr.querySelector('.qty-input');
         if (qtyInp) qtyInp.addEventListener('input', function() { updateRowSum(tr); });
     });
 
-    fromWh.addEventListener('change', function() {
+    var btnLoadAll = document.getElementById('btnLoadAllStock');
+    if (fromWh) fromWh.addEventListener('change', function() {
         if (toWh.value === fromWh.value) toWh.value = '';
-        document.getElementById('btnLoadAllStock').style.display = fromWh.value ? 'inline-block' : 'none';
+        if (btnLoadAll) btnLoadAll.style.display = fromWh.value ? 'inline-block' : 'none';
     });
-    toWh.addEventListener('change', function() { if (toWh.value === fromWh.value) toWh.value = ''; });
+    if (toWh) toWh.addEventListener('change', function() { if (toWh.value === fromWh.value) toWh.value = ''; });
 
-    if (fromWh.value) document.getElementById('btnLoadAllStock').style.display = 'inline-block';
+    if (fromWh && fromWh.value && btnLoadAll) btnLoadAll.style.display = 'inline-block';
 
-    document.getElementById('btnLoadAllStock').onclick = function() {
+    if (btnLoadAll) btnLoadAll.onclick = function() {
         var fromId = fromWh.value;
         if (!fromId) return;
         var avail = stockByWhProduct[fromId];

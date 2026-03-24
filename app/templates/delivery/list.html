@@ -28,7 +28,7 @@
         <div class="col-6 col-md-3">
             <div class="mini-stat">
                 <div class="num" style="color:#1a73e8;">
-                    {{ deliveries | selectattr('status', 'in', ['pending', 'picked_up', 'in_transit']) | list | length }}
+                    {{ deliveries | selectattr('status', 'in', ['pending', 'picked_up', 'in_progress']) | list | length }}
                 </div>
                 <div class="lbl">Faol yetkazishlar</div>
             </div>
@@ -36,7 +36,7 @@
         <div class="col-6 col-md-3">
             <div class="mini-stat">
                 <div class="num" style="color:#856404;">
-                    {{ deliveries | selectattr('status', 'eq', 'in_transit') | list | length }}
+                    {{ deliveries | selectattr('status', 'eq', 'in_progress') | list | length }}
                 </div>
                 <div class="lbl">Yo'lda</div>
             </div>
@@ -105,7 +105,7 @@
                             <td><code>{{ driver.vehicle_number or '-' }}</code></td>
                             <td>
                                 <span class="badge-done me-1" title="Yetkazilgan">{{ driver.deliveries|selectattr('status', 'eq', 'delivered')|list|length }}</span>
-                                <span class="badge-waiting me-1" title="Yo'lda">{{ driver.deliveries|selectattr('status', 'eq', 'in_transit')|list|length }}</span>
+                                <span class="badge-waiting me-1" title="Yo'lda">{{ driver.deliveries|selectattr('status', 'eq', 'in_progress')|list|length }}</span>
                                 <span class="badge-inactive" title="Jami">{{ driver.deliveries|length }}</span>
                             </td>
                             <td>
@@ -144,7 +144,7 @@
     <div class="row g-3">
         {% set active_found = namespace(v=false) %}
         {% for delivery in deliveries %}
-        {% if delivery.status in ['pending', 'picked_up', 'in_transit'] %}
+        {% if delivery.status in ['pending', 'picked_up', 'in_progress'] %}
         {% set active_found.v = true %}
         <div class="col-md-4">
             <div class="card data-table h-100">
@@ -155,12 +155,12 @@
                         <span class="badge-draft">Kutilmoqda</span>
                         {% elif delivery.status == 'picked_up' %}
                         <span class="badge-waiting">Olib ketildi</span>
-                        {% elif delivery.status == 'in_transit' %}
+                        {% elif delivery.status == 'in_progress' %}
                         <span class="badge-active">Yo'lda</span>
                         {% endif %}
                     </div>
                     <p class="mb-1" style="font-size:13px;"><i class="bi bi-geo text-muted me-1"></i>{{ delivery.delivery_address }}</p>
-                    <p class="mb-1 muted-cell"><i class="bi bi-clock me-1"></i>{{ delivery.created_at.strftime('%d.%m %H:%M') }}</p>
+                    <p class="mb-1 muted-cell"><i class="bi bi-clock me-1"></i>{{ delivery.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
                     {% if delivery.driver %}
                     <p class="mb-0 muted-cell"><i class="bi bi-person me-1"></i>{{ delivery.driver.full_name }}</p>
                     {% endif %}
