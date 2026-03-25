@@ -329,7 +329,17 @@ async def sales_edit(
     info_detail = unquote(request.query_params.get("detail", "") or "") if info else ""
     foyda_zarar = 0
     for item in order.items:
-        cost = (item.product.purchase_price or 0) if item.product else 0
+        cost = 0
+        if item.product:
+            # Tannarxni stock.cost_price dan olish (ombordagi haqiqiy tannarx)
+            item_wh = getattr(item, "warehouse_id", None) or order.warehouse_id
+            st = db.query(Stock).filter(
+                Stock.warehouse_id == item_wh,
+                Stock.product_id == item.product_id,
+            ).first()
+            if st and st.cost_price and st.cost_price > 0:
+                cost = st.cost_price
+            # cost_price topilmasa, cost=0 qoladi (noto'g'ri purchase_price ishlatilmaydi)
         foyda_zarar += (item.quantity or 0) * ((item.price or 0) - cost)
     role = (getattr(current_user, "role", None) or "").strip().lower() if current_user else ""
     # Foyda/Zarar faqat admin yoki rahbar/raxbar ko'radi

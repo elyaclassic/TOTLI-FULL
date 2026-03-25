@@ -343,8 +343,9 @@ class Stock(Base):
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Float, default=0)
+    cost_price = Column(Float, default=0)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
-    
+
     warehouse = relationship("Warehouse", back_populates="stocks")
     product = relationship("Product", back_populates="stock_items")
     movements = relationship("StockMovement", back_populates="stock", order_by="StockMovement.created_at.desc()")
@@ -1569,8 +1570,32 @@ def ensure_agent_order_columns():
         logger.error(f"ensure_agent_order_columns: {e}")
 
 
+def ensure_agent_tasks():
+    """agent_tasks jadvalini yaratadi (SQLite)."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS agent_tasks (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    agent_id INTEGER NOT NULL REFERENCES agents(id),
+                    title VARCHAR(200) NOT NULL,
+                    description TEXT,
+                    due_date DATE,
+                    status VARCHAR(20) DEFAULT 'pending',
+                    priority VARCHAR(10) DEFAULT 'normal',
+                    partner_id INTEGER REFERENCES partners(id),
+                    created_at DATETIME,
+                    completed_at DATETIME
+                )
+            """))
+    except Exception as e:
+        logger.error(f"ensure_agent_tasks: {e}")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    ensure_agent_tasks()
     ensure_agent_order_columns()
     ensure_recipe_warehouse_columns()
     ensure_cash_register_payment_type()
@@ -1676,6 +1701,23 @@ def ensure_cash_transfer_inkasatsiya():
             conn.execute(text("UPDATE cash_transfers SET status='pending' WHERE status='draft'"))
     except Exception as e:
         print(f"ensure_cash_transfer_inkasatsiya: {e}")
+
+
+class AgentTask(Base):
+    """Agent vazifalari (SD Agent)"""
+    __tablename__ = "agent_tasks"
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"))
+    title = Column(String(200))
+    description = Column(Text, nullable=True)
+    due_date = Column(Date, nullable=True)
+    status = Column(String(20), default="pending")  # pending, completed
+    priority = Column(String(10), default="normal")  # low, normal, high
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    completed_at = Column(DateTime, nullable=True)
+    agent = relationship("Agent")
+    partner = relationship("Partner")
 
 
 class AuditLog(Base):

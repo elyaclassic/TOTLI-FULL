@@ -2,7 +2,7 @@
 API — stats, products, partners, agent/driver login va location (PWA/mobil).
 """
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -25,6 +25,8 @@ from app.models.database import (
     User,
     Visit,
     Delivery,
+    Payment,
+    AgentTask,
 )
 from sqlalchemy import func as sa_func
 from app.deps import require_auth, get_current_user
@@ -580,7 +582,7 @@ async def agent_visit_checkin(
     latitude: float = Form(None),
     longitude: float = Form(None),
     notes: str = Form(""),
-    token: str = Form(...),
+    token: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Agent mijozga tashrif boshlanishi (check-in)"""
@@ -598,7 +600,7 @@ async def agent_visit_checkin(
             latitude=latitude,
             longitude=longitude,
             status="visited",
-            notes=notes,
+            notes=notes or "",
         )
         db.add(visit)
         db.commit()
@@ -607,7 +609,7 @@ async def agent_visit_checkin(
     except Exception as e:
         db.rollback()
         logger.error(f"Agent checkin error: {e}")
-        return {"success": False, "error": "Server xatosi"}
+        return {"success": False, "error": f"Xatolik: {e}"}
 
 
 @router.post("/agent/visit/checkout")
@@ -615,7 +617,7 @@ async def agent_visit_checkout(
     request: Request,
     visit_id: int = Form(...),
     notes: str = Form(""),
-    token: str = Form(...),
+    token: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Agent tashrifni tugatishi (check-out)"""
@@ -642,15 +644,17 @@ async def agent_visit_checkout(
 
 @router.post("/agent/location")
 async def agent_location_update(
+    request: Request,
     latitude: float = Form(...),
     longitude: float = Form(...),
     accuracy: float = Form(None),
     battery: int = Form(None),
-    token: str = Form(...),
+    token: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
-        user_data = get_user_from_token(token)
+        tk = _extract_token(request, token)
+        user_data = get_user_from_token(tk)
         if not user_data or user_data.get("user_type") != "agent":
             return {"success": False, "error": "Invalid token"}
         agent_id = user_data.get("user_id")
@@ -995,6 +999,97 @@ async def agent_partner_detail(request: Request, partner_id: int, token: str = N
         return {"success": False, "error": "Server xatosi"}
 
 
+@router.post("/agent/partner/add")
+async def agent_partner_add(
+    request: Request,
+    name: str = Form(...),
+    phone: str = Form(""),
+    address: str = Form(""),
+    legal_name: str = Form(""),
+    landmark: str = Form(""),
+    contact_person: str = Form(""),
+    notes: str = Form(""),
+    category: str = Form(""),
+    region: str = Form(""),
+    customer_type: str = Form(""),
+    sales_channel: str = Form(""),
+    visit_days: str = Form(""),
+    inn: str = Form(""),
+    account: str = Form(""),
+    bank: str = Form(""),
+    mfo: str = Form(""),
+    oked: str = Form(""),
+    pinfl: str = Form(""),
+    contract_number: str = Form(""),
+    contract_date: str = Form(""),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Agent yangi mijoz (partner) qo'shadi — to'liq forma."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+        # Kod generatsiya
+        last = db.query(Partner).order_by(Partner.id.desc()).first()
+        seq = (last.id + 1) if last else 1
+        code = f"P{seq:05d}"
+        # Visit day — birinchi tanlangan kunni saqlash
+        visit_day_val = None
+        if visit_days:
+            try:
+                visit_day_val = int(visit_days.split(",")[0])
+            except (ValueError, IndexError):
+                pass
+        # Contract date
+        contract_date_val = None
+        if contract_date:
+            try:
+                from datetime import datetime as _dt
+                contract_date_val = _dt.strptime(contract_date, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                pass
+        partner = Partner(
+            code=code,
+            name=name.strip(),
+            legal_name=(legal_name or "").strip() or None,
+            phone=(phone or "").strip(),
+            address=(address or "").strip(),
+            landmark=(landmark or "").strip() or None,
+            contact_person=(contact_person or "").strip() or None,
+            notes=(notes or "").strip() or None,
+            category=(category or "").strip() or None,
+            region=(region or "").strip() or None,
+            customer_type=(customer_type or "").strip() or None,
+            sales_channel=(sales_channel or "").strip() or None,
+            visit_day=visit_day_val,
+            inn=(inn or "").strip() or None,
+            account=(account or "").strip() or None,
+            bank=(bank or "").strip() or None,
+            mfo=(mfo or "").strip() or None,
+            oked=(oked or "").strip() or None,
+            pinfl=(pinfl or "").strip() or None,
+            contract_number=(contract_number or "").strip() or None,
+            contract_date=contract_date_val,
+            latitude=latitude,
+            longitude=longitude,
+            agent_id=agent.id,
+            is_active=True,
+            type="customer",
+        )
+        db.add(partner)
+        db.commit()
+        db.refresh(partner)
+        return {"success": True, "partner_id": partner.id}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_partner_add: {e}")
+        return {"success": False, "error": f"Xatolik: {e}"}
+
+
 @router.get("/agent/products")
 async def agent_products(request: Request, token: str = None, search: str = None, db: Session = Depends(get_db)):
     """Mahsulotlar ro'yxati (agent buyurtma uchun) — stock va ProductPrice bilan."""
@@ -1192,4 +1287,581 @@ async def agent_stats(request: Request, token: str = None, db: Session = Depends
         }
     except Exception as e:
         logger.error(f"agent_stats: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# SD AGENT API — BATCH, DEBTS, SUMMARY, RECONCILIATION, KPI, TASKS
+# ==========================================
+
+@router.post("/agent/order/create-batch")
+async def agent_create_order_batch(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Bir nechta buyurtmani bir yo'la yaratish (JSON array). Har biri agent_create_order mantiqida."""
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token") if isinstance(body, dict) else None)
+        # Body dict bo'lsa, orders kaliti bilan; yoki to'g'ridan-to'g'ri list
+        if isinstance(body, dict):
+            tok = tok or _extract_token(request, None)
+            orders_data = body.get("orders", [])
+        elif isinstance(body, list):
+            orders_data = body
+        else:
+            return {"success": False, "error": "JSON array yoki {orders: [...]} kutilmoqda"}
+
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        if not orders_data:
+            return {"success": False, "error": "Buyurtmalar ro'yxati bo'sh"}
+
+        results = []
+        for idx, order_data in enumerate(orders_data):
+            try:
+                partner_id = order_data.get("partner_id")
+                payment_type = order_data.get("payment_type", "naqd")
+                note = order_data.get("note", "")
+                items = order_data.get("items", [])
+
+                partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent.id).first()
+                if not partner:
+                    results.append({"index": idx, "success": False, "error": "Klient topilmadi"})
+                    continue
+                if not items:
+                    results.append({"index": idx, "success": False, "error": "Mahsulot tanlang"})
+                    continue
+
+                # Ombor
+                warehouse = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+                if not warehouse:
+                    warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
+                if not warehouse:
+                    warehouse = db.query(Warehouse).filter(Warehouse.is_active == True).first()
+                if not warehouse:
+                    results.append({"index": idx, "success": False, "error": "Ombor topilmadi"})
+                    continue
+
+                # Buyurtma raqami
+                today = datetime.now()
+                prefix = f"AGT-{today.strftime('%Y%m%d')}"
+                last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+                if last and last.number:
+                    try:
+                        seq = int(last.number.split("-")[-1]) + 1
+                    except Exception:
+                        seq = 1
+                else:
+                    seq = 1
+                order_number = f"{prefix}-{seq:03d}"
+
+                partner_discount = float(partner.discount_percent or 0)
+                subtotal = 0.0
+                order_items = []
+                for it in items:
+                    prod = db.query(Product).filter(Product.id == int(it["product_id"]), Product.is_active == True).first()
+                    if not prod:
+                        continue
+                    qty = float(it.get("qty", it.get("quantity", 1)))
+                    pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
+                    price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
+                    total_line = qty * price
+                    subtotal += total_line
+                    order_items.append(OrderItem(
+                        product_id=prod.id,
+                        quantity=qty,
+                        price=price,
+                        discount_percent=partner_discount,
+                        total=total_line * (1 - partner_discount / 100),
+                    ))
+
+                if not order_items:
+                    results.append({"index": idx, "success": False, "error": "Mahsulot topilmadi"})
+                    continue
+
+                discount_amount = subtotal * partner_discount / 100
+                total = subtotal - discount_amount
+                order = Order(
+                    number=order_number,
+                    date=today,
+                    type="sale",
+                    partner_id=partner.id,
+                    warehouse_id=warehouse.id,
+                    user_id=None,
+                    agent_id=agent.id,
+                    source="agent",
+                    subtotal=subtotal,
+                    discount_percent=partner_discount,
+                    discount_amount=discount_amount,
+                    total=total,
+                    paid=0,
+                    debt=total,
+                    status="draft",
+                    payment_type=payment_type,
+                    note=f"Agent: {agent.code} — {agent.full_name}" + (f". {note}" if note else ""),
+                )
+                db.add(order)
+                db.flush()
+                for oi in order_items:
+                    oi.order_id = order.id
+                    db.add(oi)
+                db.flush()
+
+                results.append({
+                    "index": idx,
+                    "success": True,
+                    "order_id": order.id,
+                    "order_number": order_number,
+                    "total": total,
+                })
+            except Exception as item_err:
+                results.append({"index": idx, "success": False, "error": str(item_err)})
+
+        db.commit()
+        success_count = sum(1 for r in results if r.get("success"))
+        logger.info(f"Agent batch orders: agent={agent.code}, total={len(orders_data)}, success={success_count}")
+        return {"success": True, "results": results, "total": len(orders_data), "success_count": success_count}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_create_order_batch: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/partner/{partner_id}/debts")
+async def agent_partner_debts(
+    request: Request,
+    partner_id: int,
+    token: str = None,
+    db: Session = Depends(get_db),
+):
+    """Kontragentning to'lanmagan buyurtmalari (qarz > 0)."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent.id).first()
+        if not partner:
+            return {"success": False, "error": "Klient topilmadi"}
+
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.partner_id == partner_id,
+                Order.agent_id == agent.id,
+                Order.debt > 0,
+                Order.type == "sale",
+            )
+            .order_by(Order.date.desc())
+            .all()
+        )
+
+        debts_list = []
+        total_debt = 0.0
+        for o in orders:
+            debt_val = float(o.debt or 0)
+            total_debt += debt_val
+            debts_list.append({
+                "id": o.id,
+                "number": o.number,
+                "date": o.date.strftime("%d.%m.%Y") if o.date else "",
+                "total": float(o.total or 0),
+                "paid": float(o.paid or 0),
+                "debt": debt_val,
+                "status": o.status,
+            })
+
+        return {
+            "success": True,
+            "partner_id": partner_id,
+            "partner_name": partner.name,
+            "total_debt": total_debt,
+            "debts": debts_list,
+        }
+    except Exception as e:
+        logger.error(f"agent_partner_debts: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/reports/summary")
+async def agent_reports_summary(
+    request: Request,
+    token: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db),
+):
+    """Agent kunlik/davriy hisobot: buyurtmalar, to'lovlar, kontragentlar bo'yicha."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        today = datetime.now().date()
+        try:
+            d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+        except (ValueError, TypeError):
+            d_from = today
+        try:
+            d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+        except (ValueError, TypeError):
+            d_to = today
+
+        # Davriy buyurtmalar
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.agent_id == agent.id,
+                sa_func.date(Order.date) >= d_from,
+                sa_func.date(Order.date) <= d_to,
+            )
+            .all()
+        )
+
+        orders_count = len(orders)
+        total_amount = sum(float(o.total or 0) for o in orders)
+
+        # Payment breakdown
+        cash_orders = [o for o in orders if (o.payment_type or "").lower() in ("naqd", "cash")]
+        transfer_orders = [o for o in orders if (o.payment_type or "").lower() in ("plastik", "transfer", "card", "perechisleniye")]
+        credit_orders = [o for o in orders if float(o.debt or 0) > 0]
+
+        payment_breakdown = {
+            "cash": {
+                "count": len(cash_orders),
+                "total": sum(float(o.total or 0) for o in cash_orders),
+            },
+            "transfer": {
+                "count": len(transfer_orders),
+                "total": sum(float(o.total or 0) for o in transfer_orders),
+            },
+            "credit": {
+                "count": len(credit_orders),
+                "total": sum(float(o.debt or 0) for o in credit_orders),
+            },
+        }
+
+        # Partner breakdown — top 10 kontragentlar
+        partner_totals = {}
+        for o in orders:
+            pid = o.partner_id
+            if pid not in partner_totals:
+                p = db.query(Partner).filter(Partner.id == pid).first()
+                partner_totals[pid] = {
+                    "partner_id": pid,
+                    "partner_name": p.name if p else "Noma'lum",
+                    "orders_count": 0,
+                    "total": 0.0,
+                }
+            partner_totals[pid]["orders_count"] += 1
+            partner_totals[pid]["total"] += float(o.total or 0)
+
+        top_partners = sorted(partner_totals.values(), key=lambda x: x["total"], reverse=True)[:10]
+
+        return {
+            "success": True,
+            "date_from": d_from.isoformat(),
+            "date_to": d_to.isoformat(),
+            "orders_count": orders_count,
+            "total_amount": total_amount,
+            "payment_breakdown": payment_breakdown,
+            "top_partners": top_partners,
+        }
+    except Exception as e:
+        logger.error(f"agent_reports_summary: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/partner/{partner_id}/reconciliation")
+async def agent_partner_reconciliation(
+    request: Request,
+    partner_id: int,
+    token: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db),
+):
+    """Kontragent bilan solishtirma akt (harakat tarixi: debet/kredit/saldo)."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent.id).first()
+        if not partner:
+            return {"success": False, "error": "Klient topilmadi"}
+
+        today = datetime.now().date()
+        try:
+            d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else (today - timedelta(days=90))
+        except (ValueError, TypeError):
+            d_from = today - timedelta(days=90)
+        try:
+            d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+        except (ValueError, TypeError):
+            d_to = today
+
+        # Davrgacha bo'lgan buyurtmalar va to'lovlar — ochilish qoldig'i
+        prior_orders_total = (
+            db.query(sa_func.coalesce(sa_func.sum(Order.total), 0))
+            .filter(
+                Order.partner_id == partner_id,
+                Order.agent_id == agent.id,
+                Order.type == "sale",
+                sa_func.date(Order.date) < d_from,
+            )
+            .scalar()
+        ) or 0
+
+        prior_payments_total = (
+            db.query(sa_func.coalesce(sa_func.sum(Payment.amount), 0))
+            .filter(
+                Payment.partner_id == partner_id,
+                Payment.type == "income",
+                Payment.status != "cancelled",
+                sa_func.date(Payment.date) < d_from,
+            )
+            .scalar()
+        ) or 0
+
+        opening_balance = float(prior_orders_total) - float(prior_payments_total)
+
+        # Davrdagi harakatlar
+        movements = []
+
+        # Buyurtmalar (debit)
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.partner_id == partner_id,
+                Order.agent_id == agent.id,
+                Order.type == "sale",
+                sa_func.date(Order.date) >= d_from,
+                sa_func.date(Order.date) <= d_to,
+            )
+            .order_by(Order.date)
+            .all()
+        )
+        for o in orders:
+            movements.append({
+                "date": o.date.strftime("%d.%m.%Y %H:%M") if o.date else "",
+                "sort_date": o.date.isoformat() if o.date else "",
+                "description": f"Sotuv #{o.number}",
+                "debit": float(o.total or 0),
+                "credit": 0.0,
+            })
+
+        # To'lovlar (kredit)
+        payments = (
+            db.query(Payment)
+            .filter(
+                Payment.partner_id == partner_id,
+                Payment.type == "income",
+                Payment.status != "cancelled",
+                sa_func.date(Payment.date) >= d_from,
+                sa_func.date(Payment.date) <= d_to,
+            )
+            .order_by(Payment.date)
+            .all()
+        )
+        for p in payments:
+            movements.append({
+                "date": p.date.strftime("%d.%m.%Y %H:%M") if p.date else "",
+                "sort_date": p.date.isoformat() if p.date else "",
+                "description": f"To'lov #{p.number}" + (f" ({p.payment_type})" if p.payment_type else ""),
+                "debit": 0.0,
+                "credit": float(p.amount or 0),
+            })
+
+        # Sanaga ko'ra tartiblash
+        movements.sort(key=lambda x: x.get("sort_date", ""))
+
+        # Balansni hisoblash
+        running_balance = opening_balance
+        for m in movements:
+            running_balance += m["debit"] - m["credit"]
+            m["balance"] = round(running_balance, 2)
+            del m["sort_date"]
+
+        closing_balance = running_balance
+
+        return {
+            "success": True,
+            "partner_id": partner_id,
+            "partner_name": partner.name,
+            "date_from": d_from.isoformat(),
+            "date_to": d_to.isoformat(),
+            "opening_balance": round(opening_balance, 2),
+            "closing_balance": round(closing_balance, 2),
+            "movements": movements,
+        }
+    except Exception as e:
+        logger.error(f"agent_partner_reconciliation: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/kpi")
+async def agent_kpi(
+    request: Request,
+    token: str = None,
+    period: str = "daily",
+    db: Session = Depends(get_db),
+):
+    """Agent KPI ko'rsatkichlari: tashriflar, buyurtmalar, yangi klientlar, o'rtacha summa."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        today = datetime.now().date()
+        period = (period or "daily").lower()
+        if period == "weekly":
+            d_from = today - timedelta(days=today.weekday())  # Dushanba
+        elif period == "monthly":
+            d_from = today.replace(day=1)
+        else:
+            d_from = today
+
+        # Tashriflar
+        visits_done = (
+            db.query(Visit)
+            .filter(
+                Visit.agent_id == agent.id,
+                sa_func.date(Visit.visit_date) >= d_from,
+                sa_func.date(Visit.visit_date) <= today,
+            )
+            .count()
+        )
+
+        # Rejalashtirilgan tashriflar — agent kontragentlari soni
+        visits_planned = db.query(Partner).filter(Partner.agent_id == agent.id, Partner.is_active == True).count()
+
+        # Buyurtmalar
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.agent_id == agent.id,
+                sa_func.date(Order.date) >= d_from,
+                sa_func.date(Order.date) <= today,
+            )
+            .all()
+        )
+        orders_count = len(orders)
+        orders_total = sum(float(o.total or 0) for o in orders)
+        average_order_value = (orders_total / orders_count) if orders_count > 0 else 0
+
+        # Yangi kontragentlar (ushbu davrda qo'shilganlar)
+        new_partners = (
+            db.query(Partner)
+            .filter(
+                Partner.agent_id == agent.id,
+                Partner.is_active == True,
+                sa_func.date(Partner.created_at) >= d_from,
+                sa_func.date(Partner.created_at) <= today,
+            )
+            .count()
+        )
+
+        # Foizlar
+        visits_pct = round((visits_done / visits_planned * 100), 1) if visits_planned > 0 else 0
+
+        return {
+            "success": True,
+            "period": period,
+            "date_from": d_from.isoformat(),
+            "date_to": today.isoformat(),
+            "metrics": {
+                "visits_done": visits_done,
+                "visits_planned": visits_planned,
+                "visits_percent": visits_pct,
+                "orders_count": orders_count,
+                "orders_total": round(orders_total, 2),
+                "average_order_value": round(average_order_value, 2),
+                "new_partners": new_partners,
+            },
+        }
+    except Exception as e:
+        logger.error(f"agent_kpi: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/tasks")
+async def agent_tasks_list(
+    request: Request,
+    token: str = None,
+    status: str = None,
+    db: Session = Depends(get_db),
+):
+    """Agent vazifalari ro'yxati."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        q = db.query(AgentTask).filter(AgentTask.agent_id == agent.id)
+        if status:
+            q = q.filter(AgentTask.status == status)
+        tasks = q.order_by(AgentTask.due_date.asc(), AgentTask.priority.desc()).all()
+
+        result = []
+        for t in tasks:
+            partner_name = ""
+            if t.partner_id:
+                p = db.query(Partner).filter(Partner.id == t.partner_id).first()
+                partner_name = p.name if p else ""
+            result.append({
+                "id": t.id,
+                "title": t.title,
+                "description": t.description or "",
+                "due_date": t.due_date.isoformat() if t.due_date else None,
+                "status": t.status,
+                "priority": t.priority,
+                "partner_id": t.partner_id,
+                "partner_name": partner_name,
+                "created_at": t.created_at.isoformat() if t.created_at else "",
+                "completed_at": t.completed_at.isoformat() if t.completed_at else None,
+            })
+
+        return {"success": True, "tasks": result}
+    except Exception as e:
+        logger.error(f"agent_tasks_list: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/tasks/{task_id}/complete")
+async def agent_task_complete(
+    request: Request,
+    task_id: int,
+    token: str = Form(""),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Agent vazifani bajarilgan deb belgilaydi."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        task = db.query(AgentTask).filter(AgentTask.id == task_id, AgentTask.agent_id == agent.id).first()
+        if not task:
+            return {"success": False, "error": "Vazifa topilmadi"}
+
+        if task.status == "completed":
+            return {"success": False, "error": "Vazifa allaqachon bajarilgan"}
+
+        task.status = "completed"
+        task.completed_at = datetime.now()
+        if notes:
+            task.description = (task.description or "") + f"\n[Bajarildi]: {notes}" if task.description else f"[Bajarildi]: {notes}"
+        db.commit()
+
+        logger.info(f"Agent task completed: task_id={task_id}, agent={agent.code}")
+        return {"success": True, "task_id": task.id, "status": "completed"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_task_complete: {e}")
         return {"success": False, "error": "Server xatosi"}

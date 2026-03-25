@@ -322,6 +322,7 @@ async def purchase_delete_expense(
 @router.post("/{purchase_id}/confirm")
 async def purchase_confirm(
     purchase_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):

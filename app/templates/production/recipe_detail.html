@@ -264,33 +264,29 @@
     </div>
 </div>
 
-<!-- Xom ashyo qo'shish modal -->
+<!-- Xom ashyo qo'shish modal (multi-select) -->
 <div class="modal fade" id="addItemModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form method="POST" action="/production/recipes/{{ recipe.id }}/add-item" id="addItemForm">
-                <input type="hidden" name="return_q" value="{{ search_q or '' }}">
-                <div class="modal-header">
-                    <h5 class="modal-title">Xom ashyo qo'shish</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-header">
+                <h5 class="modal-title">Xom ashyo qo'shish</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="p-3 border-bottom">
+                    <input type="text" class="form-control" id="add_product_search" placeholder="Xom ashyo nomini qidiring..." autocomplete="off" oninput="filterAddItems()">
                 </div>
-                <div class="modal-body">
-                    <div class="mb-3 position-relative">
-                        <label class="form-label">Xom ashyo</label>
-                        <input type="text" class="form-control" id="add_product_search" placeholder="Yozib qidiring..." autocomplete="off">
-                        <input type="hidden" name="product_id" id="add_product_id" required>
-                        <div id="add_product_dropdown" class="list-group position-absolute w-100 mt-1 shadow" style="max-height: 220px; overflow-y: auto; z-index: 1050; display: none;"></div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Miqdor (kg)</label>
-                        <input type="text" inputmode="decimal" class="form-control" name="quantity" id="add_quantity" placeholder="0.001" required>
-                    </div>
+                <div style="max-height:400px;overflow-y:auto;" id="addItemsList"></div>
+                <div class="p-3 border-top bg-light" id="selectedCount" style="display:none;">
+                    <span class="fw-semibold text-primary" id="selectedCountText">0 ta tanlandi</span>
                 </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
-                    <button type="submit" class="btn btn-primary">Qo'shish</button>
-                </div>
-            </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                <button type="button" class="btn btn-primary" onclick="submitMultiAdd()">
+                    <i class="bi bi-plus-lg"></i> Tanlanganlarni qo'shish
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -351,54 +347,74 @@
         container.style.display = 'block';
     }
 
-    var addSearch = document.getElementById('add_product_search');
-    var addId = document.getElementById('add_product_id');
-    var addDrop = document.getElementById('add_product_dropdown');
+    // ── MULTI-SELECT ADD ──
+    var selectedIds = {};
+    var existingIds = {};
+    // Allaqachon retseptda bor xom ashyolar
+    {% for item in recipe.items %}
+    existingIds[{{ item.product_id }}] = true;
+    {% endfor %}
 
-    function addSelect(m) {
-        addId.value = m.id;
-        addSearch.value = decodeHtmlEntities(m.label);
-        addDrop.style.display = 'none';
+    function renderAddItems(list) {
+        var el = document.getElementById('addItemsList');
+        if (!list.length) { el.innerHTML = '<div class="p-3 text-muted text-center">Topilmadi</div>'; return; }
+        el.innerHTML = list.map(function(m) {
+            var checked = selectedIds[m.id] ? 'checked' : '';
+            var exists = existingIds[m.id] ? ' <span class="badge bg-warning text-dark" style="font-size:10px;">mavjud</span>' : '';
+            return '<label style="display:flex;align-items:center;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid #f0f0f0;">' +
+                '<input type="checkbox" style="width:18px;height:18px;flex-shrink:0;" value="' + m.id + '" ' + checked + ' onchange="toggleAddItem(' + m.id + ',this.checked)">' +
+                '<span>' + decodeHtmlEntities(m.name) + ' <small style="color:#888;">(' + (m.code || '') + ')</small>' + exists + '</span>' +
+            '</label>';
+        }).join('');
     }
-    addSearch.addEventListener('input', function() {
-        var list = filterMaterials(this.value);
-        renderDropdown(addDrop, list.slice(0, 50), addSelect, addState);
-    });
-    addSearch.addEventListener('focus', function() {
-        if (!addId.value) renderDropdown(addDrop, materials.slice(0, 30), addSelect, addState);
-    });
-    addSearch.addEventListener('keydown', function(e) {
-        if (addDrop.style.display === 'none' || !addState.list.length) return;
-        if (e.key === 'ArrowDown') {
-            addState.index = (addState.index + 1) % addState.list.length;
-            setDropdownHighlight(addDrop, addState.index);
-            e.preventDefault();
-        } else if (e.key === 'ArrowUp') {
-            addState.index = (addState.index - 1 + addState.list.length) % addState.list.length;
-            setDropdownHighlight(addDrop, addState.index);
-            e.preventDefault();
-        } else if (e.key === 'Enter') {
-            addSelect(addState.list[addState.index]);
-            e.preventDefault();
-        } else if (e.key === 'Escape') {
-            addDrop.style.display = 'none';
-            e.preventDefault();
+
+    window.filterAddItems = function() {
+        var q = (document.getElementById('add_product_search').value || '').trim().toLowerCase();
+        var list = q ? materials.filter(function(m) {
+            return (m.name && m.name.toLowerCase().indexOf(q) >= 0) || (m.code && m.code.toLowerCase().indexOf(q) >= 0);
+        }) : materials;
+        renderAddItems(list);
+    };
+
+    window.toggleAddItem = function(id, checked) {
+        if (checked) selectedIds[id] = true;
+        else delete selectedIds[id];
+        var count = Object.keys(selectedIds).length;
+        var countEl = document.getElementById('selectedCount');
+        var countText = document.getElementById('selectedCountText');
+        if (count > 0) {
+            countEl.style.display = 'block';
+            countText.textContent = count + ' ta tanlandi';
+        } else {
+            countEl.style.display = 'none';
         }
-    });
-    document.addEventListener('click', function(e) {
-        if (!addSearch.contains(e.target) && !addDrop.contains(e.target)) addDrop.style.display = 'none';
-    });
+    };
+
+    window.submitMultiAdd = function() {
+        var ids = Object.keys(selectedIds);
+        if (!ids.length) { alert('Kamida bitta xom ashyo tanlang'); return; }
+        // Ketma-ket POST yuborish
+        var i = 0;
+        var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+        var csrf = csrfMeta ? csrfMeta.getAttribute('content') : '';
+        function next() {
+            if (i >= ids.length) { window.location.reload(); return; }
+            var fd = new FormData();
+            fd.append('product_id', ids[i]);
+            fd.append('quantity', '0');
+            fd.append('csrf_token', csrf);
+            fetch('/production/recipes/{{ recipe.id }}/add-item', { method: 'POST', body: fd, redirect: 'manual' })
+                .then(function() { i++; next(); })
+                .catch(function() { i++; next(); });
+        }
+        next();
+    };
 
     document.getElementById('addItemModal').addEventListener('show.bs.modal', function() {
-        addSearch.value = '';
-        addId.value = '';
-        addDrop.style.display = 'none';
-    });
-    document.getElementById('addItemForm').addEventListener('submit', function() {
-        if (!addId.value) {
-            alert('Xom ashyoni tanlang yoki yozib qidiring.');
-            return false;
-        }
+        selectedIds = {};
+        document.getElementById('add_product_search').value = '';
+        document.getElementById('selectedCount').style.display = 'none';
+        renderAddItems(materials);
     });
 
     function fixQuantityInput(el) {
@@ -407,7 +423,6 @@
         v = v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
         if (v !== el.value) el.value = v;
     }
-    document.getElementById('add_quantity').addEventListener('input', function() { fixQuantityInput(this); });
     document.getElementById('edit_quantity').addEventListener('input', function() { fixQuantityInput(this); });
 
     var editSearch = document.getElementById('edit_product_search');

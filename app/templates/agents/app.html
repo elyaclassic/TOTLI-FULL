@@ -3,224 +3,723 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Sales Agent</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#4CAF50">
+<title>TOTLI Agent</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
-  :root { --bottom-nav-h: 60px; }
-  body { background: #f0f2f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  #app { display: none; }
-  #loginScreen { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); }
-  .login-card { background: white; border-radius: 20px; padding: 2rem; width: 340px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
-  .login-logo { text-align: center; margin-bottom: 1.5rem; }
-  .login-logo i { font-size: 3rem; color: #1a73e8; }
-  .login-logo h4 { margin-top: 0.5rem; font-weight: 700; color: #1a73e8; }
+*{box-sizing:border-box;margin:0;padding:0;}
+:root{--green:#4CAF50;--green-dark:#388E3C;--green-light:#C8E6C9;--bg:#f5f5f5;--white:#fff;--text:#212121;--text2:#757575;--border:#e0e0e0;--danger:#e53935;--toolbar-h:56px;--status-h:36px;}
+body{font-family:'Segoe UI','Roboto',sans-serif;background:var(--bg);color:var(--text);-webkit-tap-highlight-color:transparent;overflow-x:hidden;}
 
-  /* Bottom nav */
-  #bottomNav { position: fixed; bottom: 0; left: 0; right: 0; height: var(--bottom-nav-h); background: white; border-top: 1px solid #e0e0e0; display: flex; z-index: 1000; box-shadow: 0 -2px 10px rgba(0,0,0,0.08); }
-  .nav-tab { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: color .2s; color: #9e9e9e; font-size: 11px; gap: 2px; border: none; background: none; }
-  .nav-tab i { font-size: 20px; }
-  .nav-tab.active { color: #1a73e8; }
-  .nav-tab .badge-dot { position: relative; }
-  .nav-tab .badge-dot::after { content: ''; position: absolute; top: -2px; right: -4px; width: 8px; height: 8px; background: #e53935; border-radius: 50%; display: none; }
-  .nav-tab .badge-dot.has-dot::after { display: block; }
+/* ── LOGIN ── */
+#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--green) 0%,var(--green-dark) 100%);}
+.login-card{background:var(--white);border-radius:16px;padding:2rem;width:340px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,0.25);}
+.login-logo{text-align:center;margin-bottom:1.5rem;}
+.login-logo i{font-size:3rem;color:var(--green);}
+.login-logo h4{margin-top:0.5rem;font-weight:700;color:var(--green);}
+.login-card input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:15px;margin-bottom:12px;outline:none;}
+.login-card input:focus{border-color:var(--green);}
+.login-card .btn-login{width:100%;padding:12px;border:none;border-radius:8px;background:var(--green);color:#fff;font-size:16px;font-weight:600;cursor:pointer;}
+.login-card .btn-login:active{background:var(--green-dark);}
+.login-err{color:var(--danger);font-size:13px;margin-bottom:8px;display:none;}
 
-  /* Pages */
-  .page { display: none; padding-bottom: calc(var(--bottom-nav-h) + 10px); min-height: 100vh; }
-  .page.active { display: block; }
-  .page-header { background: white; padding: 12px 16px; position: sticky; top: 0; z-index: 100; box-shadow: 0 2px 4px rgba(0,0,0,0.06); }
-  .page-header h5 { margin: 0; font-weight: 700; font-size: 17px; }
-  .content-area { padding: 12px 16px; }
+/* ── TOOLBAR ── */
+.toolbar{position:fixed;top:0;left:0;right:0;height:var(--toolbar-h);background:var(--green);color:#fff;display:flex;align-items:center;padding:0 8px;z-index:1000;box-shadow:0 2px 4px rgba(0,0,0,0.2);}
+.toolbar .menu-btn{background:none;border:none;color:#fff;font-size:24px;padding:8px;cursor:pointer;}
+.toolbar .title{flex:1;font-size:18px;font-weight:600;margin-left:4px;}
+.toolbar .actions{display:flex;gap:4px;}
+.toolbar .actions button{background:none;border:none;color:#fff;font-size:20px;padding:8px;cursor:pointer;position:relative;}
 
-  /* Cards */
-  .stat-card { background: white; border-radius: 16px; padding: 16px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-  .stat-card .num { font-size: 1.8rem; font-weight: 800; line-height: 1; }
-  .stat-card .lbl { font-size: 12px; color: #666; margin-top: 4px; }
-  .client-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); cursor: pointer; transition: transform .15s; }
-  .client-card:active { transform: scale(0.98); }
-  .client-card .name { font-weight: 700; font-size: 15px; }
-  .client-card .meta { font-size: 12px; color: #666; margin-top: 2px; }
-  .order-card { background: white; border-radius: 14px; padding: 14px; margin-bottom: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-  .order-card .order-num { font-weight: 700; font-size: 14px; color: #1a73e8; }
-  .order-card .order-meta { font-size: 12px; color: #666; }
+/* ── TABS ── */
+.tabs-bar{position:fixed;top:var(--toolbar-h);left:0;right:0;background:var(--green);display:flex;z-index:999;box-shadow:0 2px 4px rgba(0,0,0,0.15);}
+.tab-btn{flex:1;padding:12px 0;text-align:center;color:rgba(255,255,255,0.7);font-size:14px;font-weight:600;border:none;background:none;cursor:pointer;position:relative;text-transform:uppercase;letter-spacing:0.5px;}
+.tab-btn.active{color:#fff;}
+.tab-btn.active::after{content:'';position:absolute;bottom:0;left:10%;right:10%;height:3px;background:#fff;border-radius:3px 3px 0 0;}
 
-  /* Debt badge */
-  .debt-badge { background: #ffebee; color: #c62828; border-radius: 20px; padding: 2px 10px; font-size: 12px; font-weight: 600; }
-  .debt-badge.ok { background: #e8f5e9; color: #2e7d32; }
+/* ── CONTENT ── */
+.main-content{margin-top:calc(var(--toolbar-h) + 44px);padding-bottom:calc(var(--status-h) + 16px);min-height:calc(100vh - var(--toolbar-h) - 44px);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
 
-  /* Detail page */
-  #clientDetailPage .page-header { display: flex; align-items: center; gap: 10px; }
-  #clientDetailPage .page-header h5 { flex: 1; }
-  #mapBox { height: 220px; border-radius: 12px; overflow: hidden; background: #e0e0e0; margin-bottom: 12px; }
+/* ── PARTNER CARD (visits list) ── */
+.partner-card{display:flex;align-items:center;padding:12px 16px;background:var(--white);border-bottom:1px solid #eee;cursor:pointer;transition:background 0.15s;}
+.partner-card:active{background:#f0f0f0;}
+.partner-avatar{width:64px;height:64px;border-radius:8px;background:#e8e8e8;display:flex;align-items:center;justify-content:center;margin-right:12px;flex-shrink:0;overflow:hidden;}
+.partner-avatar i{font-size:28px;color:#bbb;}
+.partner-info{flex:1;min-width:0;}
+.partner-info .name{font-size:16px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.partner-info .sub{font-size:13px;color:var(--text2);margin-top:2px;}
+.partner-info .balance{font-size:13px;color:var(--text2);margin-top:1px;}
+.partner-info .balance.debt{color:var(--danger);font-weight:600;}
+.partner-info .days{font-size:12px;color:var(--green);margin-top:2px;font-weight:500;}
+.partner-loc-btn{width:40px;height:40px;display:flex;align-items:center;justify-content:center;color:var(--green);font-size:22px;flex-shrink:0;}
 
-  /* New order */
-  .product-row { background: white; border-radius: 12px; padding: 12px; margin-bottom: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  .product-row .p-name { font-weight: 600; font-size: 14px; }
-  .product-row .p-price { font-size: 12px; color: #1a73e8; font-weight: 600; }
-  .qty-ctrl { display: flex; align-items: center; gap: 8px; }
-  .qty-ctrl button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid #ddd; background: white; font-size: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-  .qty-ctrl input { width: 50px; text-align: center; border: 1px solid #ddd; border-radius: 8px; padding: 4px; font-size: 14px; }
-  .order-total-bar { position: fixed; bottom: var(--bottom-nav-h); left: 0; right: 0; background: white; border-top: 1px solid #e0e0e0; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; z-index: 200; }
+/* ── RESULTS / STATS ── */
+.results-section{padding:16px;}
+.result-card{background:var(--white);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+.result-card .label{font-size:13px;color:var(--text2);margin-bottom:4px;}
+.result-card .value{font-size:24px;font-weight:800;}
+.result-card .value.green{color:var(--green);}
+.result-card .value.red{color:var(--danger);}
 
-  /* Search */
-  .search-box { position: relative; }
-  .search-box input { padding-left: 36px; border-radius: 12px; border: 1px solid #ddd; background: white; }
-  .search-box i { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #9e9e9e; }
+/* ── DRAWER ── */
+.drawer-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:2000;opacity:0;pointer-events:none;transition:opacity 0.3s;}
+.drawer-overlay.open{opacity:1;pointer-events:auto;}
+.drawer{position:fixed;top:0;left:0;bottom:0;width:300px;max-width:85vw;background:var(--white);z-index:2001;transform:translateX(-100%);transition:transform 0.3s ease;display:flex;flex-direction:column;}
+.drawer.open{transform:translateX(0);}
+.drawer-header{background:var(--green);padding:24px 16px 16px;color:#fff;}
+.drawer-header .avatar{width:56px;height:56px;background:var(--green-dark);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:8px;}
+.drawer-header .user-name{font-size:18px;font-weight:600;}
+.drawer-header .server-name{font-size:13px;opacity:0.8;margin-top:2px;}
+.drawer-menu{flex:1;overflow-y:auto;padding:8px 0;}
+.drawer-item{display:flex;align-items:center;padding:14px 16px;cursor:pointer;transition:background 0.15s;border:none;background:none;width:100%;text-align:left;font-size:15px;color:var(--text);}
+.drawer-item:active,.drawer-item:hover{background:#f0f0f0;}
+.drawer-item i{width:28px;font-size:20px;color:var(--text2);margin-right:12px;text-align:center;}
+.drawer-divider{height:1px;background:var(--border);margin:8px 0;}
 
-  /* Loading */
-  .spinner-wrap { text-align: center; padding: 40px; color: #9e9e9e; }
+/* ── FABs ── */
+.fab-container{position:fixed;bottom:calc(var(--status-h) + 16px);right:16px;display:flex;flex-direction:column;gap:12px;z-index:500;}
+.fab{width:56px;height:56px;border-radius:50%;border:none;color:#fff;font-size:24px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;transition:transform 0.15s;}
+.fab:active{transform:scale(0.92);}
+.fab-sync{background:var(--green);}
+.fab-route{background:var(--green);}
 
-  /* Status badges */
-  .s-badge { border-radius: 20px; padding: 2px 10px; font-size: 11px; font-weight: 600; }
-  .s-new { background: #e3f2fd; color: #1565c0; }
-  .s-confirmed { background: #e8f5e9; color: #2e7d32; }
-  .s-delivered { background: #ede7f6; color: #4527a0; }
-  .s-cancelled { background: #fce4ec; color: #880e4f; }
-  .s-production { background: #fff3e0; color: #e65100; }
+/* ── STATUS BAR ── */
+.status-bar{position:fixed;bottom:0;left:0;right:0;height:var(--status-h);background:var(--green-dark);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 16px;font-size:13px;z-index:1000;}
 
-  /* Profile */
-  .profile-row { background: white; border-radius: 14px; padding: 14px 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 12px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-  .profile-row i { font-size: 20px; color: #1a73e8; width: 24px; }
+/* ── SUB PAGES ── */
+.sub-page{position:fixed;top:0;left:0;right:0;bottom:0;background:var(--bg);z-index:1500;transform:translateX(100%);transition:transform 0.3s ease;display:flex;flex-direction:column;overflow:hidden;}
+.sub-page.open{transform:translateX(0);}
+.sub-toolbar{height:var(--toolbar-h);background:var(--green);color:#fff;display:flex;align-items:center;padding:0 8px;flex-shrink:0;}
+.sub-toolbar .back-btn{background:none;border:none;color:#fff;font-size:22px;padding:8px;cursor:pointer;}
+.sub-toolbar .sub-title{flex:1;font-size:17px;font-weight:600;margin-left:4px;}
+.sub-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+
+/* ── CLIENT DETAIL ── */
+.client-header{padding:16px;background:var(--white);border-bottom:1px solid var(--border);}
+.client-header .cname{font-size:20px;font-weight:700;}
+.client-header .cphone{font-size:14px;color:var(--text2);margin-top:4px;}
+.client-row{display:flex;align-items:center;padding:14px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;}
+.client-row i{font-size:20px;color:var(--green);width:28px;margin-right:12px;}
+.client-row .cr-label{font-size:12px;color:var(--text2);}
+.client-row .cr-value{font-size:15px;font-weight:500;}
+.action-btns{display:flex;gap:8px;padding:16px;}
+.action-btns button{flex:1;padding:12px;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+.btn-order{background:var(--green);color:#fff;}
+.btn-order:active{background:var(--green-dark);}
+.btn-checkin{background:#1976D2;color:#fff;}
+.btn-checkin:active{background:#1565C0;}
+.btn-call{background:#FF9800;color:#fff;}
+.btn-call:active{background:#F57C00;}
+#mapBox{height:200px;background:#e0e0e0;margin:0;}
+
+/* ── ORDER PAGE ── */
+.product-item{display:flex;align-items:center;padding:12px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;}
+.product-item .pi-info{flex:1;min-width:0;}
+.product-item .pi-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.product-item .pi-price{font-size:12px;color:var(--green);font-weight:600;}
+.product-item .pi-stock{font-size:11px;color:var(--text2);}
+.qty-ctrl{display:flex;align-items:center;gap:6px;}
+.qty-ctrl button{width:32px;height:32px;border-radius:50%;border:1px solid var(--border);background:var(--white);font-size:18px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text);}
+.qty-ctrl button:active{background:#f0f0f0;}
+.qty-ctrl input{width:48px;text-align:center;border:1px solid var(--border);border-radius:8px;padding:4px;font-size:15px;font-weight:600;}
+.order-footer{position:sticky;bottom:0;background:var(--white);border-top:2px solid var(--green);padding:12px 16px;display:none;align-items:center;justify-content:space-between;}
+.order-footer.show{display:flex;}
+.order-footer .total{font-size:18px;font-weight:800;color:var(--green);}
+.order-footer .total small{font-size:12px;color:var(--text2);display:block;font-weight:400;}
+.order-footer .submit-btn{padding:10px 24px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:15px;font-weight:600;cursor:pointer;}
+.order-footer .submit-btn:active{background:var(--green-dark);}
+
+/* ── ORDER LIST ── */
+.order-item{padding:14px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;}
+.order-item .oi-head{display:flex;justify-content:space-between;align-items:center;}
+.order-item .oi-num{font-weight:700;color:var(--green);font-size:14px;}
+.order-item .oi-meta{font-size:13px;color:var(--text2);margin-top:3px;}
+.s-badge{display:inline-block;border-radius:12px;padding:2px 10px;font-size:11px;font-weight:600;}
+.s-draft{background:#FFF9C4;color:#F57F17;}
+.s-new{background:#E3F2FD;color:#1565C0;}
+.s-confirmed{background:#E8F5E9;color:#2E7D32;}
+.s-delivered{background:#EDE7F6;color:#4527A0;}
+.s-cancelled{background:#FFEBEE;color:#C62828;}
+.s-production{background:#FFF3E0;color:#E65100;}
+
+/* ── DEBTORS ── */
+.debtor-card{display:flex;align-items:center;padding:14px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;}
+.debtor-card .d-info{flex:1;}
+.debtor-card .d-name{font-size:15px;font-weight:600;}
+.debtor-card .d-phone{font-size:12px;color:var(--text2);}
+.debtor-card .d-debt{font-size:16px;font-weight:700;color:var(--danger);white-space:nowrap;}
+
+/* ── SEARCH BAR ── */
+.search-bar{padding:8px 16px;background:var(--white);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10;}
+.search-bar input{width:100%;padding:8px 12px 8px 36px;border:1px solid var(--border);border-radius:20px;font-size:14px;background:var(--bg);outline:none;}
+.search-bar input:focus{border-color:var(--green);}
+.search-bar i{position:absolute;left:28px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:16px;}
+
+/* ── MISC ── */
+.spinner{text-align:center;padding:40px;color:var(--text2);font-size:14px;}
+.empty-state{text-align:center;padding:60px 20px;color:var(--text2);}
+.empty-state i{font-size:48px;display:block;margin-bottom:12px;color:#ccc;}
+
+/* ── ADD PARTNER FORM ── */
+.ap-field{margin-bottom:14px;}
+.ap-label{display:block;font-size:13px;color:var(--text2);margin-bottom:4px;font-weight:500;}
+.ap-label.req::before{content:'*';color:var(--danger);margin-right:2px;}
+.ap-input{width:100%;padding:12px;border:1px solid var(--border);border-radius:10px;font-size:15px;background:var(--white);outline:none;-webkit-appearance:none;}
+.ap-input:focus{border-color:var(--green);}
+select.ap-input{color:var(--text);}
+.ap-section{display:flex;align-items:center;justify-content:space-between;padding:14px 0;margin:8px 0;font-size:15px;font-weight:600;color:var(--green-dark);background:var(--green-light);border-radius:10px;padding:14px 16px;cursor:pointer;}
+.vday-btn{padding:8px 14px;border:1px solid var(--border);border-radius:20px;background:var(--white);font-size:13px;font-weight:600;color:var(--text);cursor:pointer;transition:all 0.15s;}
+.vday-btn.sel{background:var(--green);color:#fff;border-color:var(--green);}
+
+/* ── DAY TABS ── */
+.day-tabs{display:flex;overflow-x:auto;background:var(--white);border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.day-tabs::-webkit-scrollbar{display:none;}
+.dtab{white-space:nowrap;padding:10px 14px;border:none;background:none;font-size:13px;font-weight:600;color:var(--text2);cursor:pointer;position:relative;flex-shrink:0;}
+.dtab.active{color:var(--green);}
+.dtab.active::after{content:'';position:absolute;bottom:0;left:8px;right:8px;height:3px;background:var(--green);border-radius:3px 3px 0 0;}
+
+/* ── DRAWER BADGE ── */
+.drawer-badge{background:var(--danger);color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:6px;display:none;}
+.drawer-badge.show{display:inline;}
+
+/* ── KPI PROGRESS ── */
+.kpi-card{background:var(--white);border-radius:12px;padding:16px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+.kpi-card .kpi-label{font-size:13px;color:var(--text2);margin-bottom:6px;}
+.kpi-card .kpi-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;}
+.kpi-card .kpi-value{font-size:20px;font-weight:800;}
+.kpi-card .kpi-target{font-size:13px;color:var(--text2);}
+.kpi-bar{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;}
+.kpi-bar-fill{height:100%;border-radius:4px;transition:width 0.5s;}
+.kpi-green{background:var(--green);}
+.kpi-yellow{background:#FFC107;}
+.kpi-red{background:var(--danger);}
+
+/* ── REPORT CARDS ── */
+.rpt-card{background:var(--white);border-radius:12px;padding:14px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+.rpt-card .rpt-label{font-size:12px;color:var(--text2);}
+.rpt-card .rpt-value{font-size:22px;font-weight:800;}
+.rpt-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:14px;}
+
+/* ── TASK CARD ── */
+.task-card{padding:14px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;display:flex;align-items:flex-start;gap:12px;}
+.task-check{width:24px;height:24px;border:2px solid var(--border);border-radius:6px;flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:2px;}
+.task-check.done{background:var(--green);border-color:var(--green);color:#fff;}
+.task-info{flex:1;min-width:0;}
+.task-info .t-title{font-size:15px;font-weight:600;}
+.task-info .t-title.done{text-decoration:line-through;color:var(--text2);}
+.task-info .t-meta{font-size:12px;color:var(--text2);margin-top:2px;}
+.task-info .t-meta.overdue{color:var(--danger);}
+.priority-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:8px;}
+.priority-high{background:var(--danger);}
+.priority-normal{background:#FFC107;}
+.priority-low{background:var(--green);}
+
+/* ── RECONCILIATION ── */
+.recon-row{display:flex;padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:13px;}
+.recon-row .r-date{width:80px;flex-shrink:0;color:var(--text2);}
+.recon-row .r-desc{flex:1;min-width:0;}
+.recon-row .r-debit{width:80px;text-align:right;color:var(--danger);font-weight:600;}
+.recon-row .r-credit{width:80px;text-align:right;color:var(--green);font-weight:600;}
+.recon-summary{background:var(--white);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+
+/* ── DRAFT CARD ── */
+.draft-card{padding:14px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;display:flex;align-items:center;gap:12px;}
+.draft-card .draft-info{flex:1;}
+.draft-card .draft-name{font-size:15px;font-weight:600;}
+.draft-card .draft-meta{font-size:12px;color:var(--text2);margin-top:2px;}
+.draft-card .draft-total{font-size:15px;font-weight:700;color:var(--green);white-space:nowrap;}
+.draft-actions{display:flex;gap:8px;}
+.draft-actions button{width:36px;height:36px;border-radius:50%;border:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;}
+.draft-sync{background:var(--green);color:#fff;}
+.draft-del{background:#ffebee;color:var(--danger);}
+.visit-badge{display:inline-flex;align-items:center;gap:4px;background:var(--green-light);color:var(--green-dark);border-radius:12px;padding:2px 8px;font-size:11px;font-weight:600;}
+.visit-badge.done{background:#E3F2FD;color:#1565C0;}
 </style>
 </head>
 <body>
 
-<!-- LOGIN -->
+<!-- ═══════════════ LOGIN ═══════════════ -->
 <div id="loginScreen">
   <div class="login-card">
     <div class="login-logo">
-      <i class="bi bi-person-badge"></i>
-      <h4>Sales Agent</h4>
-      <p class="text-muted small mb-0">TOTLI Business</p>
+      <i class="bi bi-box-seam"></i>
+      <h4>TOTLI Agent</h4>
+      <p style="color:#999;font-size:13px;">Biznes tizimiga kirish</p>
     </div>
-    <div id="loginErr" class="alert alert-danger d-none small p-2"></div>
-    <div class="mb-3">
-      <label class="form-label small fw-semibold">Telefon raqam</label>
-      <input type="tel" id="loginPhone" class="form-control" placeholder="+998901234567" autocomplete="username">
-    </div>
-    <div class="mb-3">
-      <label class="form-label small fw-semibold">Parol</label>
-      <div class="input-group">
-        <input type="password" id="loginPass" class="form-control" placeholder="Parolingizni kiriting" autocomplete="current-password">
-        <button class="btn btn-outline-secondary" type="button" onclick="togglePasswordVis()"><i class="bi bi-eye" id="passEyeIcon"></i></button>
-      </div>
-    </div>
-    <button class="btn btn-primary w-100 py-2 fw-semibold" onclick="doLogin()">
-      <i class="bi bi-box-arrow-in-right"></i> Kirish
-    </button>
+    <div class="login-err" id="loginErr"></div>
+    <input type="text" id="loginPhone" placeholder="Login yoki telefon" autocomplete="username">
+    <input type="password" id="loginPass" placeholder="Parol" autocomplete="current-password">
+    <button class="btn-login" onclick="doLogin()"><i class="bi bi-box-arrow-in-right"></i> Kirish</button>
   </div>
 </div>
 
-<!-- MAIN APP -->
-<div id="app">
-  <!-- HOME PAGE -->
-  <div class="page active" id="homePage">
-    <div class="page-header d-flex align-items-center justify-content-between">
-      <div>
-        <h5 id="agentName">Agent</h5>
-        <div class="text-muted" style="font-size:12px;" id="agentRegion"></div>
-      </div>
-      <button class="btn btn-sm btn-outline-danger" onclick="doLogout()"><i class="bi bi-box-arrow-right"></i></button>
-    </div>
-    <div class="content-area">
-      <div id="statsArea" class="row g-2 mb-3">
-        <div class="col-6"><div class="stat-card"><div class="num text-primary" id="statOrders">—</div><div class="lbl">Bugungi buyurtmalar</div></div></div>
-        <div class="col-6"><div class="stat-card"><div class="num text-success" id="statTotal">—</div><div class="lbl">Bugungi summa</div></div></div>
-        <div class="col-6"><div class="stat-card"><div class="num text-info" id="statPartners">—</div><div class="lbl">Mijozlar</div></div></div>
-        <div class="col-6"><div class="stat-card"><div class="num text-danger" id="statDebt">—</div><div class="lbl">Umumiy qarz</div></div></div>
-      </div>
-      <h6 class="fw-bold mb-2">So'nggi buyurtmalar</h6>
-      <div id="recentOrdersList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
+<!-- ═══════════════ MAIN APP ═══════════════ -->
+<div id="app" style="display:none;">
+
+  <!-- TOOLBAR -->
+  <div class="toolbar">
+    <button class="menu-btn" onclick="toggleDrawer()"><i class="bi bi-list"></i></button>
+    <div class="title" id="toolbarTitle">Agent</div>
+    <div class="actions">
+      <button onclick="openPage('ordersPage','Buyurtmalarim')"><i class="bi bi-globe2"></i></button>
+      <button onclick="openDrawer()"><i class="bi bi-three-dots-vertical"></i></button>
     </div>
   </div>
 
-  <!-- CLIENTS PAGE -->
-  <div class="page" id="clientsPage">
-    <div class="page-header">
-      <h5>Mijozlar</h5>
-      <div class="search-box mt-2">
-        <i class="bi bi-search"></i>
-        <input type="text" id="clientSearch" class="form-control form-control-sm" placeholder="Qidirish…" oninput="filterClients()">
+  <!-- TABS -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" id="tabVisits" onclick="switchTab('visits')">
+      Vizitlar (<span id="visitCount">0/0</span>)
+    </button>
+    <button class="tab-btn" id="tabResults" onclick="switchTab('results')">
+      Natijalar
+    </button>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+    <!-- VISITS TAB -->
+    <div class="tab-content active" id="visitsContent">
+      <div id="visitsList">
+        <div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>
       </div>
     </div>
-    <div class="content-area">
-      <div id="clientsList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
+
+    <!-- RESULTS TAB -->
+    <div class="tab-content" id="resultsContent">
+      <div class="results-section">
+        <div class="result-card">
+          <div class="label">Bugungi buyurtmalar</div>
+          <div class="value green" id="statOrders">0</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Bugungi summa</div>
+          <div class="value green" id="statTotal">0 so'm</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Jami mijozlar</div>
+          <div class="value" id="statPartners">0</div>
+        </div>
+        <div class="result-card">
+          <div class="label">Umumiy qarz</div>
+          <div class="value red" id="statDebt">0 so'm</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- CLIENT DETAIL PAGE -->
-  <div class="page" id="clientDetailPage">
-    <div class="page-header">
-      <button class="btn btn-sm btn-link p-0 text-dark" onclick="showPage('clientsPage')"><i class="bi bi-arrow-left fs-5"></i></button>
-      <h5 id="clientDetailName">Mijoz</h5>
-    </div>
-    <div class="content-area">
-      <div id="clientDetailContent"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div></div>
-    </div>
+  <!-- FABs -->
+  <div class="fab-container">
+    <button class="fab fab-sync" onclick="doSync()" title="Yangilash"><i class="bi bi-arrow-repeat"></i></button>
+    <button class="fab fab-route" onclick="openPage('clientsPage','Mijozlar')" title="Mijozlar"><i class="bi bi-arrow-right-circle"></i></button>
   </div>
 
-  <!-- NEW ORDER PAGE -->
-  <div class="page" id="newOrderPage">
-    <div class="page-header d-flex align-items-center justify-content-between">
-      <div class="d-flex align-items-center gap-2">
-        <button class="btn btn-sm btn-link p-0 text-dark" id="newOrderBack"><i class="bi bi-arrow-left fs-5"></i></button>
-        <h5 class="mb-0">Yangi buyurtma</h5>
-      </div>
-      <div class="text-muted small" id="newOrderClientName"></div>
+  <!-- STATUS BAR -->
+  <div class="status-bar">
+    <span id="syncStatus">Tayyor</span>
+    <span>Oxirgi: <span id="lastSync">--:--</span></span>
+  </div>
+</div>
+
+<!-- ═══════════════ DRAWER ═══════════════ -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div class="avatar"><i class="bi bi-person"></i></div>
+    <div class="user-name" id="drawerName">Agent</div>
+    <div class="server-name">Server: totliholva</div>
+  </div>
+  <div class="drawer-menu">
+    <button class="drawer-item" onclick="closeDrawer();openPage('addPartnerPage')"><i class="bi bi-building-add"></i> Savdo nuqtasi qo'shish</button>
+    <button class="drawer-item" onclick="closeDrawer();openPage('clientsPage')"><i class="bi bi-buildings"></i> Savdo nuqtalari</button>
+    <button class="drawer-item" onclick="closeDrawer();openPage('tasksPage')"><i class="bi bi-check2-square"></i> Vazifalar <span class="drawer-badge" id="tasksBadge"></span></button>
+    <div class="drawer-divider"></div>
+    <button class="drawer-item" onclick="closeDrawer();openPage('ordersPage')"><i class="bi bi-bag-check"></i> Buyurtmalarim</button>
+    <button class="drawer-item" onclick="closeDrawer();openPage('draftsPage')"><i class="bi bi-file-earmark"></i> Chernoviklar <span class="drawer-badge" id="draftsBadge"></span></button>
+    <button class="drawer-item" onclick="closeDrawer();openPage('stockPage')"><i class="bi bi-box-seam"></i> Qoldiqlar</button>
+    <div class="drawer-divider"></div>
+    <button class="drawer-item" onclick="closeDrawer();openPage('reportsPage')"><i class="bi bi-bar-chart"></i> Hisobotlar</button>
+    <button class="drawer-item" onclick="closeDrawer();openPage('kpiPage')"><i class="bi bi-speedometer2"></i> KPI natijalar</button>
+    <div class="drawer-divider"></div>
+    <button class="drawer-item" onclick="closeDrawer();openPage('debtorsPage')"><i class="bi bi-people"></i> Qarzdorlar</button>
+    <button class="drawer-item" onclick="sendLocation()"><i class="bi bi-send"></i> Lokatsiya yuborish</button>
+    <div class="drawer-divider"></div>
+    <button class="drawer-item" onclick="doLogout()" style="color:var(--danger);"><i class="bi bi-box-arrow-left" style="color:var(--danger);"></i> Chiqish</button>
+  </div>
+</div>
+
+<!-- ═══════════════ SUB PAGES ═══════════════ -->
+
+<!-- CLIENTS PAGE -->
+<div class="sub-page" id="clientsPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('clientsPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Savdo nuqtalari</div>
+    <div class="actions" style="margin-left:auto;">
+      <button onclick="toggleClientSearch()"><i class="bi bi-search"></i></button>
     </div>
-    <div class="content-area pb-5" style="padding-bottom: 120px !important;">
-      <div class="mb-3">
-        <label class="form-label small fw-semibold">To'lov turi</label>
-        <select id="paymentType" class="form-select form-select-sm">
+  </div>
+  <div class="sub-body">
+    <!-- Kun filtrlari -->
+    <div class="day-tabs" id="dayTabs">
+      <button class="dtab active" data-day="all" onclick="filterByDay('all',this)">Barchasi (<span id="dcAll">0</span>)</button>
+      <button class="dtab" data-day="1" onclick="filterByDay(1,this)">Du (<span id="dc1">0</span>)</button>
+      <button class="dtab" data-day="2" onclick="filterByDay(2,this)">Se (<span id="dc2">0</span>)</button>
+      <button class="dtab" data-day="3" onclick="filterByDay(3,this)">Ch (<span id="dc3">0</span>)</button>
+      <button class="dtab" data-day="4" onclick="filterByDay(4,this)">Pa (<span id="dc4">0</span>)</button>
+      <button class="dtab" data-day="5" onclick="filterByDay(5,this)">Ju (<span id="dc5">0</span>)</button>
+      <button class="dtab" data-day="6" onclick="filterByDay(6,this)">Sh (<span id="dc6">0</span>)</button>
+      <button class="dtab" data-day="0" onclick="filterByDay(0,this)">Ya (<span id="dc0">0</span>)</button>
+    </div>
+    <!-- Qidiruv (yashirin) -->
+    <div class="search-bar" id="clientSearchBar" style="position:relative;display:none;">
+      <i class="bi bi-search"></i>
+      <input type="text" id="clientSearch" placeholder="Qidirish..." oninput="filterClients()">
+    </div>
+    <!-- Yangi qo'shish -->
+    <div class="partner-card" onclick="closePage('clientsPage');openPage('addPartnerPage','Yangi mijoz')" style="border-bottom:2px solid var(--green-light);">
+      <div class="partner-avatar" style="background:var(--green-light);"><i class="bi bi-plus-lg" style="font-size:24px;color:var(--green);"></i></div>
+      <div class="partner-info"><div class="name" style="color:var(--green);">Yangi qo'shish</div></div>
+    </div>
+    <div id="clientsList"></div>
+    <!-- Mijozlar soni -->
+    <div style="padding:12px 16px;text-align:center;color:var(--text2);font-size:13px;" id="clientsCountInfo"></div>
+  </div>
+</div>
+
+<!-- CLIENT DETAIL PAGE -->
+<div class="sub-page" id="clientDetailPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('clientDetailPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title" id="clientDetailTitle">Mijoz</div>
+  </div>
+  <div class="sub-body" id="clientDetailBody">
+    <div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>
+  </div>
+</div>
+
+<!-- NEW ORDER PAGE -->
+<div class="sub-page" id="newOrderPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('newOrderPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Yangi buyurtma</div>
+  </div>
+  <div class="sub-body" id="newOrderBody">
+    <div style="padding:12px 16px;background:var(--white);border-bottom:1px solid var(--border);">
+      <div style="font-size:13px;color:var(--text2);">Mijoz:</div>
+      <div style="font-size:16px;font-weight:600;" id="newOrderClientName"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <select id="paymentType" style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
           <option value="cash">Naqd</option>
           <option value="transfer">O'tkazma</option>
           <option value="credit">Nasiya</option>
         </select>
+        <input type="text" id="orderNote" placeholder="Izoh..." style="flex:1;padding:8px;border:1px solid var(--border);border-radius:8px;font-size:14px;">
       </div>
-      <div class="mb-3">
-        <label class="form-label small fw-semibold">Izoh</label>
-        <input type="text" id="orderNote" class="form-control form-control-sm" placeholder="Ixtiyoriy…">
-      </div>
-      <div class="search-box mb-3">
-        <i class="bi bi-search"></i>
-        <input type="text" id="productSearch" class="form-control form-control-sm" placeholder="Mahsulot qidirish…" oninput="filterProducts()">
-      </div>
-      <div id="productsList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div></div>
     </div>
-    <div class="order-total-bar d-none" id="orderTotalBar">
-      <div>
-        <div class="small text-muted">Jami:</div>
-        <div class="fw-bold text-primary" id="orderTotalAmt">0 so'm</div>
+    <div class="search-bar" style="position:relative;">
+      <i class="bi bi-search"></i>
+      <input type="text" id="productSearch" placeholder="Mahsulot qidirish..." oninput="filterProducts()">
+    </div>
+    <div id="productsList"></div>
+    <div class="order-footer" id="orderFooter">
+      <div class="total"><small>Jami:</small><span id="orderTotalAmt">0</span> so'm</div>
+      <button class="submit-btn" onclick="submitOrder()"><i class="bi bi-check-lg"></i> Yuborish</button>
+    </div>
+  </div>
+</div>
+
+<!-- ORDERS PAGE -->
+<div class="sub-page" id="ordersPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('ordersPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Buyurtmalarim</div>
+  </div>
+  <div class="sub-body" id="ordersBody">
+    <div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>
+  </div>
+</div>
+
+<!-- STOCK PAGE -->
+<div class="sub-page" id="stockPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('stockPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Qoldiqlar</div>
+  </div>
+  <div class="sub-body">
+    <div class="search-bar" style="position:relative;">
+      <i class="bi bi-search"></i>
+      <input type="text" id="stockSearch" placeholder="Qidirish..." oninput="filterStock()">
+    </div>
+    <div id="stockList"></div>
+  </div>
+</div>
+
+<!-- DEBTORS PAGE -->
+<div class="sub-page" id="debtorsPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('debtorsPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Qarzdorlar</div>
+  </div>
+  <div class="sub-body" id="debtorsBody">
+    <div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>
+  </div>
+</div>
+
+<!-- DEBTOR DETAIL PAGE -->
+<div class="sub-page" id="debtorDetailPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('debtorDetailPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title" id="debtorDetailTitle">Qarzdor</div>
+  </div>
+  <div class="sub-body" id="debtorDetailBody"></div>
+</div>
+
+<!-- DRAFTS PAGE -->
+<div class="sub-page" id="draftsPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('draftsPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Chernoviklar</div>
+    <div class="actions" style="margin-left:auto;">
+      <button onclick="syncAllDrafts()" title="Hammasini yuborish"><i class="bi bi-cloud-upload"></i></button>
+    </div>
+  </div>
+  <div class="sub-body" id="draftsBody">
+    <div class="empty-state"><i class="bi bi-file-earmark"></i>Chernoviklar yo'q</div>
+  </div>
+</div>
+
+<!-- TASKS PAGE -->
+<div class="sub-page" id="tasksPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('tasksPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Vazifalar</div>
+  </div>
+  <div class="sub-body">
+    <div class="day-tabs" id="taskTabs">
+      <button class="dtab active" onclick="filterTasks('all',this)">Barchasi</button>
+      <button class="dtab" onclick="filterTasks('pending',this)">Bajarilmagan</button>
+      <button class="dtab" onclick="filterTasks('completed',this)">Bajarilgan</button>
+    </div>
+    <div id="tasksBody"></div>
+  </div>
+</div>
+
+<!-- REPORTS PAGE -->
+<div class="sub-page" id="reportsPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('reportsPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Hisobotlar</div>
+  </div>
+  <div class="sub-body" style="padding:16px;">
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <div style="flex:1;">
+        <label class="ap-label">Dan</label>
+        <input type="date" id="reportFrom" class="ap-input" onchange="loadReport()">
       </div>
-      <button class="btn btn-success px-4 fw-semibold" onclick="submitOrder()">
-        <i class="bi bi-check-lg"></i> Buyurtma berish
+      <div style="flex:1;">
+        <label class="ap-label">Gacha</label>
+        <input type="date" id="reportTo" class="ap-input" onchange="loadReport()">
+      </div>
+    </div>
+    <div id="reportBody">
+      <div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>
+    </div>
+  </div>
+</div>
+
+<!-- KPI PAGE -->
+<div class="sub-page" id="kpiPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('kpiPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">KPI natijalar</div>
+  </div>
+  <div class="sub-body">
+    <div class="day-tabs" id="kpiTabs">
+      <button class="dtab active" onclick="loadKpi('daily',this)">Bugun</button>
+      <button class="dtab" onclick="loadKpi('weekly',this)">Hafta</button>
+      <button class="dtab" onclick="loadKpi('monthly',this)">Oy</button>
+    </div>
+    <div id="kpiBody" style="padding:16px;"></div>
+  </div>
+</div>
+
+<!-- RECONCILIATION PAGE -->
+<div class="sub-page" id="reconciliationPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('reconciliationPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title" id="reconTitle">Akt sverka</div>
+  </div>
+  <div class="sub-body" style="padding:16px;">
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input type="date" id="reconFrom" class="ap-input" style="flex:1;" onchange="loadReconciliation()">
+      <input type="date" id="reconTo" class="ap-input" style="flex:1;" onchange="loadReconciliation()">
+    </div>
+    <div id="reconBody"></div>
+  </div>
+</div>
+
+<!-- ADD PARTNER PAGE -->
+<div class="sub-page" id="addPartnerPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closePage('addPartnerPage')"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Yangi mijoz qo'shish</div>
+  </div>
+  <div class="sub-body" style="padding-bottom:70px;">
+    <!-- Rasm -->
+    <div style="padding:16px;background:var(--white);border-bottom:1px solid var(--border);">
+      <div id="photoPreview" style="width:100px;height:100px;background:#f0f0f0;border-radius:12px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;" onclick="document.getElementById('partnerPhoto').click()">
+        <i class="bi bi-camera" style="font-size:32px;color:#999;" id="photoIcon"></i>
+        <img id="photoImg" style="width:100%;height:100%;object-fit:cover;display:none;">
+      </div>
+      <input type="file" id="partnerPhoto" accept="image/*" capture="environment" style="display:none;" onchange="previewPhoto(this)">
+    </div>
+
+    <div style="padding:0 16px;">
+      <!-- Asosiy ma'lumotlar -->
+      <div class="ap-field">
+        <label class="ap-label req">Savdo nuqtasi nomi</label>
+        <input type="text" id="npName" class="ap-input" placeholder="Kiriting">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Yuridik nomi</label>
+        <input type="text" id="npLegalName" class="ap-input" placeholder="Kiriting">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Manzil</label>
+        <input type="text" id="npAddress" class="ap-input" placeholder="Kiriting">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Mo'ljal (orientir)</label>
+        <input type="text" id="npLandmark" class="ap-input" placeholder="Kiriting">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Aloqa shaxsi</label>
+        <input type="text" id="npContact" class="ap-input" placeholder="Kiriting">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Telefon raqami</label>
+        <input type="tel" id="npPhone" class="ap-input" placeholder="998" value="998">
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Izoh</label>
+        <input type="text" id="npNotes" class="ap-input" placeholder="Kiriting">
+      </div>
+
+      <!-- Tashrif va kategoriya -->
+      <div class="ap-field">
+        <label class="ap-label req">Tashrif kunlari</label>
+        <div id="visitDaysSelector" style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="vday-btn" data-day="1" onclick="toggleDay(this)">Du</button>
+          <button type="button" class="vday-btn" data-day="2" onclick="toggleDay(this)">Se</button>
+          <button type="button" class="vday-btn" data-day="3" onclick="toggleDay(this)">Ch</button>
+          <button type="button" class="vday-btn" data-day="4" onclick="toggleDay(this)">Pa</button>
+          <button type="button" class="vday-btn" data-day="5" onclick="toggleDay(this)">Ju</button>
+          <button type="button" class="vday-btn" data-day="6" onclick="toggleDay(this)">Sh</button>
+          <button type="button" class="vday-btn" data-day="0" onclick="toggleDay(this)">Ya</button>
+        </div>
+      </div>
+      <div class="ap-field">
+        <label class="ap-label req">Kategoriya</label>
+        <select id="npCategory" class="ap-input">
+          <option value="">Tanlang</option>
+          <option value="A">A — Katta</option>
+          <option value="B">B — O'rta</option>
+          <option value="C">C — Kichik</option>
+          <option value="D">D — Juda kichik</option>
+        </select>
+      </div>
+      <div class="ap-field">
+        <label class="ap-label req">Hudud (territoriya)</label>
+        <input type="text" id="npRegion" class="ap-input" placeholder="Kiriting">
+      </div>
+
+      <!-- Lokatsiya -->
+      <div class="ap-field">
+        <label class="ap-label">Lokatsiya</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input type="text" id="npLocation" class="ap-input" placeholder="GPS orqali olinadi" readonly style="flex:1;">
+          <button type="button" onclick="getPartnerLocation()" style="width:44px;height:44px;border:1px solid var(--border);border-radius:8px;background:var(--white);color:var(--green);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;">
+            <i class="bi bi-geo-alt-fill"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mijoz turi -->
+      <div class="ap-field">
+        <label class="ap-label">Mijoz turi</label>
+        <select id="npCustomerType" class="ap-input">
+          <option value="">Tanlang</option>
+          <option value="retail">Chakana (retail)</option>
+          <option value="wholesale">Ulgurji (wholesale)</option>
+          <option value="horeca">HoReCa</option>
+          <option value="distributor">Distribyuter</option>
+        </select>
+      </div>
+      <div class="ap-field">
+        <label class="ap-label">Sotuv kanali</label>
+        <select id="npSalesChannel" class="ap-input">
+          <option value="">Tanlang</option>
+          <option value="direct">To'g'ridan-to'g'ri</option>
+          <option value="distributor">Distribyuter orqali</option>
+          <option value="online">Online</option>
+        </select>
+      </div>
+
+      <!-- Rekvizitlar (yig'iladigan) -->
+      <div class="ap-section" onclick="toggleRequisites()">
+        <span>Rekvizitlar</span>
+        <i class="bi bi-chevron-down" id="reqChevron"></i>
+      </div>
+      <div id="requisitesBlock" style="display:none;">
+        <div class="ap-field">
+          <label class="ap-label">INN</label>
+          <input type="text" id="npInn" class="ap-input" placeholder="Kiriting">
+        </div>
+        <div class="ap-field">
+          <label class="ap-label">Hisob raqami (R/S)</label>
+          <input type="text" id="npAccount" class="ap-input" placeholder="Kiriting">
+        </div>
+        <div class="ap-field">
+          <label class="ap-label">Bank</label>
+          <input type="text" id="npBank" class="ap-input" placeholder="Kiriting">
+        </div>
+        <div style="display:flex;gap:8px;">
+          <div class="ap-field" style="flex:1;">
+            <label class="ap-label">MFO</label>
+            <input type="text" id="npMfo" class="ap-input" placeholder="Kiriting">
+          </div>
+          <div class="ap-field" style="flex:1;">
+            <label class="ap-label">OKED</label>
+            <input type="text" id="npOked" class="ap-input" placeholder="Kiriting">
+          </div>
+        </div>
+        <div class="ap-field">
+          <label class="ap-label">PINFL</label>
+          <input type="text" id="npPinfl" class="ap-input" placeholder="Kiriting">
+        </div>
+        <div class="ap-field">
+          <label class="ap-label">Shartnoma raqami</label>
+          <input type="text" id="npContractNum" class="ap-input" placeholder="Kiriting">
+        </div>
+        <div class="ap-field">
+          <label class="ap-label">Shartnoma sanasi</label>
+          <input type="date" id="npContractDate" class="ap-input">
+        </div>
+      </div>
+    </div>
+
+    <!-- Saqlash tugmasi (sticky) -->
+    <div style="position:sticky;bottom:0;padding:12px 16px;background:var(--bg);">
+      <button onclick="saveNewPartner()" style="width:100%;padding:14px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:16px;font-weight:600;cursor:pointer;">
+        <i class="bi bi-check-lg"></i> Saqlash
       </button>
     </div>
   </div>
-
-  <!-- ORDERS PAGE -->
-  <div class="page" id="ordersPage">
-    <div class="page-header">
-      <h5>Mening buyurtmalarim</h5>
-    </div>
-    <div class="content-area">
-      <div id="myOrdersList"><div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div></div>
-    </div>
-  </div>
-
-  <!-- BOTTOM NAV -->
-  <nav id="bottomNav">
-    <button class="nav-tab active" id="tabHome" onclick="showPage('homePage','tabHome')">
-      <i class="bi bi-house"></i><span>Asosiy</span>
-    </button>
-    <button class="nav-tab" id="tabClients" onclick="showPage('clientsPage','tabClients')">
-      <i class="bi bi-people"></i><span>Mijozlar</span>
-    </button>
-    <button class="nav-tab" id="tabOrders" onclick="showPage('ordersPage','tabOrders')">
-      <i class="bi bi-bag"></i><span>Buyurtmalar</span>
-    </button>
-  </nav>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -228,445 +727,1126 @@
 (function(){
 'use strict';
 
-// ── STATE ──────────────────────────────────────────────────────────────────
+// ═══ STATE ═══
 var TOKEN = '';
 var agentInfo = null;
 var allClients = [];
 var allProducts = [];
-var orderItems = {}; // product_id -> qty
+var orderItems = {};
 var currentOrderPartnerId = null;
 var leafletMap = null;
 var gpsWatchId = null;
 var gpsIntervalId = null;
 var lastGpsPos = null;
+var visitsDone = 0;
+var visitsTotal = 0;
 
-// ── UTILS ──────────────────────────────────────────────────────────────────
-function fmt(n) {
-  if (n == null) return '0';
-  return Number(n).toLocaleString('uz-UZ');
-}
-function fmtDate(s) {
-  if (!s) return '';
-  var raw = (s||'');
-  if (raw.length >= 16) {
-    var parts = raw.slice(0,10).split('-');
-    return parts[2] + '.' + parts[1] + '.' + parts[0] + ' ' + raw.slice(11,16);
-  }
+// ═══ UTILS ═══
+function fmt(n){ if(n==null)return '0'; return Number(n).toLocaleString('uz-UZ'); }
+function fmtDate(s){
+  if(!s)return '';
+  var raw=(s||'');
+  if(raw.length>=16){var p=raw.slice(0,10).split('-');return p[2]+'.'+p[1]+'.'+p[0]+' '+raw.slice(11,16);}
   return raw;
 }
-function statusBadge(s) {
-  var map = {draft:'s-new',new:'s-new',confirmed:'s-confirmed',delivered:'s-delivered',cancelled:'s-cancelled',production:'s-production',waiting_production:'s-production'};
-  var labels = {draft:'Draft',new:'Yangi',confirmed:'Tasdiqlangan',delivered:'Yetkazilgan',cancelled:'Bekor',production:"Ishlab chiqarishda",waiting_production:"Kutilmoqda"};
+function escHtml(s){return(s||'').replace(/'/g,"\\'").replace(/"/g,'&quot;');}
+function statusBadge(s){
+  var map={draft:'s-draft',new:'s-new',confirmed:'s-confirmed',delivered:'s-delivered',cancelled:'s-cancelled',production:'s-production',waiting_production:'s-production'};
+  var labels={draft:'Draft',new:'Yangi',confirmed:'Tasdiqlangan',delivered:'Yetkazilgan',cancelled:'Bekor',production:'Ishlab chiqarishda',waiting_production:'Kutilmoqda'};
   return '<span class="s-badge '+(map[s]||'')+'">'+( labels[s]||s)+'</span>';
 }
-function api(path, opts) {
-  var options = Object.assign({ credentials: 'same-origin', headers: { 'Authorization': 'Bearer ' + TOKEN } }, opts || {});
-  return fetch(path, options).then(function(r){ return r.json(); });
+function api(path,opts){
+  var options=Object.assign({credentials:'same-origin',headers:{'Authorization':'Bearer '+TOKEN}},opts||{});
+  return fetch(path,options).then(function(r){return r.json();});
 }
 
-// ── AUTH ────────────────────────────────────────────────────────────────────
-function togglePasswordVis() {
-  var inp = document.getElementById('loginPass');
-  var icon = document.getElementById('passEyeIcon');
-  if (inp.type === 'password') { inp.type = 'text'; icon.className = 'bi bi-eye-slash'; }
-  else { inp.type = 'password'; icon.className = 'bi bi-eye'; }
-}
-window.togglePasswordVis = togglePasswordVis;
-
-function doLogin() {
-  var phone = (document.getElementById('loginPhone').value || '').trim();
-  var pass = (document.getElementById('loginPass').value || '').trim();
-  if (!phone) { showLoginErr('Telefon raqam kiriting'); return; }
-  if (!pass) { showLoginErr('Parol kiriting'); return; }
-  var fd = new FormData();
-  fd.append('username', phone);
-  fd.append('password', pass);
-  fetch('/api/login', { method: 'POST', body: fd }).then(function(r){ return r.json(); }).then(function(d){
-    if (!d || !d.success || d.error || d.detail || !d.token) { showLoginErr(d && (d.error || d.detail) || 'Login yoki parol xato'); return; }
-    if (d.role !== 'agent') { showLoginErr('Faqat agentlar kirishi mumkin'); return; }
-    TOKEN = d.token;
-    localStorage.setItem('agent_token', TOKEN);
-    agentInfo = d.agent || {};
+// ═══ AUTH ═══
+function doLogin(){
+  var phone=(document.getElementById('loginPhone').value||'').trim();
+  var pass=(document.getElementById('loginPass').value||'').trim();
+  if(!phone||!pass){showLoginErr('Login va parol kiriting');return;}
+  var fd=new FormData();
+  fd.append('username',phone);
+  fd.append('password',pass);
+  fetch('/api/login',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.success||!d.token){showLoginErr(d&&(d.error||d.detail)||'Login yoki parol xato');return;}
+    if(d.role!=='agent'){showLoginErr('Faqat agentlar kirishi mumkin');return;}
+    TOKEN=d.token;
+    localStorage.setItem('agent_token',TOKEN);
+    agentInfo=d.agent||{};
     startApp();
-  }).catch(function(){ showLoginErr('Server bilan bog\'lanib bo\'lmadi'); });
+  }).catch(function(){showLoginErr("Server bilan bog'lanib bo'lmadi");});
 }
-window.doLogin = doLogin;
+window.doLogin=doLogin;
 
-function showLoginErr(msg) {
-  var el = document.getElementById('loginErr');
-  el.textContent = msg; el.classList.remove('d-none');
-}
+function showLoginErr(msg){var el=document.getElementById('loginErr');el.textContent=msg;el.style.display='block';}
 
-function doLogout() {
+function doLogout(){
+  closeDrawer();
   stopGpsTracking();
   localStorage.removeItem('agent_token');
-  TOKEN = ''; agentInfo = null;
-  document.getElementById('app').style.display = 'none';
-  document.getElementById('loginScreen').style.display = 'flex';
+  TOKEN='';agentInfo=null;
+  document.getElementById('app').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
 }
-window.doLogout = doLogout;
+window.doLogout=doLogout;
 
-// ── GPS TRACKING ────────────────────────────────────────────────────────────
-function startGpsTracking() {
-  if (!navigator.geolocation) { console.warn('Geolocation not supported'); return; }
-  // Doimiy GPS tracking
-  gpsWatchId = navigator.geolocation.watchPosition(
-    function(pos) {
-      lastGpsPos = { lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy };
-    },
-    function(err) { console.warn('GPS error:', err.message); },
-    { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 }
+// ═══ GPS ═══
+function startGpsTracking(){
+  if(!navigator.geolocation)return;
+  gpsWatchId=navigator.geolocation.watchPosition(
+    function(pos){lastGpsPos={lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:pos.coords.accuracy};},
+    function(){},
+    {enableHighAccuracy:true,maximumAge:30000,timeout:15000}
   );
-  // Har 60 sekundda serverga yuborish
-  sendGpsLocation(); // darhol birinchi marta
-  gpsIntervalId = setInterval(sendGpsLocation, 60000);
+  sendGpsLocation();
+  gpsIntervalId=setInterval(sendGpsLocation,60000);
 }
-
-function stopGpsTracking() {
-  if (gpsWatchId !== null) { navigator.geolocation.clearWatch(gpsWatchId); gpsWatchId = null; }
-  if (gpsIntervalId !== null) { clearInterval(gpsIntervalId); gpsIntervalId = null; }
-  lastGpsPos = null;
+function stopGpsTracking(){
+  if(gpsWatchId!==null){navigator.geolocation.clearWatch(gpsWatchId);gpsWatchId=null;}
+  if(gpsIntervalId!==null){clearInterval(gpsIntervalId);gpsIntervalId=null;}
+  lastGpsPos=null;
 }
-
-function sendGpsLocation() {
-  if (!lastGpsPos || !TOKEN) return;
-  var fd = new FormData();
-  fd.append('latitude', lastGpsPos.lat);
-  fd.append('longitude', lastGpsPos.lng);
-  fd.append('accuracy', lastGpsPos.accuracy || 0);
-  fd.append('token', TOKEN);
-  // Battery API (agar mavjud bo'lsa)
-  var sendIt = function(battery) {
-    if (battery !== null) fd.append('battery', battery);
-    fetch('/api/agent/location', { method: 'POST', body: fd }).catch(function(e){ console.warn('GPS send error:', e); });
+function sendGpsLocation(){
+  if(!lastGpsPos||!TOKEN)return;
+  var fd=new FormData();
+  fd.append('latitude',lastGpsPos.lat);
+  fd.append('longitude',lastGpsPos.lng);
+  fd.append('accuracy',lastGpsPos.accuracy||0);
+  fd.append('token',TOKEN);
+  var doSend=function(bat){
+    if(bat!==null)fd.append('battery',bat);
+    fetch('/api/agent/location',{method:'POST',body:fd}).catch(function(){});
   };
-  if (navigator.getBattery) {
-    navigator.getBattery().then(function(b){ sendIt(Math.round(b.level * 100)); }).catch(function(){ sendIt(null); });
-  } else {
-    sendIt(null);
-  }
+  if(navigator.getBattery){navigator.getBattery().then(function(b){doSend(Math.round(b.level*100));}).catch(function(){doSend(null);});}
+  else{doSend(null);}
 }
 
-function startApp() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.getElementById('app').style.display = 'block';
-  if (agentInfo) {
-    document.getElementById('agentName').textContent = agentInfo.full_name || agentInfo.name || 'Agent';
-    document.getElementById('agentRegion').textContent = agentInfo.region || '';
-  }
-  loadHome();
-  loadClients();
-  loadProducts();
-  showPage('homePage','tabHome');
+function sendLocation(){
+  closeDrawer();
+  if(!navigator.geolocation){alert('GPS qo\'llab-quvvatlanmaydi');return;}
+  updateSyncStatus('GPS aniqlanmoqda...');
+  navigator.geolocation.getCurrentPosition(function(pos){
+    lastGpsPos={lat:pos.coords.latitude,lng:pos.coords.longitude,accuracy:pos.coords.accuracy};
+    var fd=new FormData();
+    fd.append('latitude',lastGpsPos.lat);
+    fd.append('longitude',lastGpsPos.lng);
+    fd.append('accuracy',lastGpsPos.accuracy||0);
+    fd.append('token',TOKEN);
+    var doSend=function(bat){
+      if(bat!==null)fd.append('battery',bat);
+      fetch('/api/agent/location',{method:'POST',body:fd})
+        .then(function(r){return r.json();})
+        .then(function(d){
+          if(d.success){
+            updateSyncStatus('Lokatsiya yuborildi');
+            alert('Lokatsiya yuborildi!\n'+lastGpsPos.lat.toFixed(6)+', '+lastGpsPos.lng.toFixed(6));
+          } else {
+            updateSyncStatus('Xatolik');
+            alert('Xatolik: '+(d.error||'Server xatosi'));
+          }
+        })
+        .catch(function(){updateSyncStatus('Server xatosi');alert('Server bilan bog\'lanib bo\'lmadi');});
+    };
+    if(navigator.getBattery){navigator.getBattery().then(function(b){doSend(Math.round(b.level*100));}).catch(function(){doSend(null);});}
+    else{doSend(null);}
+  },function(err){
+    updateSyncStatus('GPS xatosi');
+    var msg='GPS xatosi: ';
+    if(err.code===1)msg+='Ruxsat berilmadi. Brauzer sozlamalarida lokatsiya ruxsatini yoqing.';
+    else if(err.code===2)msg+='Lokatsiya aniqlanmadi.';
+    else if(err.code===3)msg+='Vaqt tugadi, qayta urinib ko\'ring.';
+    else msg+=err.message;
+    alert(msg);
+  },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+}
+window.sendLocation=sendLocation;
+
+// ═══ APP START ═══
+function startApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='block';
+  var name=(agentInfo&&(agentInfo.full_name||agentInfo.name))||'Agent';
+  document.getElementById('toolbarTitle').textContent=name;
+  document.getElementById('drawerName').textContent=name;
+  loadAll();
   startGpsTracking();
 }
 
-// Auto-login (URL token yoki localStorage)
+function loadAll(){
+  loadStats();
+  loadClients();
+  loadProducts();
+  loadVisits();
+  updateSyncStatus('Yangilandi');
+}
+
+// Auto-login
 (function(){
-  // URL dan token olish: /agent?token=xxx
-  var urlToken = new URLSearchParams(window.location.search).get('token');
-  if (urlToken) {
-    localStorage.setItem('agent_token', urlToken);
-    // URL ni tozalash (token ko'rinmasin)
-    history.replaceState(null, '', '/agent');
-  }
-  var saved = urlToken || localStorage.getItem('agent_token');
-  if (!saved) return;
-  TOKEN = saved;
+  var urlToken=new URLSearchParams(window.location.search).get('token');
+  if(urlToken){localStorage.setItem('agent_token',urlToken);history.replaceState(null,'','/agent');}
+  var saved=urlToken||localStorage.getItem('agent_token');
+  if(!saved)return;
+  TOKEN=saved;
   api('/api/agent/stats').then(function(d){
-    if (!d || d.error || d.detail || d.success === false) { TOKEN=''; localStorage.removeItem('agent_token'); return; }
-    agentInfo = d.agent || {};
+    if(!d||d.error||d.detail||d.success===false){TOKEN='';localStorage.removeItem('agent_token');return;}
+    agentInfo=d.agent||{};
     startApp();
-  }).catch(function(){ TOKEN=''; });
+  }).catch(function(){TOKEN='';});
 })();
 
-// Enter key support on login fields
-document.addEventListener('DOMContentLoaded', function(){
+document.addEventListener('DOMContentLoaded',function(){
   ['loginPhone','loginPass'].forEach(function(id){
-    var el = document.getElementById(id);
-    if (el) el.addEventListener('keydown', function(e){ if (e.key === 'Enter') doLogin(); });
+    var el=document.getElementById(id);
+    if(el)el.addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
   });
 });
 
-// ── NAVIGATION ─────────────────────────────────────────────────────────────
-var pageStack = [];
-
-function showPage(pageId, tabId) {
-  document.querySelectorAll('.page').forEach(function(p){ p.classList.remove('active'); });
-  document.querySelectorAll('.nav-tab').forEach(function(t){ t.classList.remove('active'); });
-  document.getElementById(pageId).classList.add('active');
-  if (tabId) document.getElementById(tabId).classList.add('active');
-  document.getElementById('bottomNav').style.display = ['clientDetailPage','newOrderPage'].includes(pageId) ? 'none' : 'flex';
-  window.scrollTo(0,0);
-  if (pageId === 'ordersPage') loadMyOrders();
+// ═══ DRAWER ═══
+function toggleDrawer(){
+  var d=document.getElementById('drawer');
+  if(d.classList.contains('open'))closeDrawer();else openDrawer();
 }
-window.showPage = showPage;
+window.toggleDrawer=toggleDrawer;
+function openDrawer(){
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+window.openDrawer=openDrawer;
+function closeDrawer(){
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+window.closeDrawer=closeDrawer;
 
-// ── HOME ────────────────────────────────────────────────────────────────────
-function loadHome() {
+// ═══ TABS ═══
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(function(t){t.classList.remove('active');});
+  document.querySelectorAll('.tab-content').forEach(function(c){c.classList.remove('active');});
+  if(tab==='visits'){
+    document.getElementById('tabVisits').classList.add('active');
+    document.getElementById('visitsContent').classList.add('active');
+  } else {
+    document.getElementById('tabResults').classList.add('active');
+    document.getElementById('resultsContent').classList.add('active');
+  }
+}
+window.switchTab=switchTab;
+
+// ═══ SUB PAGES ═══
+function openPage(id){
+  var page=document.getElementById(id);
+  if(!page)return;
+  page.classList.add('open');
+  if(id==='ordersPage')loadMyOrders();
+  if(id==='stockPage')loadStock();
+  if(id==='debtorsPage')loadDebtors();
+  if(id==='draftsPage')renderDrafts();
+  if(id==='tasksPage')loadTasks();
+  if(id==='reportsPage')initReport();
+  if(id==='kpiPage')loadKpi('daily');
+}
+window.openPage=openPage;
+function closePage(id){document.getElementById(id).classList.remove('open');}
+window.closePage=closePage;
+
+// ═══ SYNC ═══
+function doSync(){
+  updateSyncStatus('Yangilanmoqda...');
+  loadAll();
+}
+window.doSync=doSync;
+function updateSyncStatus(msg){
+  document.getElementById('syncStatus').textContent=msg||'Tayyor';
+  var now=new Date();
+  document.getElementById('lastSync').textContent=String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0');
+}
+
+// ═══ STATS ═══
+function loadStats(){
   api('/api/agent/stats').then(function(d){
-    if (!d || d.error) return;
-    var st = d.stats || d;
-    document.getElementById('statOrders').textContent = st.today_orders || 0;
-    document.getElementById('statTotal').textContent = fmt(st.today_total) + ' so\'m';
-    document.getElementById('statPartners').textContent = st.partners_count || st.partner_count || 0;
-    document.getElementById('statDebt').textContent = fmt(st.total_debt) + ' so\'m';
-    agentInfo = d.agent || agentInfo;
-    if (agentInfo) {
-      document.getElementById('agentName').textContent = agentInfo.full_name || agentInfo.name || 'Agent';
-      document.getElementById('agentRegion').textContent = agentInfo.region || '';
-    }
-  });
-  api('/api/agent/my-orders').then(function(d){
-    var list = document.getElementById('recentOrdersList');
-    var orders = (Array.isArray(d) ? d : (d.orders || [])).slice(0, 5);
-    if (!orders.length) { list.innerHTML = '<div class="text-muted small text-center py-3">Buyurtmalar yo\'q</div>'; return; }
-    list.innerHTML = orders.map(function(o){
-      return '<div class="order-card">' +
-        '<div class="d-flex justify-content-between align-items-start">' +
-          '<div class="order-num">' + (o.number||o.order_number||'—') + '</div>' +
-          statusBadge(o.status) +
-        '</div>' +
-        '<div class="order-meta mt-1">' + (o.partner||o.partner_name||'') + ' · ' + fmt(o.total||o.total_amount) + ' so\'m</div>' +
-        '<div class="order-meta">' + (o.date||o.created_at||'') + '</div>' +
-      '</div>';
-    }).join('');
+    if(!d||d.error)return;
+    var st=d.stats||d;
+    document.getElementById('statOrders').textContent=st.today_orders||0;
+    document.getElementById('statTotal').textContent=fmt(st.today_total)+' so\'m';
+    document.getElementById('statPartners').textContent=st.partners_count||st.partner_count||0;
+    document.getElementById('statDebt').textContent=fmt(st.total_debt)+' so\'m';
+    agentInfo=d.agent||agentInfo;
   });
 }
 
-// ── CLIENTS ─────────────────────────────────────────────────────────────────
-function loadClients() {
-  api('/api/agent/my-partners').then(function(d){
-    allClients = Array.isArray(d) ? d : (d.partners || []);
-    renderClients(allClients);
-  });
+// ═══ VISITS ═══
+function loadVisits(){
+  api('/api/agent/visits').then(function(d){
+    var visits=Array.isArray(d)?d:(d.visits||[]);
+    visitsDone=visits.filter(function(v){return v.status==='visited';}).length;
+    visitsTotal=allClients.length;
+    document.getElementById('visitCount').textContent=visitsDone+'/'+visitsTotal;
+    renderVisitsList();
+  }).catch(function(){renderVisitsList();});
 }
 
-function renderClients(list) {
-  var el = document.getElementById('clientsList');
-  if (!list.length) { el.innerHTML = '<div class="text-muted small text-center py-4">Mijozlar yo\'q</div>'; return; }
-  el.innerHTML = list.map(function(c){
-    var debt = Number(c.balance || 0);
-    var debtHtml = '<span class="debt-badge ' + (debt > 0 ? '' : 'ok') + '">' + (debt > 0 ? '-' + fmt(debt) : 'Qarz yo\'q') + ' so\'m</span>';
-    return '<div class="client-card" onclick="openClient(' + c.id + ')">' +
-      '<div class="d-flex justify-content-between align-items-start">' +
-        '<div class="name">' + (c.name||'—') + '</div>' +
-        debtHtml +
+function renderVisitsList(){
+  var el=document.getElementById('visitsList');
+  if(!allClients.length){
+    el.innerHTML='<div class="empty-state"><i class="bi bi-buildings"></i>Mijozlar yuklanmoqda...</div>';
+    return;
+  }
+  // Har bir mijozni visit kartochka sifatida ko'rsatish
+  el.innerHTML=allClients.map(function(c){
+    var debt=Number(c.balance||0);
+    var balanceClass=debt>0?'balance debt':'balance';
+    var balanceText='Balans: '+fmt(debt);
+    var hasLoc=c.lat||c.latitude||c.lng||c.longitude;
+    return '<div class="partner-card" onclick="openClient('+c.id+')">' +
+      '<div class="partner-avatar"><i class="bi bi-building"></i></div>' +
+      '<div class="partner-info">' +
+        '<div class="name">'+escHtml(c.name||'—').replace(/&quot;/g,'"')+'</div>' +
+        '<div class="'+balanceClass+'">'+balanceText+'</div>' +
+        (c.phone?'<div class="sub">'+escHtml(c.phone).replace(/&quot;/g,'"')+'</div>':'') +
       '</div>' +
-      '<div class="meta">' + (c.phone||'') + (c.region ? ' · '+c.region : '') + '</div>' +
-      '<div class="d-flex gap-2 mt-2">' +
-        '<button class="btn btn-sm btn-outline-primary py-0 px-2" style="font-size:12px;" onclick="event.stopPropagation();startNewOrder(' + c.id + ',\'' + escHtml(c.name||'') + '\')">' +
-          '<i class="bi bi-plus-lg"></i> Buyurtma' +
-        '</button>' +
-        (c.phone ? '<a class="btn btn-sm btn-outline-success py-0 px-2" style="font-size:12px;" href="tel:' + c.phone + '" onclick="event.stopPropagation()"><i class="bi bi-telephone"></i> Qo\'ng\'iroq</a>' : '') +
-      '</div>' +
+      (hasLoc?'<div class="partner-loc-btn" onclick="event.stopPropagation();openClientMap('+c.id+')"><i class="bi bi-geo-alt-fill"></i></div>':'') +
     '</div>';
   }).join('');
 }
 
-function escHtml(s){ return (s||'').replace(/'/g,"\\'"); }
+// ═══ CLIENTS ═══
+var _dayNames=['Ya','Du','Se','Ch','Pa','Ju','Sh'];
+var _currentDayFilter='all';
 
-function filterClients() {
-  var q = (document.getElementById('clientSearch').value || '').toLowerCase();
-  if (!q) { renderClients(allClients); return; }
-  renderClients(allClients.filter(function(c){ return (c.name||'').toLowerCase().includes(q) || (c.phone||'').includes(q); }));
+function loadClients(){
+  api('/api/agent/my-partners').then(function(d){
+    allClients=Array.isArray(d)?d:(d.partners||[]);
+    updateDayCounts();
+    applyClientFilters();
+    renderVisitsList();
+    visitsTotal=allClients.length;
+    document.getElementById('visitCount').textContent=visitsDone+'/'+visitsTotal;
+  });
 }
-window.filterClients = filterClients;
 
-// ── CLIENT DETAIL ───────────────────────────────────────────────────────────
-function openClient(id) {
-  showPage('clientDetailPage');
-  document.getElementById('clientDetailName').textContent = 'Yuklanmoqda…';
-  document.getElementById('clientDetailContent').innerHTML = '<div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i></div>';
-  // Remove old map
-  if (leafletMap) { try { leafletMap.remove(); } catch(e){} leafletMap = null; }
-  api('/api/agent/partner/' + id).then(function(d){
-    if (!d || d.error) { document.getElementById('clientDetailContent').innerHTML = '<div class="alert alert-danger">Ma\'lumot topilmadi</div>'; return; }
-    var p = d.partner || d;
-    document.getElementById('clientDetailName').textContent = p.name || 'Mijoz';
-    var debt = Number(p.balance || 0);
-    var lat = p.lat || p.latitude;
-    var lng = p.lng || p.longitude;
-    var hasLoc = lat && lng;
-    var mapHtml = hasLoc ? '<div id="mapBox"></div>' : '';
-    var orders = d.orders || [];
-    var ordersHtml = orders.length ? orders.map(function(o){
-      return '<div class="order-card">' +
-        '<div class="d-flex justify-content-between">' +
-          '<span class="order-num">' + (o.number||o.order_number||'—') + '</span>' +
-          statusBadge(o.status) +
-        '</div>' +
-        '<div class="order-meta">' + fmt(o.total||o.total_amount) + ' so\'m · ' + (o.date||o.created_at||'') + '</div>' +
-      '</div>';
-    }).join('') : '<div class="text-muted small text-center py-2">Buyurtmalar yo\'q</div>';
+function updateDayCounts(){
+  var counts={};
+  for(var i=0;i<7;i++)counts[i]=0;
+  allClients.forEach(function(c){
+    if(c.visit_day!=null)counts[c.visit_day]=(counts[c.visit_day]||0)+1;
+  });
+  var el;
+  el=document.getElementById('dcAll');if(el)el.textContent=allClients.length;
+  for(var i=0;i<7;i++){el=document.getElementById('dc'+i);if(el)el.textContent=counts[i]||0;}
+}
 
-    document.getElementById('clientDetailContent').innerHTML =
-      '<div class="mb-3">' +
-        '<button class="btn btn-primary w-100 fw-semibold" onclick="startNewOrder(' + id + ',\'' + escHtml(p.name||'') + '\')">' +
-          '<i class="bi bi-plus-circle"></i> Yangi buyurtma berish' +
-        '</button>' +
+function visitDayText(day){
+  if(day==null||day===''||day===undefined)return '';
+  var d=Number(day);
+  return _dayNames[d]||'';
+}
+
+function filterByDay(day,btn){
+  _currentDayFilter=day;
+  document.querySelectorAll('.dtab').forEach(function(t){t.classList.remove('active');});
+  if(btn)btn.classList.add('active');
+  applyClientFilters();
+}
+window.filterByDay=filterByDay;
+
+function applyClientFilters(){
+  var q=(document.getElementById('clientSearch').value||'').toLowerCase();
+  var list=allClients;
+  if(_currentDayFilter!=='all'){
+    list=list.filter(function(c){return c.visit_day==_currentDayFilter;});
+  }
+  if(q){
+    list=list.filter(function(c){return(c.name||'').toLowerCase().includes(q)||(c.phone||'').includes(q);});
+  }
+  renderClients(list);
+  var info=document.getElementById('clientsCountInfo');
+  if(info)info.textContent='Jami: '+list.length+' ta savdo nuqtasi';
+}
+
+function renderClients(list){
+  var el=document.getElementById('clientsList');
+  if(!list.length){el.innerHTML='<div class="empty-state"><i class="bi bi-buildings"></i>Savdo nuqtalari yo\'q</div>';return;}
+  el.innerHTML=list.map(function(c){
+    var debt=Number(c.balance||0);
+    var hasLoc=c.lat||c.latitude||c.lng||c.longitude;
+    var dayText=visitDayText(c.visit_day);
+    return '<div class="partner-card" onclick="openClient('+c.id+')">' +
+      '<div class="partner-avatar"><i class="bi bi-building"></i></div>' +
+      '<div class="partner-info">' +
+        '<div class="name">'+escHtml(c.name||'—').replace(/&quot;/g,'"')+'</div>' +
+        '<div class="'+(debt>0?'balance debt':'balance')+'">Balans: '+fmt(debt)+'</div>' +
+        (dayText?'<div class="days">'+dayText+'</div>':'') +
       '</div>' +
-      mapHtml +
-      '<div class="profile-row"><i class="bi bi-telephone"></i><div>' + (p.phone||'—') + '</div></div>' +
-      '<div class="profile-row"><i class="bi bi-geo-alt"></i><div>' + (p.address||'—') + '</div></div>' +
-      '<div class="profile-row"><i class="bi bi-cash-stack"></i><div>' +
-        '<div class="small text-muted">Balans / qarz</div>' +
-        '<div class="fw-bold ' + (debt > 0 ? 'text-danger' : 'text-success') + '">' + (debt > 0 ? '-' : '') + fmt(Math.abs(debt)) + ' so\'m</div>' +
-      '</div></div>' +
-      '<h6 class="fw-bold mt-3 mb-2">So\'nggi buyurtmalar</h6>' +
-      ordersHtml;
+      (hasLoc?'<div class="partner-loc-btn" onclick="event.stopPropagation();openClientMap('+c.id+')"><i class="bi bi-geo-alt-fill"></i></div>':'') +
+    '</div>';
+  }).join('');
+}
 
-    if (hasLoc) {
+function toggleClientSearch(){
+  var bar=document.getElementById('clientSearchBar');
+  if(bar.style.display==='none'){bar.style.display='block';document.getElementById('clientSearch').focus();}
+  else{bar.style.display='none';document.getElementById('clientSearch').value='';applyClientFilters();}
+}
+window.toggleClientSearch=toggleClientSearch;
+
+function filterClients(){applyClientFilters();}
+window.filterClients=filterClients;
+
+// ═══ CLIENT DETAIL ═══
+function openClient(id){
+  openPage('clientDetailPage','Mijoz');
+  document.getElementById('clientDetailTitle').textContent='Yuklanmoqda...';
+  document.getElementById('clientDetailBody').innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  if(leafletMap){try{leafletMap.remove();}catch(e){}leafletMap=null;}
+  api('/api/agent/partner/'+id).then(function(d){
+    if(!d||d.error){document.getElementById('clientDetailBody').innerHTML='<div class="empty-state"><i class="bi bi-exclamation-triangle"></i>Ma\'lumot topilmadi</div>';return;}
+    var p=d.partner||d;
+    document.getElementById('clientDetailTitle').textContent=p.name||'Mijoz';
+    var debt=Number(p.balance||0);
+    var lat=p.lat||p.latitude;
+    var lng=p.lng||p.longitude;
+    var hasLoc=lat&&lng;
+    var orders=d.orders||[];
+
+    var html=
+      '<div class="client-header">' +
+        '<div class="cname">'+(p.name||'—')+'</div>' +
+        '<div class="cphone">'+(p.phone||'')+'</div>' +
+      '</div>' +
+      '<div class="action-btns">' +
+        '<button class="btn-order" onclick="startNewOrder('+id+',\''+escHtml(p.name||'')+'\')">' +
+          '<i class="bi bi-plus-circle"></i> Buyurtma' +
+        '</button>' +
+        '<button class="btn-checkin" onclick="doCheckin('+id+')">' +
+          '<i class="bi bi-geo-alt"></i> Check-in' +
+        '</button>' +
+        '<button class="btn-checkin" onclick="openReconciliation('+id+',\''+escHtml(p.name||'')+'\')" style="background:#7B1FA2;">' +
+          '<i class="bi bi-file-text"></i> Sverka' +
+        '</button>' +
+        (p.phone?'<a class="btn-call" href="tel:'+p.phone+'" style="text-decoration:none;"><i class="bi bi-telephone"></i></a>':'') +
+      '</div>' +
+      (hasLoc?'<div id="mapBox"></div>':'') +
+      '<div class="client-row"><i class="bi bi-geo-alt"></i><div><div class="cr-label">Manzil</div><div class="cr-value">'+(p.address||'—')+'</div></div></div>' +
+      '<div class="client-row"><i class="bi bi-cash-stack"></i><div><div class="cr-label">Balans / qarz</div><div class="cr-value" style="color:'+(debt>0?'var(--danger)':'var(--green)')+';">'+(debt>0?'-':'')+fmt(Math.abs(debt))+' so\'m</div></div></div>';
+
+    if(orders.length){
+      html+='<div style="padding:12px 16px;font-weight:700;font-size:15px;">So\'nggi buyurtmalar</div>';
+      html+=orders.map(function(o){
+        return '<div class="order-item">' +
+          '<div class="oi-head"><span class="oi-num">'+(o.number||o.order_number||'—')+'</span>'+statusBadge(o.status)+'</div>' +
+          '<div class="oi-meta">'+fmt(o.total||o.total_amount)+' so\'m &middot; '+fmtDate(o.date||o.created_at)+'</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    document.getElementById('clientDetailBody').innerHTML=html;
+
+    if(hasLoc){
       setTimeout(function(){
-        var mapEl = document.getElementById('mapBox');
-        if (!mapEl) return;
-        leafletMap = L.map('mapBox').setView([lat, lng], 15);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(leafletMap);
-        L.marker([lat, lng]).addTo(leafletMap).bindPopup(p.name || '').openPopup();
+        var mapEl=document.getElementById('mapBox');
+        if(!mapEl)return;
+        leafletMap=L.map('mapBox').setView([lat,lng],15);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM'}).addTo(leafletMap);
+        L.marker([lat,lng]).addTo(leafletMap).bindPopup(p.name||'').openPopup();
         leafletMap.invalidateSize();
-      }, 100);
+      },200);
     }
   });
 }
-window.openClient = openClient;
+window.openClient=openClient;
 
-// ── NEW ORDER ───────────────────────────────────────────────────────────────
-function loadProducts() {
+function openClientMap(id){
+  openClient(id);
+}
+window.openClientMap=openClientMap;
+
+// ═══ CHECK-IN ═══
+function doCheckin(partnerId){
+  var fd=new FormData();
+  fd.append('partner_id',partnerId);
+  fd.append('token',TOKEN);
+  if(lastGpsPos){
+    fd.append('latitude',lastGpsPos.lat);
+    fd.append('longitude',lastGpsPos.lng);
+  }
+  fetch('/api/agent/visit/checkin',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
+    if(d.success){
+      alert('Check-in muvaffaqiyatli!' + (lastGpsPos ? '' : '\n(GPS ma\'lumoti yo\'q, lokatsiyasiz saqlandi)'));
+      loadVisits();
+    } else {
+      alert(d.error||'Xatolik');
+    }
+  }).catch(function(){alert('Server xatosi');});
+}
+window.doCheckin=doCheckin;
+
+// ═══ NEW ORDER ═══
+function loadProducts(){
   api('/api/agent/products').then(function(d){
-    allProducts = Array.isArray(d) ? d : (d.products || []);
+    allProducts=Array.isArray(d)?d:(d.products||[]);
   });
 }
 
-function startNewOrder(partnerId, partnerName) {
-  currentOrderPartnerId = partnerId;
-  orderItems = {};
-  document.getElementById('newOrderClientName').textContent = partnerName || '';
-  document.getElementById('orderNote').value = '';
-  document.getElementById('productSearch').value = '';
-  document.getElementById('newOrderBack').onclick = function(){ history.back(); showPage('clientDetailPage'); };
+function startNewOrder(partnerId,partnerName){
+  currentOrderPartnerId=partnerId;
+  orderItems={};
+  document.getElementById('newOrderClientName').textContent=partnerName||'';
+  document.getElementById('orderNote').value='';
+  document.getElementById('productSearch').value='';
   updateOrderTotal();
   renderProducts(allProducts);
-  showPage('newOrderPage');
+  openPage('newOrderPage','Yangi buyurtma');
 }
-window.startNewOrder = startNewOrder;
+window.startNewOrder=startNewOrder;
 
-function renderProducts(list) {
-  var el = document.getElementById('productsList');
-  if (!list.length) { el.innerHTML = '<div class="text-muted small text-center py-3">Mahsulotlar yo\'q</div>'; return; }
-  el.innerHTML = list.map(function(p){
-    var qty = orderItems[p.id] || 0;
-    var stockNum = p.stock != null ? Number(p.stock) : null;
-    var stockHtml = stockNum !== null ? '<span class="' + (stockNum > 0 ? 'text-success' : 'text-danger') + '" style="font-size:11px;font-weight:600;">Qoldiq: ' + fmt(stockNum) + '</span>' : '';
-    return '<div class="product-row" id="prow_'+p.id+'">' +
-      '<div class="d-flex justify-content-between align-items-center">' +
-        '<div>' +
-          '<div class="p-name">' + (p.name||'—') + '</div>' +
-          '<div class="p-price">' + fmt(p.price) + ' so\'m / ' + (p.unit||'dona') + ' ' + stockHtml + '</div>' +
-        '</div>' +
-        '<div class="qty-ctrl">' +
-          '<button onclick="changeQty('+p.id+',-1)">−</button>' +
-          '<input type="number" id="qty_'+p.id+'" value="'+qty+'" min="0" onchange="setQty('+p.id+',this.value)">' +
-          '<button onclick="changeQty('+p.id+',1)">+</button>' +
-        '</div>' +
+function renderProducts(list){
+  var el=document.getElementById('productsList');
+  if(!list.length){el.innerHTML='<div class="empty-state"><i class="bi bi-box"></i>Mahsulotlar yo\'q</div>';return;}
+  el.innerHTML=list.map(function(p){
+    var qty=orderItems[p.id]||0;
+    var stockNum=p.stock!=null?Number(p.stock):null;
+    var stockHtml=stockNum!==null?'<span class="pi-stock">Qoldiq: '+fmt(stockNum)+'</span>':'';
+    return '<div class="product-item">' +
+      '<div class="pi-info">' +
+        '<div class="pi-name">'+(p.name||'—')+'</div>' +
+        '<div class="pi-price">'+fmt(p.price)+' / '+(p.unit||'dona')+'</div>' +
+        stockHtml +
+      '</div>' +
+      '<div class="qty-ctrl">' +
+        '<button onclick="changeQty('+p.id+',-1)">-</button>' +
+        '<input type="number" id="qty_'+p.id+'" value="'+qty+'" min="0" onchange="setQty('+p.id+',this.value)">' +
+        '<button onclick="changeQty('+p.id+',1)">+</button>' +
       '</div>' +
     '</div>';
   }).join('');
 }
 
-function filterProducts() {
-  var q = (document.getElementById('productSearch').value || '').toLowerCase();
-  var filtered = q ? allProducts.filter(function(p){ return (p.name||'').toLowerCase().includes(q); }) : allProducts;
+function filterProducts(){
+  var q=(document.getElementById('productSearch').value||'').toLowerCase();
+  var filtered=q?allProducts.filter(function(p){return(p.name||'').toLowerCase().includes(q);}):allProducts;
   renderProducts(filtered);
 }
-window.filterProducts = filterProducts;
+window.filterProducts=filterProducts;
 
-function getProductPrice(id) {
-  var p = allProducts.find(function(x){ return x.id == id; });
-  return p ? Number(p.price || 0) : 0;
-}
+function getProductPrice(id){var p=allProducts.find(function(x){return x.id==id;});return p?Number(p.price||0):0;}
 
-function changeQty(id, delta) {
-  var inp = document.getElementById('qty_'+id);
-  var cur = parseInt(inp ? inp.value : 0) || 0;
-  var nv = Math.max(0, cur + delta);
-  if (inp) inp.value = nv;
-  orderItems[id] = nv;
-  if (nv === 0) delete orderItems[id];
+function changeQty(id,delta){
+  var inp=document.getElementById('qty_'+id);
+  var cur=parseInt(inp?inp.value:0)||0;
+  var nv=Math.max(0,cur+delta);
+  if(inp)inp.value=nv;
+  orderItems[id]=nv;
+  if(nv===0)delete orderItems[id];
   updateOrderTotal();
 }
-window.changeQty = changeQty;
+window.changeQty=changeQty;
 
-function setQty(id, val) {
-  var nv = Math.max(0, parseInt(val) || 0);
-  orderItems[id] = nv;
-  if (nv === 0) delete orderItems[id];
+function setQty(id,val){
+  var nv=Math.max(0,parseInt(val)||0);
+  orderItems[id]=nv;
+  if(nv===0)delete orderItems[id];
   updateOrderTotal();
 }
-window.setQty = setQty;
+window.setQty=setQty;
 
-function updateOrderTotal() {
-  var total = 0;
-  Object.keys(orderItems).forEach(function(id){
-    total += getProductPrice(id) * (orderItems[id] || 0);
-  });
-  document.getElementById('orderTotalAmt').textContent = fmt(total) + ' so\'m';
-  var bar = document.getElementById('orderTotalBar');
-  var hasItems = Object.keys(orderItems).some(function(k){ return orderItems[k] > 0; });
-  bar.classList.toggle('d-none', !hasItems);
+function updateOrderTotal(){
+  var total=0;
+  Object.keys(orderItems).forEach(function(id){total+=getProductPrice(id)*(orderItems[id]||0);});
+  document.getElementById('orderTotalAmt').textContent=fmt(total);
+  var hasItems=Object.keys(orderItems).some(function(k){return orderItems[k]>0;});
+  document.getElementById('orderFooter').classList.toggle('show',hasItems);
 }
 
-function submitOrder() {
-  var items = [];
-  Object.keys(orderItems).forEach(function(id){
-    if (orderItems[id] > 0) items.push({ product_id: parseInt(id), qty: orderItems[id] });
-  });
-  if (!items.length) { alert('Mahsulot tanlanmadi'); return; }
-  var btn = document.querySelector('#orderTotalBar button');
-  btn.disabled = true; btn.textContent = 'Yuborilmoqda…';
-
-  var payload = {
-    partner_id: currentOrderPartnerId,
-    payment_type: document.getElementById('paymentType').value,
-    note: document.getElementById('orderNote').value,
-    items: items
-  };
-  fetch('/api/agent/order/create', {
-    method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  }).then(function(r){ return r.json(); }).then(function(d){
-    btn.disabled = false; btn.innerHTML = '<i class="bi bi-check-lg"></i> Buyurtma berish';
-    if (d.error || d.detail || !d.success) { alert(d.error || d.detail || 'Xatolik'); return; }
-    alert('Buyurtma #' + (d.order_number||'') + ' draft sifatida yuborildi.\nAdmin tasdiqlashini kutmoqda.');
-    orderItems = {};
-    updateOrderTotal();
-    showPage('clientsPage','tabClients');
-    loadHome();
-  }).catch(function(e){ btn.disabled=false; btn.innerHTML='<i class="bi bi-check-lg"></i> Buyurtma berish'; alert('Xatolik: '+e); });
+function submitOrder(){
+  var items=[];
+  Object.keys(orderItems).forEach(function(id){if(orderItems[id]>0)items.push({product_id:parseInt(id),qty:orderItems[id]});});
+  if(!items.length){alert('Mahsulot tanlanmadi');return;}
+  var btn=document.querySelector('.submit-btn');
+  btn.disabled=true;btn.textContent='Yuborilmoqda...';
+  var payload={partner_id:currentOrderPartnerId,payment_type:document.getElementById('paymentType').value,note:document.getElementById('orderNote').value,items:items};
+  fetch('/api/agent/order/create',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(d){
+    btn.disabled=false;btn.innerHTML='<i class="bi bi-check-lg"></i> Yuborish';
+    if(d.error||d.detail||!d.success){alert(d.error||d.detail||'Xatolik');return;}
+    alert('Buyurtma #'+(d.order_number||'')+' yuborildi!');
+    orderItems={};updateOrderTotal();
+    closePage('newOrderPage');
+    loadStats();
+  }).catch(function(e){btn.disabled=false;btn.innerHTML='<i class="bi bi-check-lg"></i> Yuborish';alert('Xatolik: '+e);});
 }
-window.submitOrder = submitOrder;
+window.submitOrder=submitOrder;
 
-// ── MY ORDERS ───────────────────────────────────────────────────────────────
-function loadMyOrders() {
-  var el = document.getElementById('myOrdersList');
-  el.innerHTML = '<div class="spinner-wrap"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda…</div>';
+// ═══ MY ORDERS ═══
+function loadMyOrders(){
+  var el=document.getElementById('ordersBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
   api('/api/agent/my-orders').then(function(d){
-    var orders = Array.isArray(d) ? d : (d.orders || []);
-    if (!orders.length) { el.innerHTML = '<div class="text-muted small text-center py-4">Buyurtmalar yo\'q</div>'; return; }
-    el.innerHTML = orders.map(function(o){
-      return '<div class="order-card">' +
-        '<div class="d-flex justify-content-between align-items-start">' +
-          '<div class="order-num">' + (o.number||o.order_number||'—') + '</div>' +
-          statusBadge(o.status) +
-        '</div>' +
-        '<div class="order-meta mt-1 fw-semibold">' + (o.partner||o.partner_name||'') + '</div>' +
-        '<div class="order-meta">' + fmt(o.total||o.total_amount) + ' so\'m · ' + (o.payment_type||'') + '</div>' +
-        '<div class="order-meta">' + (o.date||o.created_at||'') + '</div>' +
+    var orders=Array.isArray(d)?d:(d.orders||[]);
+    if(!orders.length){el.innerHTML='<div class="empty-state"><i class="bi bi-bag"></i>Buyurtmalar yo\'q</div>';return;}
+    el.innerHTML=orders.map(function(o){
+      return '<div class="order-item">' +
+        '<div class="oi-head"><span class="oi-num">'+(o.number||o.order_number||'—')+'</span>'+statusBadge(o.status)+'</div>' +
+        '<div class="oi-meta" style="font-weight:600;">'+(o.partner||o.partner_name||'')+'</div>' +
+        '<div class="oi-meta">'+fmt(o.total||o.total_amount)+' so\'m &middot; '+(o.payment_type||'')+'</div>' +
+        '<div class="oi-meta">'+fmtDate(o.date||o.created_at)+'</div>' +
       '</div>';
     }).join('');
   });
 }
 
+// ═══ STOCK ═══
+var allStockItems=[];
+function loadStock(){
+  var el=document.getElementById('stockList');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/products').then(function(d){
+    allStockItems=Array.isArray(d)?d:(d.products||[]);
+    renderStock(allStockItems);
+  });
+}
+function renderStock(list){
+  var el=document.getElementById('stockList');
+  if(!list.length){el.innerHTML='<div class="empty-state"><i class="bi bi-box-seam"></i>Mahsulotlar yo\'q</div>';return;}
+  el.innerHTML=list.map(function(p){
+    var stockNum=p.stock!=null?Number(p.stock):0;
+    return '<div class="product-item">' +
+      '<div class="pi-info">' +
+        '<div class="pi-name">'+(p.name||'—')+'</div>' +
+        '<div class="pi-price">'+fmt(p.price)+' / '+(p.unit||'dona')+'</div>' +
+      '</div>' +
+      '<div style="font-size:15px;font-weight:700;color:'+(stockNum>0?'var(--green)':'var(--danger)')+';">'+fmt(stockNum)+'</div>' +
+    '</div>';
+  }).join('');
+}
+function filterStock(){
+  var q=(document.getElementById('stockSearch').value||'').toLowerCase();
+  var filtered=q?allStockItems.filter(function(p){return(p.name||'').toLowerCase().includes(q);}):allStockItems;
+  renderStock(filtered);
+}
+window.filterStock=filterStock;
+
+// ═══ DEBTORS ═══
+function loadDebtors(){
+  var el=document.getElementById('debtorsBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/my-partners').then(function(d){
+    var partners=Array.isArray(d)?d:(d.partners||[]);
+    var debtors=partners.filter(function(c){return Number(c.balance||0)>0;}).sort(function(a,b){return(b.balance||0)-(a.balance||0);});
+    if(!debtors.length){el.innerHTML='<div class="empty-state"><i class="bi bi-emoji-smile"></i>Qarzdorlar yo\'q</div>';return;}
+    el.innerHTML=debtors.map(function(c){
+      return '<div class="debtor-card" onclick="openClient('+c.id+')">' +
+        '<div class="d-info">' +
+          '<div class="d-name">'+(c.name||'—')+'</div>' +
+          '<div class="d-phone">'+(c.phone||'')+'</div>' +
+        '</div>' +
+        '<div class="d-debt">-'+fmt(c.balance)+' so\'m</div>' +
+      '</div>';
+    }).join('');
+  });
+}
+
+// ═══ ADD PARTNER ═══
+// ═══ ADD PARTNER ═══
+var _npLat=null, _npLng=null;
+var _selectedDays=[];
+
+function toggleDay(btn){
+  btn.classList.toggle('sel');
+  _selectedDays=[];
+  document.querySelectorAll('.vday-btn.sel').forEach(function(b){_selectedDays.push(b.getAttribute('data-day'));});
+}
+window.toggleDay=toggleDay;
+
+function toggleRequisites(){
+  var block=document.getElementById('requisitesBlock');
+  var chevron=document.getElementById('reqChevron');
+  if(block.style.display==='none'){block.style.display='block';chevron.className='bi bi-chevron-up';}
+  else{block.style.display='none';chevron.className='bi bi-chevron-down';}
+}
+window.toggleRequisites=toggleRequisites;
+
+function previewPhoto(input){
+  if(input.files&&input.files[0]){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      document.getElementById('photoImg').src=e.target.result;
+      document.getElementById('photoImg').style.display='block';
+      document.getElementById('photoIcon').style.display='none';
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+window.previewPhoto=previewPhoto;
+
+function getPartnerLocation(){
+  if(!navigator.geolocation){alert('GPS qo\'llab-quvvatlanmaydi');return;}
+  document.getElementById('npLocation').value='Aniqlanmoqda...';
+  navigator.geolocation.getCurrentPosition(function(pos){
+    _npLat=pos.coords.latitude;
+    _npLng=pos.coords.longitude;
+    document.getElementById('npLocation').value=_npLat.toFixed(6)+', '+_npLng.toFixed(6);
+  },function(err){
+    document.getElementById('npLocation').value='';
+    alert('GPS xatosi: '+err.message);
+  },{enableHighAccuracy:true,timeout:15000});
+}
+window.getPartnerLocation=getPartnerLocation;
+
+function saveNewPartner(){
+  var name=(document.getElementById('npName').value||'').trim();
+  if(!name){alert('Savdo nuqtasi nomini kiriting');return;}
+
+  var fd=new FormData();
+  fd.append('name',name);
+  fd.append('legal_name',(document.getElementById('npLegalName').value||'').trim());
+  fd.append('address',(document.getElementById('npAddress').value||'').trim());
+  fd.append('landmark',(document.getElementById('npLandmark').value||'').trim());
+  fd.append('contact_person',(document.getElementById('npContact').value||'').trim());
+  fd.append('phone',(document.getElementById('npPhone').value||'').trim());
+  fd.append('notes',(document.getElementById('npNotes').value||'').trim());
+  fd.append('category',(document.getElementById('npCategory').value||''));
+  fd.append('region',(document.getElementById('npRegion').value||'').trim());
+  fd.append('customer_type',(document.getElementById('npCustomerType').value||''));
+  fd.append('sales_channel',(document.getElementById('npSalesChannel').value||''));
+  fd.append('visit_days',_selectedDays.join(','));
+  // Lokatsiya
+  if(_npLat){fd.append('latitude',_npLat);fd.append('longitude',_npLng);}
+  else if(lastGpsPos){fd.append('latitude',lastGpsPos.lat);fd.append('longitude',lastGpsPos.lng);}
+  // Rekvizitlar
+  fd.append('inn',(document.getElementById('npInn').value||'').trim());
+  fd.append('account',(document.getElementById('npAccount').value||'').trim());
+  fd.append('bank',(document.getElementById('npBank').value||'').trim());
+  fd.append('mfo',(document.getElementById('npMfo').value||'').trim());
+  fd.append('oked',(document.getElementById('npOked').value||'').trim());
+  fd.append('pinfl',(document.getElementById('npPinfl').value||'').trim());
+  fd.append('contract_number',(document.getElementById('npContractNum').value||'').trim());
+  fd.append('contract_date',(document.getElementById('npContractDate').value||''));
+  // Rasm
+  var photoFile=document.getElementById('partnerPhoto').files[0];
+  if(photoFile)fd.append('photo',photoFile);
+  fd.append('token',TOKEN);
+
+  fetch('/api/agent/partner/add',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+TOKEN},
+    body:fd
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.success){
+      alert('Mijoz qo\'shildi!');
+      resetAddPartnerForm();
+      closePage('addPartnerPage');
+      loadClients();
+    } else {
+      alert(d.error||'Xatolik');
+    }
+  }).catch(function(){alert('Server xatosi');});
+}
+window.saveNewPartner=saveNewPartner;
+
+function resetAddPartnerForm(){
+  ['npName','npLegalName','npAddress','npLandmark','npContact','npNotes','npRegion',
+   'npInn','npAccount','npBank','npMfo','npOked','npPinfl','npContractNum','npContractDate','npLocation'].forEach(function(id){
+    var el=document.getElementById(id);if(el)el.value='';
+  });
+  document.getElementById('npPhone').value='998';
+  document.getElementById('npCategory').value='';
+  document.getElementById('npCustomerType').value='';
+  document.getElementById('npSalesChannel').value='';
+  document.querySelectorAll('.vday-btn').forEach(function(b){b.classList.remove('sel');});
+  _selectedDays=[];_npLat=null;_npLng=null;
+  document.getElementById('photoImg').style.display='none';
+  document.getElementById('photoIcon').style.display='';
+  document.getElementById('partnerPhoto').value='';
+}
+
+// ═══ DRAFTS (CHERNOVIKLAR) ═══
+var DRAFT_KEY='agent_drafts';
+function getDrafts(){try{return JSON.parse(localStorage.getItem(DRAFT_KEY)||'[]');}catch(e){return[];}}
+function saveDrafts(arr){localStorage.setItem(DRAFT_KEY,JSON.stringify(arr));updateDraftBadge();}
+function updateDraftBadge(){
+  var count=getDrafts().length;
+  var badge=document.getElementById('draftsBadge');
+  if(badge){badge.textContent=count;badge.classList.toggle('show',count>0);}
+}
+
+function addDraft(partnerId,partnerName,items,paymentType,note){
+  var drafts=getDrafts();
+  var total=0;
+  items.forEach(function(it){total+=it.qty*(it.price||0);});
+  drafts.push({
+    localId:Date.now(),
+    partnerId:partnerId,
+    partnerName:partnerName,
+    items:items,
+    paymentType:paymentType||'cash',
+    note:note||'',
+    total:total,
+    createdAt:new Date().toISOString()
+  });
+  saveDrafts(drafts);
+}
+
+function removeDraft(localId){
+  var drafts=getDrafts().filter(function(d){return d.localId!==localId;});
+  saveDrafts(drafts);
+  renderDrafts();
+}
+window.removeDraft=removeDraft;
+
+function renderDrafts(){
+  var el=document.getElementById('draftsBody');
+  var drafts=getDrafts();
+  if(!drafts.length){el.innerHTML='<div class="empty-state"><i class="bi bi-file-earmark"></i>Chernoviklar yo\'q</div>';return;}
+  el.innerHTML=drafts.map(function(d){
+    var date=new Date(d.createdAt);
+    var dateStr=String(date.getHours()).padStart(2,'0')+':'+String(date.getMinutes()).padStart(2,'0')+' '+String(date.getDate()).padStart(2,'0')+'.'+String(date.getMonth()+1).padStart(2,'0');
+    return '<div class="draft-card">' +
+      '<div class="draft-info">' +
+        '<div class="draft-name">'+(d.partnerName||'—')+'</div>' +
+        '<div class="draft-meta">'+d.items.length+' ta mahsulot &middot; '+dateStr+' &middot; '+(d.paymentType||'')+'</div>' +
+      '</div>' +
+      '<div class="draft-total">'+fmt(d.total)+' so\'m</div>' +
+      '<div class="draft-actions">' +
+        '<button class="draft-sync" onclick="event.stopPropagation();syncDraft('+d.localId+')"><i class="bi bi-cloud-upload"></i></button>' +
+        '<button class="draft-del" onclick="event.stopPropagation();removeDraft('+d.localId+')"><i class="bi bi-trash"></i></button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function syncDraft(localId){
+  var drafts=getDrafts();
+  var draft=drafts.find(function(d){return d.localId===localId;});
+  if(!draft)return;
+  var payload={partner_id:draft.partnerId,payment_type:draft.paymentType,note:draft.note,items:draft.items.map(function(it){return{product_id:it.product_id,qty:it.qty};})};
+  fetch('/api/agent/order/create',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(d){
+    if(d.success){removeDraft(localId);alert('Buyurtma #'+(d.order_number||'')+' yuborildi!');}
+    else{alert(d.error||'Xatolik');}
+  }).catch(function(){alert('Server bilan bog\'lanib bo\'lmadi');});
+}
+window.syncDraft=syncDraft;
+
+function syncAllDrafts(){
+  var drafts=getDrafts();
+  if(!drafts.length){alert('Chernoviklar yo\'q');return;}
+  var remaining=drafts.length;
+  var success=0;
+  drafts.forEach(function(draft){
+    var payload={partner_id:draft.partnerId,payment_type:draft.paymentType,note:draft.note,items:draft.items.map(function(it){return{product_id:it.product_id,qty:it.qty};})};
+    fetch('/api/agent/order/create',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.success){removeDraft(draft.localId);success++;}
+      remaining--;
+      if(remaining<=0){alert(success+' ta buyurtma yuborildi');renderDrafts();loadStats();}
+    }).catch(function(){remaining--;if(remaining<=0)alert(success+' ta yuborildi, qolganlari kutmoqda');});
+  });
+}
+window.syncAllDrafts=syncAllDrafts;
+
+// Modify submitOrder to save draft on failure
+var _origSubmitOrder=submitOrder;
+submitOrder=function(){
+  var items=[];
+  Object.keys(orderItems).forEach(function(id){
+    if(orderItems[id]>0){
+      var p=allProducts.find(function(x){return x.id==id;});
+      items.push({product_id:parseInt(id),qty:orderItems[id],price:p?Number(p.price||0):0});
+    }
+  });
+  if(!items.length){alert('Mahsulot tanlanmadi');return;}
+  var btn=document.querySelector('.submit-btn');
+  btn.disabled=true;btn.textContent='Yuborilmoqda...';
+  var partnerName='';
+  var c=allClients.find(function(x){return x.id==currentOrderPartnerId;});
+  if(c)partnerName=c.name||'';
+  var payload={partner_id:currentOrderPartnerId,payment_type:document.getElementById('paymentType').value,note:document.getElementById('orderNote').value,items:items.map(function(it){return{product_id:it.product_id,qty:it.qty};})};
+  fetch('/api/agent/order/create',{
+    method:'POST',
+    headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify(payload)
+  }).then(function(r){return r.json();}).then(function(d){
+    btn.disabled=false;btn.innerHTML='<i class="bi bi-check-lg"></i> Yuborish';
+    if(d.error||d.detail||!d.success){alert(d.error||d.detail||'Xatolik');return;}
+    alert('Buyurtma #'+(d.order_number||'')+' yuborildi!');
+    orderItems={};updateOrderTotal();closePage('newOrderPage');loadStats();
+  }).catch(function(){
+    btn.disabled=false;btn.innerHTML='<i class="bi bi-check-lg"></i> Yuborish';
+    // Offline — save as draft
+    addDraft(currentOrderPartnerId,partnerName,items,document.getElementById('paymentType').value,document.getElementById('orderNote').value);
+    alert('Internet yo\'q. Chernovik sifatida saqlandi!');
+    orderItems={};updateOrderTotal();closePage('newOrderPage');
+  });
+};
+window.submitOrder=submitOrder;
+
+// ═══ DEBTOR DETAIL ═══
+function openDebtorDetail(partnerId,partnerName){
+  openPage('debtorDetailPage');
+  document.getElementById('debtorDetailTitle').textContent=partnerName||'Qarzdor';
+  var el=document.getElementById('debtorDetailBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/partner/'+partnerId+'/debts').then(function(d){
+    if(!d.success){el.innerHTML='<div class="empty-state">Ma\'lumot topilmadi</div>';return;}
+    var orders=d.orders||[];
+    var totalDebt=d.total_debt||0;
+    var html='<div style="padding:16px;background:var(--white);border-bottom:2px solid var(--danger);margin-bottom:8px;">' +
+      '<div style="font-size:13px;color:var(--text2);">Jami qarz</div>' +
+      '<div style="font-size:24px;font-weight:800;color:var(--danger);">'+fmt(totalDebt)+' so\'m</div>' +
+    '</div>';
+    if(!orders.length){html+='<div class="empty-state">Qarz buyurtmalar yo\'q</div>';}
+    else{
+      html+=orders.map(function(o){
+        return '<div class="order-item">' +
+          '<div class="oi-head"><span class="oi-num">'+(o.number||'—')+'</span>'+statusBadge(o.status)+'</div>' +
+          '<div class="oi-meta">'+fmtDate(o.date)+'</div>' +
+          '<div style="display:flex;gap:16px;margin-top:4px;font-size:13px;">' +
+            '<span>Jami: <b>'+fmt(o.total)+'</b></span>' +
+            '<span>To\'langan: <b style="color:var(--green);">'+fmt(o.paid)+'</b></span>' +
+            '<span>Qarz: <b style="color:var(--danger);">'+fmt(o.debt)+'</b></span>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+    el.innerHTML=html;
+  }).catch(function(){el.innerHTML='<div class="empty-state">Server xatosi</div>';});
+}
+window.openDebtorDetail=openDebtorDetail;
+
+// Update loadDebtors to make cards tappable
+var _origLoadDebtors=loadDebtors;
+loadDebtors=function(){
+  var el=document.getElementById('debtorsBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/my-partners').then(function(d){
+    var partners=Array.isArray(d)?d:(d.partners||[]);
+    var debtors=partners.filter(function(c){return Number(c.balance||0)>0;}).sort(function(a,b){return(b.balance||0)-(a.balance||0);});
+    if(!debtors.length){el.innerHTML='<div class="empty-state"><i class="bi bi-emoji-smile"></i>Qarzdorlar yo\'q</div>';return;}
+    var totalDebt=0;
+    debtors.forEach(function(c){totalDebt+=Number(c.balance||0);});
+    var html='<div style="padding:12px 16px;background:var(--white);border-bottom:2px solid var(--danger);">' +
+      '<div style="font-size:13px;color:var(--text2);">Jami qarzdorlik</div>' +
+      '<div style="font-size:22px;font-weight:800;color:var(--danger);">'+fmt(totalDebt)+' so\'m</div>' +
+      '<div style="font-size:12px;color:var(--text2);">'+debtors.length+' ta qarzdor</div>' +
+    '</div>';
+    html+=debtors.map(function(c){
+      return '<div class="debtor-card" onclick="openDebtorDetail('+c.id+',\''+escHtml(c.name||'')+'\')">' +
+        '<div class="d-info">' +
+          '<div class="d-name">'+(c.name||'—')+'</div>' +
+          '<div class="d-phone">'+(c.phone||'')+'</div>' +
+        '</div>' +
+        '<div class="d-debt">-'+fmt(c.balance)+' so\'m</div>' +
+        '<i class="bi bi-chevron-right" style="color:var(--text2);"></i>' +
+      '</div>';
+    }).join('');
+    el.innerHTML=html;
+  });
+};
+
+// ═══ TASKS (VAZIFALAR) ═══
+var _taskFilter='all';
+function loadTasks(status){
+  var el=document.getElementById('tasksBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  var url='/api/agent/tasks';
+  if(status&&status!=='all')url+='?status='+status;
+  api(url).then(function(d){
+    var tasks=d.tasks||[];
+    if(!tasks.length){el.innerHTML='<div class="empty-state"><i class="bi bi-check2-square"></i>Vazifalar yo\'q</div>';return;}
+    el.innerHTML=tasks.map(function(t){
+      var isDone=t.status==='completed';
+      var isOverdue=!isDone&&t.due_date&&new Date(t.due_date)<new Date();
+      var prioClass=t.priority==='high'?'priority-high':t.priority==='low'?'priority-low':'priority-normal';
+      return '<div class="task-card">' +
+        '<div class="task-check'+(isDone?' done':'')+'" onclick="toggleTask('+t.id+',\''+(isDone?'pending':'completed')+'\')">'+(isDone?'<i class="bi bi-check"></i>':'')+'</div>' +
+        '<div class="task-info">' +
+          '<div class="t-title'+(isDone?' done':'')+'">'+t.title+'</div>' +
+          (t.description?'<div class="t-meta">'+t.description+'</div>':'') +
+          '<div class="t-meta'+(isOverdue?' overdue':'')+'">' +
+            (t.due_date?fmtDate(t.due_date):'')+
+            (t.partner_name?' &middot; '+t.partner_name:'') +
+          '</div>' +
+        '</div>' +
+        '<div class="'+prioClass+'"></div>' +
+      '</div>';
+    }).join('');
+    // Update badge
+    var pending=tasks.filter(function(t){return t.status!=='completed';}).length;
+    var badge=document.getElementById('tasksBadge');
+    if(badge){badge.textContent=pending;badge.classList.toggle('show',pending>0);}
+  }).catch(function(){el.innerHTML='<div class="empty-state">Server xatosi</div>';});
+}
+
+function filterTasks(status,btn){
+  _taskFilter=status;
+  document.querySelectorAll('#taskTabs .dtab').forEach(function(t){t.classList.remove('active');});
+  if(btn)btn.classList.add('active');
+  loadTasks(status==='all'?null:status);
+}
+window.filterTasks=filterTasks;
+
+function toggleTask(taskId,newStatus){
+  if(newStatus==='completed'){
+    fetch('/api/agent/tasks/'+taskId+'/complete',{
+      method:'POST',
+      headers:{'Authorization':'Bearer '+TOKEN,'Content-Type':'application/json'}
+    }).then(function(r){return r.json();}).then(function(d){
+      if(d.success)loadTasks(_taskFilter==='all'?null:_taskFilter);
+      else alert(d.error||'Xatolik');
+    }).catch(function(){alert('Server xatosi');});
+  }
+}
+window.toggleTask=toggleTask;
+
+// ═══ REPORTS (HISOBOTLAR) ═══
+function initReport(){
+  var today=new Date().toISOString().slice(0,10);
+  document.getElementById('reportFrom').value=today;
+  document.getElementById('reportTo').value=today;
+  loadReport();
+}
+
+function loadReport(){
+  var from=document.getElementById('reportFrom').value;
+  var to=document.getElementById('reportTo').value;
+  if(!from||!to)return;
+  var el=document.getElementById('reportBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/reports/summary?date_from='+from+'&date_to='+to).then(function(d){
+    if(!d.success){el.innerHTML='<div class="empty-state">Ma\'lumot topilmadi</div>';return;}
+    var s=d.summary||{};
+    var payments=s.payment_breakdown||{};
+    var partners=s.partner_breakdown||[];
+    var html=
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">' +
+        '<div class="rpt-card"><div class="rpt-label">Buyurtmalar</div><div class="rpt-value" style="color:var(--green);">'+( s.orders_count||0)+'</div></div>' +
+        '<div class="rpt-card"><div class="rpt-label">Jami summa</div><div class="rpt-value" style="color:var(--green);">'+fmt(s.total_amount)+'</div></div>' +
+      '</div>' +
+      '<div class="rpt-card" style="margin-bottom:16px;">' +
+        '<div class="rpt-label" style="margin-bottom:8px;">To\'lov turlari</div>' +
+        '<div class="rpt-row"><span>Naqd</span><span><b>'+fmt(payments.cash_total||0)+'</b> ('+( payments.cash_count||0)+')</span></div>' +
+        '<div class="rpt-row"><span>O\'tkazma</span><span><b>'+fmt(payments.transfer_total||0)+'</b> ('+(payments.transfer_count||0)+')</span></div>' +
+        '<div class="rpt-row" style="border:none;"><span>Nasiya</span><span><b>'+fmt(payments.credit_total||0)+'</b> ('+(payments.credit_count||0)+')</span></div>' +
+      '</div>';
+    if(partners.length){
+      html+='<div class="rpt-card"><div class="rpt-label" style="margin-bottom:8px;">Mijozlar bo\'yicha</div>';
+      partners.forEach(function(p){
+        html+='<div class="rpt-row"><span>'+p.name+'</span><span><b>'+fmt(p.total)+'</b> ('+p.count+')</span></div>';
+      });
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }).catch(function(){el.innerHTML='<div class="empty-state">Server xatosi</div>';});
+}
+window.loadReport=loadReport;
+
+// ═══ KPI NATIJALAR ═══
+function loadKpi(period,btn){
+  if(btn){
+    document.querySelectorAll('#kpiTabs .dtab').forEach(function(t){t.classList.remove('active');});
+    btn.classList.add('active');
+  }
+  var el=document.getElementById('kpiBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/kpi?period='+(period||'daily')).then(function(d){
+    if(!d.success){el.innerHTML='<div class="empty-state">Ma\'lumot topilmadi</div>';return;}
+    var kpi=d.kpi||{};
+    var metrics=[
+      {label:'Vizitlar',value:kpi.visits_done||0,target:kpi.visits_planned||1,suffix:''},
+      {label:'Buyurtmalar',value:kpi.orders_count||0,target:Math.max(kpi.orders_count||0,5),suffix:''},
+      {label:'Sotuv summasi',value:kpi.orders_total||0,target:Math.max(kpi.orders_total||0,1),suffix:' so\'m',isMoney:true},
+      {label:'O\'rtacha buyurtma',value:kpi.avg_order_value||0,target:0,suffix:' so\'m',isMoney:true,noBar:true},
+      {label:'Yangi mijozlar',value:kpi.new_partners||0,target:0,suffix:'',noBar:true},
+    ];
+    // Overall score
+    var visitPct=kpi.visits_planned>0?Math.round((kpi.visits_done/kpi.visits_planned)*100):0;
+    var overallColor=visitPct>=80?'var(--green)':visitPct>=50?'#FFC107':'var(--danger)';
+    var html='<div class="kpi-card" style="text-align:center;margin-bottom:16px;">' +
+      '<div style="font-size:13px;color:var(--text2);">Umumiy ball</div>' +
+      '<div style="font-size:36px;font-weight:800;color:'+overallColor+';">'+visitPct+'%</div>' +
+      '<div class="kpi-bar" style="height:10px;margin-top:8px;"><div class="kpi-bar-fill" style="width:'+Math.min(100,visitPct)+'%;background:'+overallColor+';"></div></div>' +
+    '</div>';
+    metrics.forEach(function(m){
+      var pct=m.target>0?Math.round((m.value/m.target)*100):0;
+      var color=pct>=80?'kpi-green':pct>=50?'kpi-yellow':'kpi-red';
+      html+='<div class="kpi-card">' +
+        '<div class="kpi-label">'+m.label+'</div>' +
+        '<div class="kpi-row">' +
+          '<div class="kpi-value">'+(m.isMoney?fmt(m.value):m.value)+(m.suffix||'')+'</div>' +
+          (!m.noBar?'<div class="kpi-target">'+pct+'% ('+(m.isMoney?fmt(m.target):m.target)+')</div>':'') +
+        '</div>' +
+        (!m.noBar?'<div class="kpi-bar"><div class="kpi-bar-fill '+color+'" style="width:'+Math.min(100,pct)+'%;"></div></div>':'') +
+      '</div>';
+    });
+    el.innerHTML=html;
+  }).catch(function(){el.innerHTML='<div class="empty-state">Server xatosi</div>';});
+}
+window.loadKpi=loadKpi;
+
+// ═══ AKT SVERKA (RECONCILIATION) ═══
+var _reconPartnerId=null;
+function openReconciliation(partnerId,partnerName){
+  _reconPartnerId=partnerId;
+  document.getElementById('reconTitle').textContent='Sverka: '+(partnerName||'');
+  // Default dates: last 30 days
+  var today=new Date();
+  var from=new Date(today);from.setDate(from.getDate()-30);
+  document.getElementById('reconFrom').value=from.toISOString().slice(0,10);
+  document.getElementById('reconTo').value=today.toISOString().slice(0,10);
+  openPage('reconciliationPage');
+  loadReconciliation();
+}
+window.openReconciliation=openReconciliation;
+
+function loadReconciliation(){
+  if(!_reconPartnerId)return;
+  var from=document.getElementById('reconFrom').value;
+  var to=document.getElementById('reconTo').value;
+  var el=document.getElementById('reconBody');
+  el.innerHTML='<div class="spinner"><i class="bi bi-arrow-repeat"></i> Yuklanmoqda...</div>';
+  api('/api/agent/partner/'+_reconPartnerId+'/reconciliation?date_from='+from+'&date_to='+to).then(function(d){
+    if(!d.success){el.innerHTML='<div class="empty-state">Ma\'lumot topilmadi</div>';return;}
+    var movements=d.movements||[];
+    var html=
+      '<div class="recon-summary">' +
+        '<div style="display:flex;justify-content:space-between;">' +
+          '<div><div style="font-size:12px;color:var(--text2);">Boshlang\'ich qoldiq</div><div style="font-size:18px;font-weight:700;">'+fmt(d.opening_balance||0)+' so\'m</div></div>' +
+          '<div style="text-align:right;"><div style="font-size:12px;color:var(--text2);">Yakuniy qoldiq</div><div style="font-size:18px;font-weight:700;color:'+(Number(d.closing_balance||0)>0?'var(--danger)':'var(--green)')+';">'+fmt(d.closing_balance||0)+' so\'m</div></div>' +
+        '</div>' +
+      '</div>';
+    if(!movements.length){html+='<div class="empty-state">Operatsiyalar yo\'q</div>';}
+    else{
+      html+='<div style="background:var(--white);border-radius:12px;padding:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">' +
+        '<div class="recon-row" style="font-weight:700;color:var(--text2);border-bottom:2px solid var(--border);">' +
+          '<div class="r-date">Sana</div><div class="r-desc">Tavsif</div><div class="r-debit">Debet</div><div class="r-credit">Kredit</div>' +
+        '</div>';
+      movements.forEach(function(m){
+        html+='<div class="recon-row">' +
+          '<div class="r-date">'+fmtDate(m.date)+'</div>' +
+          '<div class="r-desc">'+m.description+'</div>' +
+          '<div class="r-debit">'+(m.debit?fmt(m.debit):'')+'</div>' +
+          '<div class="r-credit">'+(m.credit?fmt(m.credit):'')+'</div>' +
+        '</div>';
+      });
+      html+='</div>';
+    }
+    el.innerHTML=html;
+  }).catch(function(){el.innerHTML='<div class="empty-state">Server xatosi</div>';});
+}
+window.loadReconciliation=loadReconciliation;
+
+// ═══ INIT ═══
+updateDraftBadge();
 
 })();
 </script>

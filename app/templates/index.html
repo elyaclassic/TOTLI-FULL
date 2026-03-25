@@ -186,8 +186,14 @@
   <!-- Bildirishnomalar + Statistika -->
   <div class="col-md-4">
     <div class="card mb-3" style="border-radius:14px;">
-      <div class="card-header fw-bold"><i class="bi bi-bell text-primary"></i> Bildirishnomalar</div>
+      <div class="card-header fw-bold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-bell text-primary"></i> Bildirishnomalar</span>
+        {% if user_notifications %}
+        <button class="btn btn-sm btn-outline-secondary py-0 px-2" style="font-size:11px;" onclick="markAllRead()">Barchasini o'qildi</button>
+        {% endif %}
+      </div>
       <div class="card-body pt-2 pb-2">
+        <!-- Tezkor ko'rsatkichlar -->
         <a href="/reports/stock?low=1" class="notif-item">
           <div class="icon-b" style="background:#fff3e0;color:#f57c00;"><i class="bi bi-exclamation-triangle"></i></div>
           <div><div style="font-size:13px;">Kam qolgan tovarlar</div><strong>{{ low_stock_count|default(0) }}</strong></div>
@@ -196,10 +202,48 @@
           <div class="icon-b" style="background:#e3f2fd;color:#1a73e8;"><i class="bi bi-cake2"></i></div>
           <div><div style="font-size:13px;">Bugun tug'ilgan kunlar</div><strong>{{ birthday_today_count|default(0) }}</strong></div>
         </a>
-        <a href="/reports/debts?overdue_days=7" class="notif-item mb-0">
+        <a href="/reports/debts?overdue_days=7" class="notif-item">
           <div class="icon-b" style="background:#ffebee;color:#dc3545;"><i class="bi bi-clock"></i></div>
           <div><div style="font-size:13px;">Muddati o'tgan qarzlar (7+ kun)</div><strong>{{ overdue_debts_count|default(0) }}</strong></div>
         </a>
+
+        <!-- Bildirishnomalar ro'yxati -->
+        {% if user_notifications %}
+        <div style="border-top:2px solid #e9ecef;margin-top:8px;padding-top:8px;">
+          <div style="font-size:12px;color:#888;margin-bottom:6px;">So'nggi bildirishnomalar</div>
+          <div style="max-height:300px;overflow-y:auto;" id="notifList">
+            {% for n in user_notifications %}
+            <div class="notif-row{% if not n.is_read %} unread{% endif %}" id="notif-{{ n.id }}" style="display:flex;align-items:flex-start;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5;font-size:13px;{% if not n.is_read %}background:#f0f7ff;border-radius:6px;margin-bottom:2px;{% endif %}">
+              <div style="flex-shrink:0;margin-top:2px;">
+                {% if n.notification_type == 'warning' %}
+                <i class="bi bi-exclamation-triangle-fill" style="color:#f57c00;"></i>
+                {% elif n.notification_type == 'error' %}
+                <i class="bi bi-x-circle-fill" style="color:#dc3545;"></i>
+                {% elif n.notification_type == 'success' %}
+                <i class="bi bi-check-circle-fill" style="color:#28a745;"></i>
+                {% else %}
+                <i class="bi bi-info-circle-fill" style="color:#1a73e8;"></i>
+                {% endif %}
+              </div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-weight:{% if not n.is_read %}600{% else %}400{% endif %};">{{ n.title }}</div>
+                <div style="color:#666;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ n.message }}</div>
+                <div style="color:#aaa;font-size:11px;margin-top:2px;">{{ n.created_at | fmt_date('%d.%m %H:%M') }}</div>
+              </div>
+              {% if not n.is_read %}
+              <button class="btn btn-sm p-0" style="flex-shrink:0;color:#aaa;font-size:16px;" title="O'qildi" onclick="markRead({{ n.id }})">
+                <i class="bi bi-check2"></i>
+              </button>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% else %}
+        <div style="border-top:2px solid #e9ecef;margin-top:8px;padding:12px 0;text-align:center;color:#aaa;font-size:13px;">
+          <i class="bi bi-check-circle"></i> Yangi bildirishnomalar yo'q
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -222,4 +266,38 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function markRead(id) {
+  fetch('/api/notifications/' + id + '/read', { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      var el = document.getElementById('notif-' + id);
+      if (el) {
+        el.classList.remove('unread');
+        el.style.background = '';
+        var btn = el.querySelector('button');
+        if (btn) btn.remove();
+        var title = el.querySelector('div > div');
+        if (title) title.style.fontWeight = '400';
+      }
+    });
+}
+
+function markAllRead() {
+  var rows = document.querySelectorAll('.notif-row.unread');
+  rows.forEach(function(el) {
+    var id = el.id.replace('notif-', '');
+    fetch('/api/notifications/' + id + '/read', { method: 'POST' });
+    el.classList.remove('unread');
+    el.style.background = '';
+    var btn = el.querySelector('button');
+    if (btn) btn.remove();
+    var title = el.querySelector('div > div');
+    if (title) title.style.fontWeight = '400';
+  });
+}
+</script>
 {% endblock %}

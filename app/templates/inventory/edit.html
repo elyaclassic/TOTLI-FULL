@@ -3,6 +3,16 @@
 {% block content %}
 <style>
 .inventory-table input[type="number"] { width: 100%; min-width: 70px; }
+/* Searchable select */
+.ss-wrap{position:relative;min-width:280px;display:inline-block;}
+.ss-input{width:100%;padding:6px 10px;border:1px solid #ced4da;border-radius:6px;font-size:14px;outline:none;}
+.ss-input:focus{border-color:#86b7fe;box-shadow:0 0 0 .2rem rgba(13,110,253,.15);}
+.ss-dropdown{position:absolute;top:100%;left:0;right:0;max-height:250px;overflow-y:auto;background:#fff;border:1px solid #ced4da;border-top:none;border-radius:0 0 6px 6px;z-index:1050;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);}
+.ss-dropdown.show{display:block;}
+.ss-option{padding:6px 10px;cursor:pointer;font-size:14px;}
+.ss-option:hover,.ss-option.highlighted{background:#0d6efd;color:#fff;}
+.ss-option.selected{background:#e7f1ff;}
+.ss-empty{padding:8px 10px;color:#999;font-size:13px;}
 </style>
 <div class="container-fluid">
     <div class="page-header mb-3">
@@ -37,12 +47,17 @@
             {% if products_to_add %}
             <form method="post" action="/inventory/{{ doc.id }}/add-product" class="d-inline row g-2 align-items-end">
                 <div class="col-auto">
-                    <select name="product_id" class="form-select form-select-sm" style="min-width: 220px;" required>
-                        <option value="">— Tovarni tanlang —</option>
+                    <input type="hidden" name="product_id" id="productIdInput" required>
+                    <div class="ss-wrap">
+                      <input type="text" class="ss-input" id="productSearchInput" placeholder="Tovar nomini yozing..." autocomplete="off">
+                      <div class="ss-dropdown" id="productDropdown">
                         {% for p in products_to_add %}
-                        <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                        <div class="ss-option" data-id="{{ p.id }}" data-name="{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}">
+                          {{ p.name }}{% if p.code %} <small style="color:#888;">({{ p.code }})</small>{% endif %}
+                        </div>
                         {% endfor %}
-                    </select>
+                      </div>
+                    </div>
                 </div>
                 <div class="col-auto">
                     <button type="submit" class="top-btn btn btn-outline-primary btn-sm"><i class="bi bi-plus-lg"></i> Qo'shish</button>
@@ -86,6 +101,7 @@
                                 <th>Farq</th>
                                 {% if show_tannarx %}<th>Tannarx</th><th>Sotuv narx</th>{% endif %}
                                 <th class="text-center" style="width: 90px;">Qayerdan</th>
+                                <th class="text-center" style="width: 50px;"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -104,6 +120,9 @@
                                     <a href="/reports/stock/source?warehouse_id={{ doc.warehouse_id }}&product_id={{ row.product_id }}" class="btn-act" title="Bu omborda shu tovar qayerdan keldi — harakat tarixi" target="_blank"><i class="bi bi-clock-history"></i></a>
                                     {% else %}—{% endif %}
                                 </td>
+                                <td class="text-center">
+                                    <button type="button" class="btn btn-sm btn-outline-danger p-0 px-1" title="O'chirish" onclick="removeInventoryRow(this, {{ row.item_id }})"><i class="bi bi-x-lg"></i></button>
+                                </td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -116,4 +135,113 @@
     <div class="alert alert-light border">Jadval bo'sh. «Qoldiq tovarlarni yuklash» yoki «Tovarlarni tanlash» orqali to'ldiring.</div>
     {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function removeInventoryRow(btn, itemId) {
+  if (!confirm('Bu tovarni ro\'yxatdan o\'chirmoqchimisiz?')) return;
+  var csrfToken = document.querySelector('meta[name="csrf-token"]');
+  var token = csrfToken ? csrfToken.getAttribute('content') : '';
+  fetch('/inventory/{{ doc.id }}/remove-item', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+    body: 'item_id=' + itemId + '&csrf_token=' + encodeURIComponent(token)
+  }).then(function(r) {
+    return r.json();
+  }).then(function(d) {
+    if (d.success) {
+      btn.closest('tr').remove();
+      document.querySelectorAll('.inventory-table tbody tr').forEach(function(tr, i) {
+        tr.querySelector('td').textContent = i + 1;
+      });
+    } else {
+      alert(d.error || 'O\'chirishda xatolik');
+    }
+  }).catch(function() { alert('Server xatosi'); });
+}
+
+(function(){
+  var input = document.getElementById('productSearchInput');
+  var dropdown = document.getElementById('productDropdown');
+  var hiddenInput = document.getElementById('productIdInput');
+  if(!input || !dropdown) return;
+
+  var allOptions = Array.from(dropdown.querySelectorAll('.ss-option'));
+  var highlighted = -1;
+
+  input.addEventListener('focus', function(){
+    filterOptions();
+    dropdown.classList.add('show');
+  });
+
+  input.addEventListener('input', function(){
+    hiddenInput.value = '';
+    filterOptions();
+    dropdown.classList.add('show');
+  });
+
+  input.addEventListener('keydown', function(e){
+    var visible = allOptions.filter(function(o){return o.style.display !== 'none';});
+    if(e.key === 'ArrowDown'){
+      e.preventDefault();
+      highlighted = Math.min(highlighted + 1, visible.length - 1);
+      updateHighlight(visible);
+    } else if(e.key === 'ArrowUp'){
+      e.preventDefault();
+      highlighted = Math.max(highlighted - 1, 0);
+      updateHighlight(visible);
+    } else if(e.key === 'Enter'){
+      e.preventDefault();
+      if(highlighted >= 0 && highlighted < visible.length) selectOption(visible[highlighted]);
+    } else if(e.key === 'Escape'){
+      dropdown.classList.remove('show');
+    }
+  });
+
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.ss-wrap')) dropdown.classList.remove('show');
+  });
+
+  allOptions.forEach(function(opt){
+    opt.addEventListener('click', function(){ selectOption(opt); });
+  });
+
+  function filterOptions(){
+    var q = (input.value || '').toLowerCase();
+    highlighted = -1;
+    var count = 0;
+    allOptions.forEach(function(opt){
+      var name = (opt.getAttribute('data-name') || '').toLowerCase();
+      var show = !q || name.indexOf(q) !== -1;
+      opt.style.display = show ? '' : 'none';
+      opt.classList.remove('highlighted');
+      if(show) count++;
+    });
+    // Show "not found" message
+    var empty = dropdown.querySelector('.ss-empty');
+    if(count === 0){
+      if(!empty){empty = document.createElement('div');empty.className='ss-empty';empty.textContent='Topilmadi';dropdown.appendChild(empty);}
+      empty.style.display = '';
+    } else if(empty){
+      empty.style.display = 'none';
+    }
+  }
+
+  function updateHighlight(visible){
+    allOptions.forEach(function(o){o.classList.remove('highlighted');});
+    if(highlighted >= 0 && highlighted < visible.length){
+      visible[highlighted].classList.add('highlighted');
+      visible[highlighted].scrollIntoView({block:'nearest'});
+    }
+  }
+
+  function selectOption(opt){
+    input.value = opt.getAttribute('data-name');
+    hiddenInput.value = opt.getAttribute('data-id');
+    dropdown.classList.remove('show');
+    highlighted = -1;
+  }
+})();
+</script>
 {% endblock %}

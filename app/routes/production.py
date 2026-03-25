@@ -37,6 +37,7 @@ from app.utils.notifications import check_low_stock_and_notify
 from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.audit import log_action
+from app.services.stock_service import create_stock_movement
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -170,6 +171,20 @@ def _do_complete_production_stock(db, production, recipe):
         ).first()
         if stock:
             stock.quantity -= actual_use
+            db.flush()
+            db.add(StockMovement(
+                stock_id=stock.id,
+                warehouse_id=wh_id,
+                product_id=product_id,
+                operation_type="production_consumption",
+                document_type="Production",
+                document_id=production.id,
+                document_number=production.number,
+                quantity_change=-actual_use,
+                quantity_after=stock.quantity,
+                note=f"Ishlab chiqarish (xom ashyo): {production.number}",
+                created_at=datetime.now(),
+            ))
     total_material_cost = 0.0
     for product_id, actual_use in items_actual:
         product = db.query(Product).filter(Product.id == product_id).first()
@@ -216,6 +231,26 @@ def _do_complete_production_stock(db, production, recipe):
         if hasattr(Stock, "cost_price"):
             new_stock.cost_price = cost_per_unit
         db.add(new_stock)
+    db.flush()
+    # Tayyor mahsulot kirimini stock_movements ga yozish
+    out_stock = db.query(Stock).filter(
+        Stock.warehouse_id == out_wh_id,
+        Stock.product_id == recipe.product_id,
+    ).first()
+    if out_stock:
+        db.add(StockMovement(
+            stock_id=out_stock.id,
+            warehouse_id=out_wh_id,
+            product_id=recipe.product_id,
+            operation_type="production_output",
+            document_type="Production",
+            document_id=production.id,
+            document_number=production.number,
+            quantity_change=output_units,
+            quantity_after=out_stock.quantity,
+            note=f"Ishlab chiqarish (tayyor mahsulot): {production.number}",
+            created_at=datetime.now(),
+        ))
     output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
     if output_product:
         product_stock = db.query(Stock).filter(
@@ -493,6 +528,7 @@ async def production_index_page(
 @router.get("/recipes", response_class=HTMLResponse)
 async def production_recipes(
     request: Request,
+    q: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -519,6 +555,7 @@ async def production_recipes(
         "recipe_products_json": recipe_products_json,
         "materials": materials,
         "warehouses": warehouses,
+        "search_q": q or "",
         "page_title": "Retseptlar",
     })
 
@@ -594,12 +631,12 @@ async def add_recipe(
 async def add_recipe_item(
     recipe_id: int,
     product_id: int = Form(...),
-    quantity: float = Form(...),
+    quantity: float = Form(0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    if quantity <= 0:
-        raise HTTPException(status_code=400, detail="Miqdor musbat bo'lishi kerak")
+    if quantity < 0:
+        quantity = 0
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
@@ -646,12 +683,12 @@ async def edit_recipe_item(
     recipe_id: int,
     item_id: int,
     product_id: int = Form(...),
-    quantity: float = Form(...),
+    quantity: float = Form(0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    if quantity <= 0:
-        raise HTTPException(status_code=400, detail="Miqdor musbat bo'lishi kerak")
+    if quantity < 0:
+        quantity = 0
     item = db.query(RecipeItem).filter(
         RecipeItem.id == item_id,
         RecipeItem.recipe_id == recipe_id,

@@ -44,22 +44,19 @@
 
     <!-- Filter card -->
     <div class="filter-card mb-3">
-        <form method="get" action="/production/recipes" class="d-flex flex-wrap gap-2 align-items-end">
+        <div class="d-flex flex-wrap gap-2 align-items-end">
             <div class="search-wrap">
                 <i class="bi bi-search"></i>
-                <input type="search" name="q" value="{{ search_q or '' }}" class="form-control" placeholder="Retsept nomi bo'yicha qidirish..." autocomplete="off">
+                <input type="search" id="recipeSearch" class="form-control" placeholder="Retsept nomi bo'yicha qidirish..." autocomplete="off" oninput="filterRecipes()" onkeydown="if(event.key==='Enter')event.preventDefault();">
             </div>
-            <button type="submit" class="btn btn-outline-primary btn-sm px-3">Qidirish</button>
-            {% if search_q %}
-            <a href="/production/recipes" class="btn btn-outline-secondary btn-sm">Tozalash</a>
-            {% endif %}
-        </form>
+            <span class="text-muted small" id="recipeFilterCount"></span>
+        </div>
     </div>
 
     <!-- Recipes grid -->
     <div class="row g-3">
         {% for recipe in recipes %}
-        <div class="col-md-4">
+        <div class="col-md-4 recipe-card-col" data-name="{{ recipe.name|lower }}">
             <div class="data-table h-100" style="display:flex; flex-direction:column;">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <strong>{{ recipe.name }}</strong>
@@ -339,5 +336,21 @@
             });
         }
     })();
+
+    function filterRecipes() {
+        var q = (document.getElementById('recipeSearch').value || '').toLowerCase().trim();
+        var cards = document.querySelectorAll('.recipe-card-col');
+        var shown = 0;
+        cards.forEach(function(card) {
+            var name = card.getAttribute('data-name') || '';
+            var match = !q || name.indexOf(q) !== -1;
+            card.style.display = match ? '' : 'none';
+            if (match) shown++;
+        });
+        var info = document.getElementById('recipeFilterCount');
+        if (info) info.textContent = q ? (shown + ' / ' + cards.length + ' ta topildi') : '';
+    }
+    // Sahifa yuklanganda filter qo'llash (agar URL dan q bo'lsa)
+    filterRecipes();
 </script>
 {% endblock %}

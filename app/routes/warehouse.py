@@ -8,7 +8,7 @@ from urllib.parse import quote, unquote
 
 import openpyxl
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, and_, func, text
 from typing import Optional
@@ -997,6 +997,29 @@ async def inventory_remove_zero_balance(
     return RedirectResponse(url=f"/inventory/{doc_id}/edit?message=" + quote(msg), status_code=303)
 
 
+@inventory_router.post("/{doc_id}/remove-item")
+async def inventory_remove_item(
+    request: Request,
+    doc_id: int,
+    item_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Inventarizatsiya jadvalidan bitta qatorni o'chirish."""
+    doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
+    if not doc or doc.status != "draft":
+        return JSONResponse({"success": False, "error": "Hujjat topilmadi yoki tasdiqlanган"})
+    item = db.query(StockAdjustmentDocItem).filter(
+        StockAdjustmentDocItem.id == item_id,
+        StockAdjustmentDocItem.doc_id == doc_id,
+    ).first()
+    if not item:
+        return JSONResponse({"success": False, "error": "Qator topilmadi"})
+    db.delete(item)
+    db.commit()
+    return JSONResponse({"success": True})
+
+
 @inventory_router.post("/{doc_id}/save")
 async def inventory_save_draft(
     doc_id: int,
@@ -1168,21 +1191,31 @@ async def inventory_confirm(
             for r in rows[1:]:
                 db.delete(r)
     db.commit()
-    for item in doc.items:
+    # Items ni oldindan list ga olish (commit dan keyin lazy-load muammosi uchun)
+    items_snapshot = [
+        {
+            "item": item,
+            "warehouse_id": item.warehouse_id,
+            "product_id": item.product_id,
+            "quantity": float(item.quantity or 0),
+        }
+        for item in doc.items
+    ]
+    for snap in items_snapshot:
         stocks = db.query(Stock).filter(
-            Stock.warehouse_id == item.warehouse_id,
-            Stock.product_id == item.product_id,
+            Stock.warehouse_id == snap["warehouse_id"],
+            Stock.product_id == snap["product_id"],
         ).all()
         old_qty = sum(float(s.quantity or 0) for s in stocks)
-        new_qty = float(item.quantity or 0)
-        if hasattr(item, "previous_quantity"):
-            item.previous_quantity = old_qty
+        new_qty = snap["quantity"]
+        if hasattr(snap["item"], "previous_quantity"):
+            snap["item"].previous_quantity = old_qty
         quantity_change = new_qty - old_qty
         if abs(quantity_change) > 1e-9:
             create_stock_movement(
                 db=db,
-                warehouse_id=item.warehouse_id,
-                product_id=item.product_id,
+                warehouse_id=snap["warehouse_id"],
+                product_id=snap["product_id"],
                 quantity_change=quantity_change,
                 operation_type="adjustment",
                 document_type="StockAdjustmentDoc",

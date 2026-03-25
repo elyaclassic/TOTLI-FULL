@@ -1043,24 +1043,7 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
             if prod:
                 prod.purchase_price = item.cost_price
 
-    for wh_id in doc_warehouse_ids:
-        for stock in db.query(Stock).filter(Stock.warehouse_id == wh_id).all():
-            if (stock.warehouse_id, stock.product_id) in doc_pairs:
-                continue
-            old_q = float(stock.quantity or 0)
-            if old_q > 0:
-                create_stock_movement(
-                    db=db,
-                    warehouse_id=stock.warehouse_id,
-                    product_id=stock.product_id,
-                    quantity_change=-old_q,
-                    operation_type="adjustment",
-                    document_type="StockAdjustmentDoc",
-                    document_id=doc.id,
-                    document_number=doc.number,
-                    user_id=current_user.id if current_user else None,
-                    note=f"Qoldiq tuzatish (hujjatda qatori yo'q): {doc.number}",
-                )
+    # Faqat hujjatdagi tovarlar yangilanadi — boshqa tovarlarning qoldig'iga tegmaydi
 
     doc.status = "confirmed"
     db.commit()

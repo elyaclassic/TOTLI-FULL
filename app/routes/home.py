@@ -149,6 +149,13 @@ async def home(
         overdue_debts_count = 0
         if not error:
             error = "Statistika yuklanmadi"
+    # Bildirishnomalar ro'yxati
+    user_notifications = []
+    try:
+        from app.utils.notifications import get_user_notifications
+        user_notifications = get_user_notifications(db, current_user.id, limit=20)
+    except Exception:
+        pass
     return templates.TemplateResponse("index.html", {
         "request": request,
         "stats": stats,
@@ -159,6 +166,7 @@ async def home(
         "low_stock_count": low_stock_count,
         "birthday_today_count": birthday_today_count,
         "overdue_debts_count": overdue_debts_count,
+        "user_notifications": user_notifications,
     })
 
 
