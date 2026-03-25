@@ -6,6 +6,8 @@ from typing import List, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
+from datetime import timedelta
+
 from app.models.database import (
     Order,
     OrderItem,
@@ -19,6 +21,7 @@ from app.models.database import (
     Warehouse,
     User,
     Department,
+    Notification,
 )
 from app.utils.notifications import create_notification
 
@@ -71,14 +74,25 @@ def notify_qiyom_operators(
     qiyom operatorlariga bildirish.
     """
     users = _get_users_by_role(db, "production", "operator", "rahbar", "raxbar")
+    since = datetime.now() - timedelta(hours=24)
+    msg_text = (
+        f"Sotuv {order_number} uchun «{product_name}» "
+        f"yarim tayyor omborda yetarli emas. Qiyom tayyorlang."
+    )
     for user in users:
+        # 24 soat ichida bir xil bildirishnoma yaratilmasin
+        existing = db.query(Notification).filter(
+            Notification.title == "Qiyom tayyorlash kerak",
+            Notification.user_id == user.id,
+            Notification.related_entity_id == order_id,
+            Notification.created_at >= since,
+        ).first()
+        if existing:
+            continue
         create_notification(
             db=db,
             title="Qiyom tayyorlash kerak",
-            message=(
-                f"Sotuv {order_number} uchun «{product_name}» "
-                f"yarim tayyor omborda yetarli emas. Qiyom tayyorlang."
-            ),
+            message=msg_text,
             notification_type="warning",
             user_id=user.id,
             priority="high",

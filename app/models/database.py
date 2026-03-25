@@ -1010,19 +1010,24 @@ class Salary(Base):
 class Attendance(Base):
     """Davomat yozuvi (kunlik — bitta xodim, bitta sana)"""
     __tablename__ = "attendances"
-    
+    __table_args__ = (
+        UniqueConstraint("employee_id", "date", name="uq_attendance_employee_date"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
     date = Column(Date, nullable=False)
+    doc_id = Column(Integer, ForeignKey("attendance_docs.id"), nullable=True)
     check_in = Column(DateTime, nullable=True)
     check_out = Column(DateTime, nullable=True)
     hours_worked = Column(Float, default=0)
-    status = Column(String(20), default="present")  # present, absent, leave
+    status = Column(String(20), default="present")  # present, absent, leave, kasallik, tatil, mehnat_safari
     event_snapshot_path = Column(String(255), nullable=True)
     note = Column(String(500), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
-    
+
     employee = relationship("Employee", backref="attendances")
+    doc = relationship("AttendanceDoc", backref="attendances")
 
 
 class AttendanceDoc(Base):
@@ -1606,6 +1611,7 @@ def init_db():
     ensure_employee_piecework_tasks_table()
     ensure_dismissal_docs_table()
     ensure_production_groups_tables()
+    ensure_attendance_improvements()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
@@ -1682,6 +1688,24 @@ def ensure_attendance_advance_tables():
             ed_cols = [row[1] for row in r]
             if col not in ed_cols:
                 conn.execute(text(f"ALTER TABLE employment_docs ADD COLUMN {col} {sql}"))
+
+
+def ensure_attendance_improvements():
+    """Attendance jadvaliga doc_id, UNIQUE constraint va yangi status qo'shish."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(attendances)"))
+            cols = [row[1] for row in r]
+            if "doc_id" not in cols:
+                conn.execute(text("ALTER TABLE attendances ADD COLUMN doc_id INTEGER REFERENCES attendance_docs(id)"))
+            # UNIQUE index (dublikat bo'lmasligi uchun)
+            try:
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_attendance_employee_date ON attendances(employee_id, date)"))
+            except Exception:
+                pass  # Agar dublikatlar bor bo'lsa, index yaratilmaydi
+    except Exception as e:
+        print(f"ensure_attendance_improvements: {e}")
 
 
 def ensure_cash_transfer_inkasatsiya():

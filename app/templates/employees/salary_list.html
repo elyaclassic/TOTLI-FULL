@@ -101,8 +101,7 @@
                                 <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.bonus) }}">
                             </td>
                             <td class="text-end">
-                                <input type="hidden" name="deduction_{{ row.employee.id }}" form="salaryForm" value="{{ row.deduction }}">
-                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0" value="{{ '{:,.0f}'.format(row.deduction) }}">
+                                <input type="number" name="deduction_{{ row.employee.id }}" form="salaryForm" value="{{ row.deduction | int }}" class="form-control form-control-sm text-end py-0" style="width:90px;display:inline-block;" min="0" step="1000" title="Jarima / ushlab qolish summasi">
                             </td>
                             <td class="text-end">
                                 <input type="hidden" name="advance_{{ row.employee.id }}" form="salaryForm" value="{{ row.advance_deduction }}">

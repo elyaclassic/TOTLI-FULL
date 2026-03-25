@@ -218,7 +218,12 @@ async def startup():
         from app.utils.telegram_bot import start_telegram_bot
         start_telegram_bot()
     except Exception as e:
-        print("[Startup] Telegram bot ishga tushmadi:", e)
+        print("[Startup] Telegram chat bot ishga tushmadi:", e)
+    try:
+        from app.bot.main import start_bot
+        await start_bot()
+    except Exception as e:
+        print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)

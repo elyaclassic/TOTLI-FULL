@@ -568,6 +568,16 @@ async def sales_confirm(
             partner.balance = (partner.balance or 0) + order.debt
     db.commit()
     check_low_stock_and_notify(db)
+    # Telegram bildirish
+    try:
+        from app.bot.services.notifier import notify_new_sale, notify_big_sale
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+        p_name = partner.name if partner else "Naqd"
+        notify_new_sale(order.number, p_name, order.total or 0, order.paid or 0)
+        if (order.total or 0) >= 10_000_000:
+            notify_big_sale(order.number, p_name, order.total)
+    except Exception:
+        pass
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
 

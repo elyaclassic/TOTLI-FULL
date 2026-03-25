@@ -10,9 +10,10 @@ from app.core import templates
 from sqlalchemy.orm import joinedload
 from app.models.database import (
     get_db, User, Product, Partner, Order, Stock,
-    CashRegister, Employee, Production, Recipe, Warehouse,
+    CashRegister, Employee, Production, Recipe, Warehouse, Notification,
 )
 from app.deps import get_current_user, require_auth
+from app.utils.notifications import get_user_notifications, mark_as_read
 from app.utils.production_order import recipe_kg_per_unit
 
 router = APIRouter(tags=["home"])
@@ -167,6 +168,32 @@ async def home(
         "birthday_today_count": birthday_today_count,
         "overdue_debts_count": overdue_debts_count,
         "user_notifications": user_notifications,
+    })
+
+
+@router.get("/notifications", response_class=HTMLResponse)
+async def notifications_page(
+    request: Request,
+    title: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Bildirishnomalar ro'yxati — title bo'yicha filtrlash mumkin"""
+    query = db.query(Notification).filter(
+        Notification.user_id == current_user.id,
+        Notification.is_read == False,
+    ).filter(
+        (Notification.expires_at == None) | (Notification.expires_at > datetime.now())
+    )
+    if title:
+        query = query.filter(Notification.title == title)
+    notifications = query.order_by(Notification.created_at.desc()).limit(100).all()
+    return templates.TemplateResponse("notifications/list.html", {
+        "request": request,
+        "notifications": notifications,
+        "filter_title": title,
+        "current_user": current_user,
+        "page_title": title or "Bildirishnomalar",
     })
 
 

@@ -2,15 +2,16 @@
 Reja (scheduler) — kunlik/vaqtli vazifalar.
 Kam qolgan tovar va muddati o'tgan qarzlar uchun bildirishnoma yaratadi.
 Kunlik avtomatik baza backup.
+Hikvision dan kunlik davomat yuklash.
 """
 
 import os
 import shutil
 import glob
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.models.database import SessionLocal, Order
+from app.models.database import SessionLocal, Order, Notification
 from app.utils.notifications import check_low_stock_and_notify, create_notification
 
 # Baza fayli va backup papkasi
@@ -26,25 +27,68 @@ def _scheduled_notifications_job():
         # 1) Kam qolgan tovarlar
         n_low = check_low_stock_and_notify(db)
         # 2) Muddati o'tgan qarzlar (sotuvda qarz > 0, 7+ kun oldin)
-        overdue_cutoff = datetime.now() - timedelta(days=7)
-        overdue = db.query(Order).filter(
-            Order.type == "sale",
-            Order.debt > 0,
-            Order.created_at < overdue_cutoff,
-        ).all()
-        if overdue:
-            total_debt = sum(o.debt for o in overdue)
-            create_notification(
-                db,
-                title="Muddati o'tgan qarzlar",
-                message=f"{len(overdue)} ta buyurtmada jami {total_debt:,.0f} so'm qarz muddati o'tgan (7+ kun).",
-                notification_type="warning",
-                priority="high",
-                action_url="/reports/debts",
-                related_entity_type="order",
-            )
+        # 24 soat ichida takroriy bildirishnoma yaratilmasin
+        since = datetime.now() - timedelta(hours=24)
+        existing_debt_notif = db.query(Notification).filter(
+            Notification.title == "Muddati o'tgan qarzlar",
+            Notification.created_at >= since,
+        ).first()
+        if not existing_debt_notif:
+            overdue_cutoff = datetime.now() - timedelta(days=7)
+            overdue = db.query(Order).filter(
+                Order.type == "sale",
+                Order.debt > 0,
+                Order.created_at < overdue_cutoff,
+            ).all()
+            if overdue:
+                total_debt = sum(o.debt for o in overdue)
+                create_notification(
+                    db,
+                    title="Muddati o'tgan qarzlar",
+                    message=f"{len(overdue)} ta buyurtmada jami {total_debt:,.0f} so'm qarz muddati o'tgan (7+ kun).",
+                    notification_type="warning",
+                    priority="high",
+                    action_url="/reports/debts",
+                    related_entity_type="order",
+                )
     except Exception as e:
         print(f"[Scheduler] xato: {e}")
+    finally:
+        db.close()
+
+
+# Hikvision sozlamalari
+_HIKVISION_HOST = "192.168.1.199"
+_HIKVISION_PORT = 443
+_HIKVISION_USERNAME = "admin"
+_HIKVISION_PASSWORD = "Samsung0707"
+
+
+def _daily_hikvision_sync_job():
+    """Har kuni Hikvision dan shu kungi davomatni avtomatik yuklash.
+    Birinchi kelish va oxirgi ketish vaqti bo'yicha."""
+    db = SessionLocal()
+    try:
+        from app.utils.hikvision import sync_hikvision_attendance
+        today = date.today()
+        result = sync_hikvision_attendance(
+            hikvision_host=_HIKVISION_HOST,
+            hikvision_port=_HIKVISION_PORT,
+            hikvision_username=_HIKVISION_USERNAME,
+            hikvision_password=_HIKVISION_PASSWORD,
+            start_date=today,
+            end_date=today,
+            db_session=db,
+        )
+        imported = result.get("imported", 0)
+        events = result.get("events_count", 0)
+        errors = result.get("errors", [])
+        print(f"[Hikvision Sync] {today}: hodisa={events}, yuklangan={imported}, xato={len(errors)}")
+        if errors:
+            for err in errors[:3]:
+                print(f"  [Hikvision] {err}")
+    except Exception as e:
+        print(f"[Hikvision Sync] xato: {e}")
     finally:
         db.close()
 
@@ -71,11 +115,38 @@ def _daily_backup_job():
         print(f"[Backup] Xato: {e}")
 
 
+def _tg_absent_check():
+    """Ertalab — kim kelmagan"""
+    try:
+        from app.bot.services.notifier import check_absent_employees
+        check_absent_employees()
+    except Exception as e:
+        print(f"[Scheduler] TG absent check xato: {e}")
+
+
+def _tg_low_stock():
+    """Ertalab — kam qolgan tovarlar"""
+    try:
+        from app.bot.services.notifier import check_low_stock_notify
+        check_low_stock_notify()
+    except Exception as e:
+        print(f"[Scheduler] TG low stock xato: {e}")
+
+
+def _tg_daily_summary():
+    """Kechqurun — kunlik yakuniy hisobot"""
+    try:
+        from app.bot.services.notifier import send_daily_summary
+        send_daily_summary()
+    except Exception as e:
+        print(f"[Scheduler] TG daily summary xato: {e}")
+
+
 _scheduler = None
 
 
 def start_scheduler():
-    """Scheduler ni ishga tushiradi — har 6 soatda bildirishnomalar, kunlik backup."""
+    """Scheduler ni ishga tushiradi — har 6 soatda bildirishnomalar, kunlik backup, Hikvision sync."""
     global _scheduler
     if _scheduler is not None:
         return
@@ -86,8 +157,21 @@ def start_scheduler():
     _scheduler.add_job(_daily_backup_job, "cron", hour=23, minute=0, id="daily_backup")
     # Hozir ham bir marta backup olish
     _scheduler.add_job(_daily_backup_job, "date", run_date=datetime.now() + timedelta(seconds=10), id="backup_first")
+    # Hikvision davomat yuklash — har kuni soat 22:00 da (ish kuni tugagach)
+    _scheduler.add_job(_daily_hikvision_sync_job, "cron", hour=22, minute=0, id="hikvision_daily")
+    # Har 2 soatda ham sync qilish (kun davomida yangilanib turishi uchun)
+    _scheduler.add_job(_daily_hikvision_sync_job, "interval", hours=2, id="hikvision_interval")
+    # Hozir ham bir marta yuklash
+    _scheduler.add_job(_daily_hikvision_sync_job, "date", run_date=datetime.now() + timedelta(minutes=2), id="hikvision_first")
+    # Telegram bildirish vazifalari
+    # Ertalab 10:00 — kim kelmagan
+    _scheduler.add_job(_tg_absent_check, "cron", hour=10, minute=0, id="tg_absent")
+    # Ertalab 09:00 — kam qolgan tovarlar
+    _scheduler.add_job(_tg_low_stock, "cron", hour=9, minute=0, id="tg_low_stock")
+    # Kechqurun 21:00 — kunlik yakuniy hisobot
+    _scheduler.add_job(_tg_daily_summary, "cron", hour=21, minute=0, id="tg_daily_summary")
     _scheduler.start()
-    print("[Scheduler] Reja ishga tushdi (bildirishnomalar + kunlik backup soat 23:00)")
+    print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + Hikvision sync + TG notify)")
 
 
 def stop_scheduler():

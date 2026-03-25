@@ -207,35 +207,36 @@
           <div><div style="font-size:13px;">Muddati o'tgan qarzlar (7+ kun)</div><strong>{{ overdue_debts_count|default(0) }}</strong></div>
         </a>
 
-        <!-- Bildirishnomalar ro'yxati -->
+        <!-- Bildirishnomalar ro'yxati (guruhlab, soni bilan — notif-item uslubida) -->
         {% if user_notifications %}
         <div style="border-top:2px solid #e9ecef;margin-top:8px;padding-top:8px;">
           <div style="font-size:12px;color:#888;margin-bottom:6px;">So'nggi bildirishnomalar</div>
-          <div style="max-height:300px;overflow-y:auto;" id="notifList">
+          <div id="notifList">
+            {% set ns = namespace(seen=[]) %}
             {% for n in user_notifications %}
-            <div class="notif-row{% if not n.is_read %} unread{% endif %}" id="notif-{{ n.id }}" style="display:flex;align-items:flex-start;gap:8px;padding:8px 4px;border-bottom:1px solid #f5f5f5;font-size:13px;{% if not n.is_read %}background:#f0f7ff;border-radius:6px;margin-bottom:2px;{% endif %}">
-              <div style="flex-shrink:0;margin-top:2px;">
-                {% if n.notification_type == 'warning' %}
-                <i class="bi bi-exclamation-triangle-fill" style="color:#f57c00;"></i>
-                {% elif n.notification_type == 'error' %}
-                <i class="bi bi-x-circle-fill" style="color:#dc3545;"></i>
-                {% elif n.notification_type == 'success' %}
-                <i class="bi bi-check-circle-fill" style="color:#28a745;"></i>
-                {% else %}
-                <i class="bi bi-info-circle-fill" style="color:#1a73e8;"></i>
-                {% endif %}
-              </div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-weight:{% if not n.is_read %}600{% else %}400{% endif %};">{{ n.title }}</div>
-                <div style="color:#666;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ n.message }}</div>
-                <div style="color:#aaa;font-size:11px;margin-top:2px;">{{ n.created_at | fmt_date('%d.%m %H:%M') }}</div>
-              </div>
-              {% if not n.is_read %}
-              <button class="btn btn-sm p-0" style="flex-shrink:0;color:#aaa;font-size:16px;" title="O'qildi" onclick="markRead({{ n.id }})">
-                <i class="bi bi-check2"></i>
-              </button>
+              {% if n.title not in ns.seen %}
+                {% set ns.seen = ns.seen + [n.title] %}
+                {% set count = namespace(val=0) %}
+                {% for m in user_notifications %}
+                  {% if m.title == n.title %}
+                    {% set count.val = count.val + 1 %}
+                  {% endif %}
+                {% endfor %}
+                <a href="/notifications?title={{ n.title | urlencode }}" class="notif-item">
+                  <div class="icon-b" style="background:{% if n.notification_type == 'warning' %}#fff3e0;color:#f57c00{% elif n.notification_type == 'success' %}#e8f5e9;color:#28a745{% elif n.notification_type == 'error' %}#ffebee;color:#dc3545{% else %}#e3f2fd;color:#1a73e8{% endif %};">
+                    {% if n.notification_type == 'warning' %}
+                    <i class="bi bi-exclamation-triangle"></i>
+                    {% elif n.notification_type == 'success' %}
+                    <i class="bi bi-check-circle"></i>
+                    {% elif n.notification_type == 'error' %}
+                    <i class="bi bi-x-circle"></i>
+                    {% else %}
+                    <i class="bi bi-info-circle"></i>
+                    {% endif %}
+                  </div>
+                  <div><div style="font-size:13px;">{{ n.title }}</div><strong>{{ count.val }}</strong></div>
+                </a>
               {% endif %}
-            </div>
             {% endfor %}
           </div>
         </div>

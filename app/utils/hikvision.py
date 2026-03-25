@@ -356,9 +356,9 @@ def sync_hikvision_attendance(
         if not events:
             result["errors"].append("Hikvision qurilmasidan shu sana uchun hodisa qaytmadi. IP/parol va sana to'g'riligini tekshiring.")
 
-        # employeeNo -> employee_id (barcha xodimlar, jumladan Hikvision'dan import qilingan is_active=False)
+        # employeeNo -> employee_id (faqat faol xodimlar — bo'shatilganlar tabelga qo'shilmaydi)
         employee_by_no: Dict[str, int] = {}
-        for emp in db_session.query(Employee).all():
+        for emp in db_session.query(Employee).filter(Employee.is_active == True).all():
             for key in (getattr(emp, "hikvision_id", None), getattr(emp, "code", None)):
                 if key:
                     employee_by_no[str(key).strip()] = emp.id

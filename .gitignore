@@ -84,3 +84,5 @@ totli_mobile/ios/Pods/
 totli_mobile/ios/.symlinks/
 totli_mobile/ios/Flutter/Flutter.framework
 totli_mobile/ios/Flutter/Flutter.podspec
+
+app/static/attendance_snapshots/

@@ -1483,7 +1483,7 @@ async def attendance_form_save(
         hours_str = (form.get(f"hours_{emp_id}") or "").strip().replace(",", ".")
         status_val = (form.get(f"status_{emp_id}") or "").strip() or "present"
         note_val = (form.get(f"note_{emp_id}") or "").strip() or None
-        if status_val not in ("present", "absent", "leave"):
+        if status_val not in ("present", "absent", "leave", "kasallik", "tatil", "mehnat_safari"):
             status_val = "present"
         if not check_in_str and not check_out_str:
             status_val = "absent"
@@ -1541,6 +1541,9 @@ async def attendance_form_confirm(
     number = f"TBL-{doc_date.strftime('%Y%m%d')}-{count + 1:04d}"
     doc = AttendanceDoc(number=number, date=doc_date, user_id=current_user.id, confirmed_at=datetime.now())
     db.add(doc)
+    db.flush()
+    # Shu kundagi barcha attendance yozuvlariga doc_id qo'shish
+    db.query(Attendance).filter(Attendance.date == doc_date).update({"doc_id": doc.id})
     db.commit()
     return RedirectResponse(url="/attendance?confirmed=1", status_code=303)
 
@@ -2268,14 +2271,20 @@ async def employee_salary_page(
     if year < 2020 or year > 2030:
         year = today.year
     # Faqat ishga qabul hujjati bor xodimlar ro'yxatda ko'rinadi
+    # Bo'shatilgan xodimlarni chiqarib tashlash (shu oydan oldin bo'shatilganlar)
     hired_employee_ids = db.query(EmploymentDoc.employee_id).distinct().all()
     hired_ids = [r[0] for r in hired_employee_ids if r[0]]
-    if not hired_ids:
+    dismissed_before = db.query(DismissalDoc.employee_id).filter(
+        DismissalDoc.doc_date < date(year, month, 1),
+    ).distinct().all()
+    dismissed_ids = {r[0] for r in dismissed_before if r[0]}
+    active_hired_ids = [eid for eid in hired_ids if eid not in dismissed_ids]
+    if not active_hired_ids:
         employees = []
     else:
         employees = (
             db.query(Employee)
-            .filter(Employee.is_active == True, Employee.id.in_(hired_ids))
+            .filter(Employee.is_active == True, Employee.id.in_(active_hired_ids))
             .order_by(Employee.full_name)
             .all()
         )
@@ -2351,6 +2360,11 @@ async def employee_salary_page(
         except Exception:
             pass
     days_in_month = last_day
+    # Hikvision dan o'tmaydigan xodimlar (hikvision_id yo'q) — davomat yozuvi bo'lmasa to'liq oy ishlagan deb hisoblanadi
+    for emp in employees:
+        if emp.id not in worked_days_by_emp:
+            if not getattr(emp, "hikvision_id", None):
+                worked_days_by_emp[emp.id] = days_in_month
     # Bo'lak ish haqi: ishlab chiqarilgan miqdor * (bitta bo'lak narxi). Bitta stavka ishlatiladi (min), yig'indi emas.
     piecework_calculated = {}
     emp_by_id = {e.id: e for e in employees}
@@ -2532,12 +2546,11 @@ async def employee_salary_page(
         total = amount_for_total + bonus - deduction - adv_ded
         total = round(total, 2)
         paid = float(s.paid if s and s.paid is not None else 0) or 0
-        status = (s.status if s else "pending") or "pending"
-        if total == 0 and paid == 0:
-            status = "pending"
-        elif (total or 0) > 0 and paid >= total:
+        if s and s.status == "paid":
             status = "paid"
-        elif (total or 0) > 0:
+        elif total > 0 and paid >= total:
+            status = "paid"
+        else:
             status = "pending"
         rows.append({
             "employee": emp,
@@ -2606,7 +2619,7 @@ async def employee_salary_save(
 ):
     """Oylik yozuvlarini saqlash; tanlangan kassadan chiqim hujjati (Payment) va qoldiq hujjati (CashBalanceDoc) yaratiladi. Faqat ishga qabul qilingan xodimlar."""
     if not (1 <= month <= 12) or year < 2020 or year > 2030:
-        return RedirectResponse(url="/salary?error=Noto'g'ri oy yoki yil", status_code=303)
+        return RedirectResponse(url="/employees/salary?error=Noto'g'ri oy yoki yil", status_code=303)
     form = await request.form()
     hired_ids = [r[0] for r in db.query(EmploymentDoc.employee_id).distinct().all() if r[0]]
     if not hired_ids:
@@ -2687,7 +2700,7 @@ async def employee_salary_save(
         params += f"&expense_doc_id={expense_doc_id}"
     if no_cash_warn:
         params += "&no_cash=1"
-    return RedirectResponse(url=f"/salary?{params}", status_code=303)
+    return RedirectResponse(url=f"/employees/salary?{params}", status_code=303)
 
 
 @router.post("/salary/mark-paid/{employee_id}")
@@ -2712,6 +2725,6 @@ async def employee_salary_mark_paid(
     s.paid = paid_amount
     s.status = "paid" if paid_amount >= (s.total or 0) else "pending"
     db.commit()
-    return RedirectResponse(url=f"/salary?year={year}&month={month}", status_code=303)
+    return RedirectResponse(url=f"/employees/salary?year={year}&month={month}", status_code=303)
 
 

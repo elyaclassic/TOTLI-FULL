@@ -1518,6 +1518,14 @@ async def complete_production(
     db.commit()
     check_low_stock_and_notify(db)
     notify_managers_production_ready(db, production)
+    # Telegram bildirish
+    try:
+        from app.bot.services.notifier import notify_production_ready
+        p = db.query(Product).filter(Product.id == recipe.product_id).first()
+        p_name = p.name if p else "Mahsulot"
+        notify_production_ready(production.number, p_name, production.quantity or 0)
+    except Exception:
+        pass
     return RedirectResponse(url="/production", status_code=303)
 
 
