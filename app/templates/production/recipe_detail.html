@@ -10,6 +10,15 @@
         <a href="/production/recipes{% if search_q %}?q={{ search_q | urlencode }}{% endif %}" class="top-btn btn btn-outline-secondary">
             <i class="bi bi-arrow-left"></i> Orqaga
         </a>
+        {% if current_user and current_user.role == 'admin' %}
+        <form method="POST" action="/production/recipes/{{ recipe.id }}/delete" class="d-inline"
+            onsubmit="return confirm('Bu retseptni o\'chirmoqchimisiz?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button type="submit" class="top-btn btn btn-outline-danger">
+                <i class="bi bi-trash3"></i> O'chirish
+            </button>
+        </form>
+        {% endif %}
         <button class="top-btn btn btn-success" data-bs-toggle="modal" data-bs-target="#produceModal">
             <i class="bi bi-play-fill"></i> Ishlab chiqarish
         </button>
@@ -251,7 +260,7 @@
                         <div id="edit_product_dropdown" class="list-group position-absolute w-100 mt-1 shadow" style="max-height: 220px; overflow-y: auto; z-index: 1050; display: none;"></div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Miqdor (kg)</label>
+                        <label class="form-label" id="edit_quantity_label">Miqdor</label>
                         <input type="text" inputmode="decimal" class="form-control" name="quantity" id="edit_quantity" placeholder="0.001" required>
                     </div>
                 </div>
@@ -295,7 +304,7 @@
 (function() {
     var materials = [
         {% for m in materials %}
-        { "id": {{ m.id }}, "name": "{{ (m.name or '')|e }}", "code": "{{ (m.code or '')|e }}" }{% if not loop.last %},{% endif %}
+        { "id": {{ m.id }}, "name": "{{ (m.name or '')|e }}", "code": "{{ (m.code or '')|e }}", "unit": "{{ (m.unit.name if m.unit else 'kg')|e }}" }{% if not loop.last %},{% endif %}
         {% endfor %}
     ];
     materials.forEach(function(m) { m.label = m.name + ' (' + (m.code || '') + ')'; });
@@ -429,10 +438,16 @@
     var editId = document.getElementById('edit_product_id');
     var editDrop = document.getElementById('edit_product_dropdown');
 
+    var editQtyLabel = document.getElementById('edit_quantity_label');
+    function updateEditUnit(m) {
+        var unit = (m && m.unit) ? m.unit : 'kg';
+        editQtyLabel.textContent = 'Miqdor (' + unit + ')';
+    }
     function editSelect(m) {
         editId.value = m.id;
         editSearch.value = decodeHtmlEntities(m.label);
         editDrop.style.display = 'none';
+        updateEditUnit(m);
     }
     editSearch.addEventListener('input', function() {
         var list = filterMaterials(this.value);
@@ -470,6 +485,7 @@
         var m = materials.filter(function(x) { return x.id == productId; })[0];
         editSearch.value = m ? decodeHtmlEntities(m.label) : '';
         editDrop.style.display = 'none';
+        updateEditUnit(m);
         new bootstrap.Modal(document.getElementById('editItemModal')).show();
     }
     window.editItem = editItem;

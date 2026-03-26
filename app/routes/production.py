@@ -467,6 +467,7 @@ async def production_index_page(
                             product.unit = units_map.get(product.unit_id) if product.unit_id else None
                             recipe.product = product
                         prod.recipe = recipe
+                    prod._kg_per_unit = recipe_kg_per_unit(recipe) if recipe else 1.0
                     recent_productions.append(prod)
                 except Exception as prod_error:
                     logger.warning("Production %s yuklashda xatolik: %s", getattr(prod, 'id', 'unknown'), prod_error)
@@ -753,6 +754,31 @@ async def delete_recipe_item(
     return RedirectResponse(url=f"/production/recipes/{recipe_id}", status_code=303)
 
 
+@router.post("/recipes/{recipe_id}/delete")
+async def delete_recipe(
+    recipe_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Retseptni o'chirish (faqat admin). Ishlab chiqarishda ishlatilgan bo'lsa — faolsizlantirish."""
+    recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+    if not recipe:
+        raise HTTPException(status_code=404, detail="Retsept topilmadi")
+    # Ishlab chiqarishda ishlatilganmi?
+    used = db.query(Production).filter(Production.recipe_id == recipe_id).first()
+    if used:
+        # O'chirish emas, faolsizlantirish
+        recipe.is_active = False
+        db.commit()
+        return RedirectResponse(url="/production/recipes?deactivated=1", status_code=303)
+    # Avval tarkib va bosqichlarni o'chirish
+    db.query(RecipeItem).filter(RecipeItem.recipe_id == recipe_id).delete()
+    db.query(RecipeStage).filter(RecipeStage.recipe_id == recipe_id).delete()
+    db.delete(recipe)
+    db.commit()
+    return RedirectResponse(url="/production/recipes?deleted=1", status_code=303)
+
+
 @router.get("/api/quick-recipes")
 async def production_api_quick_recipes(
     db: Session = Depends(get_db),
@@ -831,33 +857,39 @@ async def production_by_operator(
             seen[p.id] = p
     productions = list(seen.values())
     productions.sort(key=lambda x: (x.date or datetime.min), reverse=True)
+    # Har bir production uchun kg_per_unit hisoblash (template uchun)
+    for p in productions:
+        p._kg_per_unit = recipe_kg_per_unit(p.recipe)
 
-    user_ids_from_productions = {p.user_id for p in productions if p.user_id and not p.operator_id}
-    user_to_employee = {}
-    if user_ids_from_productions:
-        for emp in db.query(Employee).filter(Employee.user_id.in_(user_ids_from_productions)).all():
-            if emp.user_id:
-                user_to_employee[emp.user_id] = emp.id
-
-    totals_by_name = defaultdict(float)
+    totals_tayyor = defaultdict(float)
+    totals_yarim = defaultdict(float)
     name_to_employee_id = {}
     for p in productions:
         if is_qiyom_recipe(p.recipe):
             continue
         op_name = "—"
-        if p.operator:
-            op_name = getattr(p.operator, "full_name", None) or str(p.operator_id)
-            if p.operator_id and op_name != "—":
-                name_to_employee_id[op_name] = p.operator_id
-        elif p.user:
-            op_name = getattr(p.user, "full_name", None) or str(p.user_id)
-            if p.user_id and op_name != "—":
-                emp_id = user_to_employee.get(p.user_id)
-                if emp_id:
-                    name_to_employee_id[op_name] = emp_id
-        kg = (p.quantity or 0) * recipe_kg_per_unit(p.recipe)
-        totals_by_name[op_name] += kg
-    operator_totals = sorted(totals_by_name.items(), key=lambda x: -x[1])
+        if p.operator_id:
+            if p.operator:
+                op_name = getattr(p.operator, "full_name", None) or str(p.operator_id)
+            else:
+                emp = db.query(Employee).filter(Employee.id == p.operator_id).first()
+                if emp:
+                    op_name = emp.full_name
+            name_to_employee_id[op_name] = p.operator_id
+        # operator_id yo'q bo'lsa "—" qoladi
+        product = db.query(Product).filter(Product.id == p.recipe.product_id).first() if p.recipe else None
+        p_type = getattr(product, "type", "") or ""
+        is_yarim_tayyor = p_type == "yarim_tayyor"
+        if is_yarim_tayyor:
+            totals_yarim[op_name] += float(p.quantity or 0)
+        else:
+            kg = (p.quantity or 0) * recipe_kg_per_unit(p.recipe)
+            totals_tayyor[op_name] += kg
+    all_names = set(totals_tayyor.keys()) | set(totals_yarim.keys())
+    operator_totals = sorted(
+        [(name, totals_tayyor.get(name, 0), totals_yarim.get(name, 0)) for name in all_names],
+        key=lambda x: -(x[1] + x[2]),
+    )
 
     return templates.TemplateResponse("production/by_operator.html", {
         "request": request,
@@ -865,7 +897,7 @@ async def production_by_operator(
         "productions": productions,
         "operator_totals": operator_totals,
         "name_to_employee_id": name_to_employee_id,
-        "user_to_employee": user_to_employee,
+        "user_to_employee": {},
         "filter_date_from": (date_from or "").strip()[:10],
         "filter_date_to": (date_to or "").strip()[:10],
         "page_title": "Operator bo'yicha ishlab chiqarish",
@@ -1081,20 +1113,23 @@ async def production_orders(
     total_output_kg = 0.0
     total_yarim_tayyor_kg = 0.0
     for p in productions:
-        out_wh_name = (getattr(p.output_warehouse, "name", None) or "").lower()
-        is_yarim_tayyor_output = "yarim" in out_wh_name
-        out_kg = recipe_kg_per_unit(p.recipe) * (float(p.quantity or 0))
-        inp_kg = sum(float(pi.quantity or 0) for pi in (p.production_items or []))
+        # Mahsulot turi bo'yicha aniqlash (ombor nomi emas)
+        product = db.query(Product).filter(Product.id == p.recipe.product_id).first() if p.recipe else None
+        p_type = getattr(product, "type", "") or ""
+        is_yarim_tayyor = p_type == "yarim_tayyor"
+        is_qiyom = p.recipe and "qiyom" in (getattr(p.recipe, "name", None) or "").lower()
+        p._kg_per_unit = recipe_kg_per_unit(p.recipe)
+        out_kg = p._kg_per_unit * (float(p.quantity or 0))
         completed_only = getattr(p, "status", None) == "completed"
-        if is_yarim_tayyor_output:
+        if is_yarim_tayyor or is_qiyom:
             p.output_kg = 0.0
-            is_qiyom = p.recipe and "qiyom" in (getattr(p.recipe, "name", None) or "").lower()
             if is_qiyom:
-                p.yarim_tayyor_kg = 0.0  # qiyom retseptlari Y.t.kg da ko'rsatilmaydi va jamiga kiritilmaydi
+                p.yarim_tayyor_kg = 0.0
             else:
-                p.yarim_tayyor_kg = inp_kg
+                yt_kg = float(p.quantity or 0)
+                p.yarim_tayyor_kg = yt_kg
                 if completed_only:
-                    total_yarim_tayyor_kg += inp_kg
+                    total_yarim_tayyor_kg += yt_kg
         else:
             p.output_kg = out_kg
             p.yarim_tayyor_kg = 0.0
@@ -1315,6 +1350,8 @@ async def production_new(
 ):
     warehouses = get_warehouses_for_user(db, current_user)
     recipes = db.query(Recipe).filter(Recipe.is_active == True).all()
+    for r in recipes:
+        r._kg_per_unit = recipe_kg_per_unit(r)
     machines = db.query(Machine).filter(Machine.is_active == True).all()
     employees = db.query(Employee).filter(Employee.is_active == True).all()
     current_user_employee = db.query(Employee).filter(Employee.user_id == current_user.id).first() if current_user else None
@@ -1495,6 +1532,18 @@ async def complete_production_stage(
     check_low_stock_and_notify(db)
     # Oxirgi bosqich (qadoqlash) tugadi — admin va menejerga bildirish
     notify_managers_production_ready(db, production)
+    # Telegram bildirish
+    try:
+        from app.bot.services.notifier import notify_production_ready
+        p = db.query(Product).filter(Product.id == recipe.product_id).first()
+        p_name = p.name if p else "Mahsulot"
+        p_type = getattr(p, "type", "") or ""
+        if p_type == "yarim_tayyor":
+            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=True)
+        else:
+            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=False)
+    except Exception as e:
+        print(f"[TG Notify] production complete-stage xato: {e}")
     return RedirectResponse(url="/production", status_code=303)
 
 
@@ -1523,9 +1572,13 @@ async def complete_production(
         from app.bot.services.notifier import notify_production_ready
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
-        notify_production_ready(production.number, p_name, production.quantity or 0)
-    except Exception:
-        pass
+        p_type = getattr(p, "type", "") or ""
+        if p_type == "yarim_tayyor":
+            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=True)
+        else:
+            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=False)
+    except Exception as e:
+        print(f"[TG Notify] production complete xato: {e}")
     return RedirectResponse(url="/production", status_code=303)
 
 

@@ -58,8 +58,7 @@
                             <select id="recipeSelectHidden" style="display: none;" onchange="updateRecipeInfo()">
                                 <option value="">Tanlang...</option>
                                 {% for recipe in recipes %}
-                                {% set _rname = (recipe.name or '')|lower %}
-                                {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (recipe.output_quantity or 1))))))) %}
+                                {% set _kg_per_unit = recipe._kg_per_unit if recipe._kg_per_unit else 1.0 %}
                                 <option value="{{ recipe.id }}"
                                         data-name="{{ recipe.name|e }}"
                                         data-items="{{ recipe.items|length }}"
@@ -418,8 +417,7 @@
 <script>
 var recipes = {
     {% for recipe in recipes %}
-    {% set _rname = (recipe.name or '')|lower %}
-    {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (recipe.output_quantity or 1))))))) %}
+    {% set _kg_per_unit = recipe._kg_per_unit if recipe._kg_per_unit else 1.0 %}
     {{ recipe.id }}: {
         name: "{{ recipe.name }}",
         output: {{ _kg_per_unit }},

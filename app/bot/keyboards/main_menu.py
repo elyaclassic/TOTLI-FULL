@@ -1,27 +1,76 @@
 """Asosiy menyu va davr tanlash klaviaturalari"""
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+
+
+def main_menu_reply_kb() -> ReplyKeyboardMarkup:
+    """Pastdagi doimiy menyu (ReplyKeyboard)"""
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="💰 Savdo"),
+                KeyboardButton(text="💵 Pul oqimi"),
+            ],
+            [
+                KeyboardButton(text="📌 Qarzdorlar"),
+                KeyboardButton(text="📉 Harajatlar"),
+            ],
+            [
+                KeyboardButton(text="🏆 Top mahsulotlar"),
+                KeyboardButton(text="🚗 Agentlar"),
+            ],
+            [
+                KeyboardButton(text="💳 Ish haqi"),
+                KeyboardButton(text="📊 KPI"),
+            ],
+            [
+                KeyboardButton(text="🏭 Ishlab chiqarish"),
+                KeyboardButton(text="📋 Davomat"),
+            ],
+            [
+                KeyboardButton(text="🔄 Obmen/Vozvrat"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+# Matn -> report_type mapping
+MENU_TEXT_MAP = {
+    "💰 Savdo": "sales",
+    "💵 Pul oqimi": "cashflow",
+    "📌 Qarzdorlar": "debtors",
+    "📉 Harajatlar": "expenses",
+    "🏆 Top mahsulotlar": "top_products",
+    "🚗 Agentlar": "agents",
+    "💳 Ish haqi": "salaries",
+    "📊 KPI": "kpi",
+    "🏭 Ishlab chiqarish": "production",
+    "📋 Davomat": "attendance",
+    "🔄 Obmen/Vozvrat": "returns",
+}
 
 
 def main_menu_kb() -> InlineKeyboardMarkup:
+    """Inline menyu (eski usul — saqlab qolish)"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📋 Davomat", callback_data="report:attendance"),
             InlineKeyboardButton(text="💰 Savdo", callback_data="report:sales"),
-        ],
-        [
             InlineKeyboardButton(text="💵 Pul oqimi", callback_data="report:cashflow"),
-            InlineKeyboardButton(text="📉 Harajatlar", callback_data="report:expenses"),
         ],
         [
             InlineKeyboardButton(text="📌 Qarzdorlar", callback_data="report:debtors"),
-            InlineKeyboardButton(text="💳 Ish haqi", callback_data="report:salaries"),
+            InlineKeyboardButton(text="📉 Harajatlar", callback_data="report:expenses"),
         ],
         [
-            InlineKeyboardButton(text="📊 KPI", callback_data="report:kpi"),
             InlineKeyboardButton(text="🏆 Top mahsulotlar", callback_data="report:top_products"),
+            InlineKeyboardButton(text="🚗 Agentlar", callback_data="report:agents"),
         ],
         [
-            InlineKeyboardButton(text="🚗 Agentlar", callback_data="report:agents"),
+            InlineKeyboardButton(text="💳 Ish haqi", callback_data="report:salaries"),
+            InlineKeyboardButton(text="📊 KPI", callback_data="report:kpi"),
+        ],
+        [
+            InlineKeyboardButton(text="📋 Davomat", callback_data="report:attendance"),
             InlineKeyboardButton(text="🔄 Obmen/Vozvrat", callback_data="report:returns"),
         ],
     ])

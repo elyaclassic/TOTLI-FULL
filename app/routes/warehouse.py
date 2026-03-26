@@ -39,6 +39,22 @@ router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
 
 
+def _product_kg_per_unit(name: str) -> float:
+    """Mahsulot nomidan 1 dona ning kg og'irligini aniqlash."""
+    import re
+    n = (name or "").lower()
+    m_gr = re.search(r'(\d+)\s*gr', n)
+    if m_gr:
+        return int(m_gr.group(1)) / 1000.0
+    m_g = re.search(r'(\d+)\s*g(?:\b|\))', n)
+    if m_g:
+        return int(m_g.group(1)) / 1000.0
+    m_kg = re.search(r'([\d.]+)\s*kg', n)
+    if m_kg:
+        return float(m_kg.group(1))
+    return 1.0
+
+
 def _warehouses_for_user(db: Session, user: User):
     """Foydalanuvchi uchun ko'rinadigan omborlar: sozlamada belgilangan yoki admin/raxbar uchun barcha."""
     return get_warehouses_for_user(db, user)
@@ -1313,3 +1329,306 @@ async def inventory_print_page(
         "show_tannarx": show_tannarx,
         "current_user": current_user,
     })
+
+
+# ============================================================
+# Otxod ishlab chiqarish va Utilizatsiya
+# ============================================================
+
+@router.get("/otxod/{warehouse_id}", response_class=HTMLResponse)
+async def warehouse_otxod_form(
+    warehouse_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Vozvrat omboridagi mahsulotlarni tanlab Otxod Holva ishlab chiqarish."""
+    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Ombor topilmadi")
+    stocks = (
+        db.query(Stock)
+        .filter(Stock.warehouse_id == warehouse_id, Stock.quantity > 0)
+        .options(joinedload(Stock.product).joinedload(Product.unit))
+        .all()
+    )
+    items = []
+    for s in stocks:
+        if not s.product:
+            continue
+        unit_name = s.product.unit.name if s.product.unit else "kg"
+        unit_code = (s.product.unit.code if s.product.unit else "kg").lower()
+        kg_per = _product_kg_per_unit(s.product.name) if unit_code == "dona" else 1.0
+        items.append({
+            "stock_id": s.id,
+            "product_id": s.product.id,
+            "product_name": s.product.name,
+            "product_code": s.product.code or "",
+            "quantity": float(s.quantity or 0),
+            "unit": unit_name,
+            "unit_code": unit_code,
+            "kg_per": kg_per,
+        })
+    return templates.TemplateResponse("warehouse/otxod_form.html", {
+        "request": request,
+        "current_user": current_user,
+        "warehouse": warehouse,
+        "items": items,
+        "mode": "otxod",
+        "page_title": "Otxod ishlab chiqarish",
+    })
+
+
+@router.post("/otxod/{warehouse_id}/confirm")
+async def warehouse_otxod_confirm(
+    warehouse_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Tanlangan mahsulotlarni chiqarib, Otxod Holva sifatida kirim qilish."""
+    form = await request.form()
+    product_ids = form.getlist("product_id")
+    quantities = form.getlist("qty")
+
+    if not product_ids:
+        return RedirectResponse(
+            url=f"/warehouse/otxod/{warehouse_id}?error=" + quote("Kamida bitta mahsulot tanlang."),
+            status_code=303,
+        )
+
+    # Hujjat raqami
+    today_str = datetime.now().strftime("%Y%m%d")
+    count = db.query(StockAdjustmentDoc).filter(
+        StockAdjustmentDoc.number.like(f"OTX-{today_str}%")
+    ).count()
+    doc_number = f"OTX-{today_str}-{count + 1:04d}"
+
+    # Hujjat yaratish
+    doc = StockAdjustmentDoc(
+        number=doc_number,
+        date=datetime.now(),
+        warehouse_id=warehouse_id,
+        user_id=current_user.id if current_user else None,
+        status="confirmed",
+    )
+    db.add(doc)
+    db.flush()
+
+    total_kg = 0.0
+    for i in range(len(product_ids)):
+        try:
+            pid = int(product_ids[i])
+            qty = float(quantities[i])
+        except (ValueError, TypeError, IndexError):
+            continue
+        if qty <= 0:
+            continue
+
+        product = db.query(Product).options(joinedload(Product.unit)).filter(Product.id == pid).first()
+        if not product:
+            continue
+
+        unit_code = (product.unit.code if product.unit else "kg").lower()
+        kg_per = _product_kg_per_unit(product.name) if unit_code == "dona" else 1.0
+        kg = qty * kg_per
+        total_kg += kg
+
+        # Vozvrat omboridan chiqim
+        create_stock_movement(
+            db=db,
+            warehouse_id=warehouse_id,
+            product_id=pid,
+            quantity_change=-qty,
+            operation_type="otxod_chiqim",
+            document_type="StockAdjustmentDoc",
+            document_id=doc.id,
+            document_number=doc_number,
+            user_id=current_user.id if current_user else None,
+            note=f"Otxod ishlab chiqarish: {product.name} {qty:.2f} → {kg:.2f} kg",
+        )
+
+        # Hujjat itemlari
+        db.add(StockAdjustmentDocItem(
+            doc_id=doc.id,
+            product_id=pid,
+            warehouse_id=warehouse_id,
+            quantity=-qty,
+            previous_quantity=0,
+            cost_price=product.purchase_price or 0,
+            sale_price=product.sale_price or 0,
+        ))
+
+    if total_kg <= 0:
+        db.rollback()
+        return RedirectResponse(
+            url=f"/warehouse/otxod/{warehouse_id}?error=" + quote("Miqdor kiritilmadi."),
+            status_code=303,
+        )
+
+    # Otxod Holva mahsulotini topish (P291, id=305)
+    otxod_product = db.query(Product).filter(Product.code == "P291").first()
+    if not otxod_product:
+        otxod_product = db.query(Product).filter(Product.name.ilike("%otxod holva%")).first()
+    if not otxod_product:
+        db.rollback()
+        return RedirectResponse(
+            url=f"/warehouse/otxod/{warehouse_id}?error=" + quote("'Otxod Holva' mahsuloti topilmadi. Avval yarating."),
+            status_code=303,
+        )
+
+    # Yarim tayyor Maxsulot aralash omboriga (id=6) Otxod Holva kirim
+    target_warehouse_id = 6
+    target_wh = db.query(Warehouse).filter(Warehouse.id == target_warehouse_id).first()
+    if not target_wh:
+        target_wh = db.query(Warehouse).filter(Warehouse.name.ilike("%yarim tayyor%aralash%")).first()
+        target_warehouse_id = target_wh.id if target_wh else warehouse_id
+
+    create_stock_movement(
+        db=db,
+        warehouse_id=target_warehouse_id,
+        product_id=otxod_product.id,
+        quantity_change=+total_kg,
+        operation_type="otxod_kirim",
+        document_type="StockAdjustmentDoc",
+        document_id=doc.id,
+        document_number=doc_number,
+        user_id=current_user.id if current_user else None,
+        note=f"Otxod Holva kirim: {total_kg:.2f} kg ({doc_number})",
+    )
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/production?success=otxod&detail=" + quote(f"{doc_number}: {total_kg:.2f} kg Otxod Holva yaratildi"),
+        status_code=303,
+    )
+
+
+@router.get("/utilizatsiya/{warehouse_id}", response_class=HTMLResponse)
+async def warehouse_utilizatsiya_form(
+    warehouse_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Omboridagi mahsulotlarni tanlab utilizatsiya qilish."""
+    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Ombor topilmadi")
+    stocks = (
+        db.query(Stock)
+        .filter(Stock.warehouse_id == warehouse_id, Stock.quantity > 0)
+        .options(joinedload(Stock.product).joinedload(Product.unit))
+        .all()
+    )
+    items = []
+    for s in stocks:
+        if not s.product:
+            continue
+        unit_name = s.product.unit.name if s.product.unit else "kg"
+        unit_code = (s.product.unit.code if s.product.unit else "kg").lower()
+        kg_per = _product_kg_per_unit(s.product.name) if unit_code == "dona" else 1.0
+        items.append({
+            "stock_id": s.id,
+            "product_id": s.product.id,
+            "product_name": s.product.name,
+            "product_code": s.product.code or "",
+            "quantity": float(s.quantity or 0),
+            "unit": unit_name,
+            "unit_code": unit_code,
+            "kg_per": kg_per,
+        })
+    return templates.TemplateResponse("warehouse/otxod_form.html", {
+        "request": request,
+        "current_user": current_user,
+        "warehouse": warehouse,
+        "items": items,
+        "mode": "utilizatsiya",
+        "page_title": "Utilizatsiya",
+    })
+
+
+@router.post("/utilizatsiya/{warehouse_id}/confirm")
+async def warehouse_utilizatsiya_confirm(
+    warehouse_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Tanlangan mahsulotlarni utilizatsiya qilib ombordan o'chirish."""
+    form = await request.form()
+    product_ids = form.getlist("product_id")
+    quantities = form.getlist("qty")
+
+    if not product_ids:
+        return RedirectResponse(
+            url=f"/warehouse/utilizatsiya/{warehouse_id}?error=" + quote("Kamida bitta mahsulot tanlang."),
+            status_code=303,
+        )
+
+    today_str = datetime.now().strftime("%Y%m%d")
+    count = db.query(StockAdjustmentDoc).filter(
+        StockAdjustmentDoc.number.like(f"UTL-{today_str}%")
+    ).count()
+    doc_number = f"UTL-{today_str}-{count + 1:04d}"
+
+    doc = StockAdjustmentDoc(
+        number=doc_number,
+        date=datetime.now(),
+        warehouse_id=warehouse_id,
+        user_id=current_user.id if current_user else None,
+        status="confirmed",
+    )
+    db.add(doc)
+    db.flush()
+
+    removed_count = 0
+    for i in range(len(product_ids)):
+        try:
+            pid = int(product_ids[i])
+            qty = float(quantities[i])
+        except (ValueError, TypeError, IndexError):
+            continue
+        if qty <= 0:
+            continue
+
+        product = db.query(Product).filter(Product.id == pid).first()
+        if not product:
+            continue
+
+        create_stock_movement(
+            db=db,
+            warehouse_id=warehouse_id,
+            product_id=pid,
+            quantity_change=-qty,
+            operation_type="utilizatsiya",
+            document_type="StockAdjustmentDoc",
+            document_id=doc.id,
+            document_number=doc_number,
+            user_id=current_user.id if current_user else None,
+            note=f"Utilizatsiya: {product.name} {qty:.2f}",
+        )
+
+        db.add(StockAdjustmentDocItem(
+            doc_id=doc.id,
+            product_id=pid,
+            warehouse_id=warehouse_id,
+            quantity=-qty,
+            previous_quantity=0,
+            cost_price=product.purchase_price or 0,
+            sale_price=product.sale_price or 0,
+        ))
+        removed_count += 1
+
+    if removed_count == 0:
+        db.rollback()
+        return RedirectResponse(
+            url=f"/warehouse/utilizatsiya/{warehouse_id}?error=" + quote("Miqdor kiritilmadi."),
+            status_code=303,
+        )
+
+    db.commit()
+    return RedirectResponse(
+        url=f"/production?success=utilizatsiya&detail=" + quote(f"{doc_number}: {removed_count} ta mahsulot utilizatsiya qilindi"),
+        status_code=303,
+    )

@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid">
+
+<div class="page-header mb-3">
+    <div>
+        <a href="/production" class="btn btn-outline-secondary btn-sm mb-1"><i class="bi bi-arrow-left"></i> Orqaga</a>
+        {% if mode == 'otxod' %}
+        <h5 class="mb-0"><i class="bi bi-recycle"></i> Otxod ishlab chiqarish</h5>
+        <p class="text-muted mb-0 small">{{ warehouse.name }} dan mahsulotlarni tanlab Otxod Holva ga aylantirish</p>
+        {% else %}
+        <h5 class="mb-0"><i class="bi bi-trash3"></i> Utilizatsiya</h5>
+        <p class="text-muted mb-0 small">{{ warehouse.name }} dan mahsulotlarni tanlab utilizatsiya qilish (o'chirish)</p>
+        {% endif %}
+    </div>
+</div>
+
+{% set error_msg = request.query_params.get('error') %}
+{% if error_msg %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> {{ error_msg }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+{% if items %}
+<form method="POST" action="/warehouse/{{ mode }}/{{ warehouse.id }}/confirm" id="otxodForm">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+
+    <div class="data-table mb-3">
+        <div class="card-header py-2 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span class="small fw-semibold">
+                <i class="bi bi-box-seam"></i> {{ warehouse.name }} — mahsulotlar ({{ items|length }} ta)
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <span class="small">Tanlangan: <strong id="selectedCount">0</strong> ta</span>
+                {% if mode == 'otxod' %}
+                <span class="small">Jami: <strong class="text-success" id="totalKg">0.00</strong> kg Otxod Holva</span>
+                {% endif %}
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width:40px;"><input type="checkbox" id="selectAll" class="form-check-input"></th>
+                        <th>Mahsulot</th>
+                        <th>Ombordagi qoldiq</th>
+                        <th style="width:140px;">Miqdor</th>
+                        {% if mode == 'otxod' %}
+                        <th>1 dona = kg</th>
+                        <th>Jami kg</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr class="item-row" data-kg="{{ item.kg_per }}" data-unit="{{ item.unit_code }}">
+                        <td>
+                            <input type="checkbox" class="form-check-input item-cb"
+                                data-pid="{{ item.product_id }}">
+                        </td>
+                        <td>
+                            <strong>{{ item.product_name }}</strong>
+                            <small class="text-muted d-block">{{ item.product_code }}</small>
+                        </td>
+                        <td>
+                            <span class="fw-semibold">{{ "%.2f"|format(item.quantity) }}</span>
+                            <small class="text-muted">{{ item.unit }}</small>
+                        </td>
+                        <td>
+                            <input type="number" step="any" min="0" max="{{ item.quantity }}"
+                                class="form-control form-control-sm qty-input" value="0" disabled
+                                placeholder="0">
+                        </td>
+                        {% if mode == 'otxod' %}
+                        <td class="text-muted small kg-per-cell">
+                            {% if item.unit_code == 'dona' %}
+                            {{ "%.3f"|format(item.kg_per) }} kg
+                            {% else %}
+                            1.000 kg
+                            {% endif %}
+                        </td>
+                        <td class="fw-semibold text-success row-kg">0.00</td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Yashirin inputlar (JS bilan to'ldiriladi) -->
+    <div id="hiddenInputs"></div>
+
+    <div class="d-flex justify-content-end gap-2 mb-4">
+        <a href="/production" class="btn btn-secondary">Bekor qilish</a>
+        {% if mode == 'otxod' %}
+        <button type="submit" class="btn btn-success" id="confirmBtn" disabled
+            onclick="return confirm('Tanlangan mahsulotlar Vozvrat omboridan chiqariladi va Otxod Holva sifatida kirim qilinadi. Davom etsinmi?');">
+            <i class="bi bi-recycle"></i> Otxod ishlab chiqarish
+        </button>
+        {% else %}
+        <button type="submit" class="btn btn-danger" id="confirmBtn" disabled
+            onclick="return confirm('Tanlangan mahsulotlar ombordan utilizatsiya qilinadi (o\'chiriladi). Davom etsinmi?');">
+            <i class="bi bi-trash3"></i> Utilizatsiya qilish
+        </button>
+        {% endif %}
+    </div>
+</form>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> Bu omborda mahsulot yo'q.
+</div>
+{% endif %}
+
+</div>
+
+<script>
+(function() {
+    var checkboxes = document.querySelectorAll('.item-cb');
+    var selectAll = document.getElementById('selectAll');
+    var confirmBtn = document.getElementById('confirmBtn');
+    var hiddenDiv = document.getElementById('hiddenInputs');
+    var totalKgEl = document.getElementById('totalKg');
+    var selectedCountEl = document.getElementById('selectedCount');
+    var mode = '{{ mode }}';
+
+    function updateRow(row) {
+        var cb = row.querySelector('.item-cb');
+        var qtyInput = row.querySelector('.qty-input');
+        var rowKgEl = row.querySelector('.row-kg');
+        qtyInput.disabled = !cb.checked;
+        if (!cb.checked) {
+            qtyInput.value = 0;
+        }
+        if (mode === 'otxod' && rowKgEl) {
+            var qty = parseFloat(qtyInput.value) || 0;
+            var kgPer = parseFloat(row.dataset.kg);
+            var unitCode = row.dataset.unit;
+            var rowKg = unitCode === 'dona' ? qty * kgPer : qty;
+            rowKgEl.textContent = rowKg.toFixed(2);
+        }
+    }
+
+    function recalc() {
+        var totalKg = 0;
+        var selected = 0;
+        hiddenDiv.innerHTML = '';
+        document.querySelectorAll('.item-row').forEach(function(row) {
+            var cb = row.querySelector('.item-cb');
+            var qtyInput = row.querySelector('.qty-input');
+            if (!cb.checked) return;
+            var qty = parseFloat(qtyInput.value) || 0;
+            if (qty <= 0) return;
+            selected++;
+            var pid = cb.dataset.pid;
+            hiddenDiv.innerHTML += '<input type="hidden" name="product_id" value="' + pid + '">';
+            hiddenDiv.innerHTML += '<input type="hidden" name="qty" value="' + qty + '">';
+            if (mode === 'otxod') {
+                var kgPer = parseFloat(row.dataset.kg);
+                var unitCode = row.dataset.unit;
+                totalKg += unitCode === 'dona' ? qty * kgPer : qty;
+            }
+        });
+        if (totalKgEl) totalKgEl.textContent = totalKg.toFixed(2);
+        selectedCountEl.textContent = selected;
+        confirmBtn.disabled = selected === 0;
+    }
+
+    checkboxes.forEach(function(cb) {
+        cb.addEventListener('change', function() {
+            updateRow(cb.closest('.item-row'));
+            recalc();
+        });
+    });
+
+    document.querySelectorAll('.qty-input').forEach(function(inp) {
+        inp.addEventListener('input', function() {
+            updateRow(inp.closest('.item-row'));
+            recalc();
+        });
+    });
+
+    selectAll.addEventListener('change', function() {
+        checkboxes.forEach(function(cb) {
+            cb.checked = selectAll.checked;
+            updateRow(cb.closest('.item-row'));
+        });
+        recalc();
+    });
+})();
+</script>
+{% endblock %}

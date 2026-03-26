@@ -253,13 +253,11 @@ class HikvisionAPI:
         max_results = 100
         max_position = 20000
         time_formats = [
-            (start_date.strftime("%Y-%m-%d") + " 00:00:00", end_date.strftime("%Y-%m-%d") + " 23:59:59"),
-            (start_date.strftime("%Y-%m-%d") + "T00:00:00", end_date.strftime("%Y-%m-%d") + "T23:59:59"),
             (start_date.strftime("%Y-%m-%d") + "T00:00:00+05:00", end_date.strftime("%Y-%m-%d") + "T23:59:59+05:00"),
         ]
+        best_out = []
         for start_str, end_str in time_formats:
-            if out:
-                break
+            out = []
             position = 0
             while True:
                 try:
@@ -284,14 +282,19 @@ class HikvisionAPI:
                     out.extend(chunk)
                     acs = (data.get("AcsEvent") or data.get("acsEvent")) if isinstance(data, dict) else None
                     acs_dict = acs if isinstance(acs, dict) else {}
-                    if acs_dict.get("responseStatusStrg") != "MORE":
+                    status_str = acs_dict.get("responseStatusStrg", "")
+                    num_of_matches = int(acs_dict.get("numOfMatches", len(chunk)) or len(chunk))
+                    if status_str == "MORE" and num_of_matches > 0:
+                        position += num_of_matches
+                    else:
                         break
-                    position += max_results
                     if position >= max_position:
                         break
                 except Exception:
                     break
-        return out
+            if len(out) > len(best_out):
+                best_out = out
+        return best_out
 
     def get_event_image_url(self, event: Dict[str, Any]) -> Optional[str]:
         """Hodisa rasmi URI/pictureURL ni qaytaradi (agar bor bo'lsa)."""
@@ -426,10 +429,28 @@ def sync_hikvision_attendance(
                     )
                     db_session.add(att)
                     result["imported"] += 1
+                    # Telegram bildirish — yangi kelgan xodim
+                    if ev_date == date.today():
+                        emp = db_session.query(Employee).filter(Employee.id == emp_id).first()
+                        if emp:
+                            _notify_checkin(emp.full_name, first_in.strftime("%H:%M"))
                 else:
+                    old_in = att.check_in
+                    old_out = att.check_out
                     att.check_in = first_in
                     att.check_out = last_out
                     att.hours_worked = hours_worked
+                    if ev_date == date.today():
+                        emp = db_session.query(Employee).filter(Employee.id == emp_id).first()
+                        if emp:
+                            # Kelish bildirishi — agar oldin check_in yo'q bo'lsa yoki yangi first_in ancha farq qilsa
+                            if old_in is None:
+                                _notify_checkin(emp.full_name, first_in.strftime("%H:%M"))
+                            # Ketish bildirishi — check_out 30+ daqiqa o'zgargan bo'lsa (takroriy xabar oldini olish)
+                            if old_out and last_out and hours_worked > 0:
+                                diff_minutes = abs((last_out - old_out).total_seconds()) / 60
+                                if diff_minutes >= 30:
+                                    _notify_checkout(emp.full_name, first_in.strftime("%H:%M"), last_out.strftime("%H:%M"), hours_worked)
                 image_url = api.get_event_image_url(first_ev)
                 if image_url:
                     try:
@@ -533,3 +554,21 @@ def import_employees_from_hikvision(
     except Exception as e:
         result["errors"].append(str(e))
     return result
+
+
+def _notify_checkin(name: str, time_str: str):
+    """Xodim kelganini Telegram ga bildirish"""
+    try:
+        from app.bot.services.notifier import send_notify_sync
+        send_notify_sync(f"➡️ <b>{name}</b> ishga keldi — {time_str}")
+    except Exception:
+        pass
+
+
+def _notify_checkout(name: str, in_time: str, out_time: str, hours: float):
+    """Xodim ketganini Telegram ga bildirish"""
+    try:
+        from app.bot.services.notifier import send_notify_sync
+        send_notify_sync(f"⬅️ <b>{name}</b> ketdi — {out_time} (kelgan: {in_time}, {hours:.1f} soat)")
+    except Exception:
+        pass

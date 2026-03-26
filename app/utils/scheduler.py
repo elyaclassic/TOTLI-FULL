@@ -159,8 +159,8 @@ def start_scheduler():
     _scheduler.add_job(_daily_backup_job, "date", run_date=datetime.now() + timedelta(seconds=10), id="backup_first")
     # Hikvision davomat yuklash — har kuni soat 22:00 da (ish kuni tugagach)
     _scheduler.add_job(_daily_hikvision_sync_job, "cron", hour=22, minute=0, id="hikvision_daily")
-    # Har 2 soatda ham sync qilish (kun davomida yangilanib turishi uchun)
-    _scheduler.add_job(_daily_hikvision_sync_job, "interval", hours=2, id="hikvision_interval")
+    # Har 10 daqiqada sync qilish (kun davomida yangilanib turishi uchun)
+    _scheduler.add_job(_daily_hikvision_sync_job, "interval", minutes=10, id="hikvision_interval")
     # Hozir ham bir marta yuklash
     _scheduler.add_job(_daily_hikvision_sync_job, "date", run_date=datetime.now() + timedelta(minutes=2), id="hikvision_first")
     # Telegram bildirish vazifalari

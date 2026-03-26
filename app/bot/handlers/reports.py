@@ -6,12 +6,13 @@ from aiogram.types import CallbackQuery, Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
+from app.bot.config import ALLOWED_CHAT_IDS
 from app.bot.keyboards.main_menu import period_kb, back_menu_kb
 from app.bot.services.report_queries import (
     parse_period,
     report_attendance, report_sales, report_cashflow, report_expenses,
     report_debtors, report_salaries, report_kpi, report_top_products,
-    report_agents, report_returns,
+    report_agents, report_returns, report_production,
 )
 from app.models.database import SessionLocal
 
@@ -27,6 +28,7 @@ REPORT_TITLES = {
     "kpi": "📊 KPI",
     "top_products": "🏆 Top mahsulotlar",
     "agents": "🚗 Agentlar",
+    "production": "🏭 Ishlab chiqarish",
     "returns": "🔄 Obmen/Vozvrat",
 }
 
@@ -40,6 +42,7 @@ REPORT_FUNCS = {
     "kpi": report_kpi,
     "top_products": report_top_products,
     "agents": report_agents,
+    "production": report_production,
     "returns": report_returns,
 }
 
@@ -51,6 +54,9 @@ class CustomPeriod(StatesGroup):
 @router.callback_query(F.data.startswith("report:"))
 async def cb_report_select(callback: CallbackQuery):
     """Hisobot turi tanlanganda — davr tanlash ekrani"""
+    if callback.from_user.id not in ALLOWED_CHAT_IDS:
+        await callback.answer("Ruxsat yo'q", show_alert=True)
+        return
     report_type = callback.data.split(":")[1]
     title = REPORT_TITLES.get(report_type, report_type)
     # Qarzdorlar uchun davr tanlash kerak emas

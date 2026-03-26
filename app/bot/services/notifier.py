@@ -24,25 +24,41 @@ def _get_bot() -> Bot:
 
 async def send_notify(text: str):
     """Barcha rahbarlarga bildirish yuborish"""
-    bot = _get_bot()
-    for chat_id in NOTIFY_CHAT_IDS:
-        try:
-            await bot.send_message(chat_id, text, parse_mode="HTML")
-        except Exception as e:
-            print(f"[TG Notify] Xato ({chat_id}): {e}")
+    from aiogram.client.default import DefaultBotProperties
+    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+    try:
+        for chat_id in NOTIFY_CHAT_IDS:
+            try:
+                await bot.send_message(chat_id, text, parse_mode="HTML")
+            except Exception as e:
+                print(f"[TG Notify] Xato ({chat_id}): {e}")
+    finally:
+        await bot.session.close()
 
 
 def send_notify_sync(text: str):
     """Sync koddan chaqirish uchun (route/scheduler ichidan)"""
+    import threading
+
+    def _send_in_thread():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(send_notify(text))
+            loop.close()
+        except Exception as e:
+            print(f"[TG Notify] thread xato: {e}")
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
-            asyncio.ensure_future(send_notify(text))
+            # FastAPI/uvicorn ichida — alohida threadda yuborish
+            t = threading.Thread(target=_send_in_thread, daemon=True)
+            t.start()
         else:
             loop.run_until_complete(send_notify(text))
     except RuntimeError:
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(send_notify(text))
+        _send_in_thread()
 
 
 # ============= 1. YANGI SOTUV BUYURTMASI =============
@@ -196,13 +212,46 @@ def send_daily_summary():
 
 
 # ============= 7. ISHLAB CHIQARISH TAYYOR =============
-def notify_production_ready(production_number: str, product_name: str, quantity: float):
+def notify_production_ready(production_number: str, product_name: str, quantity: float, is_semi: bool = False):
+    if is_semi:
+        text = (
+            f"🔶 <b>Qiyom/yarim tayyor yakunlandi</b>\n\n"
+            f"Raqam: {production_number}\n"
+            f"Mahsulot: {product_name}\n"
+            f"Miqdor: {fmt(quantity)}"
+        )
+    else:
+        text = (
+            f"✅ <b>Tayyor mahsulot yakunlandi</b>\n\n"
+            f"Raqam: {production_number}\n"
+            f"Mahsulot: {product_name}\n"
+            f"Miqdor: {fmt(quantity)}"
+        )
+    send_notify_sync(text)
+
+
+# ============= 8. HARAJAT =============
+def notify_expense(doc_number: str, total: float, description: str = ""):
     text = (
-        f"✅ <b>Ishlab chiqarish tayyor</b>\n\n"
-        f"Raqam: {production_number}\n"
-        f"Mahsulot: {product_name}\n"
-        f"Miqdor: {fmt(quantity)}"
+        f"📉 <b>Harajat tasdiqlandi</b>\n\n"
+        f"Hujjat: {doc_number}\n"
+        f"Summa: <b>{fmt(total)}</b> so'm"
     )
+    if description:
+        text += f"\n{description}"
+    send_notify_sync(text)
+
+
+# ============= 9. PUL KIRIM =============
+def notify_payment_income(partner_name: str, amount: float, payment_type: str = ""):
+    pt = {"cash": "Naqd", "card": "Karta", "transfer": "O'tkazma"}.get(payment_type, payment_type or "")
+    text = (
+        f"💵 <b>Pul kirim</b>\n\n"
+        f"Mijoz: {partner_name}\n"
+        f"Summa: <b>{fmt(amount)}</b> so'm"
+    )
+    if pt:
+        text += f"\nTuri: {pt}"
     send_notify_sync(text)
 
 

@@ -183,24 +183,22 @@ def is_qiyom_recipe(recipe) -> bool:
 
 
 def recipe_kg_per_unit(recipe: Optional[Recipe]) -> float:
-    """Retsept uchun 1 dona (birlik) ning og'irligi kg da. Nomidan 250gr/400gr/2kg/3kg/4kg/5kg/1kg aniqlanadi, aks holda retseptdagi output_quantity."""
+    """Retsept uchun 1 dona (birlik) ning og'irligi kg da. Nomidan gramm/kg aniqlanadi."""
+    import re
     if not recipe:
         return 1.0
     name = (recipe.name or "").lower()
-    if "250gr" in name or "250 gr" in name:
-        return 0.25
-    if "400gr" in name or "400 gr" in name:
-        return 0.4
-    if "5kg" in name or "5 kg" in name:
-        return 5.0
-    if "4kg" in name or "4 kg" in name:
-        return 4.0
-    if "3kg" in name or "3 kg" in name:
-        return 3.0
-    if "2kg" in name or "2 kg" in name:
-        return 2.0
-    if "1kg" in name or "1 kg" in name:
-        return 1.0
+    # Grammlarni aniqlash: 150gr, 250 gr, 400gr, 500g, (600g), ...
+    m_gr = re.search(r'(\d+)\s*gr', name)
+    if m_gr:
+        return int(m_gr.group(1)) / 1000.0
+    m_g = re.search(r'(\d+)\s*g(?:\b|\))', name)
+    if m_g:
+        return int(m_g.group(1)) / 1000.0
+    # Kilogrammlarni aniqlash: 1kg, 1.8kg, 2.5kg, 3 kg, ...
+    m_kg = re.search(r'([\d.]+)\s*kg', name)
+    if m_kg:
+        return float(m_kg.group(1))
     return float(recipe.output_quantity or 1.0)
 
 

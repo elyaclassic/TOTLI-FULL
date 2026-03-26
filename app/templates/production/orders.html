@@ -130,6 +130,8 @@
                 <button type="submit" class="top-btn btn btn-outline-secondary" title="Tasdiqni bekor qilib qayta tasdiqlaganda sana o\'zgargan hujjatlar uchun"><i class="bi bi-calendar-event"></i> Sanani tuzatish</button>
             </form>
             {% endif %}
+            <a href="/warehouse/otxod/7" class="top-btn btn btn-outline-success"><i class="bi bi-recycle"></i> Otxod</a>
+            <a href="/warehouse/utilizatsiya/7" class="top-btn btn btn-outline-danger"><i class="bi bi-trash3"></i> Utilizatsiya</a>
             <a href="/production/new" class="top-btn btn btn-success"><i class="bi bi-plus-circle"></i> Yaratish</a>
         </div>
     </div>
@@ -279,8 +281,7 @@
                         </td>
                         <td class="text-end">
                             {% set unit_name = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
-                            {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
-                            {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+                            {% set _kg_per_unit = prod._kg_per_unit if prod._kg_per_unit else 1.0 %}
                             {% set qty_kg = prod.quantity * _kg_per_unit %}
                             {% if (unit_name or '')|lower == 'kg' %}{{ "%.2f"|format(prod.quantity) }} kg{% else %}{{ "%.2f"|format(prod.quantity) }} {{ unit_name }}<br><small class="text-muted">({{ "%.2f"|format(qty_kg) }} kg)</small>{% endif %}
                         </td>
@@ -435,8 +436,7 @@
                 {% set r_stages = (prod.recipe.stages|sort(attribute='stage_number')) if (prod.recipe and prod.recipe.stages) else [] %}
                 {% set eff_max = (r_stages|map(attribute='stage_number')|list|max) if r_stages else 2 %}
                 {% set unit_name = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
-                {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
-                {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+                {% set _kg_per_unit = prod._kg_per_unit if prod._kg_per_unit else 1.0 %}
                 {% set qty_kg = prod.quantity * _kg_per_unit %}
                 <div class="prod-row"><strong>{{ prod.number }}</strong> <span class="text-muted">{{ prod.date.strftime('%d.%m.%Y %H:%M') }}</span></div>
                 <div class="prod-row">

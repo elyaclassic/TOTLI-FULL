@@ -10,6 +10,7 @@ from app.models.database import (
     ExpenseDoc, ExpenseDocItem, ExpenseType,
     CashRegister, Stock, Agent, Production, Recipe,
 )
+from app.utils.production_order import recipe_kg_per_unit
 
 
 def parse_period(period: str):
@@ -49,7 +50,26 @@ def _dt_end(d: date) -> datetime:
 
 
 # ============= 1. DAVOMAT =============
+def _sync_hikvision_now(db: Session, start: date, end: date):
+    """Hikvision dan so'ralganda yangilash"""
+    try:
+        from app.utils.hikvision import sync_hikvision_attendance
+        sync_hikvision_attendance(
+            hikvision_host="192.168.1.199",
+            hikvision_port=443,
+            hikvision_username="admin",
+            hikvision_password="Samsung0707",
+            start_date=start,
+            end_date=end,
+            db_session=db,
+        )
+    except Exception:
+        pass
+
+
 def report_attendance(db: Session, start: date, end: date) -> str:
+    # Avval Hikvision dan yangilash
+    _sync_hikvision_now(db, start, end)
     total_days = (end - start).days + 1
     is_single_day = (start == end)
     lines = [f"📋 <b>Davomat hisoboti</b>", f"📅 {start.strftime('%d.%m.%Y')} — {end.strftime('%d.%m.%Y')}\n"]
@@ -83,26 +103,35 @@ def report_attendance(db: Session, start: date, end: date) -> str:
         total_hours = 0
         for r in rows:
             t_in = r.t_in or "  —  "
-            t_out = r.t_out or "  —  "
-            if r.hours_worked and r.hours_worked > 0:
+            # Agar kelish = ketish bo'lsa — hali ketmagan (ishlayapti)
+            if r.t_in and r.t_out and r.t_in == r.t_out:
+                t_out = "  ...  "
+                hours = " ⏳"
+            elif r.hours_worked and r.hours_worked > 0:
+                t_out = r.t_out or "  —  "
                 hours = f"{r.hours_worked:.1f}"
                 total_hours += r.hours_worked
             else:
+                t_out = r.t_out or "  —  "
                 hours = " —"
             name = r.full_name[:22]
-            lines.append(f"{name:<22} {t_in:>5}  {t_out:>5}  {hours:>4}")
+            lines.append(f"{name:<22} {t_in:>5}  {t_out:>5} {hours:>4}")
             present += 1
         lines.append("─" * 42)
         lines.append(f"{'Jami soat:':<34} {total_hours:.1f}")
         lines.append("</pre>")
-        # Kelmagan xodimlar
+        # Kelmagan xodimlar (faqat hikvision_id bor xodimlar — sotuvchilar hisoblanmaydi)
         present_ids = set()
         for r in rows:
             emp = db.query(Employee).filter(Employee.full_name == r.full_name).first()
             if emp:
                 present_ids.add(emp.id)
-        all_active = db.query(Employee).filter(Employee.is_active == True).all()
-        absent_emps = [e for e in all_active if e.id not in present_ids]
+        all_hik = db.query(Employee).filter(
+            Employee.is_active == True,
+            Employee.hikvision_id.isnot(None),
+            Employee.hikvision_id != "",
+        ).all()
+        absent_emps = [e for e in all_hik if e.id not in present_ids]
         lines.append(f"\n✅ Kelgan: <b>{present}</b>  |  ❌ Kelmagan: <b>{len(absent_emps)}</b>")
         if absent_emps:
             lines.append("\n<b>Kelmaganlar:</b>")
@@ -377,7 +406,51 @@ def report_agents(db: Session, start: date, end: date) -> str:
     return "\n".join(lines)
 
 
-# ============= 10. OBMEN / VOZVRAT =============
+# ============= 10. ISHLAB CHIQARISH =============
+def report_production(db: Session, start: date, end: date) -> str:
+    prods = db.query(Production).filter(
+        Production.status == "completed",
+        Production.date >= _dt_start(start),
+        Production.date <= _dt_end(end),
+    ).all()
+    total_tayyor_kg = 0.0
+    total_yarim_kg = 0.0
+    total_count = len(prods)
+    by_product = {}
+    for pr in prods:
+        recipe = db.query(Recipe).filter(Recipe.id == pr.recipe_id).first()
+        product = db.query(Product).filter(Product.id == recipe.product_id).first() if recipe else None
+        p_name = product.name if product else "Noma'lum"
+        p_type = getattr(product, "type", "") or ""
+        is_qiyom = recipe and "qiyom" in (recipe.name or "").lower()
+        if p_type == "yarim_tayyor":
+            if not is_qiyom:
+                total_yarim_kg += float(pr.quantity or 0)
+        else:
+            kg = recipe_kg_per_unit(recipe) * float(pr.quantity or 0)
+            total_tayyor_kg += kg
+        if p_name not in by_product:
+            by_product[p_name] = {"qty": 0, "count": 0, "type": p_type}
+        by_product[p_name]["qty"] += float(pr.quantity or 0)
+        by_product[p_name]["count"] += 1
+    lines = [
+        f"🏭 <b>Ishlab chiqarish hisoboti</b>",
+        f"📅 {start.strftime('%d.%m.%Y')} — {end.strftime('%d.%m.%Y')}\n",
+        f"Buyurtmalar: <b>{total_count}</b> ta",
+        f"Tayyor mahsulot: <b>{fmt(total_tayyor_kg)}</b> kg",
+        f"Yarim tayyor: <b>{fmt(total_yarim_kg)}</b> kg",
+    ]
+    # Top mahsulotlar
+    sorted_products = sorted(by_product.items(), key=lambda x: -x[1]["qty"])
+    if sorted_products:
+        lines.append(f"\n<b>Mahsulotlar:</b>")
+        for i, (name, d) in enumerate(sorted_products[:15], 1):
+            t = "🔶" if d["type"] == "yarim_tayyor" else "✅"
+            lines.append(f"  {t} {name}: {fmt(d['qty'])} ({d['count']} ta)")
+    return "\n".join(lines)
+
+
+# ============= 11. OBMEN / VOZVRAT =============
 def report_returns(db: Session, start: date, end: date) -> str:
     returns = db.query(Order).filter(
         Order.type.in_(["return_sale", "return_purchase", "return"]),

@@ -885,6 +885,12 @@ async def finance_harajat_hujjat_tasdiqlash(
         )
         _sync_cash_balance(db, doc.cash_register_id)
         db.commit()
+        # Telegram bildirish
+        try:
+            from app.bot.services.notifier import notify_expense
+            notify_expense(doc.number or f"#{doc_id}", total, "")
+        except Exception:
+            pass
         return RedirectResponse(url="/finance/harajatlar?success=confirmed", status_code=303)
     except HTTPException:
         raise

@@ -21,18 +21,24 @@
 
 {% if operator_totals %}
 <div class="d-flex flex-wrap gap-3 mb-3">
-    {% for op_name, total_kg in operator_totals %}
+    {% for op_name, tayyor_kg, yarim_kg in operator_totals %}
     <div class="mini-stat" style="border-left: 4px solid #017449; min-width: 180px;">
         <div class="d-flex justify-content-between align-items-start">
             <div>
                 {% set emp_id = name_to_employee_id.get(op_name) %}
                 {% if emp_id %}
                 <a href="/production/orders?operator_id={{ emp_id }}&date_from={{ filter_date_from or '' }}&date_to={{ filter_date_to or '' }}" class="text-decoration-none">
-                    <div class="num text-success">{{ "%.2f"|format(total_kg) }} kg</div>
+                    <div class="num text-success">{{ "%.2f"|format(tayyor_kg) }} kg</div>
+                    {% if yarim_kg > 0 %}
+                    <div class="small text-primary">y.t.: {{ "%.2f"|format(yarim_kg) }} kg</div>
+                    {% endif %}
                     <div class="lbl"><i class="bi bi-person"></i> {{ op_name }}</div>
                 </a>
                 {% else %}
-                <div class="num text-success">{{ "%.2f"|format(total_kg) }} kg</div>
+                <div class="num text-success">{{ "%.2f"|format(tayyor_kg) }} kg</div>
+                {% if yarim_kg > 0 %}
+                <div class="small text-primary">y.t.: {{ "%.2f"|format(yarim_kg) }} kg</div>
+                {% endif %}
                 <div class="lbl"><i class="bi bi-person"></i> {{ op_name }}</div>
                 {% endif %}
             </div>
@@ -53,10 +59,10 @@
         <table class="table table-hover mb-0">
             <thead>
                 <tr>
-                    <th>Sana</th>
-                    <th>Operator</th>
-                    <th>Ishlab chiqargan mahsulot</th>
-                    <th>Miqdor</th>
+                    <th class="sortable" data-col="0" data-type="date" style="cursor:pointer;">Sana <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                    <th class="sortable" data-col="1" data-type="text" style="cursor:pointer;">Operator <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                    <th class="sortable" data-col="2" data-type="text" style="cursor:pointer;">Ishlab chiqargan mahsulot <i class="bi bi-arrow-down-up text-muted small"></i></th>
+                    <th class="sortable" data-col="3" data-type="num" style="cursor:pointer;">Miqdor <i class="bi bi-arrow-down-up text-muted small"></i></th>
                 </tr>
             </thead>
             <tbody>
@@ -87,8 +93,7 @@
                     <td>
                         {% if prod.recipe %}
                         {% set unit_name = (prod.recipe.product.unit.name if prod.recipe.product and prod.recipe.product.unit else 'kg') %}
-                        {% set _rname = (prod.recipe.name or '')|lower %}
-                        {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe.output_quantity else 1))))))) %}
+                        {% set _kg_per_unit = prod._kg_per_unit if prod._kg_per_unit else 1.0 %}
                         {% set qty_kg = (prod.quantity or 0) * _kg_per_unit %}
                         <strong class="num-cell">{{ "%.2f"|format(prod.quantity or 0) }} {{ unit_name }}</strong>
                         {% if unit_name|lower != 'kg' %}
@@ -113,4 +118,57 @@
 </div>
 
 </div>
+
+<script>
+(function() {
+    var table = document.querySelector('.data-table table');
+    if (!table) return;
+    var thead = table.querySelector('thead');
+    var tbody = table.querySelector('tbody');
+    var headers = thead.querySelectorAll('th.sortable');
+    var sortState = {};
+
+    function parseDate(s) {
+        // "26.03.2026 18:35"
+        var m = s.trim().match(/(\d{2})\.(\d{2})\.(\d{4})\s+(\d{2}):(\d{2})/);
+        if (!m) return 0;
+        return new Date(m[3], m[2]-1, m[1], m[4], m[5]).getTime();
+    }
+    function parseNum(s) {
+        var m = s.match(/([\d.,]+)/);
+        return m ? parseFloat(m[1].replace(/,/g, '')) : 0;
+    }
+    function getCellText(row, col) {
+        var td = row.cells[col];
+        return td ? (td.textContent || '').trim() : '';
+    }
+
+    headers.forEach(function(th) {
+        th.addEventListener('click', function() {
+            var col = parseInt(th.dataset.col);
+            var type = th.dataset.type;
+            var asc = sortState[col] === 'asc' ? false : true;
+            sortState = {};
+            sortState[col] = asc ? 'asc' : 'desc';
+
+            // Update icons
+            headers.forEach(function(h) {
+                h.querySelector('i').className = 'bi bi-arrow-down-up text-muted small';
+            });
+            th.querySelector('i').className = asc ? 'bi bi-arrow-up small text-primary' : 'bi bi-arrow-down small text-primary';
+
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            rows.sort(function(a, b) {
+                var va = getCellText(a, col), vb = getCellText(b, col);
+                var cmp = 0;
+                if (type === 'date') cmp = parseDate(va) - parseDate(vb);
+                else if (type === 'num') cmp = parseNum(va) - parseNum(vb);
+                else cmp = va.localeCompare(vb, 'uz');
+                return asc ? cmp : -cmp;
+            });
+            rows.forEach(function(r) { tbody.appendChild(r); });
+        });
+    });
+})();
+</script>
 {% endblock %}

@@ -4,12 +4,22 @@
 
 <div class="page-header mb-3">
     <h4 class="mb-0"><i class="bi bi-gear-fill text-primary"></i> Ishlab chiqarish</h4>
-    <a href="/production/new" class="top-btn btn btn-primary"><i class="bi bi-plus"></i> Yangi ishlab chiqarish</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a href="/warehouse/otxod/7" class="top-btn btn btn-outline-success"><i class="bi bi-recycle"></i> Otxod ishlab chiqarish</a>
+        <a href="/warehouse/utilizatsiya/7" class="top-btn btn btn-outline-danger"><i class="bi bi-trash3"></i> Utilizatsiya</a>
+        <a href="/production/new" class="top-btn btn btn-primary"><i class="bi bi-plus"></i> Yangi ishlab chiqarish</a>
+    </div>
 </div>
 
 {% if error %}
 <div class="alert alert-danger py-2">
     <small>{{ error }}</small>
+</div>
+{% endif %}
+{% if request.query_params.get('success') in ('otxod', 'utilizatsiya') and request.query_params.get('detail') %}
+<div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+    <i class="bi bi-check-circle"></i> {{ request.query_params.get('detail') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
 {% if request and request.query_params and request.query_params.get('error') == 'warehouse' %}
@@ -190,8 +200,7 @@
                             </td>
                             <td>
                                 {% set _unit = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
-                                {% set _rname = (prod.recipe.name or '')|lower if prod.recipe else '' %}
-                                {% set _kg_per_unit = 0.25 if ('250gr' in _rname or '250 gr' in _rname) else (0.4 if ('400gr' in _rname or '400 gr' in _rname) else (5.0 if ('5kg' in _rname or '5 kg' in _rname) else (4.0 if ('4kg' in _rname or '4 kg' in _rname) else (3.0 if ('3kg' in _rname or '3 kg' in _rname) else (2.0 if ('2kg' in _rname or '2 kg' in _rname) else (1.0 if ('1kg' in _rname or '1 kg' in _rname) else (prod.recipe.output_quantity if prod.recipe and prod.recipe.output_quantity else 1))))))) %}
+                                {% set _kg_per_unit = prod._kg_per_unit if prod._kg_per_unit else 1.0 %}
                                 {% set qty_kg = (prod.quantity or 0) * _kg_per_unit %}
                                 {% if (_unit or 'kg')|lower == 'kg' %}{{ "%.1f"|format(prod.quantity or 0) }} kg{% else %}{{ "%.1f"|format(prod.quantity or 0) }} {{ _unit }} <span class="text-muted small">({{ "%.2f"|format(qty_kg) }} kg)</span>{% endif %}
                             </td>
