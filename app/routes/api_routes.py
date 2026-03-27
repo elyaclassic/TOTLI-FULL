@@ -266,12 +266,16 @@ async def unified_login(
                 }
                 # PWA uchun user ma'lumotlarini agent/driver formatida ham qaytarish
                 if redirect_type == "pwa":
-                    response_data["agent"] = {
+                    user_info = {
                         "id": user.id,
                         "code": user.username,
                         "full_name": (user.full_name or "") or user.username,
                         "phone": user.phone or "",
                     }
+                    if role == "driver":
+                        response_data["driver"] = user_info
+                    else:
+                        response_data["agent"] = user_info
                 record_success(request)
                 logger.info(f"User login response: redirect={redirect_type}, role={role}")
                 return response_data
@@ -657,9 +661,12 @@ async def agent_location_update(
         user_data = get_user_from_token(tk)
         if not user_data or user_data.get("user_type") != "agent":
             return {"success": False, "error": "Invalid token"}
-        agent_id = user_data.get("user_id")
-        if not agent_id:
+        user_id = user_data.get("user_id")
+        if not user_id:
             return {"success": False, "error": "Invalid token"}
+        # user_id dan agents jadvalidagi agent_id ni topish
+        agent = db.query(Agent).filter(Agent.user_id == user_id).first()
+        agent_id = agent.id if agent else user_id
         location = AgentLocation(
             agent_id=agent_id,
             latitude=latitude,
@@ -870,7 +877,17 @@ async def driver_location_update(
         user_data = get_user_from_token(token)
         if not user_data or user_data.get("user_type") != "driver":
             return {"success": False, "error": "Invalid token"}
-        driver_id = user_data["user_id"]
+        user_id = user_data["user_id"]
+        # user_id dan drivers jadvalidagi driver_id ni topish
+        driver = db.query(Driver).filter(Driver.id == user_id).first()
+        if not driver:
+            # user_id bo'yicha employee orqali qidirish yoki code bo'yicha
+            user = db.query(User).filter(User.id == user_id).first()
+            if user:
+                driver = db.query(Driver).filter(Driver.code == user.username).first()
+                if not driver:
+                    driver = db.query(Driver).filter(Driver.full_name == user.full_name).first()
+        driver_id = driver.id if driver else user_id
         location = DriverLocation(
             driver_id=driver_id,
             latitude=latitude,
@@ -897,7 +914,13 @@ def _agent_from_token(token: str, db: Session):
     user_data = get_user_from_token(token)
     if not user_data or user_data.get("user_type") != "agent":
         return None
-    return db.query(Agent).filter(Agent.id == user_data["user_id"], Agent.is_active == True).first()
+    user_id = user_data["user_id"]
+    # Avval user_id bo'yicha agents jadvalidan qidirish
+    agent = db.query(Agent).filter(Agent.user_id == user_id, Agent.is_active == True).first()
+    if not agent:
+        # Agar user_id == agent.id bo'lsa (eski token)
+        agent = db.query(Agent).filter(Agent.id == user_id, Agent.is_active == True).first()
+    return agent
 
 
 def _extract_token(request: Request, token: str = None) -> str:

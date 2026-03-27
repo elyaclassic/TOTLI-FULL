@@ -11,7 +11,7 @@ import glob
 from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.models.database import SessionLocal, Order, Notification
+from app.models.database import SessionLocal, Order, Notification, AttendanceDoc, Attendance, Employee
 from app.utils.notifications import check_low_stock_and_notify, create_notification
 
 # Baza fayli va backup papkasi
@@ -115,6 +115,50 @@ def _daily_backup_job():
         print(f"[Backup] Xato: {e}")
 
 
+def _daily_attendance_create():
+    """Har kuni ertalab kunlik tabel hujjati va barcha faol xodimlar uchun davomat yozuvlarini yaratish."""
+    db = SessionLocal()
+    try:
+        today = date.today()
+        # Bugun uchun hujjat bormi?
+        doc = db.query(AttendanceDoc).filter(AttendanceDoc.date == today).first()
+        if not doc:
+            # Hujjat raqami: T-YYYY-MM-DD
+            doc_number = f"T-{today.strftime('%Y-%m-%d')}"
+            doc = AttendanceDoc(
+                number=doc_number,
+                date=today,
+            )
+            db.add(doc)
+            db.flush()
+            print(f"[Tabel] Kunlik tabel yaratildi: {doc_number}")
+
+        # Barcha faol xodimlar uchun davomat yozuvlari
+        active_employees = db.query(Employee).filter(Employee.is_active == True).all()
+        created = 0
+        for emp in active_employees:
+            existing = db.query(Attendance).filter(
+                Attendance.employee_id == emp.id,
+                Attendance.date == today,
+            ).first()
+            if not existing:
+                att = Attendance(
+                    employee_id=emp.id,
+                    date=today,
+                    doc_id=doc.id,
+                    status="absent",  # default — kelmagan, Hikvision yoki qo'lda yangilanadi
+                )
+                db.add(att)
+                created += 1
+        db.commit()
+        print(f"[Tabel] {today}: {created} ta xodim uchun davomat yozuvi yaratildi")
+    except Exception as e:
+        db.rollback()
+        print(f"[Tabel] Xato: {e}")
+    finally:
+        db.close()
+
+
 def _tg_absent_check():
     """Ertalab — kim kelmagan"""
     try:
@@ -163,6 +207,10 @@ def start_scheduler():
     _scheduler.add_job(_daily_hikvision_sync_job, "interval", minutes=10, id="hikvision_interval")
     # Hozir ham bir marta yuklash
     _scheduler.add_job(_daily_hikvision_sync_job, "date", run_date=datetime.now() + timedelta(minutes=2), id="hikvision_first")
+    # Kunlik tabel yaratish — har kuni soat 07:00 da
+    _scheduler.add_job(_daily_attendance_create, "cron", hour=7, minute=0, id="daily_attendance")
+    # Hozir ham bir marta yaratish
+    _scheduler.add_job(_daily_attendance_create, "date", run_date=datetime.now() + timedelta(seconds=15), id="attendance_first")
     # Telegram bildirish vazifalari
     # Ertalab 10:00 — kim kelmagan
     _scheduler.add_job(_tg_absent_check, "cron", hour=10, minute=0, id="tg_absent")

@@ -1149,8 +1149,9 @@ class Agent(Base):
     region = Column(String(100))  # Hudud
     is_active = Column(Boolean, default=True)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
-    
+
     locations = relationship("AgentLocation", back_populates="agent", order_by="AgentLocation.recorded_at.desc()")
     routes = relationship("Route", back_populates="agent")
     visits = relationship("Visit", back_populates="agent")

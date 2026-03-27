@@ -94,6 +94,7 @@
                     <label class="form-label small mb-1">Agent</label>
                     <select name="agent_id" class="form-select form-select-sm">
                         <option value="">— O'zgartirmaslik —</option>
+                        <option value="__clear__" class="text-danger">❌ Olib tashlash</option>
                         {% for a in agents %}
                         <option value="{{ a.id }}">{{ a.full_name }}</option>
                         {% endfor %}
@@ -103,6 +104,7 @@
                     <label class="form-label small mb-1">Tashrif kuni</label>
                     <select name="visit_day" class="form-select form-select-sm">
                         <option value="">— O'zgartirmaslik —</option>
+                        <option value="__clear__" class="text-danger">❌ Olib tashlash</option>
                         <option value="1">Dushanba</option>
                         <option value="2">Seshanba</option>
                         <option value="3">Chorshanba</option>
@@ -116,6 +118,7 @@
                     <label class="form-label small mb-1">Kategoriya</label>
                     <select name="category" class="form-select form-select-sm">
                         <option value="">— O'zgartirmaslik —</option>
+                        <option value="__clear__" class="text-danger">❌ Olib tashlash</option>
                         <option value="A">A - VIP</option>
                         <option value="B">B - Katta</option>
                         <option value="C">C - O'rta</option>
@@ -126,6 +129,7 @@
                     <label class="form-label small mb-1">Hudud</label>
                     <select name="region" class="form-select form-select-sm">
                         <option value="">— O'zgartirmaslik —</option>
+                        <option value="__clear__" class="text-danger">❌ Olib tashlash</option>
                         <option value="tashkent">Toshkent</option>
                         <option value="samarkand">Samarqand</option>
                         <option value="bukhara">Buxoro</option>

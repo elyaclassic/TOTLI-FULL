@@ -95,8 +95,8 @@ async def csrf_middleware_impl(request: Request, call_next):
         except Exception:
             pass
         return await call_next(request)
-    # Agent mobil ilova API — Bearer token ishlatadi, CSRF shart emas
-    if path.startswith("/api/agent/my-") or path.startswith("/api/agent/partner") or path.startswith("/api/agent/product") or path == "/api/agent/order/create" or path == "/api/agent/stats":
+    # Agent/Driver mobil ilova API — Bearer token ishlatadi, CSRF shart emas
+    if path.startswith("/api/agent/") or path.startswith("/api/driver/"):
         try:
             setattr(request.state, "csrf_token", request.cookies.get("csrf_token") or generate_csrf_token())
         except Exception:

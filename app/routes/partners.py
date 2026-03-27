@@ -140,15 +140,18 @@ async def partner_bulk_assign_agent(
     region = form.get("region", "").strip()
 
     if agent_id:
-        agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
-        if agent:
-            updates[Partner.agent_id] = agent.id
-    if visit_day != "":
-        updates[Partner.visit_day] = visit_day if visit_day != "__clear__" else None
+        if agent_id == "__clear__":
+            updates[Partner.agent_id] = None
+        else:
+            agent = db.query(Agent).filter(Agent.id == int(agent_id)).first()
+            if agent:
+                updates[Partner.agent_id] = agent.id
+    if visit_day:
+        updates[Partner.visit_day] = None if visit_day == "__clear__" else visit_day
     if category:
-        updates[Partner.category] = category if category != "__clear__" else None
+        updates[Partner.category] = None if category == "__clear__" else category
     if region:
-        updates[Partner.region] = region if region != "__clear__" else None
+        updates[Partner.region] = None if region == "__clear__" else region
 
     if updates:
         db.query(Partner).filter(Partner.id.in_(partner_ids)).update(updates, synchronize_session="fetch")
