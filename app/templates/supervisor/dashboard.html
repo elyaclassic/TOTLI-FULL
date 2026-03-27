@@ -174,8 +174,8 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if driver.last_location and driver.last_location.speed if driver.last_location else 0 %}
-                                <small>{{ "%.0f"|format(driver.last_location.speed if driver.last_location else 0) }} km/h</small>
+                                {% if driver.last_location and driver.last_location.speed %}
+                                <small>{{ "%.0f"|format(driver.last_location.speed) }} km/h</small>
                                 {% else %}
                                 -
                                 {% endif %}
