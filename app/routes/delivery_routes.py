@@ -244,6 +244,38 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
     }
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
+    # Agent va driver markerlar (mini xarita uchun)
+    agent_markers = []
+    for agent in agents:
+        last_loc = (
+            db.query(AgentLocation)
+            .filter(AgentLocation.agent_id == agent.id)
+            .order_by(AgentLocation.recorded_at.desc())
+            .first()
+        )
+        if last_loc:
+            agent.last_location = last_loc
+            agent_markers.append({
+                "id": agent.id, "name": agent.full_name, "type": "agent",
+                "lat": last_loc.latitude, "lng": last_loc.longitude,
+                "time": last_loc.recorded_at.strftime("%H:%M"),
+            })
+    driver_markers = []
+    for driver in drivers:
+        last_loc = (
+            db.query(DriverLocation)
+            .filter(DriverLocation.driver_id == driver.id)
+            .order_by(DriverLocation.recorded_at.desc())
+            .first()
+        )
+        if last_loc:
+            driver.last_location = last_loc
+            driver_markers.append({
+                "id": driver.id, "name": driver.full_name, "type": "driver",
+                "lat": last_loc.latitude, "lng": last_loc.longitude,
+                "time": last_loc.recorded_at.strftime("%H:%M"),
+                "vehicle": driver.vehicle_number,
+            })
     recent_visits = db.query(Visit).order_by(Visit.visit_date.desc()).limit(10).all()
     recent_deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(10).all()
     return templates.TemplateResponse("supervisor/dashboard.html", {
@@ -252,6 +284,8 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         "stats": stats,
         "agents": agents,
         "drivers": drivers,
+        "agent_markers": agent_markers,
+        "driver_markers": driver_markers,
         "agent_stats": agent_stats[:10],
         "recent_visits": recent_visits,
         "recent_deliveries": recent_deliveries,

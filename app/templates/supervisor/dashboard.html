@@ -111,17 +111,17 @@
                             </td>
                             <td><small>{{ agent.region or '-' }}</small></td>
                             <td>
-                                {% if agent.locations %}
+                                {% if agent.last_location %}
                                 <small class="{% if agent.is_active %}text-success{% else %}text-danger{% endif %}">
-                                    {{ agent.locations[0].recorded_at.strftime('%H:%M') }}
+                                    {{ agent.last_location.recorded_at.strftime('%H:%M') if agent.last_location else '-' }}
                                 </small>
                                 {% else %}
                                 <small class="text-muted">-</small>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if agent.locations %}
-                                <small>{{ agent.locations[0].battery }}%</small>
+                                {% if agent.last_location %}
+                                <small>{{ agent.last_location.battery if agent.last_location else 0 }}%</small>
                                 {% else %}
                                 -
                                 {% endif %}
@@ -165,17 +165,17 @@
                             </td>
                             <td><small>{{ driver.vehicle_number or '-' }}</small></td>
                             <td>
-                                {% if driver.locations %}
+                                {% if driver.last_location %}
                                 <small class="text-success">
-                                    {{ driver.locations[0].recorded_at.strftime('%H:%M') }}
+                                    {{ driver.last_location.recorded_at.strftime('%H:%M') if driver.last_location else '-' }}
                                 </small>
                                 {% else %}
                                 <small class="text-muted">-</small>
                                 {% endif %}
                             </td>
                             <td>
-                                {% if driver.locations and driver.locations[0].speed %}
-                                <small>{{ "%.0f"|format(driver.locations[0].speed) }} km/h</small>
+                                {% if driver.last_location and driver.last_location.speed if driver.last_location else 0 %}
+                                <small>{{ "%.0f"|format(driver.last_location.speed if driver.last_location else 0) }} km/h</small>
                                 {% else %}
                                 -
                                 {% endif %}
@@ -273,34 +273,26 @@
         var allCoords = [];
 
         // Agentlar
-        {% for agent in agents %}
-        {% if agent.locations %}
-        {% set lat = agent.locations[0].latitude %}
-        {% set lng = agent.locations[0].longitude %}
-        myMap.geoObjects.add(new ymaps.Placemark([{{ lat }}, {{ lng }}], {
-        balloonContent: '<b>{{ agent.full_name }}</b>'
-    }, {
-        preset: 'islands#circleIcon',
-        iconColor: '#0d6efd'
-    }));
-    allCoords.push([{{ lat }}, {{ lng }}]);
-    {% endif %}
-    {% endfor %}
+        {% for m in agent_markers %}
+        myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
+            balloonContent: '<b>{{ m.name }}</b><br><small>{{ m.time }}</small>'
+        }, {
+            preset: 'islands#circleIcon',
+            iconColor: '#0d6efd'
+        }));
+        allCoords.push([{{ m.lat }}, {{ m.lng }}]);
+        {% endfor %}
 
-    // Haydovchilar
-    {% for driver in drivers %}
-    {% if driver.locations %}
-    {% set lat = driver.locations[0].latitude %}
-    {% set lng = driver.locations[0].longitude %}
-    myMap.geoObjects.add(new ymaps.Placemark([{{ lat }}, {{ lng }}], {
-        balloonContent: '<b>{{ driver.full_name }}</b>'
-    }, {
-        preset: 'islands#circleIcon',
-        iconColor: '#0dcaf0'
-    }));
-    allCoords.push([{{ lat }}, {{ lng }}]);
-    {% endif %}
-    {% endfor %}
+        // Haydovchilar
+        {% for m in driver_markers %}
+        myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
+            balloonContent: '<b>{{ m.name }}</b><br><small>{{ m.vehicle }}</small>'
+        }, {
+            preset: 'islands#circleIcon',
+            iconColor: '#0dcaf0'
+        }));
+        allCoords.push([{{ m.lat }}, {{ m.lng }}]);
+        {% endfor %}
 
     // Xaritani markerlar bo'yicha fit qilish
     if (allCoords.length > 0) {
