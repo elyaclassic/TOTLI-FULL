@@ -1,5 +1,9 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
 {% block content %}
 <div class="d-flex justify-content-between mb-4">
     <h4><i class="bi bi-geo-alt"></i> Real vaqtda xarita</h4>
@@ -11,30 +15,18 @@
     </div>
 </div>
 
-<script>
-    // Auto-refresh every 30 seconds
-    let countdown = 30;
-    setInterval(() => {
-        countdown--;
-        document.getElementById('countdown').textContent = countdown;
-        if (countdown <= 0) {
-            location.reload();
-        }
-    }, 1000);
-</script>
-
 <!-- Filtrlar -->
 <div class="row mb-3">
     <div class="col-md-8">
         <div class="btn-group flex-wrap" role="group">
             <span class="btn btn-outline-primary">
-                <i class="bi bi-person-walking"></i> Agentlar ({{ agents|length }})
+                <i class="bi bi-person-walking"></i> Agentlar ({{ agent_markers|length }})
             </span>
             <span class="btn btn-outline-info">
-                <i class="bi bi-truck"></i> Haydovchilar ({{ drivers|length }})
+                <i class="bi bi-truck"></i> Haydovchilar ({{ driver_markers|length }})
             </span>
             <span class="btn btn-outline-success">
-                <i class="bi bi-shop"></i> Mijozlar ({{ partner_locations|length }})
+                <i class="bi bi-shop"></i> Mijozlar ({{ partner_markers|length }})
             </span>
         </div>
     </div>
@@ -59,10 +51,52 @@
 </div>
 {% endblock %}
 
-{# Xarita provider'ga qarab to'g'ri template'ni yuklash #}
-{# Load correct template based on map provider #}
-{% if map_provider == 'google' %}
-{% include 'map/_google_map.html' %}
-{% else %}
-{% include 'map/_yandex_map.html' %}
-{% endif %}
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function() {
+    var map = L.map('mainMap').setView([40.533555, 70.930423], 11);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
+
+    var bounds = [];
+
+    // Agentlar
+    {% for m in agent_markers %}
+    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 9, color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.8})
+        .bindPopup('<b>{{ m.name }}</b><br><small>Agent | {{ m.time }}</small>')
+        .addTo(map);
+    bounds.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
+
+    // Haydovchilar
+    {% for m in driver_markers %}
+    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 9, color: '#0dcaf0', fillColor: '#0dcaf0', fillOpacity: 0.8})
+        .bindPopup('<b>{{ m.name }}</b><br><small>Haydovchi | {{ m.vehicle }} | {{ m.time }}</small>')
+        .addTo(map);
+    bounds.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
+
+    // Mijozlar
+    {% for m in partner_markers %}
+    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 6, color: '#198754', fillColor: '#198754', fillOpacity: 0.7})
+        .bindPopup('<b>{{ m.name }}</b><br><small>{{ m.address or "" }}</small>')
+        .addTo(map);
+    bounds.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
+
+    if (bounds.length > 0) {
+        map.fitBounds(bounds, {padding: [30, 30]});
+    }
+
+    // Auto-refresh
+    var countdown = 30;
+    setInterval(function() {
+        countdown--;
+        document.getElementById('countdown').textContent = countdown;
+        if (countdown <= 0) location.reload();
+    }, 1000);
+})();
+</script>
+{% endblock %}

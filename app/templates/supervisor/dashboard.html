@@ -260,49 +260,42 @@
 {% block extra_css %}
 {% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
 {% block extra_js %}
-<script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ" type="text/javascript"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
-    ymaps.ready(function () {
-        var myMap = new ymaps.Map('supervisorMap', {
-            center: [40.533420, 70.930426],  // Qo'qon (Kokand)
-            zoom: 13,  // Closer zoom for city view
-            controls: ['zoomControl', 'searchControl']
-        });
+(function() {
+    var mapEl = document.getElementById('supervisorMap');
+    if (!mapEl) return;
+    var map = L.map('supervisorMap').setView([40.533420, 70.930426], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap'
+    }).addTo(map);
 
-        var allCoords = [];
+    var bounds = [];
 
-        // Agentlar
-        {% for m in agent_markers %}
-        myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
-            balloonContent: '<b>{{ m.name }}</b><br><small>{{ m.time }}</small>'
-        }, {
-            preset: 'islands#circleIcon',
-            iconColor: '#0d6efd'
-        }));
-        allCoords.push([{{ m.lat }}, {{ m.lng }}]);
-        {% endfor %}
+    // Agentlar
+    {% for m in agent_markers %}
+    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 8, color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.8})
+        .bindPopup('<b>{{ m.name }}</b><br><small>{{ m.time }}</small>')
+        .addTo(map);
+    bounds.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
 
-        // Haydovchilar
-        {% for m in driver_markers %}
-        myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
-            balloonContent: '<b>{{ m.name }}</b><br><small>{{ m.vehicle }}</small>'
-        }, {
-            preset: 'islands#circleIcon',
-            iconColor: '#0dcaf0'
-        }));
-        allCoords.push([{{ m.lat }}, {{ m.lng }}]);
-        {% endfor %}
+    // Haydovchilar
+    {% for m in driver_markers %}
+    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 8, color: '#0dcaf0', fillColor: '#0dcaf0', fillOpacity: 0.8})
+        .bindPopup('<b>{{ m.name }}</b><br><small>{{ m.vehicle }}</small>')
+        .addTo(map);
+    bounds.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
 
-    // Xaritani markerlar bo'yicha fit qilish
-    if (allCoords.length > 0) {
-        setTimeout(function () {
-            var bounds = myMap.geoObjects.getBounds();
-            if (bounds) {
-                myMap.setBounds(bounds, { checkZoomRange: true, zoomMargin: 50 });
-            }
-        }, 500);
+    if (bounds.length > 0) {
+        map.fitBounds(bounds, {padding: [30, 30]});
     }
-    });
+})();
 </script>
 {% endblock %}
