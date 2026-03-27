@@ -32,6 +32,9 @@
                         <option value="present" {% if record.status == 'present' %}selected{% endif %}>Keldi</option>
                         <option value="absent" {% if record.status == 'absent' %}selected{% endif %}>Kelmadi</option>
                         <option value="leave" {% if record.status == 'leave' %}selected{% endif %}>Ta'til</option>
+                        <option value="kasallik" {% if record.status == 'kasallik' %}selected{% endif %}>Kasallik</option>
+                        <option value="tatil" {% if record.status == 'tatil' %}selected{% endif %}>Dam olish</option>
+                        <option value="mehnat_safari" {% if record.status == 'mehnat_safari' %}selected{% endif %}>Mehnat safari</option>
                     </select>
                 </div>
                 <div class="col-md-3">

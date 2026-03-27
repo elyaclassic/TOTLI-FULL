@@ -161,9 +161,19 @@
                                 <td class="num-cell">{{ r.hours_worked or '-' }}</td>
                                 <td>
                                     {% if r.status == 'present' %}
-                                        <span class="badge-active">{{ r.status or 'present' }}</span>
+                                        <span class="badge-active">Keldi</span>
+                                    {% elif r.status == 'absent' %}
+                                        <span class="badge-inactive">Kelmadi</span>
+                                    {% elif r.status == 'leave' %}
+                                        <span class="badge bg-info text-dark">Ta'til</span>
+                                    {% elif r.status == 'kasallik' %}
+                                        <span class="badge bg-warning text-dark">Kasallik</span>
+                                    {% elif r.status == 'tatil' %}
+                                        <span class="badge bg-secondary">Dam olish</span>
+                                    {% elif r.status == 'mehnat_safari' %}
+                                        <span class="badge bg-primary">Mehnat safari</span>
                                     {% else %}
-                                        <span class="badge-inactive">{{ r.status or 'present' }}</span>
+                                        <span class="badge-inactive">{{ r.status or '-' }}</span>
                                     {% endif %}
                                 </td>
                                 <td>

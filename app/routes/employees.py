@@ -1423,7 +1423,10 @@ async def attendance_form_bulk_time(
     delta = check_out_dt - check_in_dt
     if delta.total_seconds() < 0:
         delta += timedelta(days=1)
-    hours_worked = round(delta.total_seconds() / 3600 * 2) / 2
+    raw_hours = delta.total_seconds() / 3600
+    if raw_hours >= 6:
+        raw_hours -= 1.0  # tushlik
+    hours_worked = round(raw_hours, 2)
     form = await request.form()
     employee_ids_param = form.getlist("employee_ids")
     if employee_ids_param:
@@ -1489,6 +1492,8 @@ async def attendance_form_save(
             status_val = "absent"
         try:
             hours_worked = float(hours_str) if hours_str else None
+            if hours_worked is not None and hours_worked < 0:
+                hours_worked = 0
         except ValueError:
             hours_worked = None
         check_in_time = _parse_time(check_in_str)
@@ -1498,8 +1503,17 @@ async def attendance_form_save(
         if hours_worked is None and check_in_dt and check_out_dt:
             delta = check_out_dt - check_in_dt
             if delta.total_seconds() < 0:
+                # Kechasi ishlagan bo'lishi mumkin (masalan 20:00-02:00)
                 delta += timedelta(days=1)
-            hours_worked = round(delta.total_seconds() / 3600 * 2) / 2
+            if delta.total_seconds() > 16 * 3600:
+                # 16 soatdan oshsa — xato kiritilgan, check_out < check_in
+                hours_worked = 0
+            else:
+                # Tushlik (1 soat) ayirish: 6+ soat ishlasa
+                raw_hours = delta.total_seconds() / 3600
+                if raw_hours >= 6:
+                    raw_hours -= 1.0  # tushlik
+                hours_worked = round(raw_hours, 2)
         att = db.query(Attendance).filter(Attendance.employee_id == emp_id, Attendance.date == doc_date).first()
         if not att:
             att = Attendance(employee_id=emp_id, date=doc_date)
@@ -1730,13 +1744,19 @@ async def attendance_record_edit_save(
     att.check_in = check_in_dt
     att.check_out = check_out_dt
     if hours_worked is not None:
-        att.hours_worked = float(hours_worked)
+        att.hours_worked = max(0, float(hours_worked))
     elif check_in_dt and check_out_dt:
         delta = check_out_dt - check_in_dt
         if delta.total_seconds() < 0:
             delta += timedelta(days=1)
-        att.hours_worked = round(delta.total_seconds() / 3600 * 2) / 2
-    if status in ("present", "absent", "leave"):
+        if delta.total_seconds() > 16 * 3600:
+            att.hours_worked = 0
+        else:
+            raw_hours = delta.total_seconds() / 3600
+            if raw_hours >= 6:
+                raw_hours -= 1.0  # tushlik
+            att.hours_worked = round(raw_hours, 2)
+    if status in ("present", "absent", "leave", "kasallik", "tatil", "mehnat_safari"):
         att.status = status
     att.note = (note or "").strip() or None
     db.commit()

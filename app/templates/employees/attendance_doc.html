@@ -36,6 +36,7 @@
                         <tr>
                             <th>#</th>
                             <th>Xodim</th>
+                            <th>Holat</th>
                             <th>Keldi</th>
                             <th>Ketdi</th>
                             <th>Soat</th>
@@ -48,6 +49,7 @@
                         <tr>
                             <td>{{ loop.index }}</td>
                             <td>{{ att.employee.full_name }}</td>
+                            <td>{% if att.status == 'present' %}<span class="text-success">Keldi</span>{% elif att.status == 'absent' %}<span class="text-danger">Kelmadi</span>{% elif att.status == 'leave' %}Ta'til{% elif att.status == 'kasallik' %}Kasallik{% elif att.status == 'tatil' %}Dam olish{% elif att.status == 'mehnat_safari' %}Mehnat safari{% else %}{{ att.status or '-' }}{% endif %}</td>
                             <td>{{ att.check_in.strftime('%H:%M') if att.check_in else '-' }}</td>
                             <td>{{ att.check_out.strftime('%H:%M') if att.check_out else '-' }}</td>
                             <td>{{ att.hours_worked }}</td>
@@ -56,7 +58,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="7" class="text-center text-muted py-4">Hujjatda yozuv yo'q.</td>
+                            <td colspan="8" class="text-center text-muted py-4">Hujjatda yozuv yo'q.</td>
                         </tr>
                         {% endfor %}
                     </tbody>

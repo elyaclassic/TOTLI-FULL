@@ -134,6 +134,9 @@
                                         <option value="present" {% if row.attendance and row.attendance.status == 'present' %}selected{% endif %}>Keldi</option>
                                         <option value="absent" {% if row.attendance and row.attendance.status == 'absent' %}selected{% endif %}>Kelmadi</option>
                                         <option value="leave" {% if row.attendance and row.attendance.status == 'leave' %}selected{% endif %}>Ta'til</option>
+                                        <option value="kasallik" {% if row.attendance and row.attendance.status == 'kasallik' %}selected{% endif %}>Kasallik</option>
+                                        <option value="tatil" {% if row.attendance and row.attendance.status == 'tatil' %}selected{% endif %}>Dam olish</option>
+                                        <option value="mehnat_safari" {% if row.attendance and row.attendance.status == 'mehnat_safari' %}selected{% endif %}>Mehnat safari</option>
                                     </select>
                                 </td>
                                 <td>{% if row.attendance and row.attendance.event_snapshot_path %}<a href="/static/{{ row.attendance.event_snapshot_path }}" target="_blank" title="Hodisa rasmi"><img src="/static/{{ row.attendance.event_snapshot_path }}" alt="" class="rounded" style="max-width:48px;max-height:48px;object-fit:cover;"></a>{% else %}-{% endif %}</td>

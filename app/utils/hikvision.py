@@ -412,7 +412,10 @@ def sync_hikvision_attendance(
                 first_ev = next((ev for dt, ev in time_ev_list if dt == first_in), time_ev_list[0][1])
                 hours_worked = 0.0
                 if first_in and last_out and last_out > first_in:
-                    hours_worked = round((last_out - first_in).total_seconds() / 3600.0, 2)
+                    raw_hours = (last_out - first_in).total_seconds() / 3600.0
+                    if raw_hours >= 6:
+                        raw_hours -= 1.0  # tushlik
+                    hours_worked = round(raw_hours, 2)
                 att = (
                     db_session.query(Attendance)
                     .filter(Attendance.employee_id == emp_id, Attendance.date == ev_date)
