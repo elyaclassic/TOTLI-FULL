@@ -773,14 +773,13 @@ async def driver_delivery_status(
 ):
     """Haydovchi yetkazish statusini yangilaydi"""
     try:
-        user_data = get_user_from_token(token)
-        if not user_data or user_data.get("user_type") != "driver":
+        driver = _driver_from_token(token, db)
+        if not driver:
             return {"success": False, "error": "Invalid token"}
-        driver_id = user_data["user_id"]
 
         delivery = db.query(Delivery).filter(
             Delivery.id == delivery_id,
-            Delivery.driver_id == driver_id,
+            Delivery.driver_id == driver.id,
         ).first()
         if not delivery:
             return {"success": False, "error": "Yetkazish topilmadi"}
@@ -902,22 +901,11 @@ async def driver_location_update(
     db: Session = Depends(get_db),
 ):
     try:
-        user_data = get_user_from_token(token)
-        if not user_data or user_data.get("user_type") != "driver":
-            return {"success": False, "error": "Invalid token"}
-        user_id = user_data["user_id"]
-        # user_id dan drivers jadvalidagi driver_id ni topish
-        driver = db.query(Driver).filter(Driver.id == user_id).first()
+        driver = _driver_from_token(token, db)
         if not driver:
-            # user_id bo'yicha employee orqali qidirish yoki code bo'yicha
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                driver = db.query(Driver).filter(Driver.code == user.username).first()
-                if not driver:
-                    driver = db.query(Driver).filter(Driver.full_name == user.full_name).first()
-        driver_id = driver.id if driver else user_id
+            return {"success": False, "error": "Invalid token"}
         location = DriverLocation(
-            driver_id=driver_id,
+            driver_id=driver.id,
             latitude=latitude,
             longitude=longitude,
             accuracy=accuracy,
