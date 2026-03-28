@@ -131,6 +131,18 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
     } catch (_) {}
   }
 
+  String _formatMoney(double v) {
+    if (v <= 0) return '0';
+    final intVal = v.toInt();
+    final str = intVal.toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) buf.write(' ');
+      buf.write(str[i]);
+    }
+    return buf.toString();
+  }
+
   List<String> _nextStatuses(String current) {
     switch (current) {
       case 'pending': return ['picked_up', 'failed'];
@@ -241,7 +253,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
             ],
             if (d['total'] != null && (d['total'] ?? 0) > 0) ...[
               const SizedBox(height: 4),
-              Text('${((d['total'] ?? 0) / 1000).toStringAsFixed(0)}K so\'m', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('${_formatMoney((d['total'] ?? 0).toDouble())} so\'m', style: const TextStyle(fontWeight: FontWeight.w600)),
             ],
             if (nextActions.isNotEmpty) ...[
               const SizedBox(height: 10),

@@ -91,6 +91,17 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  String _formatMoney(double v) {
+    if (v <= 0) return '0';
+    final str = v.toInt().toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) buf.write(' ');
+      buf.write(str[i]);
+    }
+    return buf.toString();
+  }
+
   Widget _buildOrderTile(Map<String, dynamic> o) {
     final status = o['status'] ?? 'draft';
     final statusColor = status == 'completed' ? Colors.green : status == 'confirmed' ? Colors.blue : Colors.orange;
@@ -109,7 +120,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Text('${((o['total'] ?? 0) / 1000).toStringAsFixed(0)}K', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${_formatMoney((o['total'] ?? 0).toDouble())}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
             Text(statusText, style: TextStyle(fontSize: 10, color: statusColor)),
           ],
         ),
@@ -134,6 +145,17 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
   final Map<int, double> _cart = {};
   bool _isSending = false;
   String _searchQuery = '';
+
+  String _formatMoney(double v) {
+    if (v <= 0) return '0';
+    final str = v.toInt().toString();
+    final buf = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      if (i > 0 && (str.length - i) % 3 == 0) buf.write(' ');
+      buf.write(str[i]);
+    }
+    return buf.toString();
+  }
 
   List<Map<String, dynamic>> get _filteredProducts {
     if (_searchQuery.isEmpty) return widget.products;
@@ -312,7 +334,7 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('${_cart.length} ta mahsulot', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                      Text('${(_total / 1000).toStringAsFixed(0)}K so\'m', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text('${_formatMoney(_total)} so\'m', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
                   const Spacer(),
