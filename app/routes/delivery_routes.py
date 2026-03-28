@@ -288,6 +288,14 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
             })
     recent_visits = db.query(Visit).filter(Visit.visit_date >= today).order_by(Visit.visit_date.desc()).limit(20).all()
     recent_deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(10).all()
+    # Agent buyurtmalari (bugungi)
+    agent_orders = (
+        db.query(Order)
+        .filter(Order.source == "agent", Order.date >= today)
+        .order_by(Order.created_at.desc())
+        .limit(20)
+        .all()
+    )
     return templates.TemplateResponse("supervisor/dashboard.html", {
         "request": request,
         "current_user": current_user,
@@ -299,6 +307,7 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         "agent_stats": agent_stats[:10],
         "recent_visits": recent_visits,
         "recent_deliveries": recent_deliveries,
+        "agent_orders": agent_orders,
         "page_title": "Supervayzer",
         "now": datetime.now(),
     })

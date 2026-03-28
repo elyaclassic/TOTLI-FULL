@@ -242,6 +242,42 @@
 
     <div class="col-md-6">
         <div class="data-table">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-cart-check"></i> Agent buyurtmalari (bugun)</span>
+                <a href="/sales?status=draft" class="btn btn-sm btn-outline-primary">Barchasi</a>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for order in agent_orders[:10] if agent_orders is defined %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                        <div>
+                            <a href="/sales/edit/{{ order.id }}" class="fw-semibold text-decoration-none">{{ order.number }}</a>
+                            <br><small class="text-muted">{{ order.partner.name if order.partner else '' }}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="fw-bold">{{ "{:,.0f}".format(order.total or 0) }}</span>
+                            <br>
+                            {% if order.status == 'draft' %}
+                            <span class="badge bg-warning text-dark" style="font-size:10px;">Yangi</span>
+                            {% elif order.status == 'confirmed' %}
+                            <span class="badge bg-primary" style="font-size:10px;">Tasdiqlangan</span>
+                            {% elif order.status == 'completed' %}
+                            <span class="badge bg-success" style="font-size:10px;">Bajarilgan</span>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted">Bugun agent buyurtmasi yo'q</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-3">
+    <div class="col-md-6">
+        <div class="data-table">
             <div class="card-header">
                 <i class="bi bi-box-seam"></i> Oxirgi yetkazishlar
             </div>
