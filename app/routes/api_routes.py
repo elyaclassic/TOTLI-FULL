@@ -52,8 +52,8 @@ async def pwa_config():
 async def app_version():
     """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
     return {
-        "version": "1.3.0",
-        "build": 4,
+        "version": "1.4.0",
+        "build": 5,
         "force_update": False,
         "download_url": "/static/totli-agent.apk",
         "changelog": "Buyurtma tarkibi, haydovchi yetkazish, in-app yangilash",

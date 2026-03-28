@@ -32,8 +32,8 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final active = _deliveries.where((d) => d['status'] == 'in_progress' || d['status'] == 'pending').toList();
-    final done = _deliveries.where((d) => d['status'] == 'delivered' || d['status'] == 'failed').toList();
+    final active = _deliveries.where((d) => !['delivered', 'failed'].contains(d['status'])).toList();
+    final done = _deliveries.where((d) => ['delivered', 'failed'].contains(d['status'])).toList();
     return _isLoading
         ? const Center(child: CircularProgressIndicator())
         : _deliveries.isEmpty
@@ -56,7 +56,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   Widget _tile(Map<String, dynamic> d) {
     final status = d['status'] ?? 'pending';
     final color = _sColor(status);
-    final isActive = status == 'in_progress' || status == 'pending';
+    final isActive = !['delivered', 'failed'].contains(status);
     final items = List<Map<String, dynamic>>.from(d['items'] ?? []);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -109,6 +109,56 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
   void initState() { super.initState(); _d = Map<String, dynamic>.from(widget.delivery); }
 
   String _fmt(double v) { if (v <= 0) return '0'; final s = v.toInt().toString(); final b = StringBuffer(); for (int i = 0; i < s.length; i++) { if (i > 0 && (s.length - i) % 3 == 0) b.write(' '); b.write(s[i]); } return b.toString(); }
+
+  double _calcTotal() {
+    final items = List<Map<String, dynamic>>.from(_d['items'] ?? []);
+    double t = 0;
+    for (final item in items) {
+      t += (item['quantity'] ?? 0).toDouble() * (item['price'] ?? 0).toDouble();
+    }
+    return t > 0 ? t : (_d['total'] ?? 0).toDouble();
+  }
+
+  void _editItemQty(int index, String name, double currentQty) async {
+    final controller = TextEditingController(text: currentQty.toStringAsFixed(0));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(name, style: const TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Miqdor', border: OutlineInputBorder(), hintText: '0 = o\'chirish'),
+          onSubmitted: (v) => Navigator.pop(ctx, double.tryParse(v)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 0.0),
+            child: const Text('O\'chirish', style: TextStyle(color: Colors.red)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF017449)),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      final items = List<Map<String, dynamic>>.from(_d['items'] ?? []);
+      if (result <= 0) {
+        items.removeAt(index);
+      } else {
+        items[index] = Map<String, dynamic>.from(items[index]);
+        items[index]['quantity'] = result;
+        items[index]['total'] = result * (items[index]['price'] ?? 0).toDouble();
+      }
+      _d['items'] = items;
+      _d['total'] = _calcTotal();
+    });
+  }
 
   Future<void> _doAction(String newStatus, {double? paidAmount}) async {
     setState(() => _isBusy = true);
@@ -191,7 +241,7 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
   Widget build(BuildContext context) {
     final items = List<Map<String, dynamic>>.from(_d['items'] ?? []);
     final status = _d['status'] ?? 'pending';
-    final isActive = status == 'in_progress' || status == 'pending';
+    final isActive = !['delivered', 'failed'].contains(status);
     final hasGps = _d['latitude'] != null && _d['longitude'] != null;
 
     return Scaffold(
@@ -238,23 +288,38 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
             if (items.isEmpty)
               const Text('Ma\'lumot yo\'q', style: TextStyle(color: Colors.grey))
             else ...[
-              ...items.map((item) => Padding(
+              ...items.asMap().entries.map((entry) {
+                final idx = entry.key;
+                final item = entry.value;
+                final qty = (item['quantity'] ?? 0).toDouble();
+                final price = (item['price'] ?? 0).toDouble();
+                return Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Row(children: [
                   Expanded(child: Text(item['name'] ?? '', style: const TextStyle(fontSize: 14))),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
-                    child: Text('x${(item['quantity'] ?? 0).toDouble().toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                  ),
+                  if (isActive)
+                    GestureDetector(
+                      onTap: () => _editItemQty(idx, item['name'] ?? '', qty),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.blue.shade50, border: Border.all(color: Colors.blue.shade200), borderRadius: BorderRadius.circular(6)),
+                        child: Text('x${qty.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.blue)),
+                      ),
+                    )
+                  else
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: Text('x${qty.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    ),
                   const SizedBox(width: 8),
-                  SizedBox(width: 80, child: Text('${_fmt((item['total'] ?? 0).toDouble())}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                  SizedBox(width: 80, child: Text('${_fmt(qty * price)}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
                 ]),
-              )),
+              ); }),
               const Divider(height: 16),
               Row(children: [
                 const Expanded(child: Text('Jami:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
-                Text('${_fmt((_d['total'] ?? 0).toDouble())} so\'m', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text('${_fmt(_calcTotal())} so\'m', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
               ]),
             ],
           ]),
