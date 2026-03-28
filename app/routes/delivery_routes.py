@@ -232,15 +232,25 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
             "is_online": last_loc and (datetime.now() - last_loc.recorded_at).seconds < 600 if last_loc else False,
         })
     agent_stats.sort(key=lambda x: x["visits"], reverse=True)
+    # O'tgan hafta vizitlar
+    from datetime import timedelta
+    week_ago = today - timedelta(days=7)
+    visits_week = db.query(Visit).filter(Visit.visit_date >= week_ago).count()
+    # Yo'ldagi yetkazishlar
+    in_transit = db.query(Delivery).filter(Delivery.status.in_(["pending", "in_transit"])).count()
     stats = {
         "total_agents": total_agents,
         "active_agents": active_agents,
         "today_visits": today_visits,
+        "visits_today": today_visits,
+        "visits_week": visits_week,
         "today_orders": len(today_orders),
         "today_sales": today_sales_sum,
         "total_drivers": total_drivers,
         "pending_deliveries": pending_deliveries,
         "today_delivered": today_delivered,
+        "delivered_today": today_delivered,
+        "in_transit": in_transit,
     }
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
@@ -276,7 +286,7 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
                 "time": last_loc.recorded_at.strftime("%H:%M"),
                 "vehicle": driver.vehicle_number,
             })
-    recent_visits = db.query(Visit).order_by(Visit.visit_date.desc()).limit(10).all()
+    recent_visits = db.query(Visit).filter(Visit.visit_date >= today).order_by(Visit.visit_date.desc()).limit(20).all()
     recent_deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(10).all()
     return templates.TemplateResponse("supervisor/dashboard.html", {
         "request": request,

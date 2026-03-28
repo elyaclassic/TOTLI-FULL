@@ -217,13 +217,23 @@
             </div>
             <div class="card-body p-0">
                 <ul class="list-group list-group-flush">
-                    {% for visit in recent_visits[:5] if recent_visits is defined %}
-                    <li class="list-group-item d-flex justify-content-between align-items-center">
-                        <span>{{ visit.agent.full_name if visit.agent else 'Agent' }}</span>
-                        <small class="muted-cell">{{ visit.visit_date.strftime('%H:%M') }}</small>
+                    {% for visit in recent_visits[:10] if recent_visits is defined %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+                        <div>
+                            <span class="fw-semibold">{{ visit.agent.full_name if visit.agent else 'Agent' }}</span>
+                            <br><small class="text-muted">{{ visit.partner.name if visit.partner else '' }}</small>
+                        </div>
+                        <div class="text-end">
+                            <small>{{ visit.check_in_time.strftime('%H:%M') if visit.check_in_time else '-' }}</small>
+                            {% if visit.check_out_time %}
+                            <small class="text-muted">- {{ visit.check_out_time.strftime('%H:%M') }}</small>
+                            {% else %}
+                            <span class="badge bg-success" style="font-size:10px;">Faol</span>
+                            {% endif %}
+                        </div>
                     </li>
                     {% else %}
-                    <li class="list-group-item text-center text-muted">Ma'lumot yo'q</li>
+                    <li class="list-group-item text-center text-muted">Bugun tashrif yo'q</li>
                     {% endfor %}
                 </ul>
             </div>
