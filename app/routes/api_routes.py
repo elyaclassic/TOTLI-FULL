@@ -572,6 +572,8 @@ async def agent_visits(request: Request, token: str = None, db: Session = Depend
                 "longitude": v.longitude,
                 "notes": v.notes or "",
                 "order_id": v.order_id,
+                "check_in_time": v.check_in_time.isoformat() if v.check_in_time else None,
+                "check_out_time": v.check_out_time.isoformat() if v.check_out_time else None,
             })
         return {"success": True, "visits": result}
     except Exception as e:
@@ -1124,14 +1126,21 @@ async def agent_products(request: Request, token: str = None, search: str = None
         if search:
             q = q.filter(Product.name.ilike(f"%{search}%"))
         products = q.order_by(Product.name).all()
+        # Tayyor mahsulot ombori ID ni bir marta topish
+        tayyor_wh = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+        if not tayyor_wh:
+            tayyor_wh = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
+        tayyor_wh_id = tayyor_wh.id if tayyor_wh else 3
         result = []
         for prod in products:
             unit_name = prod.unit.name if prod.unit else ""
             # ProductPrice dan narx olish (agar mavjud bo'lsa)
             pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
             price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
-            # Barcha omborlardan umumiy qoldiq
-            total_stock = db.query(sa_func.coalesce(sa_func.sum(Stock.quantity), 0)).filter(Stock.product_id == prod.id).scalar()
+            # Faqat Tayyor mahsulot ombori dan qoldiq
+            total_stock = db.query(sa_func.coalesce(sa_func.sum(Stock.quantity), 0)).filter(
+                Stock.product_id == prod.id, Stock.warehouse_id == tayyor_wh_id
+            ).scalar()
             result.append({
                 "id": prod.id,
                 "name": prod.name,

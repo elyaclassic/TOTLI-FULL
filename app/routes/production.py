@@ -142,16 +142,16 @@ def _warehouse_id_for_ingredient(db, product_id, production):
 
 
 def _do_complete_production_stock(db, production, recipe):
-    """Kerak=0 bo'lsa o'tkazib yuboriladi; yetmasa borini tortadi (min(kerak, mavjud)).
+    """Xom ashyo yetishmasini tekshiradi — yetmasa xato qaytaradi.
     Xom ashyo 1-ombordan, yarim tayyor mahsulotlar nomida 'yarim'/'semi' bor ombordan chiqariladi."""
     if production.production_items:
         items_to_use = [(pi.product_id, pi.quantity) for pi in production.production_items]
     else:
         items_to_use = [(item.product_id, item.quantity * production.quantity) for item in recipe.items]
-    items_actual = []
+    # --- Yetishmovchilikni tekshirish ---
+    shortage_lines = []
     for product_id, required in items_to_use:
         if required is None or required <= 0:
-            items_actual.append((product_id, 0.0))
             continue
         wh_id = _warehouse_id_for_ingredient(db, product_id, production)
         stock = db.query(Stock).filter(
@@ -159,8 +159,26 @@ def _do_complete_production_stock(db, production, recipe):
             Stock.product_id == product_id,
         ).first()
         available = (stock.quantity if stock else 0) or 0
-        actual_use = min(required, available)
-        items_actual.append((product_id, actual_use))
+        if available < required:
+            prod = db.query(Product).filter(Product.id == product_id).first()
+            prod_name = prod.name if prod else f"#{product_id}"
+            shortage_lines.append(
+                f"{prod_name}: kerak {round(required, 3)}, omborda {round(available, 3)} (kam {round(required - available, 3)})"
+            )
+    if shortage_lines:
+        from urllib.parse import quote
+        detail = "\\n".join(shortage_lines)
+        return RedirectResponse(
+            url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi:\\n{detail}"),
+            status_code=303,
+        )
+    # --- Yetarli — davom etish ---
+    items_actual = []
+    for product_id, required in items_to_use:
+        if required is None or required <= 0:
+            items_actual.append((product_id, 0.0))
+            continue
+        items_actual.append((product_id, required))
     for product_id, actual_use in items_actual:
         if actual_use <= 0:
             continue

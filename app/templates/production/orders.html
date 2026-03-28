@@ -41,6 +41,14 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+{% if error == "shortage" %}
+<div id="production-error-alert" class="alert alert-danger alert-dismissible fade show mb-0" role="alert">
+    <strong>Xom ashyo yetishmaydi! Ishlab chiqarish yakunlanmadi.</strong>
+    {% if error_detail %}<br><span class="production-error-detail" style="white-space: pre-line;">{{ error_detail|e }}</span>{% endif %}
+    <br><small class="text-muted">Yetishmayotgan xom ashyoni omborga kiritgandan keyin qayta yakunlang.</small>
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 {% if error == "revert" %}
 <div class="alert alert-danger alert-dismissible fade show" role="alert">
     <strong>Tasdiqni bekor qilish mumkin emas.</strong> {% if error_detail %}{{ error_detail }}{% endif %}

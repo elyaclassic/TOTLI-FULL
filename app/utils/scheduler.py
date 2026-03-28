@@ -115,45 +115,67 @@ def _daily_backup_job():
         print(f"[Backup] Xato: {e}")
 
 
-def _daily_attendance_create():
-    """Har kuni ertalab kunlik tabel hujjati va barcha faol xodimlar uchun davomat yozuvlarini yaratish."""
+def _create_attendance_for_date(target_date):
+    """Berilgan sana uchun tabel hujjati va davomat yozuvlarini yaratish."""
     db = SessionLocal()
     try:
-        today = date.today()
-        # Bugun uchun hujjat bormi?
-        doc = db.query(AttendanceDoc).filter(AttendanceDoc.date == today).first()
+        doc = db.query(AttendanceDoc).filter(AttendanceDoc.date == target_date).first()
         if not doc:
-            # Hujjat raqami: T-YYYY-MM-DD
-            doc_number = f"T-{today.strftime('%Y-%m-%d')}"
-            doc = AttendanceDoc(
-                number=doc_number,
-                date=today,
-            )
+            doc_number = f"T-{target_date.strftime('%Y-%m-%d')}"
+            doc = AttendanceDoc(number=doc_number, date=target_date, confirmed_at=datetime.now())
             db.add(doc)
             db.flush()
-            print(f"[Tabel] Kunlik tabel yaratildi: {doc_number}")
+            print(f"[Tabel] Kunlik tabel yaratildi va tasdiqlandi: {doc_number}")
+        elif not doc.confirmed_at:
+            doc.confirmed_at = datetime.now()
+            print(f"[Tabel] Tabel tasdiqlandi: {doc.number}")
 
-        # Barcha faol xodimlar uchun davomat yozuvlari
         active_employees = db.query(Employee).filter(Employee.is_active == True).all()
         created = 0
         for emp in active_employees:
             existing = db.query(Attendance).filter(
                 Attendance.employee_id == emp.id,
-                Attendance.date == today,
+                Attendance.date == target_date,
             ).first()
             if not existing:
                 att = Attendance(
                     employee_id=emp.id,
-                    date=today,
+                    date=target_date,
                     doc_id=doc.id,
-                    status="absent",  # default — kelmagan, Hikvision yoki qo'lda yangilanadi
+                    status="absent",
                 )
                 db.add(att)
                 created += 1
         db.commit()
-        print(f"[Tabel] {today}: {created} ta xodim uchun davomat yozuvi yaratildi")
+        if created:
+            print(f"[Tabel] {target_date}: {created} ta xodim uchun davomat yozuvi yaratildi")
     except Exception as e:
         db.rollback()
+        print(f"[Tabel] Xato ({target_date}): {e}")
+    finally:
+        db.close()
+
+
+def _daily_attendance_create():
+    """Bugun va o'tkazib yuborilgan kunlar uchun tabel yaratish."""
+    today = date.today()
+    # Oxirgi tabel sanasini topish — undan bugunga qadar bo'sh kunlarni to'ldirish
+    db = SessionLocal()
+    try:
+        last_doc = db.query(AttendanceDoc).order_by(AttendanceDoc.date.desc()).first()
+        if last_doc:
+            start = last_doc.date + timedelta(days=1)
+        else:
+            start = today
+        # O'tkazib yuborilgan kunlarni to'ldirish (max 30 kun)
+        current = start
+        while current <= today:
+            if (today - current).days > 30:
+                current += timedelta(days=1)
+                continue
+            _create_attendance_for_date(current)
+            current += timedelta(days=1)
+    except Exception as e:
         print(f"[Tabel] Xato: {e}")
     finally:
         db.close()
