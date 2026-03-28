@@ -7,8 +7,8 @@ import 'services/session_service.dart';
 import 'services/api_service.dart';
 
 // Joriy ilova versiyasi
-const String appVersion = '1.1.0';
-const int appBuild = 2;
+const String appVersion = '1.2.0';
+const int appBuild = 3;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
