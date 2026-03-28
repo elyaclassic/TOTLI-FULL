@@ -1041,9 +1041,14 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if 'Supervayzer' in page_title %}active{% endif %}" href="/supervisor">
+                <a class="nav-link {% if page_title == 'Supervayzer' %}active{% endif %}" href="/supervisor">
                     <i class="bi bi-binoculars"></i> Supervayzer
                 </a>
+                {% if page_title and 'Agent buyurtmalari' in page_title %}
+                <a class="nav-link active ps-4 small" href="/supervisor/agent-orders">
+                    <i class="bi bi-cart-check"></i> Agent buyurtmalari
+                </a>
+                {% endif %}
             </li>
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat">
@@ -1080,9 +1085,14 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if 'Supervayzer' in page_title %}active{% endif %}" href="/supervisor">
+                <a class="nav-link {% if page_title == 'Supervayzer' %}active{% endif %}" href="/supervisor">
                     <i class="bi bi-binoculars"></i> Supervayzer
                 </a>
+                {% if page_title and 'Agent buyurtmalari' in page_title %}
+                <a class="nav-link active ps-4 small" href="/supervisor/agent-orders">
+                    <i class="bi bi-cart-check"></i> Agent buyurtmalari
+                </a>
+                {% endif %}
             </li>
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat/support">

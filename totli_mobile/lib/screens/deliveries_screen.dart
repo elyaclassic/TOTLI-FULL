@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
@@ -107,6 +108,29 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
     }
   }
 
+  void _openMap(dynamic lat, dynamic lng) async {
+    final uri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
+    try {
+      await Clipboard.setData(ClipboardData(text: '$lat, $lng'));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Koordinatalar nusxalandi. Xaritada oching.')),
+        );
+      }
+    } catch (_) {}
+  }
+
+  void _callPhone(String phone) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: phone));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$phone nusxalandi')),
+        );
+      }
+    } catch (_) {}
+  }
+
   List<String> _nextStatuses(String current) {
     switch (current) {
       case 'pending': return ['picked_up', 'failed'];
@@ -172,17 +196,50 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
                 ),
               ],
             ),
-            if (d['delivery_address'] != null) ...[
+            if ((d['delivery_address'] ?? '').toString().isNotEmpty) ...[
               const SizedBox(height: 8),
               Row(
                 children: [
                   const Icon(Icons.location_on, size: 14, color: Colors.grey),
                   const SizedBox(width: 4),
                   Expanded(child: Text(d['delivery_address'], style: const TextStyle(fontSize: 12, color: Colors.grey))),
+                  if (d['latitude'] != null && d['longitude'] != null)
+                    GestureDetector(
+                      onTap: () => _openMap(d['latitude'], d['longitude']),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(8)),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.navigation, size: 14, color: Colors.blue),
+                            SizedBox(width: 2),
+                            Text('Xarita', style: TextStyle(fontSize: 11, color: Colors.blue)),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ],
-            if (d['total'] != null) ...[
+            if ((d['partner_phone'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () => _callPhone(d['partner_phone']),
+                child: Row(
+                  children: [
+                    const Icon(Icons.phone, size: 14, color: Colors.green),
+                    const SizedBox(width: 4),
+                    Text(d['partner_phone'], style: const TextStyle(fontSize: 12, color: Colors.green, decoration: TextDecoration.underline)),
+                  ],
+                ),
+              ),
+            ],
+            if ((d['notes'] ?? '').toString().isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text(d['notes'], style: TextStyle(fontSize: 11, color: Colors.grey[600], fontStyle: FontStyle.italic)),
+            ],
+            if (d['total'] != null && (d['total'] ?? 0) > 0) ...[
               const SizedBox(height: 4),
               Text('${((d['total'] ?? 0) / 1000).toStringAsFixed(0)}K so\'m', style: const TextStyle(fontWeight: FontWeight.w600)),
             ],

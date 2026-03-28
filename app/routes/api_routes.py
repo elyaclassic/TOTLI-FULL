@@ -728,17 +728,26 @@ async def driver_deliveries(request: Request, token: str = None, db: Session = D
             if order and order.partner_id:
                 p = db.query(Partner).filter(Partner.id == order.partner_id).first()
                 partner_name = p.name if p else ""
+            # Partner telefon raqami
+            partner_phone = ""
+            if order and order.partner_id:
+                p = db.query(Partner).filter(Partner.id == order.partner_id).first()
+                if p:
+                    partner_phone = p.phone or ""
             result.append({
                 "id": d.id,
                 "number": d.number,
                 "order_number": d.order_number or (order.number if order else ""),
                 "delivery_address": d.delivery_address or "",
                 "partner_name": partner_name,
+                "partner_phone": partner_phone,
                 "status": d.status or "pending",
                 "planned_date": d.planned_date.isoformat() if d.planned_date else "",
                 "delivered_at": d.delivered_at.isoformat() if d.delivered_at else "",
                 "notes": d.notes or "",
                 "total": float(order.total or 0) if order else 0,
+                "latitude": d.latitude,
+                "longitude": d.longitude,
             })
         return {"success": True, "deliveries": result}
     except Exception as e:

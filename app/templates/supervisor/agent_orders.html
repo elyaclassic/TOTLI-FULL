@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3 d-flex justify-content-between align-items-center">
+    <div>
+        <h5 class="mb-0"><i class="bi bi-cart-check"></i> Agent buyurtmalari</h5>
+        <p class="text-muted mb-0 small">Agentlar tomonidan yaratilgan buyurtmalar</p>
+    </div>
+    <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
+</div>
+
+<!-- Filtr -->
+<div class="mb-3 d-flex gap-2">
+    <a href="/supervisor/agent-orders?status=all" class="btn btn-sm {{ 'btn-primary' if current_status == 'all' else 'btn-outline-secondary' }}">Barchasi</a>
+    <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm {{ 'btn-warning' if current_status == 'draft' else 'btn-outline-warning' }}">Yangi (kutmoqda)</a>
+    <a href="/supervisor/agent-orders?status=confirmed" class="btn btn-sm {{ 'btn-primary' if current_status == 'confirmed' else 'btn-outline-primary' }}">Tasdiqlangan</a>
+    <a href="/supervisor/agent-orders?status=completed" class="btn btn-sm {{ 'btn-success' if current_status == 'completed' else 'btn-outline-success' }}">Bajarilgan</a>
+    <a href="/supervisor/agent-orders?status=cancelled" class="btn btn-sm {{ 'btn-danger' if current_status == 'cancelled' else 'btn-outline-danger' }}">Bekor qilingan</a>
+</div>
+
+<div class="data-table">
+<table class="table table-hover table-sm align-middle mb-0">
+    <thead class="table-light">
+        <tr>
+            <th>#</th>
+            <th>Buyurtma</th>
+            <th>Agent</th>
+            <th>Mijoz</th>
+            <th>Manzil</th>
+            <th class="text-end">Summa</th>
+            <th>Sana</th>
+            <th>Holat</th>
+            <th style="width: 280px;">Amallar</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for order in orders %}
+        <tr>
+            <td>{{ loop.index }}</td>
+            <td><a href="/sales/edit/{{ order.id }}" class="fw-semibold text-decoration-none">{{ order.number }}</a></td>
+            <td>
+                {% if order.agent_id %}
+                    {% for a in agents if a.id == order.agent_id %}
+                    <span class="badge bg-primary bg-opacity-10 text-primary">{{ a.full_name }}</span>
+                    {% endfor %}
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+            </td>
+            <td>{{ order.partner.name if order.partner else '—' }}</td>
+            <td>
+                <small>{{ order.partner.address or '—' if order.partner else '—' }}</small>
+                {% if order.partner and order.partner.latitude %}
+                <br><small class="text-success"><i class="bi bi-geo-alt"></i> GPS bor</small>
+                {% endif %}
+            </td>
+            <td class="text-end fw-bold">{{ "{:,.0f}".format(order.total or 0) }}</td>
+            <td><small>{{ order.date.strftime('%d.%m %H:%M') if order.date else '' }}</small></td>
+            <td>
+                {% if order.status == 'draft' %}
+                <span class="badge bg-warning text-dark">Yangi</span>
+                {% elif order.status == 'confirmed' %}
+                <span class="badge bg-primary">Tasdiqlangan</span>
+                {% elif order.status == 'completed' %}
+                <span class="badge bg-success">Bajarilgan</span>
+                {% elif order.status == 'cancelled' %}
+                <span class="badge bg-danger">Bekor</span>
+                {% else %}
+                <span class="badge bg-secondary">{{ order.status }}</span>
+                {% endif %}
+            </td>
+            <td>
+                {% if order.status == 'draft' %}
+                <form action="/supervisor/agent-orders/confirm/{{ order.id }}" method="POST" class="d-inline-flex gap-1 align-items-center">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                    <select name="driver_id" class="form-select form-select-sm" style="width:130px;" required>
+                        <option value="">Haydovchi...</option>
+                        {% for d in drivers %}
+                        <option value="{{ d.id }}">{{ d.full_name }} ({{ d.vehicle_number or '' }})</option>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash va yetkazishga berish">
+                        <i class="bi bi-check-lg"></i> Tasdiqlash
+                    </button>
+                </form>
+                <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" class="d-inline ms-1"
+                      onsubmit="return confirm('Buyurtmani bekor qilasizmi?')">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Bekor qilish">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </form>
+                {% elif order.status == 'confirmed' %}
+                <small class="text-muted">Haydovchiga berilgan</small>
+                {% endif %}
+            </td>
+        </tr>
+        <!-- Buyurtma tafsilotlari -->
+        <tr class="table-light">
+            <td></td>
+            <td colspan="8">
+                <small class="text-muted">
+                    {% for item in order.items %}
+                    {{ item.product.name if item.product else '#' ~ item.product_id }}
+                    <strong>x{{ item.quantity }}</strong>
+                    ({{ "{:,.0f}".format(item.total or 0) }}){% if not loop.last %}, {% endif %}
+                    {% endfor %}
+                </small>
+            </td>
+        </tr>
+        {% else %}
+        <tr>
+            <td colspan="9" class="text-center text-muted py-4">Buyurtmalar topilmadi</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+</div>
+
+<div class="mt-2 text-muted small">Jami: {{ orders|length }} ta buyurtma</div>
+{% endblock %}

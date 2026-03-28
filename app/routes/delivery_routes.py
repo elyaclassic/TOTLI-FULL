@@ -21,6 +21,8 @@ from app.models.database import (
     User,
 )
 from app.deps import require_admin, require_admin_or_manager
+from sqlalchemy.orm import joinedload
+from sqlalchemy import func
 
 router = APIRouter(tags=["delivery"])
 
@@ -311,6 +313,103 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         "page_title": "Supervayzer",
         "now": datetime.now(),
     })
+
+
+@router.get("/supervisor/agent-orders", response_class=HTMLResponse)
+async def supervisor_agent_orders(
+    request: Request,
+    status: str = "all",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent buyurtmalari alohida sahifa — tasdiqlash va yetkazishga berish."""
+    q = db.query(Order).filter(Order.source == "agent").options(
+        joinedload(Order.partner), joinedload(Order.items)
+    )
+    if status and status != "all":
+        q = q.filter(Order.status == status)
+    orders = q.order_by(Order.created_at.desc()).limit(100).all()
+    drivers = db.query(Driver).filter(Driver.is_active == True).all()
+    agents = db.query(Agent).filter(Agent.is_active == True).all()
+    return templates.TemplateResponse("supervisor/agent_orders.html", {
+        "request": request,
+        "current_user": current_user,
+        "orders": orders,
+        "drivers": drivers,
+        "agents": agents,
+        "current_status": status,
+        "page_title": "Agent buyurtmalari",
+    })
+
+
+@router.post("/supervisor/agent-orders/confirm/{order_id}")
+async def supervisor_confirm_agent_order(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent buyurtmasini tasdiqlash + haydovchiga yetkazish yaratish."""
+    form = await request.form()
+    driver_id_raw = form.get("driver_id", "").strip()
+    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
+    if not order:
+        return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    if order.status not in ("draft",):
+        return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+    # Buyurtmani tasdiqlash
+    order.status = "confirmed"
+    order.user_id = current_user.id
+    db.flush()
+    # Haydovchiga yetkazish yaratish
+    if driver_id_raw and driver_id_raw.isdigit():
+        driver_id = int(driver_id_raw)
+        driver = db.query(Driver).filter(Driver.id == driver_id, Driver.is_active == True).first()
+        if driver:
+            # Partner geolokatsiyasi
+            partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+            address = partner.address or "" if partner else ""
+            lat = partner.latitude if partner else None
+            lng = partner.longitude if partner else None
+            # Delivery raqami
+            today = datetime.now()
+            prefix = f"DLV-{today.strftime('%Y%m%d')}"
+            last = db.query(Delivery).filter(Delivery.number.like(f"{prefix}%")).order_by(Delivery.id.desc()).first()
+            try:
+                seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+            except Exception:
+                seq = 1
+            delivery = Delivery(
+                number=f"{prefix}-{seq:03d}",
+                driver_id=driver_id,
+                order_id=order.id,
+                order_number=order.number,
+                delivery_address=address,
+                latitude=lat,
+                longitude=lng,
+                planned_date=today,
+                notes=f"Mijoz: {partner.name if partner else ''}, Tel: {partner.phone if partner else ''}",
+                status="pending",
+            )
+            db.add(delivery)
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
+
+
+@router.post("/supervisor/agent-orders/reject/{order_id}")
+async def supervisor_reject_agent_order(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent buyurtmasini bekor qilish."""
+    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
+    if not order:
+        return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    order.status = "cancelled"
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
 
 
 @router.post("/delivery/add-driver")
