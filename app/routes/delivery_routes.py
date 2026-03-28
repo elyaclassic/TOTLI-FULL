@@ -331,6 +331,7 @@ async def supervisor_agent_orders(
     orders = q.order_by(Order.created_at.desc()).limit(100).all()
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     agents = db.query(Agent).filter(Agent.is_active == True).all()
+    draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
     return templates.TemplateResponse("supervisor/agent_orders.html", {
         "request": request,
         "current_user": current_user,
@@ -338,6 +339,7 @@ async def supervisor_agent_orders(
         "drivers": drivers,
         "agents": agents,
         "current_status": status,
+        "draft_count": draft_count,
         "page_title": "Agent buyurtmalari",
     })
 
