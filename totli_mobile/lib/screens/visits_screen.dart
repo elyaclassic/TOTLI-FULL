@@ -16,6 +16,36 @@ class _VisitsScreenState extends State<VisitsScreen> {
   List<Map<String, dynamic>> _partners = [];
   bool _isLoading = true;
 
+  // Haftaning kunlari (dart: 1=Dush, 7=Yak; DB: 1=Dush, 6=Shanba, 0=Yak)
+  static const _dayNames = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+
+  int get _todayVisitDay {
+    // DateTime.now().weekday: 1=Mon..7=Sun
+    // DB: 1=Dush, 2=Sesh, ..., 6=Shanba, 0=Yak
+    final wd = DateTime.now().weekday; // 1-7
+    return wd == 7 ? 0 : wd;
+  }
+
+  String get _todayName => _dayNames[_todayVisitDay];
+
+  /// Bugungi kun bo'yicha rejadagi mijozlar
+  List<Map<String, dynamic>> get _todayPlannedPartners {
+    final today = _todayVisitDay;
+    // Bugun vizit qilingan partner IDlari
+    final visitedIds = <int>{};
+    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+    for (final v in _visits) {
+      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
+      if (vDate.startsWith(todayStr)) {
+        visitedIds.add(v['partner_id'] as int);
+      }
+    }
+    return _partners.where((p) {
+      final vd = p['visit_day'];
+      return vd != null && vd == today && !visitedIds.contains(p['id']);
+    }).toList();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -37,20 +67,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
     }
   }
 
-  Future<void> _startVisit() async {
-    if (_partners.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Avval mijozlar yuklansin')));
-      return;
-    }
-
-    final partner = await showModalBottomSheet<Map<String, dynamic>>(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _PartnerPicker(partners: _partners),
-    );
-    if (partner == null || !mounted) return;
-
+  Future<void> _startVisitWithPartner(Map<String, dynamic> partner) async {
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GPS aniqlanmoqda...')));
     try {
       final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 10));
@@ -61,7 +78,6 @@ class _VisitsScreenState extends State<VisitsScreen> {
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${partner['name']} ga kirish belgilandi'), backgroundColor: Colors.green));
         _loadData();
-        // Aktiv vizit sahifasini ochish
         _openActiveVisit({
           'id': result['visit_id'],
           'partner_id': partner['id'],
@@ -76,6 +92,21 @@ class _VisitsScreenState extends State<VisitsScreen> {
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GPS xato: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  Future<void> _startVisit() async {
+    if (_partners.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Avval mijozlar yuklansin')));
+      return;
+    }
+    final partner = await showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => _PartnerPicker(partners: _partners),
+    );
+    if (partner == null || !mounted) return;
+    _startVisitWithPartner(partner);
   }
 
   void _openActiveVisit(Map<String, dynamic> visit) async {
@@ -96,27 +127,98 @@ class _VisitsScreenState extends State<VisitsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final planned = _todayPlannedPartners;
+    // Bugungi vizitlar
+    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
+    final todayVisits = _visits.where((v) {
+      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
+      return vDate.startsWith(todayStr);
+    }).toList();
     return Scaffold(
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _visits.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.location_off, size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: 16),
-                      const Text('Vizitlar yo\'q', style: TextStyle(color: Colors.grey)),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: ListView.builder(
-                    itemCount: _visits.length,
-                    itemBuilder: (ctx, i) => _buildVisitTile(_visits[i]),
-                  ),
-                ),
+          : RefreshIndicator(
+              onRefresh: _loadData,
+              child: ListView(
+                children: [
+                  // Bugungi reja
+                  if (planned.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.today, size: 18, color: Color(0xFF017449)),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Bugungi reja ($_todayName) — ${planned.length} ta mijoz',
+                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF017449)),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ...planned.map((p) => Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      color: Colors.orange.shade50,
+                      child: ListTile(
+                        dense: true,
+                        leading: CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.orange.shade100,
+                          child: const Icon(Icons.store, color: Colors.orange, size: 18),
+                        ),
+                        title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                        subtitle: Text(p['address'] ?? p['phone'] ?? '', style: const TextStyle(fontSize: 11)),
+                        trailing: TextButton.icon(
+                          onPressed: () => _startVisitWithPartner(p),
+                          icon: const Icon(Icons.pin_drop, size: 16),
+                          label: const Text('Kirish', style: TextStyle(fontSize: 12)),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF017449),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                          ),
+                        ),
+                      ),
+                    )),
+                    const Divider(height: 20, indent: 16, endIndent: 16),
+                  ],
+                  if (planned.isEmpty && todayVisits.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text(
+                        'Bugun ($_todayName) rejadagi mijozlar yo\'q',
+                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                      ),
+                    ),
+                  // Bugungi vizitlar
+                  if (todayVisits.isNotEmpty) ...[
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                      child: Text(
+                        'Bugungi vizitlar — ${todayVisits.length} ta',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    ...todayVisits.map((v) => _buildVisitTile(v)),
+                  ],
+                  // Oldingi vizitlar
+                  if (_visits.where((v) {
+                    final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
+                    return !vDate.startsWith(todayStr);
+                  }).isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+                      child: Text('Oldingi vizitlar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey)),
+                    ),
+                    ..._visits.where((v) {
+                      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
+                      return !vDate.startsWith(todayStr);
+                    }).map((v) => _buildVisitTile(v)),
+                  ],
+                  const SizedBox(height: 80),
+                ],
+              ),
+            ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _startVisit,
         backgroundColor: const Color(0xFF017449),

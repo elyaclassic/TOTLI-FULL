@@ -874,52 +874,57 @@
 
     function editPartnerFromData(btn) {
         var id = btn.getAttribute('data-partner-id');
-        var name = btn.getAttribute('data-partner-name') || '';
-        var type = btn.getAttribute('data-partner-type') || 'customer';
-        var phone = btn.getAttribute('data-partner-phone') || '';
-        var address = btn.getAttribute('data-partner-address') || '';
-        var credit = btn.getAttribute('data-partner-credit') || '0';
-        var discount = btn.getAttribute('data-partner-discount') || '0';
-        var agentId = btn.getAttribute('data-partner-agent-id') || '';
-        editPartner(id, name, type, phone, address, parseFloat(credit) || 0, parseFloat(discount) || 0, agentId);
+        editPartner(id);
     }
-    function editPartner(id, name, type, phone, address, credit_limit, discount_percent, agentId) {
+    function editPartner(id) {
         document.getElementById('editPartnerForm').action = '/partners/edit/' + id;
-        document.getElementById('edit_name').value = name || '';
-        document.getElementById('edit_type').value = type || 'customer';
-        document.getElementById('edit_phone').value = phone || '';
-        document.getElementById('edit_address').value = address || '';
-        document.getElementById('edit_credit_limit').value = credit_limit != null ? credit_limit : 0;
-        document.getElementById('edit_discount_percent').value = discount_percent != null ? discount_percent : 0;
-        document.getElementById('edit_agent_id').value = agentId || '';
-
-        // Clear other fields (will be populated from backend if needed)
-        document.getElementById('edit_legal_name').value = '';
-        document.getElementById('edit_contact_person').value = '';
-        document.getElementById('edit_phone2').value = '';
-        document.getElementById('edit_landmark').value = '';
-        document.getElementById('edit_notes').value = '';
-        document.getElementById('edit_visit_day').value = '';
-        document.getElementById('edit_category').value = '';
-        document.getElementById('edit_region').value = '';
-        document.getElementById('editPartnerLocation').value = '';
-        document.getElementById('editPartnerLatitude').value = '';
-        document.getElementById('editPartnerLongitude').value = '';
-        document.getElementById('edit_customer_type').value = '';
-        document.getElementById('edit_sales_channel').value = '';
-        document.getElementById('edit_product_categories').value = '';
-        document.getElementById('edit_inn').value = '';
-        document.getElementById('edit_account').value = '';
-        document.getElementById('edit_bank').value = '';
-        document.getElementById('edit_mfo').value = '';
-        document.getElementById('edit_oked').value = '';
-        document.getElementById('edit_pinfl').value = '';
-        document.getElementById('edit_contract_number').value = '';
-        document.getElementById('edit_contract_date').value = '';
-
-        updateEditPartnerRequired();
-        var modal = new bootstrap.Modal(document.getElementById('editPartnerModal'));
-        modal.show();
+        // AJAX bilan barcha ma'lumotlarni yuklash
+        fetch('/partners/detail/' + id)
+            .then(r => r.json())
+            .then(p => {
+                document.getElementById('edit_name').value = p.name || '';
+                document.getElementById('edit_type').value = p.type || 'customer';
+                document.getElementById('edit_phone').value = p.phone || '';
+                document.getElementById('edit_address').value = p.address || '';
+                document.getElementById('edit_credit_limit').value = p.credit_limit || 0;
+                document.getElementById('edit_discount_percent').value = p.discount_percent || 0;
+                document.getElementById('edit_agent_id').value = p.agent_id || '';
+                document.getElementById('edit_legal_name').value = p.legal_name || '';
+                document.getElementById('edit_contact_person').value = p.contact_person || '';
+                document.getElementById('edit_phone2').value = p.phone2 || '';
+                document.getElementById('edit_landmark').value = p.landmark || '';
+                document.getElementById('edit_notes').value = p.notes || '';
+                document.getElementById('edit_visit_day').value = p.visit_day != null ? p.visit_day : '';
+                document.getElementById('edit_category').value = p.category || '';
+                document.getElementById('edit_region').value = p.region || '';
+                document.getElementById('edit_customer_type').value = p.customer_type || '';
+                document.getElementById('edit_sales_channel').value = p.sales_channel || '';
+                document.getElementById('edit_product_categories').value = p.product_categories || '';
+                document.getElementById('edit_inn').value = p.inn || '';
+                document.getElementById('edit_account').value = p.account || '';
+                document.getElementById('edit_bank').value = p.bank || '';
+                document.getElementById('edit_mfo').value = p.mfo || '';
+                document.getElementById('edit_oked').value = p.oked || '';
+                document.getElementById('edit_pinfl').value = p.pinfl || '';
+                document.getElementById('edit_contract_number').value = p.contract_number || '';
+                document.getElementById('edit_contract_date').value = p.contract_date || '';
+                if (p.latitude && p.longitude) {
+                    document.getElementById('editPartnerLocation').value = p.latitude + ', ' + p.longitude;
+                    document.getElementById('editPartnerLatitude').value = p.latitude;
+                    document.getElementById('editPartnerLongitude').value = p.longitude;
+                } else {
+                    document.getElementById('editPartnerLocation').value = '';
+                    document.getElementById('editPartnerLatitude').value = '';
+                    document.getElementById('editPartnerLongitude').value = '';
+                }
+                updateEditPartnerRequired();
+                var modal = new bootstrap.Modal(document.getElementById('editPartnerModal'));
+                modal.show();
+            })
+            .catch(err => {
+                console.error('Partner detail error:', err);
+                alert('Ma\'lumotlarni yuklashda xato');
+            });
     }
 
     function deletePartnerFromData(btn) {

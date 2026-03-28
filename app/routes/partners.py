@@ -79,19 +79,73 @@ async def partner_add(
     return RedirectResponse(url="/partners", status_code=303)
 
 
+@router.get("/detail/{partner_id}")
+async def partner_detail_json(
+    partner_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Kontragent tafsilotlari (JSON) — edit modal uchun."""
+    p = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Kontragent topilmadi")
+    return {
+        "id": p.id,
+        "name": p.name or "",
+        "type": p.type or "customer",
+        "phone": p.phone or "",
+        "phone2": p.phone2 or "",
+        "address": p.address or "",
+        "legal_name": p.legal_name or "",
+        "contact_person": p.contact_person or "",
+        "landmark": p.landmark or "",
+        "notes": p.notes or "",
+        "visit_day": p.visit_day,
+        "category": p.category or "",
+        "region": p.region or "",
+        "credit_limit": float(p.credit_limit or 0),
+        "discount_percent": float(p.discount_percent or 0),
+        "agent_id": p.agent_id,
+        "latitude": p.latitude,
+        "longitude": p.longitude,
+        "customer_type": p.customer_type or "",
+        "sales_channel": p.sales_channel or "",
+        "product_categories": p.product_categories or "",
+        "inn": p.inn or "",
+        "account": p.account or "",
+        "bank": p.bank or "",
+        "mfo": p.mfo or "",
+        "oked": p.oked or "",
+        "pinfl": p.pinfl or "",
+        "contract_number": p.contract_number or "",
+        "contract_date": str(p.contract_date) if p.contract_date else "",
+    }
+
+
 @router.post("/edit/{partner_id}")
 async def partner_edit(
+    request: Request,
     partner_id: int,
-    name: str = Form(...),
-    type: str = Form(...),
-    phone: str = Form(""),
-    address: str = Form(""),
-    credit_limit: float = Form(0),
-    discount_percent: float = Form(0),
-    agent_id: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    form = await request.form()
+    name = form.get("name", "").strip()
+    type_ = form.get("type", "customer").strip()
+    phone = form.get("phone", "").strip()
+    address = form.get("address", "").strip()
+    try:
+        credit_limit = float(form.get("credit_limit", 0) or 0)
+    except (ValueError, TypeError):
+        credit_limit = 0
+    try:
+        discount_percent = float(form.get("discount_percent", 0) or 0)
+    except (ValueError, TypeError):
+        discount_percent = 0
+    agent_id_raw = form.get("agent_id", "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Ism kiritilmadi")
     if credit_limit < 0:
         raise HTTPException(status_code=400, detail="Kredit limit manfiy bo'lishi mumkin emas")
     if discount_percent < 0 or discount_percent > 100:
@@ -102,20 +156,85 @@ async def partner_edit(
     existing_by_name = db.query(Partner).filter(Partner.name == name, Partner.id != partner_id).first()
     if existing_by_name:
         raise HTTPException(status_code=400, detail=f"'{name}' nomli kontragent allaqachon mavjud!")
-    if phone and phone.strip():
+    if phone:
         existing_by_phone = db.query(Partner).filter(Partner.phone == phone, Partner.id != partner_id).first()
         if existing_by_phone:
             raise HTTPException(status_code=400, detail=f"'{phone}' telefon raqamli kontragent allaqachon mavjud!")
+    # Asosiy maydonlar
     partner.name = name
-    partner.type = type
+    partner.type = type_
     partner.phone = phone
     partner.address = address
     partner.credit_limit = credit_limit
     partner.discount_percent = discount_percent
     try:
-        partner.agent_id = int(agent_id) if agent_id and str(agent_id).strip().isdigit() else None
+        partner.agent_id = int(agent_id_raw) if agent_id_raw and agent_id_raw.isdigit() else None
     except (ValueError, TypeError):
         partner.agent_id = None
+    # Qo'shimcha maydonlar
+    legal_name = form.get("legal_name", "").strip()
+    contact_person = form.get("contact_person", "").strip()
+    phone2 = form.get("phone2", "").strip()
+    landmark = form.get("landmark", "").strip()
+    notes = form.get("notes", "").strip()
+    visit_day_raw = form.get("visit_day", "").strip()
+    category = form.get("category", "").strip()
+    region = form.get("region", "").strip()
+    customer_type = form.get("customer_type", "").strip()
+    sales_channel = form.get("sales_channel", "").strip()
+    product_categories = form.get("product_categories", "").strip()
+    inn = form.get("inn", "").strip()
+    account = form.get("account", "").strip()
+    bank = form.get("bank", "").strip()
+    mfo = form.get("mfo", "").strip()
+    oked = form.get("oked", "").strip()
+    pinfl = form.get("pinfl", "").strip()
+    contract_number = form.get("contract_number", "").strip()
+    contract_date_raw = form.get("contract_date", "").strip()
+    latitude_raw = form.get("latitude", "").strip()
+    longitude_raw = form.get("longitude", "").strip()
+
+    partner.legal_name = legal_name or partner.legal_name
+    partner.contact_person = contact_person or partner.contact_person
+    partner.phone2 = phone2 or partner.phone2
+    partner.landmark = landmark or partner.landmark
+    partner.notes = notes if notes else partner.notes
+    partner.category = category or partner.category
+    partner.region = region or partner.region
+    partner.customer_type = customer_type or partner.customer_type
+    partner.sales_channel = sales_channel or partner.sales_channel
+    partner.product_categories = product_categories or partner.product_categories
+    partner.inn = inn or partner.inn
+    partner.account = account or partner.account
+    partner.bank = bank or partner.bank
+    partner.mfo = mfo or partner.mfo
+    partner.oked = oked or partner.oked
+    partner.pinfl = pinfl or partner.pinfl
+    partner.contract_number = contract_number or partner.contract_number
+    # Tashrif kuni
+    if visit_day_raw != "":
+        try:
+            partner.visit_day = int(visit_day_raw)
+        except (ValueError, TypeError):
+            partner.visit_day = None
+    # GPS
+    if latitude_raw:
+        try:
+            partner.latitude = float(latitude_raw)
+        except (ValueError, TypeError):
+            pass
+    if longitude_raw:
+        try:
+            partner.longitude = float(longitude_raw)
+        except (ValueError, TypeError):
+            pass
+    # Shartnoma sanasi
+    if contract_date_raw:
+        from datetime import datetime as dt
+        try:
+            partner.contract_date = dt.strptime(contract_date_raw, "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            pass
     db.commit()
     return RedirectResponse(url="/partners", status_code=303)
 
