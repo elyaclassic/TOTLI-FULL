@@ -164,6 +164,7 @@
                             <th>Turi</th>
                             <th>Agent</th>
                             <th>Telefon</th>
+                            <th>Manzil/Hudud</th>
                             <th class="text-end">Balans</th>
                             <th style="width:80px"></th>
                         </tr>
@@ -199,7 +200,10 @@
                                 {% endif %}
                             </td>
                             <td class="muted-cell">{{ partner.phone or '-' }}</td>
-                            <td class="muted-cell" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ partner.address or '' }}">{{ partner.address or '-' }}</td>
+                            <td class="muted-cell" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ partner.address or '' }}">
+                                {{ partner.address or '-' }}
+                                {% if partner.region %}<br><small class="text-muted">{{ partner.region }}</small>{% endif %}
+                            </td>
                             <td class="text-end sum-cell">
                                 {% set bal = partner.balance if partner.balance is not none else 0 %}
                                 {% if bal > 0 %}
