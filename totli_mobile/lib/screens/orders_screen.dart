@@ -102,27 +102,103 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return buf.toString();
   }
 
+  void _showOrderDetail(Map<String, dynamic> o) {
+    final items = List<Map<String, dynamic>>.from(o['items'] ?? []);
+    final status = o['status'] ?? 'draft';
+    final statusColor = status == 'completed' ? Colors.green : status == 'confirmed' ? Colors.blue : status == 'cancelled' ? Colors.red : Colors.orange;
+    final statusText = status == 'completed' ? 'Bajarilgan' : status == 'confirmed' ? 'Tasdiqlangan' : status == 'cancelled' ? 'Bekor' : 'Kutilmoqda';
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (ctx, scroll) => Padding(
+          padding: const EdgeInsets.all(16),
+          child: ListView(
+            controller: scroll,
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 12),
+              Row(children: [
+                Expanded(child: Text(o['number'] ?? '', style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+                  child: Text(statusText, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+              const SizedBox(height: 4),
+              Text('${o['partner_name'] ?? o['partner'] ?? ''} • ${o['date'] ?? ''}', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+              const Divider(height: 20),
+              if (items.isNotEmpty) ...[
+                const Text('Buyurtma tarkibi:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 8),
+                ...items.map((item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 6),
+                  child: Row(children: [
+                    Expanded(child: Text(item['name'] ?? '', style: const TextStyle(fontSize: 14))),
+                    Text('x${(item['quantity'] ?? 0).toDouble().toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    const SizedBox(width: 12),
+                    SizedBox(width: 80, child: Text('${_formatMoney((item['total'] ?? 0).toDouble())}', textAlign: TextAlign.right, style: const TextStyle(fontSize: 13))),
+                  ]),
+                )),
+                const Divider(),
+                Row(children: [
+                  const Expanded(child: Text('Jami:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                  Text('${_formatMoney((o['total'] ?? 0).toDouble())} so\'m', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                ]),
+              ] else
+                Text('${_formatMoney((o['total'] ?? 0).toDouble())} so\'m', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+              if ((o['debt'] ?? 0).toDouble() > 0) ...[
+                const SizedBox(height: 8),
+                Text('Qarz: ${_formatMoney((o['debt'] ?? 0).toDouble())} so\'m', style: const TextStyle(color: Colors.red, fontSize: 14)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildOrderTile(Map<String, dynamic> o) {
     final status = o['status'] ?? 'draft';
-    final statusColor = status == 'completed' ? Colors.green : status == 'confirmed' ? Colors.blue : Colors.orange;
-    final statusText = status == 'completed' ? 'Bajarilgan' : status == 'confirmed' ? 'Tasdiqlangan' : 'Qoralama';
+    final statusColor = status == 'completed' ? Colors.green : status == 'confirmed' ? Colors.blue : status == 'cancelled' ? Colors.red : Colors.orange;
+    final statusText = status == 'completed' ? 'Bajarilgan' : status == 'confirmed' ? 'Tasdiqlangan' : status == 'cancelled' ? 'Bekor' : 'Kutilmoqda';
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.15),
-          child: Icon(Icons.receipt_long, color: statusColor, size: 20),
-        ),
-        title: Text(o['number'] ?? '#${o['id']}', style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(o['partner_name'] ?? o['partner'] ?? '', style: const TextStyle(fontSize: 12)),
-        trailing: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text('${_formatMoney((o['total'] ?? 0).toDouble())}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text(statusText, style: TextStyle(fontSize: 10, color: statusColor)),
-          ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(10),
+        onTap: () => _showOrderDetail(o),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(children: [
+            CircleAvatar(
+              backgroundColor: statusColor.withOpacity(0.15),
+              child: Icon(Icons.receipt_long, color: statusColor, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(o['number'] ?? '#${o['id']}', style: const TextStyle(fontWeight: FontWeight.w500)),
+              Text(o['partner_name'] ?? o['partner'] ?? '', style: const TextStyle(fontSize: 12)),
+              // Mahsulotlar qisqa
+              if ((o['items'] ?? []).isNotEmpty)
+                Text(
+                  (o['items'] as List).take(3).map((i) => '${i['name']} x${(i['quantity'] ?? 0).toDouble().toStringAsFixed(0)}').join(', ') + ((o['items'] as List).length > 3 ? '...' : ''),
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ])),
+            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+              Text(_formatMoney((o['total'] ?? 0).toDouble()), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text(statusText, style: TextStyle(fontSize: 10, color: statusColor)),
+            ]),
+          ]),
         ),
       ),
     );

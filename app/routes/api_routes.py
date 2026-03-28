@@ -742,30 +742,46 @@ async def driver_deliveries(request: Request, token: str = None, db: Session = D
         result = []
         for d in deliveries:
             order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None
-            partner_name = ""
+            partner = None
             if order and order.partner_id:
-                p = db.query(Partner).filter(Partner.id == order.partner_id).first()
-                partner_name = p.name if p else ""
-            # Partner telefon raqami
-            partner_phone = ""
-            if order and order.partner_id:
-                p = db.query(Partner).filter(Partner.id == order.partner_id).first()
-                if p:
-                    partner_phone = p.phone or ""
+                partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+            # Buyurtma mahsulotlari
+            items = []
+            if order:
+                from app.models.database import OrderItem, Product
+                for oi in order.items:
+                    prod = oi.product
+                    items.append({
+                        "name": prod.name if prod else f"#{oi.product_id}",
+                        "quantity": float(oi.quantity or 0),
+                        "price": float(oi.price or 0),
+                        "total": float(oi.total or 0),
+                    })
+            # Lokatsiya — delivery da bo'lsa delivery dan, yo'qsa partner dan
+            lat = d.latitude
+            lng = d.longitude
+            if not lat and partner:
+                lat = partner.latitude
+            if not lng and partner:
+                lng = partner.longitude
             result.append({
                 "id": d.id,
                 "number": d.number,
                 "order_number": d.order_number or (order.number if order else ""),
-                "delivery_address": d.delivery_address or "",
-                "partner_name": partner_name,
-                "partner_phone": partner_phone,
+                "delivery_address": d.delivery_address or (partner.address if partner else ""),
+                "partner_name": partner.name if partner else "",
+                "partner_phone": partner.phone if partner else "",
+                "partner_phone2": partner.phone2 if partner and partner.phone2 else "",
+                "partner_address": partner.address if partner else "",
+                "landmark": partner.landmark if partner else "",
                 "status": d.status or "pending",
                 "planned_date": d.planned_date.isoformat() if d.planned_date else "",
                 "delivered_at": d.delivered_at.isoformat() if d.delivered_at else "",
                 "notes": d.notes or "",
                 "total": float(order.total or 0) if order else 0,
-                "latitude": d.latitude,
-                "longitude": d.longitude,
+                "latitude": lat,
+                "longitude": lng,
+                "items": items,
             })
         return {"success": True, "deliveries": result}
     except Exception as e:
@@ -1294,23 +1310,30 @@ async def agent_my_orders(request: Request, token: str = None, db: Session = Dep
             .limit(50)
             .all()
         )
-        return {
-            "success": True,
-            "orders": [
-                {
-                    "id": o.id,
-                    "number": o.number,
-                    "date": o.date.strftime("%d.%m.%Y %H:%M") if o.date else "",
-                    "partner": o.partner.name if o.partner else "",
-                    "total": float(o.total or 0),
-                    "paid": float(o.paid or 0),
-                    "debt": float(o.debt or 0),
-                    "status": o.status,
-                    "items_count": len(o.items),
-                }
-                for o in orders
-            ],
-        }
+        result = []
+        for o in orders:
+            items = []
+            for oi in o.items:
+                prod = oi.product
+                items.append({
+                    "name": prod.name if prod else f"#{oi.product_id}",
+                    "quantity": float(oi.quantity or 0),
+                    "price": float(oi.price or 0),
+                    "total": float(oi.total or 0),
+                })
+            result.append({
+                "id": o.id,
+                "number": o.number,
+                "date": o.date.strftime("%d.%m.%Y %H:%M") if o.date else "",
+                "partner": o.partner.name if o.partner else "",
+                "total": float(o.total or 0),
+                "paid": float(o.paid or 0),
+                "debt": float(o.debt or 0),
+                "status": o.status,
+                "items_count": len(o.items),
+                "items": items,
+            })
+        return {"success": True, "orders": result}
     except Exception as e:
         logger.error(f"agent_my_orders: {e}")
         return {"success": False, "error": "Server xatosi"}
