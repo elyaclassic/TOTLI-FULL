@@ -167,7 +167,10 @@ async def auth_middleware_impl(request: Request, call_next):
     if path in ("/api/agent/orders", "/api/agent/partners"):
         return await call_next(request)
     # Agent mobil ilova — Bearer token orqali o'z autentifikatsiyasini qiladi
-    if path == "/agent" or path.startswith("/api/agent/my-") or path.startswith("/api/agent/partner") or path.startswith("/api/agent/product") or path == "/api/agent/order/create" or path == "/api/agent/stats" or path.startswith("/api/agent/visit") or path == "/api/agent/visits":
+    if path == "/agent" or path.startswith("/api/agent/my-") or path.startswith("/api/agent/partner") or path.startswith("/api/agent/product") or path == "/api/agent/order/create" or path.startswith("/api/agent/order/") or path == "/api/agent/stats" or path.startswith("/api/agent/visit") or path == "/api/agent/visits" or path.startswith("/api/agent/return") or path.startswith("/api/agent/kpi") or path.startswith("/api/agent/reports") or path.startswith("/api/agent/tasks"):
+        return await call_next(request)
+    # Driver mobil ilova — Bearer token orqali autentifikatsiya
+    if path.startswith("/api/driver/"):
         return await call_next(request)
 
     token = request.cookies.get("session_token")
