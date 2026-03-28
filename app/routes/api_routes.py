@@ -599,6 +599,16 @@ async def agent_visit_checkin(
         if not agent:
             return {"success": False, "error": "Invalid token"}
 
+        # Yakunlanmagan vizit bormi tekshirish
+        existing = db.query(Visit).filter(
+            Visit.agent_id == agent.id,
+            Visit.check_out_time == None,
+        ).first()
+        if existing:
+            # Avvalgi vizitni avtomatik yakunlash
+            existing.check_out_time = datetime.now()
+            db.flush()
+
         visit = Visit(
             agent_id=agent.id,
             partner_id=int(partner_id),

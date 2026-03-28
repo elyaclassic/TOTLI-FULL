@@ -77,7 +77,6 @@ class _VisitsScreenState extends State<VisitsScreen> {
       if (!mounted) return;
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${partner['name']} ga kirish belgilandi'), backgroundColor: Colors.green));
-        _loadData();
         _openActiveVisit({
           'id': result['visit_id'],
           'partner_id': partner['id'],
@@ -695,7 +694,7 @@ class _VisitOrderPage extends StatefulWidget {
 
 class _VisitOrderPageState extends State<_VisitOrderPage> {
   String _paymentType = 'naqd';
-  final Map<int, int> _cart = {};
+  final Map<int, double> _cart = {};
   bool _isSending = false;
   String _searchQuery = '';
 
@@ -715,6 +714,35 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
   }
 
   double get _total => _subtotal * (1 - widget.discount / 100);
+
+  Future<void> _editQty(int pid, String productName, double currentQty) async {
+    final controller = TextEditingController(text: currentQty > 0 ? currentQty.toStringAsFixed(currentQty == currentQty.roundToDouble() ? 0 : 1) : '');
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(productName, style: const TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Miqdor', border: OutlineInputBorder()),
+          onSubmitted: (v) => Navigator.pop(ctx, double.tryParse(v) ?? 0),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 0.0), child: const Text('O\'chirish')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text) ?? 0),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF017449)),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result <= 0) _cart.remove(pid); else _cart[pid] = result;
+    });
+  }
 
   Future<void> _submit() async {
     if (_cart.isEmpty) {
@@ -799,7 +827,20 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
                         icon: const Icon(Icons.remove_circle_outline, size: 22),
                         onPressed: () => setState(() { if (qty <= 1) _cart.remove(pid); else _cart[pid] = qty - 1; }),
                       ),
-                      if (qty > 0) Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      if (qty > 0) GestureDetector(
+                        onTap: () => _editQty(pid, p['name'] ?? '', qty),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: const Color(0xFF017449)),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF017449)),
+                          ),
+                        ),
+                      ),
                       IconButton(
                         icon: const Icon(Icons.add_circle, color: Color(0xFF017449), size: 22),
                         onPressed: () => setState(() => _cart[pid] = qty + 1),
@@ -822,7 +863,7 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_cart.values.fold(0, (a, b) => a + b)} ta mahsulot', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text('${_cart.length} ta mahsulot', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                       if (widget.discount > 0)
                         Text('Chegirma: ${widget.discount.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 11, color: Colors.green)),
                       Text('${_formatPrice(_total)} so\'m', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),

@@ -104,7 +104,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: Icon(Icons.receipt_long, color: statusColor, size: 20),
         ),
         title: Text(o['number'] ?? '#${o['id']}', style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(o['partner_name'] ?? '', style: const TextStyle(fontSize: 12)),
+        subtitle: Text(o['partner_name'] ?? o['partner'] ?? '', style: const TextStyle(fontSize: 12)),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -131,7 +131,7 @@ class _CreateOrderPage extends StatefulWidget {
 class _CreateOrderPageState extends State<_CreateOrderPage> {
   int? _selectedPartnerId;
   String _paymentType = 'naqd';
-  final Map<int, int> _cart = {};
+  final Map<int, double> _cart = {};
   bool _isSending = false;
   String _searchQuery = '';
 
@@ -148,6 +148,35 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
       t += (p['price'] ?? 0).toDouble() * qty;
     });
     return t;
+  }
+
+  Future<void> _editQty(int pid, String productName, double currentQty) async {
+    final controller = TextEditingController(text: currentQty > 0 ? currentQty.toStringAsFixed(currentQty == currentQty.roundToDouble() ? 0 : 1) : '');
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(productName, style: const TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Miqdor', border: OutlineInputBorder()),
+          onSubmitted: (v) => Navigator.pop(ctx, double.tryParse(v) ?? 0),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, 0.0), child: const Text('O\'chirish')),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, double.tryParse(controller.text) ?? 0),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF017449)),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+    if (result == null) return;
+    setState(() {
+      if (result <= 0) _cart.remove(pid); else _cart[pid] = result;
+    });
   }
 
   Future<void> _submit() async {
@@ -242,15 +271,26 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
                 final p = _filteredProducts[i];
                 final pid = p['id'] as int;
                 final qty = _cart[pid] ?? 0;
+                final stock = (p['stock'] ?? 0).toDouble();
                 return ListTile(
                   dense: true,
                   title: Text(p['name'] ?? '', style: const TextStyle(fontSize: 14)),
-                  subtitle: Text('${((p['price'] ?? 0) / 1000).toStringAsFixed(0)}K so\'m', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  subtitle: Text(
+                    '${((p['price'] ?? 0) / 1000).toStringAsFixed(0)}K | Qoldiq: ${stock.toStringAsFixed(0)} ${p['unit'] ?? ''}',
+                    style: TextStyle(fontSize: 11, color: stock > 0 ? Colors.grey : Colors.red),
+                  ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (qty > 0) IconButton(icon: const Icon(Icons.remove_circle_outline, size: 22), onPressed: () => setState(() { if (qty <= 1) _cart.remove(pid); else _cart[pid] = qty - 1; })),
-                      if (qty > 0) Text('$qty', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      if (qty > 0) GestureDetector(
+                        onTap: () => _editQty(pid, p['name'] ?? '', qty),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(border: Border.all(color: const Color(0xFF017449)), borderRadius: BorderRadius.circular(6)),
+                          child: Text(qty == qty.roundToDouble() ? qty.toStringAsFixed(0) : qty.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF017449))),
+                        ),
+                      ),
                       IconButton(icon: const Icon(Icons.add_circle, color: Color(0xFF017449), size: 22), onPressed: () => setState(() => _cart[pid] = qty + 1)),
                     ],
                   ),
@@ -271,7 +311,7 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('${_cart.values.fold(0, (a, b) => a + b)} ta mahsulot', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                      Text('${_cart.length} ta mahsulot', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                       Text('${(_total / 1000).toStringAsFixed(0)}K so\'m', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                     ],
                   ),
