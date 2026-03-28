@@ -78,7 +78,7 @@
             <i class="bi bi-exclamation-triangle"></i> Avans berish uchun avval <a href="/finance">Moliya</a> bo'limida kamida bitta kassa qo'shilgan bo'lishi kerak.
         </div>
         {% else %}
-        <form method="post" action="/employees/advances/add" class="row g-2 align-items-end">
+        <form method="post" action="/employees/advances/add" class="row g-2 align-items-end" onsubmit="return advSubmit(this)">
             <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
             <div class="col-md-2">
                 <label class="form-label">Xodim *</label>
@@ -283,5 +283,12 @@
         });
     }
 })();
+function advSubmit(form) {
+    var btn = form.querySelector('button[type="submit"]');
+    if (btn.disabled) return false;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saqlanmoqda...';
+    return true;
+}
 </script>
 {% endblock %}

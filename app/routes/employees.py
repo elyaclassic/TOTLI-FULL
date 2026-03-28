@@ -1973,8 +1973,17 @@ async def employee_advance_add(
         cash = db.query(CashRegister).filter(CashRegister.id == cash_register_id, CashRegister.is_active == True).first()
     if not cash:
         return RedirectResponse(url="/advances?error=Kassani tanlang", status_code=303)
+    # Duplikat tekshirish — 5 daqiqa ichida shu xodimga shu summada avans bo'lsa rad etish
+    five_min_ago = datetime.now() - timedelta(minutes=5)
+    dup = db.query(EmployeeAdvance).filter(
+        EmployeeAdvance.employee_id == employee_id,
+        EmployeeAdvance.amount == amount,
+        EmployeeAdvance.advance_date == adv_date,
+        EmployeeAdvance.confirmed_at >= five_min_ago,
+    ).first()
+    if dup:
+        return RedirectResponse(url="/advances?error=" + quote("Bu avans allaqachon yozilgan (duplikat)"), status_code=303)
     today = datetime.now()
-    # Status ustuni startup da ta'minlangan; bitta commit da saqlaymiz
     adv = EmployeeAdvance(
         employee_id=employee_id,
         amount=amount,
