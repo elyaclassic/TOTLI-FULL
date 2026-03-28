@@ -14,7 +14,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "totli-holva-secret-key-2026-change-in-prod
 if os.getenv("PRODUCTION", "").lower() in ("1", "true", "yes") and "change-in-production" in SECRET_KEY:
     raise RuntimeError("Production rejimida SECRET_KEY ni environment o'zgaruvchisi orqali o'rnating.")
 SESSION_SERIALIZER = URLSafeTimedSerializer(SECRET_KEY)
-SESSION_MAX_AGE = 86400  # 24 soat (sekundlarda)
+SESSION_MAX_AGE = 86400 * 30  # 30 kun (mobil ilova uchun)
 
 def _legacy_hash(password: str) -> str:
     """Eski SHA256 hash (migratsiya)"""

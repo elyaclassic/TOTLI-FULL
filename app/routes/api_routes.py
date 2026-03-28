@@ -611,13 +611,22 @@ async def agent_visit_checkin(
         if not agent:
             return {"success": False, "error": "Invalid token"}
 
+        # So'nggi 2 daqiqada shu mijozga vizit bormi (duplikat oldini olish)
+        two_min_ago = datetime.now() - timedelta(minutes=2)
+        recent_dup = db.query(Visit).filter(
+            Visit.agent_id == agent.id,
+            Visit.partner_id == int(partner_id),
+            Visit.check_in_time >= two_min_ago,
+        ).first()
+        if recent_dup:
+            return {"success": True, "visit_id": recent_dup.id}  # Mavjud vizitni qaytarish
+
         # Yakunlanmagan vizit bormi tekshirish
         existing = db.query(Visit).filter(
             Visit.agent_id == agent.id,
             Visit.check_out_time == None,
         ).first()
         if existing:
-            # Avvalgi vizitni avtomatik yakunlash
             existing.check_out_time = datetime.now()
             db.flush()
 
