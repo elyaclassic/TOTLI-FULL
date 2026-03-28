@@ -702,7 +702,13 @@ def _driver_from_token(token: str, db: Session):
     user_data = get_user_from_token(token)
     if not user_data or user_data.get("user_type") != "driver":
         return None
-    return db.query(Driver).filter(Driver.id == user_data["user_id"], Driver.is_active == True).first()
+    user_id = user_data["user_id"]
+    # Avval employee_id orqali
+    driver = db.query(Driver).filter(Driver.employee_id == user_id, Driver.is_active == True).first()
+    if not driver:
+        # Agar user_id == driver.id bo'lsa (eski token)
+        driver = db.query(Driver).filter(Driver.id == user_id, Driver.is_active == True).first()
+    return driver
 
 
 @router.get("/driver/deliveries")
