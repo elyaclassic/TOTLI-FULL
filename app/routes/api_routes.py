@@ -34,6 +34,7 @@ from app.utils.notifications import get_unread_count, get_user_notifications, ma
 from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
 from app.utils.rate_limit import is_blocked, record_failure, record_success, check_api_rate_limit
 from fastapi.responses import JSONResponse as _JSONResponse
+from app.services.stock_service import create_stock_movement
 from app.logging_config import get_logger
 
 logger = get_logger("api_routes")
@@ -1896,4 +1897,164 @@ async def agent_task_complete(
     except Exception as e:
         db.rollback()
         logger.error(f"agent_task_complete: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/partner/{partner_id}/completed-orders")
+async def agent_partner_completed_orders(
+    request: Request,
+    partner_id: int,
+    token: str = None,
+    db: Session = Depends(get_db),
+):
+    """Mijozning completed sotuvlari (vozvrat uchun)."""
+    try:
+        agent = _agent_from_token(_extract_token(request, token), db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+        partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent.id).first()
+        if not partner:
+            return {"success": False, "error": "Klient topilmadi"}
+        orders = (
+            db.query(Order)
+            .filter(
+                Order.partner_id == partner_id,
+                Order.type == "sale",
+                Order.status == "completed",
+            )
+            .order_by(Order.date.desc())
+            .limit(30)
+            .all()
+        )
+        result = []
+        for o in orders:
+            items = []
+            for it in o.items:
+                prod = it.product
+                items.append({
+                    "product_id": it.product_id,
+                    "name": prod.name if prod else f"#{it.product_id}",
+                    "quantity": float(it.quantity or 0),
+                    "price": float(it.price or 0),
+                    "total": float(it.total or 0),
+                })
+            result.append({
+                "id": o.id,
+                "number": o.number,
+                "date": o.date.strftime("%d.%m.%Y") if o.date else "",
+                "total": float(o.total or 0),
+                "items": items,
+            })
+        return {"success": True, "orders": result}
+    except Exception as e:
+        logger.error(f"agent_partner_completed_orders: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/return/create")
+async def agent_return_create(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Agent vozvrat yaratadi. JSON body: {token, order_id, items: [{product_id, qty}]}."""
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token"))
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+        order_id = body.get("order_id")
+        items = body.get("items", [])
+        if not order_id:
+            return {"success": False, "error": "Buyurtma tanlanmadi"}
+        if not items:
+            return {"success": False, "error": "Mahsulot tanlang"}
+        sale = db.query(Order).filter(
+            Order.id == int(order_id),
+            Order.type == "sale",
+            Order.status == "completed",
+        ).first()
+        if not sale:
+            return {"success": False, "error": "Buyurtma topilmadi"}
+        # Ombor — vozvrat yoki asl ombor
+        sale_wh = db.query(Warehouse).filter(Warehouse.id == sale.warehouse_id).first()
+        if sale_wh and "do'kon" in (sale_wh.name or "").lower():
+            return_warehouse_id = sale.warehouse_id
+        else:
+            vozvrat_wh = db.query(Warehouse).filter(
+                Warehouse.name.ilike("%vozvrat%"), Warehouse.is_active == True
+            ).first()
+            return_warehouse_id = vozvrat_wh.id if vozvrat_wh else sale.warehouse_id
+        # Raqam generatsiya
+        from datetime import date as date_type
+        today_start = date_type.today()
+        count = db.query(Order).filter(
+            Order.type == "return_sale",
+            sa_func.date(Order.created_at) == today_start,
+        ).count()
+        new_number = f"R-{datetime.now().strftime('%Y%m%d')}-{count + 1:04d}"
+        # Sotuv itemlari
+        sale_items_by_product = {it.product_id: it for it in sale.items}
+        return_order = Order(
+            number=new_number,
+            type="return_sale",
+            partner_id=sale.partner_id,
+            warehouse_id=return_warehouse_id,
+            price_type_id=sale.price_type_id,
+            user_id=None,
+            agent_id=agent.id,
+            source="agent",
+            status="completed",
+            payment_type=sale.payment_type,
+            note=f"Agent vozvrat: {sale.number} (Agent: {agent.code})",
+        )
+        db.add(return_order)
+        db.flush()
+        total_return = 0.0
+        for it in items:
+            pid = int(it["product_id"])
+            qty = float(it.get("qty", it.get("quantity", 0)))
+            if qty <= 0:
+                continue
+            sale_item = sale_items_by_product.get(pid)
+            if not sale_item:
+                continue
+            # Sotilgan miqdordan ko'p qaytarish mumkin emas
+            if qty > float(sale_item.quantity or 0) + 0.001:
+                qty = float(sale_item.quantity or 0)
+            price = float(sale_item.price or 0)
+            total_row = qty * price
+            db.add(OrderItem(
+                order_id=return_order.id,
+                product_id=pid,
+                quantity=qty,
+                price=price,
+                total=total_row,
+            ))
+            total_return += total_row
+            create_stock_movement(
+                db=db,
+                warehouse_id=return_warehouse_id,
+                product_id=pid,
+                quantity_change=+qty,
+                operation_type="return_sale",
+                document_type="SaleReturn",
+                document_id=return_order.id,
+                document_number=return_order.number,
+                user_id=None,
+                note=f"Agent vozvrat: {sale.number} -> {return_order.number}",
+            )
+        if total_return <= 0:
+            db.rollback()
+            return {"success": False, "error": "Qaytarish miqdori kiritilmadi"}
+        return_order.subtotal = total_return
+        return_order.total = total_return
+        return_order.paid = total_return
+        return_order.debt = 0
+        db.commit()
+        logger.info(f"Agent return created: {new_number}, agent={agent.code}, sale={sale.number}, total={total_return}")
+        return {"success": True, "return_number": new_number, "total": total_return}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_return_create: {e}")
         return {"success": False, "error": "Server xatosi"}

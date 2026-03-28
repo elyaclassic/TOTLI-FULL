@@ -137,6 +137,19 @@ class ApiService {
     }, token: token);
   }
 
+  // ===== AGENT: PARTNER DETAIL & DEBTS =====
+  static Future<Map<String, dynamic>> getPartnerDetail(String token, int partnerId) async {
+    return _get('/api/agent/partner/$partnerId', token);
+  }
+
+  static Future<Map<String, dynamic>> getPartnerCompletedOrders(String token, int partnerId) async {
+    return _get('/api/agent/partner/$partnerId/completed-orders', token);
+  }
+
+  static Future<Map<String, dynamic>> createReturn(String token, Map<String, dynamic> data) async {
+    return _postJson('/api/agent/return/create', data, token: token);
+  }
+
   // ===== AGENT: STATS =====
   static Future<Map<String, dynamic>> getAgentStats(String token) async {
     return _get('/api/agent/stats', token);
