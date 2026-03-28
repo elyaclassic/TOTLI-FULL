@@ -391,7 +391,7 @@ async def supervisor_confirm_agent_order(
                 longitude=lng,
                 planned_date=today,
                 notes=f"Mijoz: {partner.name if partner else ''}, Tel: {partner.phone if partner else ''}",
-                status="pending",
+                status="in_progress",
             )
             db.add(delivery)
     db.commit()
