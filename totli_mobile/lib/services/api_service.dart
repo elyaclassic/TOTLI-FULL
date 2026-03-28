@@ -176,6 +176,15 @@ class ApiService {
     return _get('/api/driver/stats', token);
   }
 
+  // ===== APP UPDATE =====
+  static Future<Map<String, dynamic>> checkAppVersion() async {
+    try {
+      final r = await http.get(Uri.parse('$_baseUrl/api/app/version')).timeout(const Duration(seconds: 10));
+      if (r.statusCode == 200) return jsonDecode(r.body) as Map<String, dynamic>;
+    } catch (_) {}
+    return {};
+  }
+
   // ===== PWA CONFIG =====
   static Future<String?> fetchApiBaseUrl() async {
     try {

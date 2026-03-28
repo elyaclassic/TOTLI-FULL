@@ -1,9 +1,14 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/session_service.dart';
 import 'services/api_service.dart';
+
+// Joriy ilova versiyasi
+const String appVersion = '1.1.0';
+const int appBuild = 2;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,22 +49,170 @@ class SplashScreen extends StatefulWidget {
 }
 
 class _SplashScreenState extends State<SplashScreen> {
+  String _statusText = '';
+
   @override
   void initState() {
     super.initState();
-    _checkAuth();
+    _init();
   }
 
-  Future<void> _checkAuth() async {
-    await Future.delayed(const Duration(milliseconds: 800));
+  Future<void> _init() async {
+    await Future.delayed(const Duration(milliseconds: 500));
     if (!mounted) return;
+
     final session = SessionService();
-    // Saqlangan server URL ni tiklash
     final savedUrl = await session.getApiUrl();
     if (savedUrl != null && savedUrl.isNotEmpty) {
       ApiService.setBaseUrl(savedUrl);
     }
+
+    // Yangilash tekshirish
+    setState(() => _statusText = 'Yangilanish tekshirilmoqda...');
+    try {
+      final versionInfo = await ApiService.checkAppVersion();
+      if (versionInfo.isNotEmpty && mounted) {
+        final serverBuild = versionInfo['build'] ?? 0;
+        final serverVersion = versionInfo['version'] ?? '';
+        final forceUpdate = versionInfo['force_update'] == true;
+        final downloadUrl = versionInfo['download_url'] ?? '';
+        final changelog = versionInfo['changelog'] ?? '';
+
+        if (serverBuild > appBuild && downloadUrl.isNotEmpty) {
+          // Yangi versiya bor
+          final shouldUpdate = await _showUpdateDialog(
+            serverVersion: serverVersion,
+            changelog: changelog,
+            forceUpdate: forceUpdate,
+          );
+          if (shouldUpdate == true && mounted) {
+            setState(() => _statusText = 'Yuklanmoqda...');
+            await _downloadAndInstall(downloadUrl);
+            return;
+          }
+          if (forceUpdate) return; // Majburiy yangilash — ilovaga kirmaslik
+        }
+      }
+    } catch (_) {
+      // Yangilash tekshirib bo'lmadi — davom etamiz
+    }
+
+    if (!mounted) return;
+    setState(() => _statusText = '');
     final isLoggedIn = await session.isLoggedIn();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
+      ),
+    );
+  }
+
+  Future<bool?> _showUpdateDialog({
+    required String serverVersion,
+    required String changelog,
+    required bool forceUpdate,
+  }) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: !forceUpdate,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.system_update, color: Color(0xFF017449)),
+            const SizedBox(width: 8),
+            const Text('Yangilanish'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Yangi versiya: $serverVersion', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('Joriy versiya: $appVersion', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            if (changelog.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(changelog, style: const TextStyle(fontSize: 13)),
+            ],
+          ],
+        ),
+        actions: [
+          if (!forceUpdate)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Keyinroq'),
+            ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(ctx, true),
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Yangilash'),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF017449), foregroundColor: Colors.white),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _downloadAndInstall(String downloadPath) async {
+    try {
+      final fullUrl = '${ApiService.baseUrl}$downloadPath';
+      setState(() => _statusText = 'APK yuklanmoqda...');
+
+      // APK ni yuklab olish
+      final request = await HttpClient().getUrl(Uri.parse(fullUrl));
+      final response = await request.close();
+      final bytes = await response.fold<List<int>>([], (prev, chunk) {
+        prev.addAll(chunk);
+        if (mounted) {
+          final mb = prev.length / 1024 / 1024;
+          setState(() => _statusText = 'Yuklanmoqda... ${mb.toStringAsFixed(1)} MB');
+        }
+        return prev;
+      });
+
+      // Faylga saqlash
+      final dir = Directory('/storage/emulated/0/Download');
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      final file = File('${dir.path}/totli-agent.apk');
+      await file.writeAsBytes(bytes);
+
+      if (!mounted) return;
+      setState(() => _statusText = 'O\'rnatish...');
+
+      // Android Intent orqali APK o'rnatish
+      const platform = MethodChannel('app.totli/installer');
+      try {
+        await platform.invokeMethod('installApk', {'path': file.path});
+      } catch (_) {
+        // MethodChannel ishlamasa, foydalanuvchiga xabar berish
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('APK yuklandi: ${file.path}\nFayl menejerdan o\'rnating.'),
+              duration: const Duration(seconds: 5),
+            ),
+          );
+          // Ilovaga kirish
+          await Future.delayed(const Duration(seconds: 2));
+          _continueToApp();
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _statusText = 'Yuklab bo\'lmadi');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+        );
+        await Future.delayed(const Duration(seconds: 2));
+        _continueToApp();
+      }
+    }
+  }
+
+  void _continueToApp() async {
+    final session = SessionService();
+    final isLoggedIn = await session.isLoggedIn();
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
@@ -94,14 +247,15 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Agent / Haydovchi',
-                style: TextStyle(
-                  fontSize: 14,
-                  color: Colors.white.withOpacity(0.8),
-                ),
+                'v$appVersion',
+                style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
               ),
               const SizedBox(height: 48),
               const CircularProgressIndicator(color: Color(0xFFFFB50D)),
+              if (_statusText.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Text(_statusText, style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.7))),
+              ],
             ],
           ),
         ),

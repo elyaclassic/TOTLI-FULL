@@ -48,6 +48,18 @@ async def pwa_config():
     return {"apiBaseUrl": os.getenv("PWA_API_BASE_URL", "").strip()}
 
 
+@router.get("/app/version")
+async def app_version():
+    """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
+    return {
+        "version": "1.1.0",
+        "build": 2,
+        "force_update": False,
+        "download_url": "/static/totli-agent.apk",
+        "changelog": "Vizitlar, buyurtma, vozvrat, yetkazish yangiliklari",
+    }
+
+
 @router.get("/stats")
 async def api_stats(request: Request, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     if not current_user:
