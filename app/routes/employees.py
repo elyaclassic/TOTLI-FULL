@@ -24,7 +24,7 @@ from app.models.database import (
     Attendance, AttendanceDoc, EmployeeAdvance, EmploymentDoc, DismissalDoc,
     Salary, employee_piecework_tasks, Payment,
     ExpenseType, ExpenseDoc, ExpenseDocItem, CashRegister,
-    Warehouse, Product, Unit, ProductionGroup, Production,
+    Warehouse, Product, Unit, ProductionGroup, Production, production_group_members,
 )
 from app.deps import require_auth, require_admin
 from app.utils.production_order import is_qiyom_recipe, recipe_kg_per_unit
@@ -2412,7 +2412,6 @@ async def employee_salary_page(
         group_member_ids.update(member_ids)
         # Har bir a'zo uchun alohida narx (production_group_members dan)
         member_rates = {}
-        from sqlalchemy import text as sa_text
         rate_rows = db.execute(
             production_group_members.select().where(production_group_members.c.group_id == gr.id)
         ).fetchall()
