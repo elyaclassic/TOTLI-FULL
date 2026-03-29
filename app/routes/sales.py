@@ -125,7 +125,6 @@ async def sales_list(
     terminal_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'terminal')
     click_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'click')
     qarz_sum = sum(float(o.debt or 0) for o in orders if float(o.debt or 0) > 0)
-    boshqa_sum = total_sum - naqd_sum - plastik_sum - terminal_sum - click_sum
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
@@ -150,7 +149,6 @@ async def sales_list(
         "terminal_sum": terminal_sum,
         "click_sum": click_sum,
         "qarz_sum": qarz_sum,
-        "boshqa_sum": boshqa_sum,
         "warehouses": warehouses,
         "date_from": (date_from or "").strip()[:10] or None,
         "date_to": (date_to or "").strip()[:10] or None,
