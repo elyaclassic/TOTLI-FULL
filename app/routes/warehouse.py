@@ -549,6 +549,7 @@ async def warehouse_transfer_confirm(
                 url=f"/warehouse/transfers/{transfer_id}?error=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {item.quantity}, mavjud: {avail_display})"),
                 status_code=303,
             )
+    from app.services.stock_service import create_stock_movement
     for item in items:
         src = db.query(Stock).filter(
             Stock.warehouse_id == transfer.from_warehouse_id,
@@ -565,6 +566,31 @@ async def warehouse_transfer_confirm(
             dest.quantity += item.quantity
         else:
             db.add(Stock(warehouse_id=transfer.to_warehouse_id, product_id=item.product_id, quantity=item.quantity))
+        # Stock movement yozish
+        create_stock_movement(
+            db=db,
+            warehouse_id=transfer.from_warehouse_id,
+            product_id=item.product_id,
+            quantity_change=-item.quantity,
+            operation_type="transfer_out",
+            document_type="WarehouseTransfer",
+            document_id=transfer.id,
+            document_number=transfer.number,
+            user_id=current_user.id if current_user else None,
+            note=f"O'tkazma chiqim: {transfer.number}",
+        )
+        create_stock_movement(
+            db=db,
+            warehouse_id=transfer.to_warehouse_id,
+            product_id=item.product_id,
+            quantity_change=+item.quantity,
+            operation_type="transfer_in",
+            document_type="WarehouseTransfer",
+            document_id=transfer.id,
+            document_number=transfer.number,
+            user_id=current_user.id if current_user else None,
+            note=f"O'tkazma kirim: {transfer.number}",
+        )
     transfer.status = "confirmed"
     db.commit()
     return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?confirmed=1", status_code=303)
