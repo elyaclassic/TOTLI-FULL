@@ -443,6 +443,7 @@ def sync_hikvision_attendance(
                     att.check_in = first_in
                     att.check_out = last_out
                     att.hours_worked = hours_worked
+                    att.status = "present"
                     if ev_date == date.today():
                         emp = db_session.query(Employee).filter(Employee.id == emp_id).first()
                         if emp:
