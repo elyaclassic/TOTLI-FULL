@@ -118,13 +118,14 @@ async def sales_list(
     else:
         q = q.order_by(Order.date.desc())
     orders = q.limit(500).all()
-    total_sum = sum(float(o.total or 0) for o in orders)
-    # To'lov turlari bo'yicha statistika
-    naqd_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'naqd')
-    plastik_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'plastik')
-    terminal_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'terminal')
-    click_sum = sum(float(o.total or 0) for o in orders if (o.payment_type or '') == 'click')
-    qarz_sum = sum(float(o.debt or 0) for o in orders if float(o.debt or 0) > 0)
+    confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
+    total_sum = sum(float(o.total or 0) for o in confirmed_orders)
+    # To'lov turlari bo'yicha statistika (faqat tasdiqlangan)
+    naqd_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'naqd')
+    plastik_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'plastik')
+    terminal_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'terminal')
+    click_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'click')
+    qarz_sum = sum(float(o.debt or 0) for o in confirmed_orders if float(o.debt or 0) > 0)
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
