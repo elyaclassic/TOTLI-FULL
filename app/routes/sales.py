@@ -120,29 +120,40 @@ async def sales_list(
     orders = q.limit(500).all()
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
-    # To'lov turlari — kassadagi haqiqiy paymentlardan hisoblash
-    confirmed_ids = [o.id for o in confirmed_orders]
+    # To'lov turlari — order.payment_type + payments jadvalidan
     naqd_sum = 0
     plastik_sum = 0
     terminal_sum = 0
     click_sum = 0
-    if confirmed_ids:
-        pay_stats = (
-            db.query(Payment.payment_type, func.sum(Payment.amount))
-            .filter(Payment.order_id.in_(confirmed_ids), Payment.type == "income", Payment.status == "confirmed")
-            .group_by(Payment.payment_type)
-            .all()
-        )
-        for pt, amount in pay_stats:
-            pt_lower = (pt or '').strip().lower()
-            if pt_lower in ('cash', 'naqd'):
-                naqd_sum += float(amount or 0)
-            elif pt_lower in ('card', 'plastik'):
-                plastik_sum += float(amount or 0)
-            elif pt_lower == 'terminal':
-                terminal_sum += float(amount or 0)
-            elif pt_lower == 'click':
-                click_sum += float(amount or 0)
+    for o in confirmed_orders:
+        pt = (o.payment_type or '').strip().lower()
+        t = float(o.total or 0)
+        if pt == 'naqd':
+            naqd_sum += t
+        elif pt == 'plastik':
+            plastik_sum += t
+        elif pt == 'terminal':
+            terminal_sum += t
+        elif pt == 'click':
+            click_sum += t
+        elif pt in ('split', 'mixed', ''):
+            # Aralash to'lovlar — payments dan aniq summa olish
+            pays = db.query(Payment.payment_type, Payment.amount).filter(
+                Payment.order_id == o.id, Payment.type == "income", Payment.status == "confirmed"
+            ).all()
+            if pays:
+                for ppt, pamt in pays:
+                    ppt_l = (ppt or '').strip().lower()
+                    if ppt_l in ('cash', 'naqd'):
+                        naqd_sum += float(pamt or 0)
+                    elif ppt_l in ('card', 'plastik'):
+                        plastik_sum += float(pamt or 0)
+                    elif ppt_l == 'terminal':
+                        terminal_sum += float(pamt or 0)
+                    elif ppt_l == 'click':
+                        click_sum += float(pamt or 0)
+            else:
+                naqd_sum += t  # payment yo'q — naqd deb hisoblaymiz
     qarz_sum = sum(float(o.debt or 0) for o in confirmed_orders if float(o.debt or 0) > 0)
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
