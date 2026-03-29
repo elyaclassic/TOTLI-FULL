@@ -57,33 +57,57 @@
 
 <!-- Stats -->
 <div class="row g-3 mb-3">
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="mini-stat">
       <div class="num text-primary">{{ orders|length }}</div>
       <div class="lbl">Jami hujjatlar</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="mini-stat">
-      <div class="num text-success" style="font-size:1.2rem;">{{ "{:,.0f}".format(total_sum or 0) }}</div>
-      <div class="lbl">Jami summa (so'm)</div>
+      <div class="num text-success" style="font-size:1.1rem;">{{ "{:,.0f}".format(total_sum or 0) }}</div>
+      <div class="lbl">Jami summa</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="mini-stat">
       {% set done_count = orders|selectattr('status','equalto','completed')|list|length %}
       <div class="num text-success">{{ done_count }}</div>
       <div class="lbl">Bajarilgan</div>
     </div>
   </div>
-  <div class="col-6 col-md-3">
+  <div class="col-6 col-md-2">
     <div class="mini-stat">
       {% set draft_count = orders|selectattr('status','equalto','draft')|list|length %}
       <div class="num text-warning">{{ draft_count }}</div>
       <div class="lbl">Qoralama</div>
     </div>
   </div>
+  {% if qarz_sum is defined and qarz_sum > 0 %}
+  <div class="col-6 col-md-2">
+    <div class="mini-stat">
+      <div class="num text-danger" style="font-size:1.1rem;">{{ "{:,.0f}".format(qarz_sum or 0) }}</div>
+      <div class="lbl">Qarz</div>
+    </div>
+  </div>
+  {% endif %}
 </div>
+
+{% if naqd_sum is defined %}
+<div class="card mb-3 border-0 bg-light">
+  <div class="card-body py-2 px-3">
+    <div class="d-flex flex-wrap gap-3 align-items-center" style="font-size:13px;">
+      <span class="fw-bold">To'lov turlari:</span>
+      {% if naqd_sum > 0 %}<span><i class="bi bi-cash text-success"></i> Naqd: <strong>{{ "{:,.0f}".format(naqd_sum) }}</strong></span>{% endif %}
+      {% if plastik_sum > 0 %}<span><i class="bi bi-credit-card text-primary"></i> Plastik: <strong>{{ "{:,.0f}".format(plastik_sum) }}</strong></span>{% endif %}
+      {% if terminal_sum > 0 %}<span><i class="bi bi-phone text-info"></i> Terminal: <strong>{{ "{:,.0f}".format(terminal_sum) }}</strong></span>{% endif %}
+      {% if click_sum > 0 %}<span><i class="bi bi-lightning text-warning"></i> Click: <strong>{{ "{:,.0f}".format(click_sum) }}</strong></span>{% endif %}
+      {% if qarz_sum > 0 %}<span><i class="bi bi-exclamation-triangle text-danger"></i> Qarz: <strong class="text-danger">{{ "{:,.0f}".format(qarz_sum) }}</strong></span>{% endif %}
+      {% if boshqa_sum > 0 %}<span class="text-muted">Boshqa: {{ "{:,.0f}".format(boshqa_sum) }}</span>{% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <!-- Table -->
 <div class="card data-table">
