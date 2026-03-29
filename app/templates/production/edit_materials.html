@@ -55,6 +55,10 @@
                         <th>Xom ashyo</th>
                         <th>Retseptda (1 chiqish uchun)</th>
                         <th>Shu buyurtma uchun</th>
+                        {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar', 'manager'] %}
+                        <th class="text-end">Narx (1 kg/dona)</th>
+                        <th class="text-end">Summa</th>
+                        {% endif %}
                         {% if production.warehouse_id %}<th class="text-center">Tarix</th>{% endif %}
                     </tr>
                 </thead>
@@ -83,6 +87,12 @@
                             <span class="muted-cell ms-1">{{ _unit }}</span>
                             {% endif %}
                         </td>
+                        {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar', 'manager'] %}
+                        {% set _cost = (pi.product.purchase_price or pi.product.cost_price or 0)|float %}
+                        {% set _qty = (pi.quantity or 0)|float %}
+                        <td class="text-end"><small>{{ "{:,.0f}".format(_cost) }}</small></td>
+                        <td class="text-end fw-semibold">{{ "{:,.0f}".format(_qty * _cost) }}</td>
+                        {% endif %}
                         {% if production.warehouse_id %}
                         <td class="text-center">
                             <a href="/reports/stock/source?warehouse_id={{ production.warehouse_id }}&product_id={{ pi.product_id }}" class="btn-act" title="Harakat tarixi (1-ombor)"><i class="bi bi-clock-history"></i></a>
@@ -91,7 +101,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="{% if production.warehouse_id %}4{% else %}3{% endif %}" class="text-center muted-cell">Xom ashyo yo'q.</td>
+                        <td colspan="6" class="text-center muted-cell">Xom ashyo yo'q.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

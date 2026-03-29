@@ -1014,12 +1014,31 @@ async def production_edit_materials(
         db.commit()
         db.refresh(production)
     read_only = production.status == "completed"
+    # Tannarx hisoblash (admin/rahbar uchun)
+    total_material_cost = 0.0
+    output_units = float(production.quantity or 0)
+    output_unit_name = "kg"
+    if recipe and recipe.product and recipe.product.unit:
+        output_unit_name = recipe.product.unit.name or recipe.product.unit.code or "kg"
+    for pi in production.production_items:
+        qty = float(pi.quantity or 0)
+        if qty <= 0:
+            continue
+        prod = pi.product
+        if prod:
+            cost = float(prod.purchase_price or prod.cost_price or 0)
+            total_material_cost += qty * cost
+    cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0.0
     return templates.TemplateResponse("production/edit_materials.html", {
         "request": request,
         "current_user": current_user,
         "production": production,
         "recipe": recipe,
         "read_only": read_only,
+        "total_material_cost": total_material_cost,
+        "cost_per_unit": cost_per_unit,
+        "output_units": output_units,
+        "output_unit_name": output_unit_name,
         "page_title": f"Xom ashyo: {production.number}",
     })
 
