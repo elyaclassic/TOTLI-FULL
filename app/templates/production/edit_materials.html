@@ -88,10 +88,10 @@
                             {% endif %}
                         </td>
                         {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar', 'manager'] %}
-                        {% set _cost = (pi.product.purchase_price or pi.product.cost_price or 0)|float %}
+                        {% set _cost = (pi.product.purchase_price or 0)|float %}
                         {% set _qty = (pi.quantity or 0)|float %}
-                        <td class="text-end"><small>{{ "{:,.0f}".format(_cost) }}</small></td>
-                        <td class="text-end fw-semibold">{{ "{:,.0f}".format(_qty * _cost) }}</td>
+                        <td class="text-end" style="white-space:nowrap;"><small>{{ "{:,.0f}".format(_cost) }}</small></td>
+                        <td class="text-end fw-semibold" style="white-space:nowrap;">{{ "{:,.0f}".format(_qty * _cost) }}</td>
                         {% endif %}
                         {% if production.warehouse_id %}
                         <td class="text-center">
