@@ -120,26 +120,29 @@ async def sales_list(
     orders = q.limit(500).all()
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
-    # To'lov turlari bo'yicha statistika (faqat tasdiqlangan)
-    # Kassadagi haqiqiy to'lovlardan hisoblash
+    # To'lov turlari — kassadagi haqiqiy paymentlardan hisoblash
+    confirmed_ids = [o.id for o in confirmed_orders]
     naqd_sum = 0
     plastik_sum = 0
     terminal_sum = 0
     click_sum = 0
-    aralash_sum = 0
-    for o in confirmed_orders:
-        pt = (o.payment_type or '').strip().lower()
-        t = float(o.total or 0)
-        if pt == 'naqd':
-            naqd_sum += t
-        elif pt == 'plastik':
-            plastik_sum += t
-        elif pt == 'terminal':
-            terminal_sum += t
-        elif pt == 'click':
-            click_sum += t
-        elif pt in ('split', 'mixed', 'qarz', ''):
-            aralash_sum += t
+    if confirmed_ids:
+        pay_stats = (
+            db.query(Payment.payment_type, func.sum(Payment.amount))
+            .filter(Payment.order_id.in_(confirmed_ids), Payment.type == "income", Payment.status == "confirmed")
+            .group_by(Payment.payment_type)
+            .all()
+        )
+        for pt, amount in pay_stats:
+            pt_lower = (pt or '').strip().lower()
+            if pt_lower in ('cash', 'naqd'):
+                naqd_sum += float(amount or 0)
+            elif pt_lower in ('card', 'plastik'):
+                plastik_sum += float(amount or 0)
+            elif pt_lower == 'terminal':
+                terminal_sum += float(amount or 0)
+            elif pt_lower == 'click':
+                click_sum += float(amount or 0)
     qarz_sum = sum(float(o.debt or 0) for o in confirmed_orders if float(o.debt or 0) > 0)
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
@@ -165,7 +168,6 @@ async def sales_list(
         "terminal_sum": terminal_sum,
         "click_sum": click_sum,
         "qarz_sum": qarz_sum,
-        "aralash_sum": aralash_sum,
         "warehouses": warehouses,
         "date_from": (date_from or "").strip()[:10] or None,
         "date_to": (date_to or "").strip()[:10] or None,

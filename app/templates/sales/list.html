@@ -102,7 +102,6 @@
       {% if plastik_sum > 0 %}<span><i class="bi bi-credit-card text-primary"></i> Plastik: <strong>{{ "{:,.0f}".format(plastik_sum) }}</strong></span>{% endif %}
       {% if terminal_sum > 0 %}<span><i class="bi bi-phone text-info"></i> Terminal: <strong>{{ "{:,.0f}".format(terminal_sum) }}</strong></span>{% endif %}
       {% if click_sum > 0 %}<span><i class="bi bi-lightning text-warning"></i> Click: <strong>{{ "{:,.0f}".format(click_sum) }}</strong></span>{% endif %}
-      {% if aralash_sum is defined and aralash_sum > 0 %}<span><i class="bi bi-shuffle text-secondary"></i> Aralash/boshqa: <strong>{{ "{:,.0f}".format(aralash_sum) }}</strong></span>{% endif %}
       {% if qarz_sum > 0 %}<span><i class="bi bi-exclamation-triangle text-danger"></i> Qarz: <strong class="text-danger">{{ "{:,.0f}".format(qarz_sum) }}</strong></span>{% endif %}
     </div>
   </div>
