@@ -120,7 +120,7 @@ async def sales_list(
     orders = q.limit(500).all()
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
-    # To'lov turlari — to'langan (paid) qismini payment_type bo'yicha
+    # To'lov turlari: total = naqd + plastik + terminal + click + qarz
     naqd_sum = 0
     plastik_sum = 0
     terminal_sum = 0
@@ -128,15 +128,12 @@ async def sales_list(
     qarz_sum = 0
     for o in confirmed_orders:
         pt = (o.payment_type or '').strip().lower()
-        paid = float(o.paid or 0)
-        debt = float(o.debt or 0)
         total = float(o.total or 0)
-        # Qarz — to'lanmagan qismi
+        debt = float(o.debt or 0)
+        to_langan = total - debt  # to'langan qismi
         if debt > 0:
             qarz_sum += debt
-        # To'langan qismini to'lov turiga qo'shish
         if pt in ('split', 'mixed', ''):
-            # Aralash — payments dan
             pays = db.query(Payment.payment_type, Payment.amount).filter(
                 Payment.order_id == o.id, Payment.type == "income", Payment.status == "confirmed"
             ).all()
@@ -151,20 +148,18 @@ async def sales_list(
                         terminal_sum += float(pamt or 0)
                     elif ppt_l == 'click':
                         click_sum += float(pamt or 0)
-            elif paid > 0:
-                naqd_sum += paid
-        else:
-            # Oddiy to'lov — faqat to'langan qismi
-            if pt == 'naqd':
-                naqd_sum += paid if paid > 0 else total
-            elif pt == 'plastik':
-                plastik_sum += paid if paid > 0 else total
-            elif pt == 'terminal':
-                terminal_sum += paid if paid > 0 else total
-            elif pt == 'click':
-                click_sum += paid if paid > 0 else total
-            elif pt == 'qarz':
-                pass  # faqat qarz, naqd emas
+            else:
+                naqd_sum += to_langan
+        elif pt == 'naqd':
+            naqd_sum += to_langan
+        elif pt == 'plastik':
+            plastik_sum += to_langan
+        elif pt == 'terminal':
+            terminal_sum += to_langan
+        elif pt == 'click':
+            click_sum += to_langan
+        elif pt == 'qarz':
+            pass
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
