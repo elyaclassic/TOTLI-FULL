@@ -1095,6 +1095,7 @@ production_group_members = Table(
     Base.metadata,
     Column("group_id", Integer, ForeignKey("production_groups.id"), primary_key=True),
     Column("employee_id", Integer, ForeignKey("employees.id"), primary_key=True),
+    Column("price_per_unit", Float, default=0),
 )
 
 

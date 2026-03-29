@@ -1534,11 +1534,19 @@ async def info_production_groups_edit_page(
         raise HTTPException(status_code=404, detail="Guruh topilmadi")
     employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
     piecework_tasks = db.query(PieceworkTask).filter(PieceworkTask.is_active == True).order_by(PieceworkTask.name).all()
+    # Har bir a'zo uchun narx
+    member_prices = {}
+    rows = db.execute(
+        production_group_members.select().where(production_group_members.c.group_id == group_id)
+    ).fetchall()
+    for row in rows:
+        member_prices[row.employee_id] = row.price_per_unit or 0
     return templates.TemplateResponse("info/production_group_edit.html", {
         "request": request,
         "group": gr,
         "employees": employees,
         "piecework_tasks": piecework_tasks,
+        "member_prices": member_prices,
         "current_user": current_user,
         "page_title": f"Guruhni tahrirlash: {gr.name}",
     })
@@ -1569,7 +1577,12 @@ async def info_production_groups_edit(
     gr.include_qiyom = (include_qiyom == "1")
     db.execute(delete(production_group_members).where(production_group_members.c.group_id == group_id))
     for eid in member_ids:
-        db.execute(production_group_members.insert().values(group_id=gr.id, employee_id=eid))
+        price_raw = form.get(f"price_{eid}", "0")
+        try:
+            price = float(price_raw) if price_raw else 0
+        except (ValueError, TypeError):
+            price = 0
+        db.execute(production_group_members.insert().values(group_id=gr.id, employee_id=eid, price_per_unit=price))
     db.commit()
     return RedirectResponse(url="/info/production-groups?updated=1", status_code=303)
 

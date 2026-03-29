@@ -22,11 +22,11 @@
                         </select>
                     </div>
                     <div class="col-md-6">
-                        <label class="form-label">Bo'lak narxi (so'm/kg)</label>
-                        <select class="form-select" name="piecework_task_id">
+                        <label class="form-label">Bo'lak narxi (umumiy/default)</label>
+                        <select class="form-select" name="piecework_task_id" id="defaultTask">
                             <option value="">— Tanlang —</option>
                             {% for t in piecework_tasks %}
-                            <option value="{{ t.id }}" {% if group.piecework_task_id == t.id %}selected{% endif %}>{{ t.name or t.code }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} / {{ t.unit_name or 'kg' }}</option>
+                            <option value="{{ t.id }}" data-price="{{ t.price_per_unit or 0 }}" {% if group.piecework_task_id == t.id %}selected{% endif %}>{{ t.name or t.code }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} / {{ t.unit_name or 'kg' }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -38,14 +38,37 @@
                         </select>
                     </div>
                     <div class="col-12">
-                        <label class="form-label">Guruh a'zolari</label>
-                        <div class="border rounded p-2" style="max-height: 280px; overflow: auto;">
-                            {% for e in employees %}
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="member_ids" value="{{ e.id }}" id="m_{{ e.id }}" {% if group.members %}{% for m in group.members %}{% if m.id == e.id %}checked{% endif %}{% endfor %}{% endif %}>
-                                <label class="form-check-label" for="m_{{ e.id }}">{{ e.full_name }} ({{ e.code }}) — {{ e.position or '—' }}</label>
-                            </div>
-                            {% endfor %}
+                        <label class="form-label">Guruh a'zolari va narxlari</label>
+                        <div class="border rounded p-2" style="max-height: 400px; overflow: auto;">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width:30px;"></th>
+                                        <th>Xodim</th>
+                                        <th>Lavozim</th>
+                                        <th style="width:150px;">Narx (so'm/kg)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% set member_ids = group.members|map(attribute='id')|list %}
+                                    {% for e in employees %}
+                                    {% set is_member = e.id in member_ids %}
+                                    <tr class="{{ 'table-success' if is_member else '' }}">
+                                        <td>
+                                            <input class="form-check-input member-check" type="checkbox" name="member_ids" value="{{ e.id }}" id="m_{{ e.id }}" {% if is_member %}checked{% endif %} onchange="togglePrice(this)">
+                                        </td>
+                                        <td><label for="m_{{ e.id }}" class="mb-0" style="cursor:pointer;">{{ e.full_name }} ({{ e.code }})</label></td>
+                                        <td><small class="text-muted">{{ e.position or '—' }}</small></td>
+                                        <td>
+                                            <input type="number" name="price_{{ e.id }}" class="form-control form-control-sm price-input"
+                                                   value="{{ member_prices.get(e.id, 0) if member_prices is defined and is_member else 0 }}"
+                                                   step="1" min="0" placeholder="0"
+                                                   {% if not is_member %}disabled{% endif %}>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                     <div class="col-12">
@@ -57,4 +80,23 @@
         </div>
     </div>
 </div>
+<script>
+function togglePrice(checkbox) {
+    var tr = checkbox.closest('tr');
+    var priceInput = tr.querySelector('.price-input');
+    if (checkbox.checked) {
+        priceInput.disabled = false;
+        tr.classList.add('table-success');
+        if (!priceInput.value || priceInput.value == '0') {
+            var sel = document.getElementById('defaultTask');
+            var opt = sel.options[sel.selectedIndex];
+            if (opt && opt.dataset.price) priceInput.value = opt.dataset.price;
+        }
+    } else {
+        priceInput.disabled = true;
+        priceInput.value = '0';
+        tr.classList.remove('table-success');
+    }
+}
+</script>
 {% endblock %}

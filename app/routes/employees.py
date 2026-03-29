@@ -2410,9 +2410,15 @@ async def employee_salary_page(
         if not member_ids or gr.operator_id not in emp_ids:
             continue
         group_member_ids.update(member_ids)
-        rate = float(gr.piecework_task.price_per_unit or 0) if gr.piecework_task else 0
-        if rate <= 0:
-            continue
+        # Har bir a'zo uchun alohida narx (production_group_members dan)
+        member_rates = {}
+        from sqlalchemy import text as sa_text
+        rate_rows = db.execute(
+            production_group_members.select().where(production_group_members.c.group_id == gr.id)
+        ).fetchall()
+        default_rate = float(gr.piecework_task.price_per_unit or 0) if gr.piecework_task else 0
+        for rr in rate_rows:
+            member_rates[rr.employee_id] = float(rr.price_per_unit or 0) or default_rate
         prod_list = (
             db.query(Production)
             .options(joinedload(Production.recipe))
@@ -2424,6 +2430,7 @@ async def employee_salary_page(
             )
             .all()
         )
+        # Kunlik kg hisoblash
         day_kg = {}
         for p in prod_list:
             if not getattr(gr, "include_qiyom", True) and is_qiyom_recipe(p.recipe):
@@ -2433,6 +2440,7 @@ async def employee_salary_page(
                 continue
             d = p.date.date() if hasattr(p.date, "date") else p.date
             day_kg[d] = day_kg.get(d, 0) + kg
+        # Tabel: kelgan kunlari
         attendances = (
             db.query(Attendance.employee_id, Attendance.date, Attendance.status, Attendance.check_in)
             .filter(Attendance.employee_id.in_(member_ids), Attendance.date >= start_d, Attendance.date <= end_d)
@@ -2445,16 +2453,14 @@ async def employee_salary_page(
                 present_by_date[d] = set()
             if (row.status or "").strip() == "present" or (getattr(row, "check_in", None) is not None):
                 present_by_date[d].add(row.employee_id)
+        # Har bir a'zo: kelgan kunlardagi JAMI kg × O'Z NARXI (bo'linmaydi!)
         member_kg = {mid: 0.0 for mid in member_ids}
         for d, kg in day_kg.items():
             present = present_by_date.get(d, set()) & set(member_ids)
-            cnt = len(present)
-            if cnt <= 0:
-                continue
-            per_person = kg / cnt
             for mid in present:
-                member_kg[mid] = member_kg.get(mid, 0) + per_person
+                member_kg[mid] = member_kg.get(mid, 0) + kg
         for mid in member_ids:
+            rate = member_rates.get(mid, default_rate)
             piecework_calculated[mid] = member_kg.get(mid, 0) * rate
     # Har bir xodim uchun bitta bo'lak narxi (min stavka — bir xil ish uchun bitta narx)
     piece_rate_sum = {}
