@@ -121,10 +121,25 @@ async def sales_list(
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
     # To'lov turlari bo'yicha statistika (faqat tasdiqlangan)
-    naqd_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'naqd')
-    plastik_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'plastik')
-    terminal_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'terminal')
-    click_sum = sum(float(o.total or 0) for o in confirmed_orders if (o.payment_type or '') == 'click')
+    # Kassadagi haqiqiy to'lovlardan hisoblash
+    naqd_sum = 0
+    plastik_sum = 0
+    terminal_sum = 0
+    click_sum = 0
+    aralash_sum = 0
+    for o in confirmed_orders:
+        pt = (o.payment_type or '').strip().lower()
+        t = float(o.total or 0)
+        if pt == 'naqd':
+            naqd_sum += t
+        elif pt == 'plastik':
+            plastik_sum += t
+        elif pt == 'terminal':
+            terminal_sum += t
+        elif pt == 'click':
+            click_sum += t
+        elif pt in ('split', 'mixed', 'qarz', ''):
+            aralash_sum += t
     qarz_sum = sum(float(o.debt or 0) for o in confirmed_orders if float(o.debt or 0) > 0)
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
@@ -150,6 +165,7 @@ async def sales_list(
         "terminal_sum": terminal_sum,
         "click_sum": click_sum,
         "qarz_sum": qarz_sum,
+        "aralash_sum": aralash_sum,
         "warehouses": warehouses,
         "date_from": (date_from or "").strip()[:10] or None,
         "date_to": (date_to or "").strip()[:10] or None,
