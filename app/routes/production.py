@@ -124,21 +124,45 @@ def calculate_production_tannarx(db, production, recipe):
 
 
 def _warehouse_id_for_ingredient(db, product_id, production):
-    """Yarim tayyor mahsulot bo'lsa — nomida 'yarim'/'semi' bor ombordan, aks holda 1-ombor (xom ashyo)."""
+    """Xom ashyo qaysi ombordan olinadi:
+    1. Yarim tayyor → stockda eng ko'p bo'lgan yarim tayyor ombordan
+    2. Xom ashyo → avval production.warehouse_id, yo'qsa stockda eng ko'p bo'lgan ombordan
+    """
     product = db.query(Product).filter(Product.id == product_id).first()
-    if not product or getattr(product, "type", None) != "yarim_tayyor":
+    if not product:
         return production.warehouse_id
-    stocks = db.query(Stock).filter(Stock.product_id == product_id, Stock.quantity > 0).all()
-    for st in stocks:
-        wh = db.query(Warehouse).filter(Warehouse.id == st.warehouse_id).first()
-        if wh and st.warehouse_id:
-            name = (wh.name or "").lower()
-            code = (getattr(wh, "code", None) or "").lower()
-            if "yarim" in name or "semi" in name or "yarim" in code or "semi" in code:
-                return st.warehouse_id
-    if stocks:
-        return stocks[0].warehouse_id
-    return production.warehouse_id
+    # Barcha omborlardagi stocklarni miqdor bo'yicha kamayishda
+    stocks = (
+        db.query(Stock)
+        .filter(Stock.product_id == product_id, Stock.quantity > 0.01)
+        .order_by(Stock.quantity.desc())
+        .all()
+    )
+    if getattr(product, "type", None) == "yarim_tayyor":
+        # Yarim tayyor — avval yarim tayyor omborlardan
+        for st in stocks:
+            wh = db.query(Warehouse).filter(Warehouse.id == st.warehouse_id).first()
+            if wh:
+                name = (wh.name or "").lower()
+                if "yarim" in name or "semi" in name or "aralash" in name:
+                    return st.warehouse_id
+        # Yarim ombordan topilmasa — eng ko'p bo'lgan ombordan
+        if stocks:
+            return stocks[0].warehouse_id
+        return production.warehouse_id
+    else:
+        # Xom ashyo — avval production omboridan, yo'qsa eng ko'p joydan
+        prod_wh_stock = db.query(Stock).filter(
+            Stock.product_id == product_id,
+            Stock.warehouse_id == production.warehouse_id,
+            Stock.quantity > 0.01,
+        ).first()
+        if prod_wh_stock:
+            return production.warehouse_id
+        # Production omborida yo'q — eng ko'p bo'lgan ombordan
+        if stocks:
+            return stocks[0].warehouse_id
+        return production.warehouse_id
 
 
 def _do_complete_production_stock(db, production, recipe):
