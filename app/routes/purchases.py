@@ -377,6 +377,20 @@ async def purchase_confirm(
             stock.quantity += item.quantity
         else:
             db.add(Stock(warehouse_id=purchase.warehouse_id, product_id=item.product_id, quantity=item.quantity))
+        # Stock movement yozish
+        from app.services.stock_service import create_stock_movement
+        create_stock_movement(
+            db=db,
+            warehouse_id=purchase.warehouse_id,
+            product_id=item.product_id,
+            quantity_change=+item.quantity,
+            operation_type="purchase",
+            document_type="Purchase",
+            document_id=purchase.id,
+            document_number=purchase.number,
+            user_id=current_user.id if current_user else None,
+            note=f"Xarid kirim: {purchase.number}",
+        )
     purchase.status = "confirmed"
     total_with_expenses = items_total + total_expenses
     if purchase.partner_id:
