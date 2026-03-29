@@ -167,9 +167,9 @@ def _do_complete_production_stock(db, production, recipe):
             )
     if shortage_lines:
         from urllib.parse import quote
-        detail = "\\n".join(shortage_lines)
+        detail = ", ".join(shortage_lines)
         return RedirectResponse(
-            url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi:\\n{detail}"),
+            url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi: {detail}"),
             status_code=303,
         )
     # --- Yetarli — davom etish ---
