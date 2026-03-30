@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core import templates
 from sqlalchemy.orm import joinedload
+from sqlalchemy import func, extract
 from app.models.database import (
     get_db, User, Product, Partner, Order, Stock,
     CashRegister, Employee, Production, Recipe, Warehouse, Notification,
@@ -157,7 +158,56 @@ async def home(
         user_notifications = get_user_notifications(db, current_user.id, limit=20)
     except Exception:
         pass
-    return templates.TemplateResponse("index.html", {
+    # Premium dashboard uchun qo'shimcha ma'lumotlar
+    view = request.query_params.get("view", "")
+    monthly_sales = []
+    low_stock_items = []
+    pending_orders = []
+    completed_orders = []
+    in_progress_count = 0
+    if view == "premium":
+        try:
+            import calendar
+            now = datetime.now()
+            # Oxirgi 6 oy sotuvlari
+            for i in range(5, -1, -1):
+                m = now.month - i
+                y = now.year
+                while m <= 0:
+                    m += 12; y -= 1
+                m_start = datetime(y, m, 1)
+                m_end = datetime(y, m, calendar.monthrange(y, m)[1], 23, 59, 59)
+                total = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
+                    Order.type == "sale", Order.date >= m_start, Order.date <= m_end
+                ).scalar() or 0
+                monthly_sales.append({"month": m_start.strftime("%b"), "total": float(total)})
+            # Kam qolgan tovarlar (top 5)
+            low_stocks = db.query(Stock).join(Product).filter(
+                Stock.quantity > 0, Stock.quantity < 10
+            ).order_by(Stock.quantity).limit(5).all()
+            for ls in low_stocks:
+                low_stock_items.append({
+                    "name": ls.product.name if ls.product else "?",
+                    "qty": float(ls.quantity or 0),
+                    "unit": (ls.product.unit.name if ls.product and ls.product.unit else "kg"),
+                })
+            # Kutilayotgan buyurtmalar
+            pending_orders = db.query(Order).options(joinedload(Order.partner)).filter(
+                Order.type == "sale", Order.status == "draft"
+            ).order_by(Order.created_at.desc()).limit(6).all()
+            # Tugallangan buyurtmalar (bugun)
+            completed_orders = db.query(Order).options(joinedload(Order.partner)).filter(
+                Order.type == "sale", Order.status == "completed", Order.date >= today_start
+            ).order_by(Order.created_at.desc()).limit(6).all()
+            # Jarayondagi ishlab chiqarish
+            in_progress_count = db.query(Production).filter(
+                Production.status.in_(["draft", "in_progress"])
+            ).count()
+        except Exception as e:
+            print(f"[Premium] Qo'shimcha ma'lumot xatosi: {e}")
+
+    template_name = "index_premium.html" if view == "premium" else "index.html"
+    return templates.TemplateResponse(template_name, {
         "request": request,
         "stats": stats,
         "current_user": current_user,
@@ -168,6 +218,11 @@ async def home(
         "birthday_today_count": birthday_today_count,
         "overdue_debts_count": overdue_debts_count,
         "user_notifications": user_notifications,
+        "monthly_sales": monthly_sales,
+        "low_stock_items": low_stock_items,
+        "pending_orders": pending_orders,
+        "completed_orders": completed_orders,
+        "in_progress_count": in_progress_count,
     })
 
 

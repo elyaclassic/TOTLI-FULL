@@ -1026,7 +1026,7 @@ async def production_edit_materials(
             continue
         prod = pi.product
         if prod:
-            cost = float(prod.purchase_price or prod.cost_price or 0)
+            cost = float(prod.purchase_price or 0)
             total_material_cost += qty * cost
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0.0
     return templates.TemplateResponse("production/edit_materials.html", {

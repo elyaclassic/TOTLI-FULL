@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+{% block content %}
+<script src="/static/js/chart.min.js"></script>
+<style>
+.pd { font-family: 'Segoe UI', sans-serif; }
+
+/* Hero */
+.pd-hero {
+    background: linear-gradient(135deg, #017449 0%, #015c3a 40%, #0d4a30 100%);
+    border-radius: 22px; padding: 30px 36px; color: #fff;
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 22px; position: relative; overflow: hidden;
+    min-height: 140px;
+}
+.pd-hero::before {
+    content: ''; position: absolute; top: -60px; right: -40px;
+    width: 280px; height: 280px;
+    background: radial-gradient(circle, rgba(200,168,78,.2) 0%, transparent 70%);
+    border-radius: 50%;
+}
+.pd-hero::after {
+    content: ''; position: absolute; bottom: -40px; right: 80px;
+    width: 200px; height: 200px;
+    background: radial-gradient(circle, rgba(255,255,255,.05) 0%, transparent 70%);
+    border-radius: 50%;
+}
+.pd-hero-left h2 { font-size: 24px; font-weight: 800; margin: 0 0 2px; }
+.pd-hero-left h2 span { color: #C8A84E; }
+.pd-hero-left p { margin: 0; opacity: .85; font-size: 13px; }
+.pd-hero-left .pd-date { font-size: 11px; opacity: .6; margin-top: 10px; display: flex; align-items: center; gap: 6px; }
+.pd-hero-right { position: relative; z-index: 1; display: flex; align-items: center; gap: 16px; }
+.pd-hero-icon { font-size: 60px; opacity: .15; }
+
+/* Metrik kartochkalar */
+.pd-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+@media (max-width: 900px) { .pd-metrics { grid-template-columns: repeat(2, 1fr); } }
+.pd-metric {
+    background: #fff; border-radius: 16px; padding: 18px 16px;
+    text-align: center; box-shadow: 0 2px 12px rgba(0,0,0,.06);
+    border-top: 3px solid; transition: transform .2s, box-shadow .2s;
+}
+.pd-metric:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.1); }
+.pd-circle-wrap {
+    width: 86px; height: 86px; margin: 0 auto 10px; position: relative;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+}
+.pd-circle-val {
+    font-size: 18px; font-weight: 800;
+    position: relative; z-index: 1;
+    background: #fff; width: 62px; height: 62px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+}
+.pd-metric-title { font-size: 11.5px; font-weight: 700; color: #555; }
+.pd-metric-sub { font-size: 10.5px; color: #999; margin-top: 2px; }
+
+/* Production Workflow */
+.pd-wf { margin-bottom: 22px; }
+.pd-wf-tabs { display: flex; gap: 10px; margin-bottom: 14px; }
+.pd-wf-tab {
+    flex: 1; padding: 10px 16px; border-radius: 12px;
+    font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 8px;
+}
+.pd-wf-tab i { font-size: 15px; }
+.pd-wf-tab .cnt { margin-left: auto; background: rgba(0,0,0,.08); padding: 2px 10px; border-radius: 999px; font-size: 11px; }
+.pd-wf-tab.t-pending { background: #FEF3C7; color: #92400E; }
+.pd-wf-tab.t-progress { background: #DBEAFE; color: #1E40AF; }
+.pd-wf-tab.t-done { background: #D1FAE5; color: #065F46; }
+
+.pd-wf-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 900px) { .pd-wf-cards { grid-template-columns: 1fr; } }
+.pd-wf-col { display: flex; flex-direction: column; gap: 8px; }
+.pd-wf-card {
+    background: #fff; border-radius: 12px; padding: 12px 14px;
+    box-shadow: 0 1px 6px rgba(0,0,0,.05); font-size: 12px;
+    border-left: 3px solid;
+}
+.pd-wf-card .wf-num { font-weight: 700; color: #333; }
+.pd-wf-card .wf-name { color: #888; margin-top: 2px; }
+.pd-wf-card .wf-info { color: #aaa; font-size: 11px; margin-top: 3px; }
+
+/* Asosiy grid */
+.pd-main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+@media (max-width: 900px) { .pd-main { grid-template-columns: 1fr; } }
+
+.pd-card {
+    background: #fff; border-radius: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.06); overflow: hidden;
+}
+.pd-card-h {
+    padding: 13px 18px; font-size: 13px; font-weight: 700;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.pd-card-b { padding: 16px 18px; }
+
+/* Pastki grid */
+.pd-bottom { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+@media (max-width: 900px) { .pd-bottom { grid-template-columns: 1fr; } }
+
+/* Low stock */
+.pd-low-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid #f5f5f5; font-size: 12.5px;
+}
+.pd-low-item:last-child { border-bottom: none; }
+.pd-low-bar { height: 6px; border-radius: 3px; background: #f0f0f0; flex: 1; max-width: 80px; margin: 0 10px; }
+.pd-low-bar-inner { height: 100%; border-radius: 3px; }
+
+/* Quick actions */
+.pd-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+@media (max-width: 768px) { .pd-actions { grid-template-columns: repeat(2, 1fr); } }
+.pd-act {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 16px 8px; border-radius: 14px;
+    text-decoration: none; font-size: 11.5px; font-weight: 600; color: #333;
+    background: #f8f9fa; transition: all .2s; gap: 6px; border: 1px solid #eee;
+}
+.pd-act:hover { background: #017449; color: #fff; transform: translateY(-2px); box-shadow: 0 4px 14px rgba(1,116,73,.3); border-color: #017449; }
+.pd-act i { font-size: 1.3rem; }
+
+/* View switch */
+.pd-switch-bar { display: flex; justify-content: flex-end; margin-bottom: 10px; }
+</style>
+
+<div class="pd">
+
+<div class="pd-switch-bar">
+    <a href="/" class="btn btn-sm btn-outline-secondary" style="font-size:11px;"><i class="bi bi-arrow-left-right me-1"></i> Oddiy ko'rinish</a>
+</div>
+
+<!-- HERO BANNER -->
+<div class="pd-hero">
+    <div class="pd-hero-left">
+        <p>Xush kelibsiz, {{ current_user.full_name or current_user.username }}.</p>
+        <h2><span>Totli Holva:</span></h2>
+        <h2 style="font-size:18px; font-weight:400; opacity:.9;">Shirinlik ishlab chiqarish</h2>
+        <div class="pd-date"><i class="bi bi-calendar3"></i> {{ now.strftime('%d.%m.%Y') if now is defined else '' }}</div>
+    </div>
+    <div class="pd-hero-right">
+        <div class="pd-hero-icon"><i class="bi bi-box-seam-fill"></i></div>
+    </div>
+</div>
+
+<!-- REAL-TIME METRICS -->
+{% set sales_pct = [((stats.today_sales / 50000000 * 100)|int) if stats.today_sales else 0, 100] | min %}
+{% set order_pct = [stats.today_orders * 10, 100] | min %}
+{% set prod_pct = [((stats.today_production|default(0)) * 100 / 1000)|int, 100] | min %}
+{% set stock_pct = [[100 - (low_stock_count|default(0)) * 5, 0]|max, 100] | min %}
+<div class="pd-metrics">
+    <div class="pd-metric" style="border-color:#2e7d32;">
+        <div class="pd-circle-wrap" style="background:conic-gradient(#2e7d32 0% {{sales_pct}}%, #e8f5e9 {{sales_pct}}% 100%);">
+            <div class="pd-circle-val" style="color:#2e7d32;">{{sales_pct}}%</div>
+        </div>
+        <div class="pd-metric-title">Kunlik savdo rejasi</div>
+        <div class="pd-metric-sub">{{ "{:,.0f}".format(stats.today_sales) }} so'm</div>
+    </div>
+    <div class="pd-metric" style="border-color:#1E40AF;">
+        <div class="pd-circle-wrap" style="background:conic-gradient(#1E40AF 0% {{order_pct}}%, #DBEAFE {{order_pct}}% 100%);">
+            <div class="pd-circle-val" style="color:#1E40AF;">{{ stats.today_orders }}</div>
+        </div>
+        <div class="pd-metric-title">Buyurtmalar bajarildi</div>
+        <div class="pd-metric-sub">bugungi sotuvlar</div>
+    </div>
+    <div class="pd-metric" style="border-color:#f57c00;">
+        <div class="pd-circle-wrap" style="background:conic-gradient(#f57c00 0% {{prod_pct}}%, #fff3e0 {{prod_pct}}% 100%);">
+            <div class="pd-circle-val" style="color:#f57c00;">{{ "{:,.0f}".format(stats.today_production|default(0)) }}</div>
+        </div>
+        <div class="pd-metric-title">Ishlab chiqarish (kg)</div>
+        <div class="pd-metric-sub">T: {{ "{:,.0f}".format(stats.today_tayyor_kg|default(0)) }} | Y: {{ "{:,.0f}".format(stats.today_yarim_tayyor_kg|default(0)) }}</div>
+    </div>
+    <div class="pd-metric" style="border-color:{% if stock_pct > 70 %}#2e7d32{% elif stock_pct > 40 %}#f57c00{% else %}#dc3545{% endif %};">
+        <div class="pd-circle-wrap" style="background:conic-gradient({% if stock_pct > 70 %}#2e7d32{% elif stock_pct > 40 %}#f57c00{% else %}#dc3545{% endif %} 0% {{stock_pct}}%, #f0f0f0 {{stock_pct}}% 100%);">
+            <div class="pd-circle-val" style="color:{% if low_stock_count|default(0) > 10 %}#dc3545{% elif low_stock_count|default(0) > 3 %}#f57c00{% else %}#2e7d32{% endif %};">{{ low_stock_count|default(0) }}</div>
+        </div>
+        <div class="pd-metric-title">Kam qolgan tovarlar</div>
+        <div class="pd-metric-sub">ombor holati</div>
+    </div>
+</div>
+
+<!-- PRODUCTION WORKFLOW -->
+<div class="pd-wf">
+    <div class="pd-wf-tabs">
+        <div class="pd-wf-tab t-pending"><i class="bi bi-hourglass-split"></i> Kutilayotgan <span class="cnt">{{ pending_orders|length }}</span></div>
+        <div class="pd-wf-tab t-progress"><i class="bi bi-gear-wide-connected"></i> Jarayonda <span class="cnt">{{ in_progress_count }}</span></div>
+        <div class="pd-wf-tab t-done"><i class="bi bi-check2-circle"></i> Tayyor <span class="cnt">{{ completed_orders|length }}</span></div>
+    </div>
+    <div class="pd-wf-cards">
+        <div class="pd-wf-col">
+            {% for o in pending_orders[:4] %}
+            <div class="pd-wf-card" style="border-color:#F59E0B;">
+                <div class="wf-num">{{ o.number or '-' }}</div>
+                <div class="wf-name">{{ o.partner.name if o.partner else 'Mijoz' }}</div>
+                <div class="wf-info">{{ "{:,.0f}".format(o.total or 0) }} so'm</div>
+            </div>
+            {% else %}
+            <div class="pd-wf-card" style="border-color:#F59E0B; color:#aaa;">Kutilayotgan yo'q</div>
+            {% endfor %}
+        </div>
+        <div class="pd-wf-col">
+            <div class="pd-wf-card" style="border-color:#3B82F6;">
+                <div class="wf-num">Ishlab chiqarish</div>
+                <div class="wf-name">{{ in_progress_count }} ta buyurtma jarayonda</div>
+                <div class="wf-info">{{ "{:,.0f}".format(stats.today_yarim_tayyor_kg|default(0)) }} kg yarim tayyor</div>
+            </div>
+        </div>
+        <div class="pd-wf-col">
+            {% for o in completed_orders[:4] %}
+            <div class="pd-wf-card" style="border-color:#10B981;">
+                <div class="wf-num">{{ o.number or '-' }}</div>
+                <div class="wf-name">{{ o.partner.name if o.partner else 'Mijoz' }}</div>
+                <div class="wf-info">{{ "{:,.0f}".format(o.total or 0) }} so'm</div>
+            </div>
+            {% else %}
+            <div class="pd-wf-card" style="border-color:#10B981; color:#aaa;">Bugun tayyor yo'q</div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<!-- MAIN GRID: Charts -->
+<div class="pd-main">
+    <!-- Sotuvlar taqsimoti (Donut) -->
+    <div class="pd-card">
+        <div class="pd-card-h"><span><i class="bi bi-pie-chart me-2" style="color:#017449;"></i> Sotuvlar taqsimoti</span></div>
+        <div class="pd-card-b" style="display:flex; align-items:center; gap:20px;">
+            <div style="width:160px; height:160px; flex-shrink:0;"><canvas id="chartDonut"></canvas></div>
+            <div style="font-size:12px;">
+                <div style="margin-bottom:16px;"><div style="font-size:22px; font-weight:800; color:#017449;">{{ "{:,.0f}".format(stats.today_sales) }}</div><div style="color:#888;">Bugungi jami</div></div>
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;"><span style="width:10px;height:10px;border-radius:50%;background:#2e7d32;display:inline-block;"></span> Tayyor: {{ stats.tayyor_count }} ta</div>
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;"><span style="width:10px;height:10px;border-radius:50%;background:#f57c00;display:inline-block;"></span> Yarim tayyor: {{ stats.yarim_tayyor_count }} ta</div>
+                <div style="display:flex; align-items:center; gap:6px;"><span style="width:10px;height:10px;border-radius:50%;background:#1E40AF;display:inline-block;"></span> Xom ashyo: {{ stats.hom_ashyo_count }} ta</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Oylik daromad (Bar chart) -->
+    <div class="pd-card">
+        <div class="pd-card-h"><span><i class="bi bi-bar-chart me-2" style="color:#1E40AF;"></i> Oylik sotuvlar</span></div>
+        <div class="pd-card-b"><canvas id="chartMonthly" height="170"></canvas></div>
+    </div>
+</div>
+
+<!-- BOTTOM GRID -->
+<div class="pd-bottom">
+    <!-- Low Stock -->
+    <div class="pd-card">
+        <div class="pd-card-h"><span><i class="bi bi-exclamation-triangle me-2" style="color:#f57c00;"></i> Kam qolgan tovarlar</span><a href="/reports/stock?low=1" style="font-size:11px;">Hammasi</a></div>
+        <div class="pd-card-b">
+            {% for item in low_stock_items %}
+            <div class="pd-low-item">
+                <span style="font-weight:600; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ item.name }}</span>
+                <div class="pd-low-bar"><div class="pd-low-bar-inner" style="width:{{ (item.qty / 10 * 100)|int }}%; background:{% if item.qty < 3 %}#dc3545{% elif item.qty < 6 %}#f57c00{% else %}#2e7d32{% endif %};"></div></div>
+                <span style="font-weight:700; color:{% if item.qty < 3 %}#dc3545{% else %}#f57c00{% endif %}; white-space:nowrap;">{{ item.qty }} {{ item.unit }}</span>
+            </div>
+            {% else %}
+            <div style="text-align:center; color:#aaa; padding:20px; font-size:12px;"><i class="bi bi-check-circle" style="font-size:24px;"></i><br>Hamma narsa yetarli</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Tez statistika -->
+    <div class="pd-card">
+        <div class="pd-card-h"><span><i class="bi bi-graph-up me-2" style="color:#017449;"></i> Umumiy ko'rsatkichlar</span></div>
+        <div class="pd-card-b" style="font-size:13px;">
+            <div class="pd-low-item"><span><i class="bi bi-people me-2" style="color:#017449;"></i>Mijozlar</span><strong>{{ stats.partners_count }}</strong></div>
+            <div class="pd-low-item"><span><i class="bi bi-person-badge me-2" style="color:#1E40AF;"></i>Xodimlar</span><strong>{{ stats.employees_count }}</strong></div>
+            <div class="pd-low-item"><span><i class="bi bi-box-seam me-2" style="color:#2e7d32;"></i>Mahsulotlar</span><strong>{{ stats.products_count }}</strong></div>
+            <div class="pd-low-item"><span><i class="bi bi-currency-dollar me-2" style="color:#dc3545;"></i>Jami qarzdorlik</span><strong style="color:#dc3545;">{{ "{:,.0f}".format(stats.total_debt) }}</strong></div>
+            <div class="pd-low-item"><span><i class="bi bi-clock me-2" style="color:#f57c00;"></i>Muddati o'tgan qarzlar</span><strong style="color:#f57c00;">{{ overdue_debts_count }}</strong></div>
+            {% if birthday_today_count|default(0) > 0 %}
+            <div class="pd-low-item"><span><i class="bi bi-cake2 me-2" style="color:#7C3AED;"></i>Bugungi tug'ilgan kun</span><strong style="color:#7C3AED;">{{ birthday_today_count }}</strong></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- QUICK ACTIONS -->
+<div class="pd-card">
+    <div class="pd-card-h"><span><i class="bi bi-lightning-charge me-2" style="color:#C8A84E;"></i> Tezkor amallar</span></div>
+    <div class="pd-card-b">
+        <div class="pd-actions">
+            <a href="/sales/pos" class="pd-act"><i class="bi bi-cart-check-fill" style="color:#2e7d32;"></i>Sotuv oynasi</a>
+            <a href="/sales/new" class="pd-act"><i class="bi bi-cart-plus" style="color:#017449;"></i>Yangi sotuv</a>
+            <a href="/finance" class="pd-act"><i class="bi bi-cash-coin" style="color:#C8961E;"></i>To'lov olish</a>
+            <a href="/products" class="pd-act"><i class="bi bi-grid-3x3-gap" style="color:#1E40AF;"></i>Tovarlar</a>
+            <a href="/partners" class="pd-act"><i class="bi bi-people" style="color:#7C3AED;"></i>Mijozlar</a>
+            <a href="/purchases" class="pd-act"><i class="bi bi-box-arrow-in-down" style="color:#0891B2;"></i>Ombor kirimi</a>
+            <a href="/production/orders" class="pd-act"><i class="bi bi-gear-wide-connected" style="color:#f57c00;"></i>Ishlab chiqarish</a>
+            <a href="/reports" class="pd-act"><i class="bi bi-bar-chart-line" style="color:#dc3545;"></i>Hisobotlar</a>
+        </div>
+    </div>
+</div>
+
+</div>
+
+<script>
+// Donut chart — mahsulot taqsimoti
+var donutCtx = document.getElementById('chartDonut');
+if (donutCtx) {
+    new Chart(donutCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Tayyor', 'Yarim tayyor', 'Xom ashyo'],
+            datasets: [{ data: [{{ stats.tayyor_count }}, {{ stats.yarim_tayyor_count }}, {{ stats.hom_ashyo_count }}], backgroundColor: ['#2e7d32','#f57c00','#1E40AF'], borderWidth: 2, borderColor: '#fff' }]
+        },
+        options: { cutout: '60%', plugins: { legend: { display: false } }, responsive: true, maintainAspectRatio: true }
+    });
+}
+
+// Bar chart — oylik sotuvlar
+var monthlyCtx = document.getElementById('chartMonthly');
+if (monthlyCtx) {
+    var mData = {{ monthly_sales | tojson }};
+    new Chart(monthlyCtx, {
+        type: 'bar',
+        data: {
+            labels: mData.map(function(d){ return d.month; }),
+            datasets: [{
+                label: 'Sotuvlar',
+                data: mData.map(function(d){ return d.total; }),
+                backgroundColor: '#017449',
+                borderRadius: 6,
+                barPercentage: 0.6
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { beginAtZero: true, ticks: { font: { size: 10 }, callback: function(v){ return (v/1000000).toFixed(0) + 'M'; } }, grid: { color: '#f0f0f0' } },
+                x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+            }
+        }
+    });
+}
+</script>
+{% endblock %}
