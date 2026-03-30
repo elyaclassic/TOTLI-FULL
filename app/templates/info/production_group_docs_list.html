@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('created') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show py-2 small">
+        <i class="bi bi-check-circle"></i> Yangi buyruq yaratildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('deleted') == '1' %}
+    <div class="alert alert-info alert-dismissible fade show py-2 small">
+        <i class="bi bi-trash"></i> Buyruq o'chirildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Ishlab chiqarish guruhi buyruqlari</h5>
+        <div class="d-flex gap-2">
+            <a href="/info/production-groups" class="top-btn btn btn-outline-secondary"><i class="bi bi-people"></i> Guruhlar</a>
+        </div>
+    </div>
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span class="fw-bold"><i class="bi bi-file-earmark-text"></i> Buyruqlar</span>
+            <span class="badge bg-secondary">{{ docs|length }} ta</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>HUJJAT №</th>
+                        <th>SANA</th>
+                        <th>GURUH</th>
+                        <th>TURI</th>
+                        <th>OPERATOR</th>
+                        <th>HOLAT</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in docs %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td><a href="/info/production-group-doc/{{ d.id }}"><strong>{{ d.number }}</strong></a></td>
+                        <td>{{ d.doc_date.strftime('%d.%m.%Y') if d.doc_date else '—' }}</td>
+                        <td>{{ d.group_name or '—' }}</td>
+                        <td>
+                            {% if d.doc_type == 'create' %}
+                            <span class="badge bg-success">Tashkil</span>
+                            {% else %}
+                            <span class="badge bg-warning text-dark">O'zgartirish</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ d.operator_name or '—' }}</td>
+                        <td>
+                            {% if d.status == 'confirmed' %}
+                            <span class="badge bg-success">Tasdiqlangan</span>
+                            {% elif d.status == 'cancelled' %}
+                            <span class="badge bg-danger">Bekor qilingan</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Qoralama</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap">
+                            <a href="/info/production-group-doc/{{ d.id }}" class="btn-act" title="Ko'rish"><i class="bi bi-eye"></i></a>
+                            <a href="/info/production-group-doc/{{ d.id }}/export-word" class="btn-act" title="Word yuklab olish"><i class="bi bi-download"></i></a>
+                            {% if d.status != 'confirmed' %}
+                            <form action="/info/production-group-doc/{{ d.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Buyruqni o\'chirishni xohlaysizmi?');">
+                                <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                            </form>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">Hozircha buyruq yo'q. Guruh yaratilganda avtomatik yaratiladi.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

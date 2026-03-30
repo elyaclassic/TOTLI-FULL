@@ -1116,6 +1116,31 @@ class ProductionGroup(Base):
     members = relationship("Employee", secondary=production_group_members, backref="production_groups")
 
 
+class ProductionGroupDoc(Base):
+    """Ishlab chiqarish guruhi buyrug'i — guruh yaratilganda yoki o'zgartirilganda avtomatik yaratiladi."""
+    __tablename__ = "production_group_docs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, index=True, nullable=False)
+    group_id = Column(Integer, ForeignKey("production_groups.id"), nullable=False)
+    doc_date = Column(Date, nullable=False)
+    doc_type = Column(String(30), default="create")  # create / update
+    # Snapshot: guruh holati hujjat yaratilgan paytda
+    group_name = Column(String(100))
+    operator_name = Column(String(200))
+    piecework_info = Column(String(200))
+    include_qiyom = Column(Boolean, default=True)
+    members_snapshot = Column(Text)  # "Ism — narx; Ism — narx"
+    status = Column(String(20), default="draft")  # draft / confirmed / cancelled
+    note = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    group = relationship("ProductionGroup", backref="docs")
+    user = relationship("User")
+
+
 class DismissalDoc(Base):
     """Ishdan bo'shatish hujjati (O'zR Mehnat kodeksi bo'yicha)"""
     __tablename__ = "dismissal_docs"
@@ -1613,6 +1638,7 @@ def init_db():
     ensure_employee_piecework_tasks_table()
     ensure_dismissal_docs_table()
     ensure_production_groups_tables()
+    ensure_production_group_docs_table()
     ensure_attendance_improvements()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
@@ -1690,6 +1716,42 @@ def ensure_attendance_advance_tables():
             ed_cols = [row[1] for row in r]
             if col not in ed_cols:
                 conn.execute(text(f"ALTER TABLE employment_docs ADD COLUMN {col} {sql}"))
+
+
+def ensure_production_group_docs_table():
+    """production_group_docs jadvalini yaratish va yangi ustunlarni qo'shish."""
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='production_group_docs'"))
+            if r.fetchone() is None:
+                conn.execute(text("""
+                    CREATE TABLE production_group_docs (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        number VARCHAR(50) NOT NULL UNIQUE,
+                        group_id INTEGER NOT NULL REFERENCES production_groups(id),
+                        doc_date DATE NOT NULL,
+                        doc_type VARCHAR(30) DEFAULT 'create',
+                        group_name VARCHAR(100),
+                        operator_name VARCHAR(200),
+                        piecework_info VARCHAR(200),
+                        include_qiyom BOOLEAN DEFAULT 1,
+                        members_snapshot TEXT,
+                        status VARCHAR(20) DEFAULT 'draft',
+                        note TEXT,
+                        user_id INTEGER REFERENCES users(id),
+                        confirmed_at DATETIME,
+                        created_at DATETIME
+                    )
+                """))
+            else:
+                # Mavjud jadvalga yangi ustunlar qo'shish
+                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(production_group_docs)"))]
+                if "status" not in cols:
+                    conn.execute(text("ALTER TABLE production_group_docs ADD COLUMN status VARCHAR(20) DEFAULT 'draft'"))
+                if "confirmed_at" not in cols:
+                    conn.execute(text("ALTER TABLE production_group_docs ADD COLUMN confirmed_at DATETIME"))
+    except Exception as e:
+        print(f"ensure_production_group_docs_table: {e}")
 
 
 def ensure_attendance_improvements():

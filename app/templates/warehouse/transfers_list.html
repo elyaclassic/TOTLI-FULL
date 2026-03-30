@@ -67,27 +67,18 @@
 
     <!-- Filter card -->
     <div class="filter-card">
-        <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-4">
-                <label class="form-label">Qidirish</label>
-                <div class="search-wrap">
-                    <i class="bi bi-search"></i>
-                    <input type="text" class="form-control" id="trSearch" placeholder="Hujjat raqami, ombor nomi...">
-                </div>
+        <div class="d-flex align-items-center gap-2 flex-nowrap">
+            <div class="search-wrap flex-grow-1">
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control form-control-sm" id="trSearch" placeholder="Hujjat raqami, ombor nomi...">
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label">Holat</label>
-                <select class="form-select" id="trStatusFilter">
-                    <option value="">Barchasi</option>
-                    <option value="draft">Qoralama</option>
-                    <option value="pending_approval">Tasdiq kutilmoqda</option>
-                    <option value="confirmed">Tasdiqlangan</option>
-                </select>
-            </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label">Sana</label>
-                <input type="date" class="form-control" id="trDateFilter">
-            </div>
+            <select class="form-select form-select-sm" id="trStatusFilter" style="width:auto;">
+                <option value="">Barchasi</option>
+                <option value="draft">Qoralama</option>
+                <option value="pending_approval">Tasdiq kutilmoqda</option>
+                <option value="confirmed">Tasdiqlangan</option>
+            </select>
+            <input type="date" class="form-control form-control-sm" id="trDateFilter" style="width:auto;">
         </div>
     </div>
 

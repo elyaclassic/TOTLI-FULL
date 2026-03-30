@@ -396,6 +396,18 @@
         }
     </style>
 
+    <!-- Tema CSS o'zgaruvchilari (faqat Sage Enterprise — hozirgi faol tema) -->
+    <style>
+        :root {
+            --t-primary: #017449; --t-primary-light: #059669; --t-accent: #10B981;
+            --t-sidebar-bg: #017449; --t-sidebar-text: #fff; --t-sidebar-hover: #015c3a;
+            --t-body-bg: #f0f2f5; --t-card-bg: #fff; --t-card-border: #017449;
+            --t-text: #333; --t-text-muted: #666; --t-border: #e9ecef;
+            --t-stat-num: #059669; --t-link: #017449;
+            --t-table-hover: #f8fbff; --t-header-bg: #fff;
+        }
+    </style>
+
     <!-- Global UI stillar — barcha sahifalar uchun -->
     <style>
         /* ===== FILTER CARD ===== */
@@ -405,6 +417,7 @@
             box-shadow: 0 2px 10px rgba(0,0,0,.07);
             padding: 16px 20px;
             margin-bottom: 16px;
+            border-left: 4px solid #017449;
         }
         .filter-card .form-control,
         .filter-card .form-select {
@@ -443,6 +456,10 @@
             border-radius: 16px;
             box-shadow: 0 2px 12px rgba(0,0,0,.08);
             overflow: hidden;
+            transition: box-shadow .2s;
+        }
+        .data-table:hover {
+            box-shadow: 0 4px 18px rgba(0,0,0,.12);
         }
         .data-table .card-header {
             background: #fff;
@@ -532,9 +549,15 @@
         /* ===== STAT MINI CARDS ===== */
         .mini-stat {
             background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 2px 8px rgba(0,0,0,.06);
-            padding: 14px 18px;
+            border-radius: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.07);
+            padding: 16px 20px;
+            border-left: 4px solid #017449;
+            transition: box-shadow .2s, transform .2s;
+        }
+        .mini-stat:hover {
+            box-shadow: 0 6px 20px rgba(0,0,0,.12);
+            transform: translateY(-2px);
         }
         .mini-stat .num { font-size: 1.5rem; font-weight: 800; line-height: 1.2; }
         .mini-stat .lbl { font-size: 12px; color: #666; margin-top: 3px; }

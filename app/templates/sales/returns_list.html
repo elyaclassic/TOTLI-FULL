@@ -151,7 +151,7 @@
                             <td class="muted-cell">{{ order.warehouse.name if order.warehouse else '-' }}</td>
                             <td class="sum-cell">{{ "{:,.0f}".format(order.total or 0) }} so'm</td>
                             <td>
-                                <a href="/sales/return/{{ order.id }}" class="btn btn-sm btn-success"><i class="bi bi-arrow-return-left me-1"></i>Qaytarish</a>
+                                <a href="/sales/return/{{ order.id }}" class="btn-act" title="Qaytarish"><i class="bi bi-arrow-return-left"></i></a>
                             </td>
                         </tr>
                         {% else %}

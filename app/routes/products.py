@@ -16,7 +16,12 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_
 
 from app.core import templates
-from app.models.database import get_db, Product, Category, Unit, User
+from app.models.database import (
+    get_db, Product, Category, Unit, User,
+    RecipeItem, Recipe, OrderItem, PurchaseItem, Stock, StockMovement,
+    ProductionItem, StockAdjustmentDocItem, WarehouseTransferItem,
+)
+from sqlalchemy import func, exists
 from app.deps import require_auth, require_admin
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -247,6 +252,20 @@ async def products_list(
         query = query.filter(Product.type == "yarim_tayyor")
     elif type == "hom_ashyo":
         query = query.filter(Product.type == "hom_ashyo")
+    elif type == "unused":
+        # Hech qayerda ishlatilmaganlar
+        used_tables = [
+            RecipeItem.product_id,
+            Recipe.product_id,
+            OrderItem.product_id,
+            PurchaseItem.product_id,
+            StockMovement.product_id,
+            ProductionItem.product_id,
+            StockAdjustmentDocItem.product_id,
+            WarehouseTransferItem.product_id,
+        ]
+        for col in used_tables:
+            query = query.filter(~exists().where(col == Product.id))
     search_q = (q or "").strip()
     if search_q:
         like = f"%{search_q}%"

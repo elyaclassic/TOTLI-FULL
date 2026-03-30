@@ -3,6 +3,7 @@ Ma'lumotlar bo'limi — omborlar, birliklar, kategoriyalar, narx turlari, kassal
 bo'limlar, yo'nalishlar, foydalanuvchilar, lavozimlar, hududlar, uskunalar.
 """
 import io
+from datetime import datetime, date as date_type
 from typing import Optional
 from urllib.parse import quote, urlencode
 from fastapi import APIRouter, Request, Depends, Form, File, HTTPException, UploadFile, Query
@@ -35,6 +36,7 @@ from app.models.database import (
     ExpenseType,
     PieceworkTask,
     ProductionGroup,
+    ProductionGroupDoc,
     production_group_members,
 )
 from app.deps import require_auth, require_admin
@@ -47,6 +49,14 @@ router = APIRouter(prefix="/info", tags=["info"])
 
 
 # ---------- Ro'yxatlar: Bo'limlar, Omborlar, Kassalar (admin hammasini ko'radi, qo'shish/tanlash) ----------
+@router.get("/themes", response_class=HTMLResponse)
+async def themes_preview(request: Request, current_user: User = Depends(require_auth)):
+    """Tema tanlash sahifasi."""
+    return templates.TemplateResponse("info/themes.html", {
+        "request": request, "current_user": current_user, "page_title": "Tema tanlash",
+    })
+
+
 @router.get("/rosters", response_class=HTMLResponse)
 async def info_rosters(
     request: Request,
@@ -1478,11 +1488,26 @@ async def info_production_groups(
     )
     employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
     piecework_tasks = db.query(PieceworkTask).filter(PieceworkTask.is_active == True).order_by(PieceworkTask.name).all()
+    # Har bir guruh uchun oxirgi hujjat
+    last_docs = {}
+    if groups:
+        group_ids = [g.id for g in groups]
+        from sqlalchemy import desc
+        all_docs = (
+            db.query(ProductionGroupDoc)
+            .filter(ProductionGroupDoc.group_id.in_(group_ids))
+            .order_by(ProductionGroupDoc.id.desc())
+            .all()
+        )
+        for d in all_docs:
+            if d.group_id not in last_docs:
+                last_docs[d.group_id] = d
     return templates.TemplateResponse("info/production_groups.html", {
         "request": request,
         "groups": groups,
         "employees": employees,
         "piecework_tasks": piecework_tasks,
+        "last_docs": last_docs,
         "current_user": current_user,
         "page_title": "Ishlab chiqarish guruhlari (qiyomchilar)",
     })
@@ -1498,7 +1523,8 @@ async def info_production_groups_add(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Guruh qo'shish."""
+    """Guruh qo'shish + avtomatik buyruq hujjati yaratish."""
+    from datetime import datetime, date as date_type
     form = await request.form()
     member_ids_raw = form.getlist("member_ids") if hasattr(form, "getlist") else []
     member_ids = list(dict.fromkeys([int(x) for x in member_ids_raw if str(x).strip().isdigit()]))
@@ -1512,8 +1538,10 @@ async def info_production_groups_add(
     db.flush()
     for eid in member_ids:
         db.execute(production_group_members.insert().values(group_id=gr.id, employee_id=eid))
+    # Buyruq hujjati yaratish
+    doc = _create_production_group_doc(db, gr, member_ids, "create", current_user)
     db.commit()
-    return RedirectResponse(url="/info/production-groups?added=1", status_code=303)
+    return RedirectResponse(url=f"/info/production-group-doc/{doc.id}?created=1", status_code=303)
 
 
 @router.get("/production-groups/edit/{group_id}", response_class=HTMLResponse)
@@ -1563,8 +1591,9 @@ async def info_production_groups_edit(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Guruhni saqlash."""
+    """Guruhni saqlash + yangi buyruq hujjati yaratish."""
     from sqlalchemy import delete
+    from datetime import datetime, date as date_type
     form = await request.form()
     member_ids_raw = form.getlist("member_ids") if hasattr(form, "getlist") else []
     member_ids = list(dict.fromkeys([int(x) for x in member_ids_raw if str(x).strip().isdigit()]))
@@ -1575,6 +1604,13 @@ async def info_production_groups_edit(
     gr.operator_id = operator_id
     gr.piecework_task_id = int(piecework_task_id) if piecework_task_id else None
     gr.include_qiyom = (include_qiyom == "1")
+    # Yaratilgan sanani o'zgartirish
+    created_date_raw = form.get("created_date", "")
+    if created_date_raw and created_date_raw.strip():
+        try:
+            gr.created_at = datetime.strptime(created_date_raw.strip(), "%Y-%m-%d")
+        except (ValueError, TypeError):
+            pass
     db.execute(delete(production_group_members).where(production_group_members.c.group_id == group_id))
     for eid in member_ids:
         price_raw = form.get(f"price_{eid}", "0")
@@ -1583,8 +1619,10 @@ async def info_production_groups_edit(
         except (ValueError, TypeError):
             price = 0
         db.execute(production_group_members.insert().values(group_id=gr.id, employee_id=eid, price_per_unit=price))
+    # Yangi buyruq hujjati (o'zgartirish)
+    doc = _create_production_group_doc(db, gr, member_ids, "update", current_user)
     db.commit()
-    return RedirectResponse(url="/info/production-groups?updated=1", status_code=303)
+    return RedirectResponse(url=f"/info/production-group-doc/{doc.id}?created=1", status_code=303)
 
 
 @router.post("/production-groups/delete/{group_id}", response_class=RedirectResponse)
@@ -1598,6 +1636,267 @@ async def info_production_groups_delete(
     gr.is_active = False
     db.commit()
     return RedirectResponse(url="/info/production-groups?deleted=1", status_code=303)
+
+
+def _build_production_group_docx(doc):
+    """Ishlab chiqarish guruhi buyrug'ini Word (.docx) sifatida qaytaradi (BytesIO)."""
+    from docx import Document as DocxDocument
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    d = DocxDocument()
+    style = d.styles["Normal"]
+    style.font.size = Pt(11)
+    style.font.name = "Times New Roman"
+    title = "ISHLAB CHIQARISH GURUHINI TASHKIL ETISH HAQIDA BUYRUQ" if doc.doc_type == "create" else "ISHLAB CHIQARISH GURUHINI O'ZGARTIRISH HAQIDA BUYRUQ"
+    d.add_heading(title, level=0)
+    h = d.paragraphs[-1]
+    h.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    d.add_paragraph()
+    p = d.add_paragraph()
+    p.add_run(f"№ {doc.number}").bold = True
+    p.add_run(f"   Sana: {doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '—'}")
+    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    d.add_paragraph()
+    d.add_paragraph(f"1. Guruh nomi: {doc.group_name or '—'}")
+    d.add_paragraph(f"2. Operator: {doc.operator_name or '—'}")
+    d.add_paragraph(f"3. Bo'lak narxi: {doc.piecework_info or '—'}")
+    d.add_paragraph(f"4. Qiyom kiritilsin: {'Ha' if doc.include_qiyom else 'Yo`q'}")
+    d.add_paragraph()
+    d.add_paragraph("5. Guruh a'zolari:")
+    if doc.members_snapshot:
+        for i, line in enumerate(doc.members_snapshot.split("; "), 1):
+            d.add_paragraph(f"   {i}. {line}")
+    else:
+        d.add_paragraph("   — a'zo yo'q")
+    if doc.note:
+        d.add_paragraph()
+        d.add_paragraph(f"Izoh: {doc.note}")
+    d.add_paragraph()
+    d.add_paragraph(f"Kuchga kirish sanasi: {doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '—'}")
+    d.add_paragraph()
+    d.add_paragraph("Rahbar: ______________________")
+    d.add_paragraph("Imzo: ______________________")
+    buf = io.BytesIO()
+    d.save(buf)
+    buf.seek(0)
+    return buf
+
+
+import os
+
+DOCS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "docs")
+os.makedirs(DOCS_DIR, exist_ok=True)
+
+
+def _create_production_group_doc(db, gr, member_ids, doc_type, current_user):
+    """Ishlab chiqarish guruhi uchun buyruq hujjati yaratadi (snapshot bilan) va .docx faylga saqlaydi."""
+    from app.models.database import Employee, PieceworkTask
+    today = date_type.today()
+    count = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.doc_date >= today.replace(day=1)).count()
+    number = f"IGR-{today.strftime('%Y%m%d')}-{count + 1:04d}"
+    # Operator nomi
+    operator = db.query(Employee).filter(Employee.id == gr.operator_id).first()
+    operator_name = operator.full_name if operator else str(gr.operator_id)
+    # Bo'lak narxi
+    piecework_info = "—"
+    if gr.piecework_task_id:
+        pt = db.query(PieceworkTask).filter(PieceworkTask.id == gr.piecework_task_id).first()
+        if pt:
+            piecework_info = f"{pt.name or pt.code} — {pt.price_per_unit:,.0f} so'm/{pt.unit_name or 'kg'}"
+    # A'zolar snapshot
+    members_lines = []
+    if member_ids:
+        emps = db.query(Employee).filter(Employee.id.in_(member_ids)).order_by(Employee.full_name).all()
+        # Narxlar
+        rate_rows = db.execute(
+            production_group_members.select().where(production_group_members.c.group_id == gr.id)
+        ).fetchall()
+        rates = {r.employee_id: r.price_per_unit for r in rate_rows}
+        for e in emps:
+            price = rates.get(e.id, 0) or 0
+            members_lines.append(f"{e.full_name} ({e.code or '—'}) — {price:,.0f} so'm" if price else f"{e.full_name} ({e.code or '—'})")
+    members_snapshot = "; ".join(members_lines) if members_lines else "—"
+    # Kuchga kirish sanasi: tashkil etish = guruh sanasi, o'zgartirish = bugun
+    if doc_type == "create":
+        effective_date = gr.created_at.date() if gr.created_at else today
+    else:
+        effective_date = today
+    doc = ProductionGroupDoc(
+        number=number,
+        group_id=gr.id,
+        doc_date=effective_date,
+        doc_type=doc_type,
+        group_name=gr.name,
+        operator_name=operator_name,
+        piecework_info=piecework_info,
+        include_qiyom=gr.include_qiyom,
+        members_snapshot=members_snapshot,
+        user_id=current_user.id if current_user else None,
+    )
+    db.add(doc)
+    db.flush()
+    # .docx faylni serverga saqlash
+    buf = _build_production_group_docx(doc)
+    safe_name = number.replace("/", "_")
+    file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
+    with open(file_path, "wb") as f:
+        f.write(buf.read())
+    return doc
+
+
+@router.get("/production-group-docs", response_class=HTMLResponse)
+async def production_group_docs_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Ishlab chiqarish guruhi buyruqlari ro'yxati."""
+    docs = (
+        db.query(ProductionGroupDoc)
+        .options(joinedload(ProductionGroupDoc.group), joinedload(ProductionGroupDoc.user))
+        .order_by(ProductionGroupDoc.id.desc())
+        .all()
+    )
+    return templates.TemplateResponse("info/production_group_docs_list.html", {
+        "request": request,
+        "docs": docs,
+        "current_user": current_user,
+        "page_title": "Ishlab chiqarish guruhi buyruqlari",
+    })
+
+
+@router.get("/production-group-doc/{doc_id}", response_class=HTMLResponse)
+async def production_group_doc_view(
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Ishlab chiqarish guruhi buyrug'i — ko'rish."""
+    doc = (
+        db.query(ProductionGroupDoc)
+        .options(joinedload(ProductionGroupDoc.group), joinedload(ProductionGroupDoc.user))
+        .filter(ProductionGroupDoc.id == doc_id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    # Shu guruhning barcha hujjatlari
+    all_docs = (
+        db.query(ProductionGroupDoc)
+        .filter(ProductionGroupDoc.group_id == doc.group_id)
+        .order_by(ProductionGroupDoc.doc_date.desc(), ProductionGroupDoc.id.desc())
+        .all()
+    )
+    return templates.TemplateResponse("info/production_group_doc.html", {
+        "request": request,
+        "doc": doc,
+        "all_docs": all_docs,
+        "current_user": current_user,
+        "page_title": f"Guruh buyrug'i {doc.number}",
+    })
+
+
+@router.get("/production-group-doc/{doc_id}/export-word")
+async def production_group_doc_export_word(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Ishlab chiqarish guruhi buyrug'ini Word (.docx) formatida yuklab olish."""
+    doc = (
+        db.query(ProductionGroupDoc)
+        .options(joinedload(ProductionGroupDoc.group))
+        .filter(ProductionGroupDoc.id == doc_id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    safe_name = (doc.number or "doc").replace("/", "_")
+    file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
+    # Agar fayl mavjud bo'lsa — uni qaytarish, aks holda generatsiya
+    if not os.path.exists(file_path):
+        buf = _build_production_group_docx(doc)
+        with open(file_path, "wb") as f:
+            f.write(buf.read())
+    return StreamingResponse(
+        open(file_path, "rb"),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{safe_name}.docx"'},
+    )
+
+
+@router.post("/production-group-doc/{doc_id}/update-date", response_class=RedirectResponse)
+async def production_group_doc_update_date(
+    doc_id: int,
+    doc_date: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Buyruqning kuchga kirish sanasini o'zgartirish (faqat qoralama holatda)."""
+    doc = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralama hujjat sanasini o'zgartirish mumkin")
+    try:
+        doc.doc_date = datetime.strptime(doc_date.strip(), "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        pass
+    db.commit()
+    return RedirectResponse(url=f"/info/production-group-doc/{doc_id}", status_code=303)
+
+
+@router.post("/production-group-doc/{doc_id}/confirm", response_class=RedirectResponse)
+async def production_group_doc_confirm(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Buyruqni tasdiqlash."""
+    doc = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    doc.status = "confirmed"
+    doc.confirmed_at = datetime.now()
+    db.commit()
+    return RedirectResponse(url=f"/info/production-group-doc/{doc_id}?confirmed=1", status_code=303)
+
+
+@router.post("/production-group-doc/{doc_id}/cancel", response_class=RedirectResponse)
+async def production_group_doc_cancel(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Buyruqni bekor qilish."""
+    doc = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    doc.status = "cancelled"
+    doc.confirmed_at = None
+    db.commit()
+    return RedirectResponse(url=f"/info/production-group-doc/{doc_id}?cancelled=1", status_code=303)
+
+
+@router.post("/production-group-doc/{doc_id}/delete", response_class=RedirectResponse)
+async def production_group_doc_delete(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Buyruqni o'chirish."""
+    doc = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    # Faylni ham o'chirish
+    safe_name = (doc.number or "doc").replace("/", "_")
+    file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
+    if os.path.exists(file_path):
+        os.remove(file_path)
+    db.delete(doc)
+    db.commit()
+    return RedirectResponse(url="/info/production-group-docs?deleted=1", status_code=303)
 
 
 # ---------- Regions ----------

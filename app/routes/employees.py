@@ -2460,7 +2460,7 @@ async def employee_salary_page(
                 member_kg[mid] = member_kg.get(mid, 0) + kg
         for mid in member_ids:
             rate = member_rates.get(mid, default_rate)
-            piecework_calculated[mid] = member_kg.get(mid, 0) * rate
+            piecework_calculated[mid] = piecework_calculated.get(mid, 0) + member_kg.get(mid, 0) * rate
     # Har bir xodim uchun bitta bo'lak narxi (min stavka — bir xil ish uchun bitta narx)
     piece_rate_sum = {}
     if emp_ids:

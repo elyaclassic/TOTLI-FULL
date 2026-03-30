@@ -93,33 +93,24 @@
 
     <!-- Filter card -->
     <div class="filter-card">
-        <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-5">
-                <label class="form-label">Qidirish</label>
-                <div class="search-wrap">
-                    <i class="bi bi-search"></i>
-                    <input type="text" class="form-control" id="empSearch" placeholder="F.I.O, kod, lavozim, telefon...">
-                </div>
+        <div class="d-flex align-items-center gap-2 flex-nowrap">
+            <div class="search-wrap flex-grow-1">
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control form-control-sm" id="empSearch" placeholder="F.I.O, kod, lavozim, telefon...">
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label">Bo'lim</label>
-                <select class="form-select" id="deptFilter">
-                    <option value="">Barchasi</option>
-                    {% for d in departments %}
-                    <option value="{{ d.name }}">{{ d.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label">Ish haqi turi</label>
-                <select class="form-select" id="salaryTypeFilter">
-                    <option value="">Barchasi</option>
-                    <option value="oylik">Oylik</option>
-                    <option value="soatlik">Soatlik</option>
-                    <option value="bo'lak">Bo'lak</option>
-                    <option value="bo'lak_oylik">Bo'lak + oylik</option>
-                </select>
-            </div>
+            <select class="form-select form-select-sm" id="deptFilter" style="width:auto; min-width:140px;">
+                <option value="">Bo'lim: Barchasi</option>
+                {% for d in departments %}
+                <option value="{{ d.name }}">{{ d.name }}</option>
+                {% endfor %}
+            </select>
+            <select class="form-select form-select-sm" id="salaryTypeFilter" style="width:auto; min-width:140px;">
+                <option value="">Ish haqi: Barchasi</option>
+                <option value="oylik">Oylik</option>
+                <option value="soatlik">Soatlik</option>
+                <option value="bo'lak">Bo'lak</option>
+                <option value="bo'lak_oylik">Bo'lak + oylik</option>
+            </select>
         </div>
     </div>
 

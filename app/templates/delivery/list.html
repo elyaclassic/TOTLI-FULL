@@ -45,32 +45,23 @@
 
     <!-- Filter card -->
     <div class="filter-card">
-        <div class="row g-2 align-items-end">
-            <div class="col-12 col-md-5">
-                <label class="form-label">Qidirish</label>
-                <div class="search-wrap">
-                    <i class="bi bi-search"></i>
-                    <input type="text" class="form-control" id="drvSearch" placeholder="Haydovchi ismi, telefon, raqam...">
-                </div>
+        <div class="d-flex align-items-center gap-2 flex-nowrap">
+            <div class="search-wrap flex-grow-1" style="min-width:180px;">
+                <i class="bi bi-search"></i>
+                <input type="text" class="form-control form-control-sm" id="drvSearch" placeholder="Haydovchi ismi, telefon, raqam...">
             </div>
-            <div class="col-12 col-md-4">
-                <label class="form-label">Transport turi</label>
-                <select class="form-select" id="vehicleFilter">
-                    <option value="">Barchasi</option>
-                    <option value="car">Yengil</option>
-                    <option value="van">Furgon</option>
-                    <option value="truck">Yuk mashinasi</option>
-                    <option value="motorcycle">Mototsikl</option>
-                </select>
-            </div>
-            <div class="col-12 col-md-3">
-                <label class="form-label">Holat</label>
-                <select class="form-select" id="statusFilter">
-                    <option value="">Barchasi</option>
-                    <option value="active">Faol</option>
-                    <option value="inactive">Nofaol</option>
-                </select>
-            </div>
+            <select class="form-select form-select-sm" id="vehicleFilter" style="width:auto; min-width:130px;">
+                <option value="">Transport: Barchasi</option>
+                <option value="car">Yengil</option>
+                <option value="van">Furgon</option>
+                <option value="truck">Yuk mashinasi</option>
+                <option value="motorcycle">Mototsikl</option>
+            </select>
+            <select class="form-select form-select-sm" id="statusFilter" style="width:auto; min-width:120px;">
+                <option value="">Holat: Barchasi</option>
+                <option value="active">Faol</option>
+                <option value="inactive">Nofaol</option>
+            </select>
         </div>
     </div>
 

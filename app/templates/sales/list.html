@@ -16,79 +16,55 @@
 
 <!-- Filter -->
 <div class="filter-card">
-  <form method="get" action="/sales" class="row g-2 align-items-end">
-    <div class="col-auto">
-      <label class="form-label">📅 Sana dan</label>
-      <input type="date" name="date_from" class="form-control form-control-sm" value="{{ date_from or '' }}">
-    </div>
-    <div class="col-auto">
-      <label class="form-label">📅 Sana gacha</label>
-      <input type="date" name="date_to" class="form-control form-control-sm" value="{{ date_to or '' }}">
-    </div>
-    <div class="col-auto">
-      <label class="form-label">🏭 Ombor</label>
-      <select name="warehouse_id" class="form-select form-select-sm" style="min-width:180px;">
-        <option value="">Barcha omborlar</option>
-        {% for w in warehouses %}
-        <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="col-auto">
-      <label class="form-label">📋 Holat</label>
-      <select name="status" class="form-select form-select-sm" style="min-width:150px;">
-        <option value="">Barchasi</option>
-        <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Qoralama</option>
-        <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Bajarildi</option>
-        <option value="waiting_production" {% if selected_status == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
-        <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
-      </select>
-    </div>
-    <div class="col-auto d-flex gap-2">
-      <button type="submit" class="btn btn-primary top-btn">
-        <i class="bi bi-funnel-fill"></i> Ko'rsatish
-      </button>
-      <a href="/sales" class="btn btn-outline-secondary top-btn" title="Tozalash">
-        <i class="bi bi-x-circle"></i>
-      </a>
-    </div>
+  <form method="get" action="/sales" class="d-flex align-items-center gap-2 flex-nowrap">
+    <input type="date" name="date_from" class="form-control form-control-sm" style="flex:1; min-width:130px;" value="{{ date_from or '' }}" title="Sana dan">
+    <input type="date" name="date_to" class="form-control form-control-sm" style="flex:1; min-width:130px;" value="{{ date_to or '' }}" title="Sana gacha">
+    <select name="warehouse_id" class="form-select form-select-sm" style="flex:1; min-width:130px;">
+      <option value="">Barcha omborlar</option>
+      {% for w in warehouses %}
+      <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+      {% endfor %}
+    </select>
+    <select name="status" class="form-select form-select-sm" style="flex:1; min-width:120px;">
+      <option value="">Barchasi</option>
+      <option value="draft" {% if selected_status == 'draft' %}selected{% endif %}>Qoralama</option>
+      <option value="completed" {% if selected_status == 'completed' %}selected{% endif %}>Bajarildi</option>
+      <option value="waiting_production" {% if selected_status == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
+      <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
+    </select>
+    <button type="submit" class="btn btn-primary btn-sm text-nowrap" style="flex-shrink:0;">
+      <i class="bi bi-funnel-fill"></i> Ko'rsatish
+    </button>
+    <a href="/sales" class="btn btn-outline-secondary btn-sm" style="flex-shrink:0;" title="Tozalash">
+      <i class="bi bi-x-circle"></i>
+    </a>
   </form>
 </div>
 
 <!-- Stats -->
-<div class="row g-3 mb-3">
-  <div class="col-6 col-md-2">
-    <div class="mini-stat">
-      <div class="num text-primary">{{ orders|length }}</div>
-      <div class="lbl">Jami hujjatlar</div>
-    </div>
+<div class="d-flex flex-nowrap gap-3 mb-3">
+  <div class="mini-stat" style="flex:1;">
+    <div class="num text-primary">{{ orders|length }}</div>
+    <div class="lbl">Jami hujjatlar</div>
   </div>
-  <div class="col-6 col-md-2">
-    <div class="mini-stat">
-      <div class="num text-success" style="font-size:1.1rem;">{{ "{:,.0f}".format(total_sum or 0) }}</div>
-      <div class="lbl">Jami summa</div>
-    </div>
+  <div class="mini-stat" style="flex:1;">
+    <div class="num text-success">{{ "{:,.0f}".format(total_sum or 0) }}</div>
+    <div class="lbl">Jami summa</div>
   </div>
-  <div class="col-6 col-md-2">
-    <div class="mini-stat">
-      {% set done_count = orders|selectattr('status','equalto','completed')|list|length %}
-      <div class="num text-success">{{ done_count }}</div>
-      <div class="lbl">Bajarilgan</div>
-    </div>
+  <div class="mini-stat" style="flex:1;">
+    {% set done_count = orders|selectattr('status','equalto','completed')|list|length %}
+    <div class="num text-success">{{ done_count }}</div>
+    <div class="lbl">Bajarilgan</div>
   </div>
-  <div class="col-6 col-md-2">
-    <div class="mini-stat">
-      {% set draft_count = orders|selectattr('status','equalto','draft')|list|length %}
-      <div class="num text-warning">{{ draft_count }}</div>
-      <div class="lbl">Qoralama</div>
-    </div>
+  <div class="mini-stat" style="flex:1;">
+    {% set draft_count = orders|selectattr('status','equalto','draft')|list|length %}
+    <div class="num text-warning">{{ draft_count }}</div>
+    <div class="lbl">Qoralama</div>
   </div>
   {% if qarz_sum is defined and qarz_sum > 0 %}
-  <div class="col-6 col-md-2">
-    <div class="mini-stat">
-      <div class="num text-danger" style="font-size:1.1rem;">{{ "{:,.0f}".format(qarz_sum or 0) }}</div>
-      <div class="lbl">Qarz</div>
-    </div>
+  <div class="mini-stat" style="flex:1;">
+    <div class="num text-danger">{{ "{:,.0f}".format(qarz_sum or 0) }}</div>
+    <div class="lbl">Qarz</div>
   </div>
   {% endif %}
 </div>

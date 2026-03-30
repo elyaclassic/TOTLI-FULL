@@ -22,9 +22,12 @@
 
 <div class="page-header mb-3">
     <h5 class="mb-0"><i class="bi bi-people"></i> Ishlab chiqarish guruhlari (qiyomchilar)</h5>
-    <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addGroupModal">
-        <i class="bi bi-plus-circle"></i> Guruh qo'shish
-    </button>
+    <div class="d-flex gap-2">
+        <a href="/info/production-group-docs" class="top-btn btn btn-outline-secondary"><i class="bi bi-file-earmark-text"></i> Buyruqlar ro'yxati</a>
+        <button class="top-btn btn btn-primary" data-bs-toggle="modal" data-bs-target="#addGroupModal">
+            <i class="bi bi-plus-circle"></i> Guruh qo'shish
+        </button>
+    </div>
 </div>
 
 <div class="card data-table">
@@ -40,6 +43,8 @@
                     <th>Bo'lak narxi (so'm/kg)</th>
                     <th>Qiyom kiritilsin</th>
                     <th>A'zolar</th>
+                    <th>Yaratilgan</th>
+                    <th>Hujjat</th>
                     <th></th>
                 </tr>
             </thead>
@@ -57,6 +62,14 @@
                     </td>
                     <td>{% if g.include_qiyom %}<span class="badge-active">Ha</span>{% else %}<span class="badge-inactive">Yo'q</span>{% endif %}</td>
                     <td><span class="muted-cell">{% if g.members %}{{ g.members|length }} kishi: {% for m in g.members %}{{ m.full_name }}{% if not loop.last %}, {% endif %}{% endfor %}{% else %}—{% endif %}</span></td>
+                    <td>{{ g.created_at.strftime('%d.%m.%Y') if g.created_at else '—' }}</td>
+                    <td>
+                        {% if last_docs and last_docs.get(g.id) %}
+                        <a href="/info/production-group-doc/{{ last_docs[g.id].id }}" title="Ko'rish">{{ last_docs[g.id].number }}</a>
+                        {% else %}
+                        <span class="muted-cell">—</span>
+                        {% endif %}
+                    </td>
                     <td>
                         <a href="/info/production-groups/edit/{{ g.id }}" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                         <form action="/info/production-groups/delete/{{ g.id }}" method="POST" class="d-inline" onsubmit="return confirm('Guruhni o\'chirishni xohlaysizmi?');">
@@ -66,7 +79,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="text-center text-muted py-4">Hozircha guruh yo'q. «Guruh qo'shish» orqali qiyomchilar guruhini yarating.</td>
+                    <td colspan="9" class="text-center text-muted py-4">Hozircha guruh yo'q. «Guruh qo'shish» orqali qiyomchilar guruhini yarating.</td>
                 </tr>
                 {% endfor %}
             </tbody>

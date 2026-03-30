@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    {% if request.query_params.get('created') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show no-print py-2 small">
+        <i class="bi bi-check-circle"></i> Ishlab chiqarish guruhi buyrug'i yaratildi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('confirmed') == '1' %}
+    <div class="alert alert-success alert-dismissible fade show no-print py-2 small">
+        <i class="bi bi-check-circle"></i> Buyruq tasdiqlandi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('cancelled') == '1' %}
+    <div class="alert alert-warning alert-dismissible fade show no-print py-2 small">
+        <i class="bi bi-x-circle"></i> Buyruq bekor qilindi.
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="page-header mb-3 no-print">
+        <h5 class="mb-0"><i class="bi bi-file-earmark-text"></i> Ishlab chiqarish guruhi buyrug'i</h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/info/production-group-docs" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Buyruqlar</a>
+            <a href="/info/production-group-doc/{{ doc.id }}/export-word" class="top-btn btn btn-outline-primary"><i class="bi bi-download"></i> Word (.docx)</a>
+            <button type="button" class="top-btn btn btn-outline-dark" onclick="window.print();"><i class="bi bi-printer"></i> Chop etish</button>
+        </div>
+    </div>
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span><i class="bi bi-file-earmark-text"></i>
+                {% if doc.doc_type == 'create' %}Guruhni tashkil etish haqida buyruq{% else %}Guruhni o'zgartirish haqida buyruq{% endif %}
+            </span>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="muted-cell">{{ doc.number }}</span>
+                <span class="muted-cell">|</span>
+                <span class="muted-cell">{{ doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '—' }}</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-bordered mb-0">
+                <tr>
+                    <th width="220" class="table-light">Guruh nomi</th>
+                    <td><strong>{{ doc.group_name or '—' }}</strong></td>
+                </tr>
+                <tr>
+                    <th class="table-light">Hujjat turi</th>
+                    <td>
+                        {% if doc.doc_type == 'create' %}
+                        <span class="badge bg-success">Tashkil etish</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">O'zgartirish</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th class="table-light">Holat</th>
+                    <td>
+                        {% if doc.status == 'confirmed' %}
+                        <span class="badge bg-success">Tasdiqlangan</span>
+                        <span class="text-muted small ms-2">{{ doc.confirmed_at.strftime('%d.%m.%Y %H:%M') if doc.confirmed_at else '' }}</span>
+                        {% elif doc.status == 'cancelled' %}
+                        <span class="badge bg-danger">Bekor qilingan</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Qoralama</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th class="table-light">Kuchga kirish sanasi</th>
+                    <td>
+                        {% if doc.status == 'draft' %}
+                        <form action="/info/production-group-doc/{{ doc.id }}/update-date" method="POST" class="d-flex align-items-center gap-2 no-print" style="max-width:300px;">
+                            <input type="date" class="form-control form-control-sm" name="doc_date" value="{{ doc.doc_date.strftime('%Y-%m-%d') if doc.doc_date else '' }}">
+                            <button type="submit" class="btn btn-sm btn-outline-primary"><i class="bi bi-check-lg"></i></button>
+                        </form>
+                        <span class="d-none d-print-inline">{{ doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '—' }}</span>
+                        {% else %}
+                        {{ doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '—' }}
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <th class="table-light">Operator</th>
+                    <td>{{ doc.operator_name or '—' }}</td>
+                </tr>
+                <tr>
+                    <th class="table-light">Bo'lak narxi</th>
+                    <td>{{ doc.piecework_info or '—' }}</td>
+                </tr>
+                <tr>
+                    <th class="table-light">Qiyom kiritilsin</th>
+                    <td>{% if doc.include_qiyom %}<span class="badge-active">Ha</span>{% else %}<span class="badge-inactive">Yo'q</span>{% endif %}</td>
+                </tr>
+                <tr>
+                    <th class="table-light">Guruh a'zolari</th>
+                    <td>
+                        {% if doc.members_snapshot and doc.members_snapshot != '—' %}
+                        <ol class="mb-0 ps-3">
+                            {% for m in doc.members_snapshot.split('; ') %}
+                            <li>{{ m }}</li>
+                            {% endfor %}
+                        </ol>
+                        {% else %}
+                        <span class="text-muted">— a'zo yo'q</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% if doc.note %}
+                <tr>
+                    <th class="table-light">Izoh</th>
+                    <td>{{ doc.note }}</td>
+                </tr>
+                {% endif %}
+            </table>
+            <div class="p-3 border-top d-flex justify-content-between align-items-center">
+                <p class="mb-0 small text-muted">Hujjat yaratilgan: {{ doc.created_at.strftime('%d.%m.%Y %H:%M') if doc.created_at else '—' }}{% if doc.user %} — {{ doc.user.username }}{% endif %}</p>
+                <div class="d-flex gap-2 no-print">
+                    {% if doc.status == 'draft' %}
+                    <form action="/info/production-group-doc/{{ doc.id }}/confirm" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
+                    </form>
+                    <form action="/info/production-group-doc/{{ doc.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Buyruqni o\'chirishni xohlaysizmi?');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                    </form>
+                    {% elif doc.status == 'confirmed' %}
+                    <form action="/info/production-group-doc/{{ doc.id }}/cancel" method="POST" class="d-inline" onsubmit="return confirm('Tasdiqlashni bekor qilishni xohlaysizmi?');">
+                        <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-x-lg"></i> Bekor qilish</button>
+                    </form>
+                    {% elif doc.status == 'cancelled' %}
+                    <form action="/info/production-group-doc/{{ doc.id }}/confirm" method="POST" class="d-inline">
+                        <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Qayta tasdiqlash</button>
+                    </form>
+                    <form action="/info/production-group-doc/{{ doc.id }}/delete" method="POST" class="d-inline" onsubmit="return confirm('Buyruqni o\'chirishni xohlaysizmi?');">
+                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i> O'chirish</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if all_docs and all_docs|length > 1 %}
+    <div class="card data-table mt-3 no-print">
+        <div class="card-header"><span class="fw-bold">Shu guruhning barcha hujjatlari</span></div>
+        <div class="card-body p-0">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Raqam</th>
+                        <th>Sana</th>
+                        <th>Turi</th>
+                        <th>Holat</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for d in all_docs %}
+                    <tr {% if d.id == doc.id %}class="table-active"{% endif %}>
+                        <td>{{ d.number }}</td>
+                        <td>{{ d.doc_date.strftime('%d.%m.%Y') if d.doc_date else '—' }}</td>
+                        <td>
+                            {% if d.doc_type == 'create' %}<span class="badge bg-success">Tashkil</span>{% else %}<span class="badge bg-warning text-dark">O'zgartirish</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if d.status == 'confirmed' %}<span class="badge bg-success">Tasdiqlangan</span>
+                            {% elif d.status == 'cancelled' %}<span class="badge bg-danger">Bekor</span>
+                            {% else %}<span class="badge bg-secondary">Qoralama</span>{% endif %}
+                        </td>
+                        <td>
+                            {% if d.id != doc.id %}
+                            <a href="/info/production-group-doc/{{ d.id }}" class="btn-act"><i class="bi bi-eye"></i></a>
+                            {% else %}
+                            <span class="text-muted small">joriy</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

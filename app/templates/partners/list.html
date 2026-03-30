@@ -65,17 +65,17 @@
 
     <!-- Filter Card -->
     <div class="filter-card mb-3">
-        <div class="d-flex flex-wrap gap-2 align-items-center">
-            <a href="/partners" class="btn btn-sm type-filter-btn {% if current_type == 'all' %}btn-primary active{% else %}btn-outline-primary{% endif %}">
+        <div class="d-flex align-items-center gap-2 flex-nowrap">
+            <a href="/partners" class="btn btn-sm type-filter-btn {% if current_type == 'all' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-grid"></i> Hammasi
             </a>
-            <a href="/partners?type=customer" class="btn btn-sm type-filter-btn {% if current_type == 'customer' %}btn-primary active{% else %}btn-outline-primary{% endif %}">
+            <a href="/partners?type=customer" class="btn btn-sm type-filter-btn {% if current_type == 'customer' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-person"></i> Mijozlar
             </a>
-            <a href="/partners?type=supplier" class="btn btn-sm type-filter-btn {% if current_type == 'supplier' %}btn-primary active{% else %}btn-outline-primary{% endif %}">
+            <a href="/partners?type=supplier" class="btn btn-sm type-filter-btn {% if current_type == 'supplier' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-truck"></i> Yetkazib beruvchilar
             </a>
-            <div class="ms-auto search-wrap">
+            <div class="ms-auto search-wrap" style="min-width: 180px;">
                 <i class="bi bi-search"></i>
                 <input type="text" id="partnerSearchInput" class="form-control form-control-sm" placeholder="Qidirish..." oninput="filterPartnersTable(this.value)" autocomplete="off">
             </div>

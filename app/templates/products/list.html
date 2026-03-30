@@ -55,29 +55,22 @@
 
     <!-- Filter card -->
     <div class="filter-card">
-        <form method="get" action="/products" class="row align-items-end g-2" id="productsFilterForm">
+        <form method="get" action="/products" id="productsFilterForm" class="d-flex align-items-center gap-2 flex-nowrap">
             <input type="hidden" name="type" value="{{ current_type }}">
-            <div class="col-md-4 col-sm-6">
-                <label class="form-label"><i class="bi bi-search me-1"></i>Qidirish</label>
-                <div class="search-wrap">
-                    <i class="bi bi-search"></i>
-                    <input type="text" name="search" id="productsSearch" class="form-control" placeholder="Nomi, kod yoki shtrix kod..." value="{{ search_q or '' }}" autocomplete="off">
-                </div>
+            <div class="search-wrap" style="min-width:180px; flex:1; max-width:300px;">
+                <i class="bi bi-search"></i>
+                <input type="text" name="search" id="productsSearch" class="form-control form-control-sm" placeholder="Nomi, kod yoki shtrix kod..." value="{{ search_q or '' }}" autocomplete="off">
             </div>
-            <div class="col-md-3 col-sm-6">
-                <label class="form-label">Kategoriya (tur)</label>
-                <div class="d-flex flex-wrap gap-1">
-                    <a href="/products{% if search_encoded %}?search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'all' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Hammasi</a>
-                    <a href="/products?type=tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'tayyor' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Tayyor</a>
-                    <a href="/products?type=yarim_tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'yarim_tayyor' %}btn-warning{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Yarim tayyor</a>
-                    <a href="/products?type=hom_ashyo{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'hom_ashyo' %}btn-info{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Xom ashyo</a>
-                </div>
-            </div>
-            <div class="col-md-5 col-sm-12 d-flex flex-wrap gap-2 align-items-end justify-content-end">
-                <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Qidirish</button>
-                {% if current_type != 'all' or search_q %}
-                <a href="/products" class="btn btn-outline-secondary btn-sm" title="Filtrlarni tozalash"><i class="bi bi-x-circle me-1"></i>Tozalash</a>
-                {% endif %}
+            <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Qidirish</button>
+            {% if current_type != 'all' or search_q %}
+            <a href="/products" class="btn btn-outline-secondary btn-sm" title="Tozalash"><i class="bi bi-x-circle"></i></a>
+            {% endif %}
+            <div class="d-flex flex-nowrap gap-1">
+                <a href="/products{% if search_encoded %}?search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'all' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Hammasi</a>
+                <a href="/products?type=tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'tayyor' %}btn-success{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Tayyor</a>
+                <a href="/products?type=yarim_tayyor{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'yarim_tayyor' %}btn-warning{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Yarim tayyor</a>
+                <a href="/products?type=hom_ashyo{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'hom_ashyo' %}btn-info{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Xom ashyo</a>
+                <a href="/products?type=unused" class="btn btn-sm {% if current_type == 'unused' %}btn-danger{% else %}btn-outline-danger{% endif %}" style="border-radius:8px;">Ishlatilmagan</a>
             </div>
         </form>
     </div>

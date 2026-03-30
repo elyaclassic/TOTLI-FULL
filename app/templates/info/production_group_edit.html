@@ -22,6 +22,10 @@
                         </select>
                     </div>
                     <div class="col-md-4">
+                        <label class="form-label">Yaratilgan sana</label>
+                        <input type="date" class="form-control" name="created_date" value="{{ group.created_at.strftime('%Y-%m-%d') if group.created_at else '' }}">
+                    </div>
+                    <div class="col-md-4">
                         <label class="form-label">Qiyom (1-bosqich) hisobga olinsinmi?</label>
                         <select class="form-select" name="include_qiyom">
                             <option value="0" {% if not group.include_qiyom %}selected{% endif %}>Yo'q — faqat tayyor mahsulot</option>

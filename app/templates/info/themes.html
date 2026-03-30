@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.themes-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; }
+@media (max-width: 992px) { .themes-grid { grid-template-columns: 1fr; } }
+.theme-preview { border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,.12); transition: transform .2s, box-shadow .2s; cursor: pointer; position: relative; }
+.theme-preview:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,.2); }
+.theme-preview.active-theme { outline: 3px solid #059669; outline-offset: 2px; }
+.tp-select-btn { position: absolute; bottom: 12px; right: 16px; padding: 5px 14px; border-radius: 8px; border: none; font-size: 11px; font-weight: 700; cursor: pointer; opacity: 0; transition: opacity .2s; background: #059669; color: #fff; }
+.theme-preview:hover .tp-select-btn { opacity: 1; }
+.theme-preview.active-theme .tp-select-btn { opacity: 1; background: #065f38; }
+.tp-active-mark { position: absolute; top: 12px; right: 16px; background: #059669; color: #fff; padding: 2px 10px; border-radius: 999px; font-size: 10px; font-weight: 700; display: none; }
+.theme-preview.active-theme .tp-active-mark { display: block; }
+.tp-header { padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+.tp-header h5 { margin: 0; font-weight: 700; font-size: 15px; }
+.tp-badge { font-size: 10px; padding: 3px 10px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+.tp-body { padding: 16px 20px; display: flex; gap: 12px; }
+.tp-sidebar { width: 60px; border-radius: 10px; padding: 10px 6px; display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.tp-sidebar-item { width: 36px; height: 4px; border-radius: 2px; opacity: .5; }
+.tp-sidebar-item.active { opacity: 1; width: 40px; height: 5px; }
+.tp-content { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+.tp-stats { display: flex; gap: 8px; }
+.tp-stat { flex: 1; padding: 10px 12px; border-radius: 10px; border-left: 3px solid; }
+.tp-stat .tp-num { font-size: 16px; font-weight: 800; }
+.tp-stat .tp-lbl { font-size: 9px; opacity: .6; margin-top: 2px; }
+.tp-table { border-radius: 10px; padding: 8px 10px; }
+.tp-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 10px; opacity: .7; border-bottom: 1px solid; }
+.tp-row:last-child { border-bottom: none; }
+.tp-colors { padding: 10px 20px 16px; display: flex; gap: 6px; }
+.tp-color { width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255,255,255,.3); }
+.theme-category { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #888; margin: 30px 0 14px; padding-bottom: 6px; border-bottom: 2px solid #e9ecef; }
+.theme-category:first-child { margin-top: 0; }
+.tp-desc { padding: 6px 20px 12px; font-size: 10px; }
+</style>
+
+<div class="page-header mb-4">
+    <h5 class="mb-0"><i class="bi bi-palette"></i> Tema tanlash</h5>
+    <a href="/info" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+</div>
+<p class="text-muted mb-4">Loyiha uchun tema tanlang. Yoqqanini ayting — men qo'shib beraman.</p>
+
+<!-- TANLANGAN 5 TA TEMA -->
+<div class="theme-category"><i class="bi bi-check-circle-fill me-1"></i> Asosiy temalar</div>
+<div class="themes-grid mb-4">
+
+<!-- Sage Enterprise -->
+<div class="theme-preview" data-theme-id="sage-enterprise" style="background:#F0FDF4;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#fff;"><h5 style="color:#064E3B;">Sage Enterprise</h5><span class="tp-badge" style="background:#059669; color:#fff;">Hozirgi</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#017449;"><div class="tp-sidebar-item active" style="background:#fff;"></div><div class="tp-sidebar-item" style="background:rgba(255,255,255,.4);"></div><div class="tp-sidebar-item" style="background:rgba(255,255,255,.4);"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#fff; border-color:#059669;"><div class="tp-num" style="color:#059669;">1,250</div><div class="tp-lbl" style="color:#6B7280;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#10B981;"><div class="tp-num" style="color:#10B981;">85.2M</div><div class="tp-lbl" style="color:#6B7280;">Daromad</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#2563EB;"><div class="tp-num" style="color:#2563EB;">94%</div><div class="tp-lbl" style="color:#6B7280;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#fff;">
+                <div class="tp-row" style="color:#374151; border-color:#E5E7EB;"><span>S-20260329-0525</span><span style="color:#059669;">161,000</span></div>
+                <div class="tp-row" style="color:#374151; border-color:#E5E7EB;"><span>S-20260329-0524</span><span style="color:#059669;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#fff;"><div class="tp-color" style="background:#017449;"></div><div class="tp-color" style="background:#059669;"></div><div class="tp-color" style="background:#10B981;"></div><div class="tp-color" style="background:#F0FDF4;"></div></div>
+</div>
+
+<!-- Carbon Pro -->
+<div class="theme-preview" data-theme-id="carbon-pro" style="background:#27272A;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#18181B;"><h5 style="color:#F4F4F5;">Carbon Pro</h5><span class="tp-badge" style="background:#3B82F6; color:#fff;">Dark</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#18181B;"><div class="tp-sidebar-item active" style="background:#3B82F6;"></div><div class="tp-sidebar-item" style="background:#52525B;"></div><div class="tp-sidebar-item" style="background:#52525B;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#18181B; border-color:#3B82F6;"><div class="tp-num" style="color:#60A5FA;">1,250</div><div class="tp-lbl" style="color:#A1A1AA;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#18181B; border-color:#22D3EE;"><div class="tp-num" style="color:#22D3EE;">85.2M</div><div class="tp-lbl" style="color:#A1A1AA;">Daromad</div></div>
+                <div class="tp-stat" style="background:#18181B; border-color:#4ADE80;"><div class="tp-num" style="color:#4ADE80;">94%</div><div class="tp-lbl" style="color:#A1A1AA;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#18181B;">
+                <div class="tp-row" style="color:#D4D4D8; border-color:#3F3F46;"><span>S-20260329-0525</span><span style="color:#60A5FA;">161,000</span></div>
+                <div class="tp-row" style="color:#D4D4D8; border-color:#3F3F46;"><span>S-20260329-0524</span><span style="color:#60A5FA;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#18181B;"><div class="tp-color" style="background:#3B82F6;"></div><div class="tp-color" style="background:#22D3EE;"></div><div class="tp-color" style="background:#4ADE80;"></div><div class="tp-color" style="background:#18181B;"></div></div>
+</div>
+
+<!-- Royal Navy -->
+<div class="theme-preview" data-theme-id="royal-navy" style="background:#EFF6FF;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#fff;"><h5 style="color:#1E3A5F;">Royal Navy</h5><span class="tp-badge" style="background:#1E40AF; color:#FBBF24;">Premium</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#1E3A5F;"><div class="tp-sidebar-item active" style="background:#FBBF24;"></div><div class="tp-sidebar-item" style="background:rgba(255,255,255,.3);"></div><div class="tp-sidebar-item" style="background:rgba(255,255,255,.3);"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#fff; border-color:#1E40AF;"><div class="tp-num" style="color:#1E40AF;">1,250</div><div class="tp-lbl" style="color:#64748B;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#FBBF24;"><div class="tp-num" style="color:#B45309;">85.2M</div><div class="tp-lbl" style="color:#64748B;">Daromad</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#1E40AF;"><div class="tp-num" style="color:#1E40AF;">94%</div><div class="tp-lbl" style="color:#64748B;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#fff;">
+                <div class="tp-row" style="color:#475569; border-color:#E2E8F0;"><span>S-20260329-0525</span><span style="color:#1E40AF;">161,000</span></div>
+                <div class="tp-row" style="color:#475569; border-color:#E2E8F0;"><span>S-20260329-0524</span><span style="color:#1E40AF;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#fff;"><div class="tp-color" style="background:#1E40AF;"></div><div class="tp-color" style="background:#1E3A5F;"></div><div class="tp-color" style="background:#FBBF24;"></div><div class="tp-color" style="background:#EFF6FF;"></div></div>
+</div>
+
+<!-- Velvet Gold -->
+<div class="theme-preview" data-theme-id="velvet-gold" style="background:#292524;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#1C1917;"><h5 style="color:#FDE68A;">Velvet Gold</h5><span class="tp-badge" style="background:#D4AF37; color:#1C1917;">Luxury</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#1C1917;"><div class="tp-sidebar-item active" style="background:#D4AF37;"></div><div class="tp-sidebar-item" style="background:#57534E;"></div><div class="tp-sidebar-item" style="background:#57534E;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#1C1917; border-color:#D4AF37;"><div class="tp-num" style="color:#FDE68A;">1,250</div><div class="tp-lbl" style="color:#A8A29E;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#1C1917; border-color:#B45309;"><div class="tp-num" style="color:#FBBF24;">85.2M</div><div class="tp-lbl" style="color:#A8A29E;">Daromad</div></div>
+                <div class="tp-stat" style="background:#1C1917; border-color:#D4AF37;"><div class="tp-num" style="color:#FDE68A;">94%</div><div class="tp-lbl" style="color:#A8A29E;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#1C1917;">
+                <div class="tp-row" style="color:#D6D3D1; border-color:#44403C;"><span>S-20260329-0525</span><span style="color:#D4AF37;">161,000</span></div>
+                <div class="tp-row" style="color:#D6D3D1; border-color:#44403C;"><span>S-20260329-0524</span><span style="color:#D4AF37;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#1C1917;"><div class="tp-color" style="background:#D4AF37;"></div><div class="tp-color" style="background:#B45309;"></div><div class="tp-color" style="background:#FDE68A;"></div><div class="tp-color" style="background:#1C1917;"></div></div>
+</div>
+
+<!-- Sunset Gradient -->
+<div class="theme-preview" data-theme-id="sunset-gradient" style="background:#FFFBEB;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#fff;"><h5 style="color:#9F1239;">Sunset Gradient</h5><span class="tp-badge" style="background:#E11D48; color:#fff;">Bold</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#fff; border:1px solid #FECDD3;"><div class="tp-sidebar-item active" style="background:#E11D48;"></div><div class="tp-sidebar-item" style="background:#FECDD3;"></div><div class="tp-sidebar-item" style="background:#FECDD3;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#fff; border-color:#E11D48;"><div class="tp-num" style="color:#E11D48;">1,250</div><div class="tp-lbl" style="color:#6B7280;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#F59E0B;"><div class="tp-num" style="color:#D97706;">85.2M</div><div class="tp-lbl" style="color:#6B7280;">Daromad</div></div>
+                <div class="tp-stat" style="background:#fff; border-color:#E11D48;"><div class="tp-num" style="color:#E11D48;">94%</div><div class="tp-lbl" style="color:#6B7280;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#fff;">
+                <div class="tp-row" style="color:#4B5563; border-color:#FEE2E2;"><span>S-20260329-0525</span><span style="color:#E11D48;">161,000</span></div>
+                <div class="tp-row" style="color:#4B5563; border-color:#FEE2E2;"><span>S-20260329-0524</span><span style="color:#E11D48;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#fff;"><div class="tp-color" style="background:#E11D48;"></div><div class="tp-color" style="background:#F59E0B;"></div><div class="tp-color" style="background:#FB923C;"></div><div class="tp-color" style="background:#FFFBEB;"></div></div>
+</div>
+
+</div>
+
+<!-- MILLIY USLUB -->
+<div class="theme-category"><i class="bi bi-flag-fill me-1"></i> Milliy uslub temalar</div>
+<div class="themes-grid mb-4">
+
+<!-- Registon -->
+<div class="theme-preview" data-theme-id="registon" style="background:#0B1D2E;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#071526;"><h5 style="color:#C5D4E0;">Registon</h5><span class="tp-badge" style="background:#1B8A8A; color:#fff;">Samarkand</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#071526;"><div class="tp-sidebar-item active" style="background:#3EC9C9;"></div><div class="tp-sidebar-item" style="background:#C8A84E; opacity:.6;"></div><div class="tp-sidebar-item" style="background:#1A3A5C;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#0E2240; border-color:#1B8A8A;"><div class="tp-num" style="color:#3EC9C9;">1,250</div><div class="tp-lbl" style="color:#7A9BB5;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#0E2240; border-color:#C8A84E;"><div class="tp-num" style="color:#C8A84E;">85.2M</div><div class="tp-lbl" style="color:#7A9BB5;">Daromad</div></div>
+                <div class="tp-stat" style="background:#0E2240; border-color:#3EC9C9;"><div class="tp-num" style="color:#3EC9C9;">94%</div><div class="tp-lbl" style="color:#7A9BB5;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#0E2240;">
+                <div class="tp-row" style="color:#C5D4E0; border-color:#1A3A5C;"><span>S-20260329-0525</span><span style="color:#3EC9C9;">161,000</span></div>
+                <div class="tp-row" style="color:#C5D4E0; border-color:#1A3A5C;"><span>S-20260329-0524</span><span style="color:#C8A84E;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#071526;"><div class="tp-color" style="background:#1B8A8A;"></div><div class="tp-color" style="background:#3EC9C9;"></div><div class="tp-color" style="background:#C8A84E;"></div><div class="tp-color" style="background:#0E2240;"></div></div>
+    <div class="tp-desc" style="color:#7A9BB5; background:#071526;">Samarkand moviy koshini va oltin naqshlari</div>
+</div>
+
+<!-- Atlas -->
+<div class="theme-preview" data-theme-id="atlas" style="background:#1A0A1E;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#120714;"><h5 style="color:#E8D0EE;">Atlas</h5><span class="tp-badge" style="background:#C0392B; color:#fff;">Margilon</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#120714;"><div class="tp-sidebar-item active" style="background:#E74C3C;"></div><div class="tp-sidebar-item" style="background:#F5D76E; opacity:.6;"></div><div class="tp-sidebar-item" style="background:#3D1A44;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#22102A; border-color:#C0392B;"><div class="tp-num" style="color:#E74C3C;">1,250</div><div class="tp-lbl" style="color:#A87DB0;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#22102A; border-color:#F5D76E;"><div class="tp-num" style="color:#F5D76E;">85.2M</div><div class="tp-lbl" style="color:#A87DB0;">Daromad</div></div>
+                <div class="tp-stat" style="background:#22102A; border-color:#E74C3C;"><div class="tp-num" style="color:#E74C3C;">94%</div><div class="tp-lbl" style="color:#A87DB0;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#22102A;">
+                <div class="tp-row" style="color:#E8D0EE; border-color:#3D1A44;"><span>S-20260329-0525</span><span style="color:#E74C3C;">161,000</span></div>
+                <div class="tp-row" style="color:#E8D0EE; border-color:#3D1A44;"><span>S-20260329-0524</span><span style="color:#F5D76E;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#120714;"><div class="tp-color" style="background:#C0392B;"></div><div class="tp-color" style="background:#E74C3C;"></div><div class="tp-color" style="background:#F5D76E;"></div><div class="tp-color" style="background:#22102A;"></div></div>
+    <div class="tp-desc" style="color:#A87DB0; background:#120714;">Margilon atlas ipagining qizil, binafsha va sariq ranglari</div>
+</div>
+
+<!-- Suzane -->
+<div class="theme-preview" data-theme-id="suzane" style="background:#FDF6EF;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#FFFDF8;"><h5 style="color:#4A2C1A;">Suzane</h5><span class="tp-badge" style="background:#A0263A; color:#fff;">Kashta</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#FDF2E9; border:1px solid #E8C8B0;"><div class="tp-sidebar-item active" style="background:#A0263A;"></div><div class="tp-sidebar-item" style="background:#2D6E46; opacity:.5;"></div><div class="tp-sidebar-item" style="background:#E8C8B0;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#FFFDF8; border-color:#A0263A;"><div class="tp-num" style="color:#A0263A;">1,250</div><div class="tp-lbl" style="color:#9A7B6D;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#FFFDF8; border-color:#2D6E46;"><div class="tp-num" style="color:#2D6E46;">85.2M</div><div class="tp-lbl" style="color:#9A7B6D;">Daromad</div></div>
+                <div class="tp-stat" style="background:#FFFDF8; border-color:#C75B2A;"><div class="tp-num" style="color:#C75B2A;">94%</div><div class="tp-lbl" style="color:#9A7B6D;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#FFFDF8;">
+                <div class="tp-row" style="color:#4A2C1A; border-color:#E8C8B0;"><span>S-20260329-0525</span><span style="color:#A0263A;">161,000</span></div>
+                <div class="tp-row" style="color:#4A2C1A; border-color:#E8C8B0;"><span>S-20260329-0524</span><span style="color:#2D6E46;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#FFFDF8;"><div class="tp-color" style="background:#A0263A;"></div><div class="tp-color" style="background:#2D6E46;"></div><div class="tp-color" style="background:#C75B2A;"></div><div class="tp-color" style="background:#FDF2E9;"></div></div>
+    <div class="tp-desc" style="color:#9A7B6D; background:#FFFDF8;">Anor guli va yashil bargli suzana kashtasi</div>
+</div>
+
+<!-- Paxta -->
+<div class="theme-preview" data-theme-id="paxta" style="background:#F4F9F0;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#FEFFFE;"><h5 style="color:#1B4332;">Paxta</h5><span class="tp-badge" style="background:#4A8C5C; color:#fff;">Dalalar</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#F0F7EC; border:1px solid #C8DFC0;"><div class="tp-sidebar-item active" style="background:#4A8C5C;"></div><div class="tp-sidebar-item" style="background:#B8860B; opacity:.5;"></div><div class="tp-sidebar-item" style="background:#C8DFC0;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#FEFFFE; border-color:#4A8C5C;"><div class="tp-num" style="color:#2D6B3F;">1,250</div><div class="tp-lbl" style="color:#7A9B80;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#FEFFFE; border-color:#B8860B;"><div class="tp-num" style="color:#B8860B;">85.2M</div><div class="tp-lbl" style="color:#7A9B80;">Daromad</div></div>
+                <div class="tp-stat" style="background:#FEFFFE; border-color:#8BB174;"><div class="tp-num" style="color:#4A8C5C;">94%</div><div class="tp-lbl" style="color:#7A9B80;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#FEFFFE;">
+                <div class="tp-row" style="color:#1B4332; border-color:#C8DFC0;"><span>S-20260329-0525</span><span style="color:#2D6B3F;">161,000</span></div>
+                <div class="tp-row" style="color:#1B4332; border-color:#C8DFC0;"><span>S-20260329-0524</span><span style="color:#B8860B;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#FEFFFE;"><div class="tp-color" style="background:#4A8C5C;"></div><div class="tp-color" style="background:#8BB174;"></div><div class="tp-color" style="background:#B8860B;"></div><div class="tp-color" style="background:#F0F7EC;"></div></div>
+    <div class="tp-desc" style="color:#7A9B80; background:#FEFFFE;">Paxta dalalarining oppoq va yam-yashil ranglari</div>
+</div>
+
+<!-- Minora -->
+<div class="theme-preview" data-theme-id="minora" style="background:#1C1408;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#14100A;"><h5 style="color:#E0D0B0;">Minora</h5><span class="tp-badge" style="background:#C8961E; color:#fff;">Buxoro</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#14100A;"><div class="tp-sidebar-item active" style="background:#D4A843;"></div><div class="tp-sidebar-item" style="background:#8B6914; opacity:.6;"></div><div class="tp-sidebar-item" style="background:#3A2E16;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#231B0E; border-color:#C8961E;"><div class="tp-num" style="color:#F0D48A;">1,250</div><div class="tp-lbl" style="color:#A89570;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#231B0E; border-color:#D4A843;"><div class="tp-num" style="color:#F0D48A;">85.2M</div><div class="tp-lbl" style="color:#A89570;">Daromad</div></div>
+                <div class="tp-stat" style="background:#231B0E; border-color:#8B6914;"><div class="tp-num" style="color:#D4A843;">94%</div><div class="tp-lbl" style="color:#A89570;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#231B0E;">
+                <div class="tp-row" style="color:#E0D0B0; border-color:#3A2E16;"><span>S-20260329-0525</span><span style="color:#F0D48A;">161,000</span></div>
+                <div class="tp-row" style="color:#E0D0B0; border-color:#3A2E16;"><span>S-20260329-0524</span><span style="color:#D4A843;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#14100A;"><div class="tp-color" style="background:#C8961E;"></div><div class="tp-color" style="background:#D4A843;"></div><div class="tp-color" style="background:#F0D48A;"></div><div class="tp-color" style="background:#231B0E;"></div></div>
+    <div class="tp-desc" style="color:#A89570; background:#14100A;">Buxoro minoralarining oltin jilosi va cho'l qumi</div>
+</div>
+
+<!-- Chust -->
+<div class="theme-preview" data-theme-id="chust" style="background:#111214;">
+    <span class="tp-active-mark">Faol</span>
+    <div class="tp-header" style="background:#0A0B0D;"><h5 style="color:#C0C4CC;">Chust</h5><span class="tp-badge" style="background:#9CA3AF; color:#111;">Pichoq</span></div>
+    <div class="tp-body">
+        <div class="tp-sidebar" style="background:#0A0B0D;"><div class="tp-sidebar-item active" style="background:#D1D5DB;"></div><div class="tp-sidebar-item" style="background:#C8961E; opacity:.5;"></div><div class="tp-sidebar-item" style="background:#2A2D33;"></div></div>
+        <div class="tp-content">
+            <div class="tp-stats">
+                <div class="tp-stat" style="background:#16181C; border-color:#9CA3AF;"><div class="tp-num" style="color:#D1D5DB;">1,250</div><div class="tp-lbl" style="color:#6B7280;">Sotuvlar</div></div>
+                <div class="tp-stat" style="background:#16181C; border-color:#C8961E;"><div class="tp-num" style="color:#C8961E;">85.2M</div><div class="tp-lbl" style="color:#6B7280;">Daromad</div></div>
+                <div class="tp-stat" style="background:#16181C; border-color:#D1D5DB;"><div class="tp-num" style="color:#D1D5DB;">94%</div><div class="tp-lbl" style="color:#6B7280;">Bajarildi</div></div>
+            </div>
+            <div class="tp-table" style="background:#16181C;">
+                <div class="tp-row" style="color:#C0C4CC; border-color:#2A2D33;"><span>S-20260329-0525</span><span style="color:#D1D5DB;">161,000</span></div>
+                <div class="tp-row" style="color:#C0C4CC; border-color:#2A2D33;"><span>S-20260329-0524</span><span style="color:#C8961E;">3,900,000</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="tp-colors" style="background:#0A0B0D;"><div class="tp-color" style="background:#9CA3AF;"></div><div class="tp-color" style="background:#D1D5DB;"></div><div class="tp-color" style="background:#C8961E;"></div><div class="tp-color" style="background:#16181C;"></div></div>
+    <div class="tp-desc" style="color:#6B7280; background:#0A0B0D;">Chust pichoqlarining kumush po'lat va qora dasta</div>
+</div>
+
+</div>
+
+<script>
+(function(){
+    var current = localStorage.getItem('totli-theme') || 'sage-enterprise';
+    // Faol temani belgilash
+    document.querySelectorAll('.theme-preview[data-theme-id]').forEach(function(el){
+        if (el.dataset.themeId === current) el.classList.add('active-theme');
+        el.addEventListener('click', function(){
+            var id = this.dataset.themeId;
+            localStorage.setItem('totli-theme', id);
+            document.documentElement.setAttribute('data-theme', id);
+            document.querySelectorAll('.theme-preview').forEach(function(e){ e.classList.remove('active-theme'); });
+            this.classList.add('active-theme');
+        });
+    });
+})();
+</script>
+{% endblock %}

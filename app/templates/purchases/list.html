@@ -22,29 +22,18 @@
 
     <!-- Filter card -->
     <div class="filter-card">
-        <form method="get" action="/purchases" class="row align-items-end g-2">
+        <form method="get" action="/purchases" class="d-flex align-items-center gap-2 flex-nowrap">
             {% if from_pos %}<input type="hidden" name="from" value="pos">{% endif %}
-            <div class="col-md-3 col-sm-6">
-                <label class="form-label">Boshlanish sanasi</label>
-                <input type="date" name="date_from" class="form-control" value="{{ request.query_params.get('date_from', '') }}">
-            </div>
-            <div class="col-md-3 col-sm-6">
-                <label class="form-label">Tugash sanasi</label>
-                <input type="date" name="date_to" class="form-control" value="{{ request.query_params.get('date_to', '') }}">
-            </div>
-            <div class="col-md-3 col-sm-6">
-                <label class="form-label">Ombor</label>
-                <select name="warehouse_id" class="form-select">
-                    <option value="">— Barcha omborlar —</option>
-                    {% for wh in warehouses or [] %}
-                    <option value="{{ wh.id }}" {% if request.query_params.get('warehouse_id')|string == wh.id|string %}selected{% endif %}>{{ wh.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="col-md-3 col-sm-6 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel me-1"></i>Filtrlash</button>
-                <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="btn btn-outline-secondary btn-sm" title="Tozalash"><i class="bi bi-x-circle"></i></a>
-            </div>
+            <input type="date" name="date_from" class="form-control form-control-sm" style="max-width:180px;" value="{{ request.query_params.get('date_from', '') }}" title="Boshlanish sanasi">
+            <input type="date" name="date_to" class="form-control form-control-sm" style="max-width:180px;" value="{{ request.query_params.get('date_to', '') }}" title="Tugash sanasi">
+            <select name="warehouse_id" class="form-select form-select-sm" style="max-width:200px;">
+                <option value="">— Barcha omborlar —</option>
+                {% for wh in warehouses or [] %}
+                <option value="{{ wh.id }}" {% if request.query_params.get('warehouse_id')|string == wh.id|string %}selected{% endif %}>{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm text-nowrap" style="flex-shrink:0;"><i class="bi bi-funnel me-1"></i>Filtrlash</button>
+            <a href="/purchases{% if from_pos %}?from=pos{% endif %}" class="btn btn-outline-secondary btn-sm" style="flex-shrink:0;" title="Tozalash"><i class="bi bi-x-circle"></i></a>
         </form>
     </div>
 

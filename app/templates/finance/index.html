@@ -101,12 +101,12 @@
 <div class="card data-table">
   <div class="card-header">
     <span class="fw-bold"><i class="bi bi-clock-history text-primary"></i> So'nggi to'lovlar</span>
-    <form method="get" action="/finance" class="d-flex flex-wrap align-items-center gap-2">
+    <form method="get" action="/finance" class="d-flex align-items-center gap-2 flex-nowrap">
       <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_from or '' }}" title="Sana dan">
       <span class="text-muted small">—</span>
       <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_to or '' }}" title="Sana gacha">
-      <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel-fill"></i></button>
-      <a href="/finance" class="btn btn-outline-secondary top-btn" title="Tozalash"><i class="bi bi-x-circle"></i></a>
+      <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel-fill"></i></button>
+      <a href="/finance" class="btn btn-sm btn-outline-secondary" title="Tozalash"><i class="bi bi-x-circle"></i></a>
     </form>
   </div>
   <div class="card-body p-0" style="overflow-x:auto;">
