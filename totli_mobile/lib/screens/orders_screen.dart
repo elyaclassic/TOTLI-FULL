@@ -19,6 +19,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   List<Map<String, dynamic>> _orders = [];
   List<Map<String, dynamic>> _offlineOrders = [];
   bool _isLoading = true;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -40,7 +41,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
     if (token != null && _syncService.isOnline) {
       try {
-        final result = await ApiService.getMyOrders(token).timeout(const Duration(seconds: 10));
+        final dateStr = _selectedDate.toIso8601String().substring(0, 10);
+        final result = await ApiService.getMyOrders(token, date: dateStr).timeout(const Duration(seconds: 10));
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -197,6 +199,33 @@ class _OrdersScreenState extends State<OrdersScreen> {
     _loadOrders();
   }
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year && _selectedDate.month == now.month && _selectedDate.day == now.day;
+  }
+
+  String get _selectedDateStr => _selectedDate.toIso8601String().substring(0, 10);
+
+  void _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() => _selectedDate = picked);
+      _loadOrders();
+    }
+  }
+
+  void _goDay(int delta) {
+    final next = _selectedDate.add(Duration(days: delta));
+    if (next.isAfter(DateTime.now())) return;
+    setState(() => _selectedDate = next);
+    _loadOrders();
+  }
+
   @override
   Widget build(BuildContext context) {
     final pendingOffline = _offlineOrders.where((o) => o['status'] == 'pending').toList();
@@ -205,6 +234,68 @@ class _OrdersScreenState extends State<OrdersScreen> {
     return Scaffold(
       body: Column(
         children: [
+          // Sana tanlash
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => _goDay(-1),
+                  icon: const Icon(Icons.chevron_left),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isToday ? const Color(0xFF017449).withOpacity(0.1) : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _isToday ? const Color(0xFF017449) : Colors.grey.shade300),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.calendar_today, size: 16, color: _isToday ? const Color(0xFF017449) : Colors.grey[700]),
+                          const SizedBox(width: 8),
+                          Text(
+                            _isToday ? 'Bugun — $_selectedDateStr' : _selectedDateStr,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _isToday ? const Color(0xFF017449) : Colors.grey[800],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _isToday ? null : () => _goDay(1),
+                  icon: const Icon(Icons.chevron_right),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (!_isToday)
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _selectedDate = DateTime.now());
+                      _loadOrders();
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF017449),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    child: const Text('Bugun', style: TextStyle(fontSize: 12)),
+                  ),
+              ],
+            ),
+          ),
           // Offline banner
           if (!_syncService.isOnline)
             Container(

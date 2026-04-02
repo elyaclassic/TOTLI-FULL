@@ -202,29 +202,28 @@
 
 {% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-{% endblock %}
-
 {% block extra_js %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 {% if locations %}
+<script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey={{ yandex_maps_apikey }}" type="text/javascript"></script>
 <script>
-    var map = L.map('miniMap').setView([{{ locations[0].latitude }}, {{ locations[0].longitude }}], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
-
-    // Oxirgi joylashuv markeri
-    var truckIcon = L.divIcon({
-        html: '<i class="bi bi-truck-front-fill" style="font-size: 24px; color: #0d6efd;"></i>',
-        iconSize: [30, 30],
-        className: 'truck-marker'
+ymaps.ready(function() {
+    var map = new ymaps.Map('miniMap', {
+        center: [{{ locations[0].latitude }}, {{ locations[0].longitude }}],
+        zoom: 14,
+        controls: ['zoomControl']
     });
-
-    L.marker([{{ locations[0].latitude }}, {{ locations[0].longitude }}], {icon: truckIcon})
-        .addTo(map)
-        .bindPopup('<b>{{ driver.full_name }}</b><br>{{ locations[0].recorded_at.strftime("%H:%M") }}');
+    var placemark = new ymaps.Placemark(
+        [{{ locations[0].latitude }}, {{ locations[0].longitude }}],
+        {
+            balloonContentHeader: '{{ driver.full_name|tojson }}',
+            balloonContentBody: '{{ locations[0].recorded_at.strftime("%H:%M") }}'
+        },
+        {
+            preset: 'islands#greenDeliveryIcon'
+        }
+    );
+    map.geoObjects.add(placemark);
+});
 </script>
 {% endif %}
 {% endblock %}

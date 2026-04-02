@@ -55,11 +55,11 @@ async def pwa_config():
 async def app_version():
     """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
     return {
-        "version": "1.8.0",
-        "build": 41,
+        "version": "1.8.3",
+        "build": 43,
         "force_update": True,
         "download_url": "/api/app/download",
-        "changelog": "Split to'lov (naqd+plastik), qarzdorlar, telefon qo'ng'iroq, xarita",
+        "changelog": "Vizitlar va yetkazishlar sana filtri, kunlar bo'yicha ko'rish",
     }
 
 
@@ -573,21 +573,23 @@ async def agent_partners(token: str = None, db: Session = Depends(get_db)):
 
 
 @router.get("/agent/visits")
-async def agent_visits(request: Request, token: str = None, db: Session = Depends(get_db)):
-    """Agent uchun tashriflar ro'yxati"""
+async def agent_visits(request: Request, token: str = None, date: str = None, db: Session = Depends(get_db)):
+    """Agent uchun tashriflar ro'yxati. date=YYYY-MM-DD bo'lsa shu kunniki qaytaradi."""
     try:
         tk = _extract_token(request, token)
         agent = _agent_from_token(tk, db)
         if not agent:
             return {"success": False, "error": "Invalid token"}
 
-        visits = (
-            db.query(Visit)
-            .filter(Visit.agent_id == agent.id)
-            .order_by(Visit.visit_date.desc())
-            .limit(50)
-            .all()
-        )
+        from sqlalchemy import func as sqla_func
+        q = db.query(Visit).filter(Visit.agent_id == agent.id)
+        if date:
+            try:
+                d = datetime.strptime(date, "%Y-%m-%d").date()
+                q = q.filter(sqla_func.date(Visit.visit_date) == d)
+            except ValueError:
+                pass
+        visits = q.order_by(Visit.visit_date.desc()).limit(200).all()
         result = []
         for v in visits:
             partner = db.query(Partner).filter(Partner.id == v.partner_id).first() if v.partner_id else None
@@ -749,21 +751,23 @@ def _driver_from_token(token: str, db: Session):
 
 
 @router.get("/driver/deliveries")
-async def driver_deliveries(request: Request, token: str = None, db: Session = Depends(get_db)):
-    """Haydovchiga tayinlangan yetkazishlar ro'yxati"""
+async def driver_deliveries(request: Request, token: str = None, date: str = None, db: Session = Depends(get_db)):
+    """Haydovchiga tayinlangan yetkazishlar ro'yxati. date=YYYY-MM-DD bo'lsa shu kunniki."""
     try:
         tk = token or (request.headers.get("Authorization", "")[7:] if request.headers.get("Authorization", "").startswith("Bearer ") else None)
         driver = _driver_from_token(tk, db)
         if not driver:
             return {"success": False, "error": "Invalid token"}
 
-        deliveries = (
-            db.query(Delivery)
-            .filter(Delivery.driver_id == driver.id)
-            .order_by(Delivery.created_at.desc())
-            .limit(50)
-            .all()
-        )
+        from sqlalchemy import func as sqla_func
+        q = db.query(Delivery).filter(Delivery.driver_id == driver.id)
+        if date:
+            try:
+                d = datetime.strptime(date, "%Y-%m-%d").date()
+                q = q.filter(sqla_func.date(Delivery.created_at) == d)
+            except ValueError:
+                pass
+        deliveries = q.order_by(Delivery.created_at.desc()).limit(200).all()
         result = []
         for d in deliveries:
             order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None
@@ -805,7 +809,7 @@ async def driver_deliveries(request: Request, token: str = None, db: Session = D
                 "notes": d.notes or "",
                 "total": float(order.total or 0) if order else 0,
                 "paid": float(order.paid or 0) if order else 0,
-                "debt": float(order.debt or 0) if order else 0,
+                "debt": max(float(order.total or 0) - float(order.paid or 0), 0) if order else 0,
                 "latitude": lat,
                 "longitude": lng,
                 "items": items,
@@ -1453,19 +1457,21 @@ async def agent_create_order(
 
 
 @router.get("/agent/my-orders")
-async def agent_my_orders(request: Request, token: str = None, db: Session = Depends(get_db)):
-    """Agent yaratgan buyurtmalar (ORM)."""
+async def agent_my_orders(request: Request, token: str = None, date: str = None, db: Session = Depends(get_db)):
+    """Agent yaratgan buyurtmalar (ORM). date=YYYY-MM-DD bo'lsa shu kunniki."""
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
-        orders = (
-            db.query(Order)
-            .filter(Order.agent_id == agent.id)
-            .order_by(Order.id.desc())
-            .limit(50)
-            .all()
-        )
+        from sqlalchemy import func as sqla_func
+        q = db.query(Order).filter(Order.agent_id == agent.id)
+        if date:
+            try:
+                d = datetime.strptime(date, "%Y-%m-%d").date()
+                q = q.filter(sqla_func.date(Order.created_at) == d)
+            except ValueError:
+                pass
+        orders = q.order_by(Order.id.desc()).limit(200).all()
         result = []
         for o in orders:
             items = []

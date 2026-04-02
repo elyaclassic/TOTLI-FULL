@@ -117,6 +117,7 @@ async def driver_detail(
         "locations": locations,
         "deliveries": deliveries,
         "page_title": f"Haydovchi: {driver.full_name}",
+        "yandex_maps_apikey": _get_yandex_apikey(),
     })
 
 
@@ -159,19 +160,59 @@ async def map_view(request: Request, db: Session = Depends(get_db), current_user
                 "time": last_loc.recorded_at.strftime("%H:%M"),
                 "vehicle": driver.vehicle_number,
             })
-    partner_locations = db.query(PartnerLocation).all()
+    # Agent dict (id -> name)
+    agent_dict = {a.id: a.full_name for a in agents}
+    # Partner mijozlar + agent statistika
+    all_partners = db.query(Partner).filter(Partner.is_active == True).all()
+    # Agent bo'yicha mijozlar soni (jami va xaritadagi)
+    agent_partner_total = {}
+    for p in all_partners:
+        aid = p.agent_id or 0
+        agent_partner_total[aid] = agent_partner_total.get(aid, 0) + 1
+
     partner_markers = []
-    for loc in partner_locations:
-        partner = db.query(Partner).filter(Partner.id == loc.partner_id).first()
-        if partner and loc.latitude and loc.longitude:
+    agent_partner_on_map = {}
+    seen_ids = set()
+    # 1) Partner.latitude/longitude dan
+    for p in all_partners:
+        if p.latitude and p.longitude:
+            aid = p.agent_id or 0
+            agent_partner_on_map[aid] = agent_partner_on_map.get(aid, 0) + 1
+            seen_ids.add(p.id)
             partner_markers.append({
-                "id": loc.partner_id,
-                "name": partner.name,
-                "type": "partner",
-                "lat": loc.latitude,
-                "lng": loc.longitude,
-                "address": loc.address,
+                "id": p.id, "name": p.name, "type": "partner",
+                "lat": p.latitude, "lng": p.longitude,
+                "address": p.address or "",
+                "agent_id": aid,
+                "agent_name": agent_dict.get(aid, "Tayinlanmagan"),
             })
+    # 2) PartnerLocation dan (Partner.lat bo'sh bo'lganlar)
+    partner_locations = db.query(PartnerLocation).all()
+    for loc in partner_locations:
+        if loc.partner_id in seen_ids or not loc.latitude or not loc.longitude:
+            continue
+        partner = db.query(Partner).filter(Partner.id == loc.partner_id).first()
+        if partner:
+            aid = partner.agent_id or 0
+            agent_partner_on_map[aid] = agent_partner_on_map.get(aid, 0) + 1
+            seen_ids.add(partner.id)
+            partner_markers.append({
+                "id": loc.partner_id, "name": partner.name, "type": "partner",
+                "lat": loc.latitude, "lng": loc.longitude,
+                "address": loc.address or partner.address or "",
+                "agent_id": aid,
+                "agent_name": agent_dict.get(aid, "Tayinlanmagan"),
+            })
+    # Agent ro'yxati (chap panel uchun)
+    agent_list = []
+    for a in agents:
+        on_map = agent_partner_on_map.get(a.id, 0)
+        total = agent_partner_total.get(a.id, 0)
+        if total > 0:
+            agent_list.append({"id": a.id, "name": a.full_name, "on_map": on_map, "total": total})
+    # Tayinlanmagan
+    unassigned_on_map = agent_partner_on_map.get(0, 0)
+    unassigned_total = agent_partner_total.get(0, 0)
     try:
         from app.config.maps_config import MAP_PROVIDER
         map_provider = MAP_PROVIDER
@@ -194,6 +235,9 @@ async def map_view(request: Request, db: Session = Depends(get_db), current_user
         "region_markers": [],
         "map_provider": map_provider,
         "yandex_maps_apikey": yandex_apikey,
+        "agent_list": agent_list,
+        "unassigned_on_map": unassigned_on_map,
+        "unassigned_total": unassigned_total,
         "page_title": "Xarita",
     })
 

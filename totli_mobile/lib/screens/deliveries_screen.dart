@@ -23,6 +23,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   List<Map<String, dynamic>> _deliveries = [];
   bool _isLoading = true;
   int _pendingActions = 0;
+  DateTime _selectedDate = DateTime.now();
 
   @override
   void initState() {
@@ -46,7 +47,8 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
         await _syncService.syncPendingDeliveries();
         _pendingActions = await _offlineDb.getPendingDeliveryActionCount();
       }
-      final r = await ApiService.getDeliveries(token);
+      final dateStr = _selectedDate.toIso8601String().substring(0, 10);
+      final r = await ApiService.getDeliveries(token, date: dateStr);
       if (r['success'] == true) {
         _deliveries = List<Map<String, dynamic>>.from(r['deliveries'] ?? []);
         // Cache ga saqlash
@@ -83,59 +85,157 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   Color _sColor(String s) { switch (s) { case 'in_progress': return Colors.blue; case 'delivered': return Colors.green; case 'failed': return Colors.red; default: return Colors.orange; } }
   String _fmt(double v) { if (v <= 0) return '0'; final s = v.toInt().toString(); final b = StringBuffer(); for (int i = 0; i < s.length; i++) { if (i > 0 && (s.length - i) % 3 == 0) b.write(' '); b.write(s[i]); } return b.toString(); }
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year && _selectedDate.month == now.month && _selectedDate.day == now.day;
+  }
+
+  String get _selectedDateStr => _selectedDate.toIso8601String().substring(0, 10);
+
+  void _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() => _selectedDate = picked);
+      _load();
+    }
+  }
+
+  void _goDay(int delta) {
+    final next = _selectedDate.add(Duration(days: delta));
+    if (next.isAfter(DateTime.now())) return;
+    setState(() => _selectedDate = next);
+    _load();
+  }
+
+  Widget _buildDateBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => _goDay(-1),
+            icon: const Icon(Icons.chevron_left),
+            visualDensity: VisualDensity.compact,
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                decoration: BoxDecoration(
+                  color: _isToday ? const Color(0xFF017449).withOpacity(0.1) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: _isToday ? const Color(0xFF017449) : Colors.grey.shade300),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.calendar_today, size: 16, color: _isToday ? const Color(0xFF017449) : Colors.grey[700]),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isToday ? 'Bugun — $_selectedDateStr' : _selectedDateStr,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: _isToday ? const Color(0xFF017449) : Colors.grey[800],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: _isToday ? null : () => _goDay(1),
+            icon: const Icon(Icons.chevron_right),
+            visualDensity: VisualDensity.compact,
+          ),
+          if (!_isToday)
+            TextButton(
+              onPressed: () {
+                setState(() => _selectedDate = DateTime.now());
+                _load();
+              },
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF017449),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: const Text('Bugun', style: TextStyle(fontSize: 12)),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final active = _deliveries.where((d) => !['delivered', 'failed'].contains(d['status'])).toList();
     final done = _deliveries.where((d) => ['delivered', 'failed'].contains(d['status'])).toList();
-    return _isLoading
-        ? const Center(child: CircularProgressIndicator())
-        : _deliveries.isEmpty
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                if (!_syncService.isOnline) ...[
-                  const Icon(Icons.wifi_off, size: 48, color: Colors.orange),
-                  const SizedBox(height: 8),
-                  const Text('Offline rejim', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text('Avval internetga ulanib ma\'lumotlarni yuklang', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
-                ] else ...[
-                  Icon(Icons.local_shipping_outlined, size: 64, color: Colors.grey[400]), const SizedBox(height: 16),
-                  const Text('Yetkazishlar yo\'q', style: TextStyle(color: Colors.grey)),
-                ],
-              ]))
-            : RefreshIndicator(onRefresh: _load, child: ListView(children: [
-                // Offline banner
-                if (!_syncService.isOnline)
-                  Container(
-                    color: Colors.orange.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Row(children: [
-                      const Icon(Icons.wifi_off, size: 18, color: Colors.orange),
-                      const SizedBox(width: 8),
-                      const Expanded(child: Text('Offline rejim — cache ma\'lumotlar', style: TextStyle(fontSize: 13, color: Colors.orange))),
-                    ]),
-                  ),
-                // Sync banner
-                if (_pendingActions > 0 && _syncService.isOnline)
-                  Container(
-                    color: Colors.blue.shade50,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    child: Row(children: [
-                      const Icon(Icons.sync, size: 18, color: Colors.blue),
-                      const SizedBox(width: 8),
-                      Expanded(child: Text('$_pendingActions ta yetkazish yuborilmagan', style: const TextStyle(fontSize: 13))),
-                      TextButton(onPressed: _syncNow, child: const Text('Sinxronlash')),
-                    ]),
-                  ),
-                if (active.isNotEmpty) ...[
-                  Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Faol (${active.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
-                  ...active.map(_tile),
-                ],
-                if (done.isNotEmpty) ...[
-                  Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Yakunlangan (${done.length})', style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
-                  ...done.map(_tile),
-                ],
-                const SizedBox(height: 20),
-              ]));
+    return Column(
+      children: [
+        _buildDateBar(),
+        Expanded(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _deliveries.isEmpty
+                  ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                      if (!_syncService.isOnline) ...[
+                        const Icon(Icons.wifi_off, size: 48, color: Colors.orange),
+                        const SizedBox(height: 8),
+                        const Text('Offline rejim', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 4),
+                        Text('Avval internetga ulanib ma\'lumotlarni yuklang', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+                      ] else ...[
+                        Icon(Icons.local_shipping_outlined, size: 64, color: Colors.grey[400]), const SizedBox(height: 16),
+                        Text('$_selectedDateStr — yetkazishlar yo\'q', style: const TextStyle(color: Colors.grey)),
+                      ],
+                    ]))
+                  : RefreshIndicator(onRefresh: _load, child: ListView(children: [
+                      // Offline banner
+                      if (!_syncService.isOnline)
+                        Container(
+                          color: Colors.orange.shade50,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: Row(children: [
+                            const Icon(Icons.wifi_off, size: 18, color: Colors.orange),
+                            const SizedBox(width: 8),
+                            const Expanded(child: Text('Offline rejim — cache ma\'lumotlar', style: TextStyle(fontSize: 13, color: Colors.orange))),
+                          ]),
+                        ),
+                      // Sync banner
+                      if (_pendingActions > 0 && _syncService.isOnline)
+                        Container(
+                          color: Colors.blue.shade50,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          child: Row(children: [
+                            const Icon(Icons.sync, size: 18, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Expanded(child: Text('$_pendingActions ta yetkazish yuborilmagan', style: const TextStyle(fontSize: 13))),
+                            TextButton(onPressed: _syncNow, child: const Text('Sinxronlash')),
+                          ]),
+                        ),
+                      if (active.isNotEmpty) ...[
+                        Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Faol (${active.length})', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold))),
+                        ...active.map(_tile),
+                      ],
+                      if (done.isNotEmpty) ...[
+                        Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 4), child: Text('Yakunlangan (${done.length})', style: TextStyle(fontSize: 13, color: Colors.grey[600]))),
+                        ...done.map(_tile),
+                      ],
+                      const SizedBox(height: 20),
+                    ])),
+        ),
+      ],
+    );
   }
 
   Widget _tile(Map<String, dynamic> d) {

@@ -96,8 +96,9 @@ class ApiService {
   }
 
   // ===== AGENT: ORDERS =====
-  static Future<Map<String, dynamic>> getMyOrders(String token) async {
-    return _get('/api/agent/my-orders', token);
+  static Future<Map<String, dynamic>> getMyOrders(String token, {String? date}) async {
+    final query = date != null ? '?date=$date' : '';
+    return _get('/api/agent/my-orders$query', token);
   }
 
   static Future<Map<String, dynamic>> createOrder(String token, Map<String, dynamic> orderData) async {
@@ -109,8 +110,9 @@ class ApiService {
   }
 
   // ===== AGENT: VISITS =====
-  static Future<Map<String, dynamic>> getVisits(String token) async {
-    return _get('/api/agent/visits', token);
+  static Future<Map<String, dynamic>> getVisits(String token, {String? date}) async {
+    final query = date != null ? '?date=$date' : '';
+    return _get('/api/agent/visits$query', token);
   }
 
   static Future<Map<String, dynamic>> checkIn(String token, {
@@ -186,8 +188,9 @@ class ApiService {
   }
 
   // ===== DRIVER: DELIVERIES =====
-  static Future<Map<String, dynamic>> getDeliveries(String token) async {
-    return _get('/api/driver/deliveries', token);
+  static Future<Map<String, dynamic>> getDeliveries(String token, {String? date}) async {
+    final query = date != null ? '?date=$date' : '';
+    return _get('/api/driver/deliveries$query', token);
   }
 
   static Future<Map<String, dynamic>> updateDeliveryStatus(String token, int deliveryId, String status, {

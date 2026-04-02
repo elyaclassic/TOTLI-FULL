@@ -20,6 +20,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
   List<Map<String, dynamic>> _visits = [];
   List<Map<String, dynamic>> _partners = [];
   bool _isLoading = true;
+  DateTime _selectedDate = DateTime.now();
 
   // Haftaning kunlari (dart: 1=Dush, 7=Yak; DB: 1=Dush, 6=Shanba, 0=Yak)
   static const _dayNames = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
@@ -33,18 +34,11 @@ class _VisitsScreenState extends State<VisitsScreen> {
 
   String get _todayName => _dayNames[_todayVisitDay];
 
-  /// Bugungi kun bo'yicha rejadagi mijozlar
+  /// Bugungi kun bo'yicha rejadagi mijozlar (faqat bugun tanlanganda ishlaydi)
   List<Map<String, dynamic>> get _todayPlannedPartners {
     final today = _todayVisitDay;
-    // Bugun vizit qilingan partner IDlari
-    final visitedIds = <int>{};
-    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
-    for (final v in _visits) {
-      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
-      if (vDate.startsWith(todayStr)) {
-        visitedIds.add(v['partner_id'] as int);
-      }
-    }
+    // _visits allaqachon tanlangan sana bo'yicha filtrlangan
+    final visitedIds = _visits.map((v) => v['partner_id'] as int).toSet();
     return _partners.where((p) {
       final vd = p['visit_day'];
       return vd != null && vd == today && !visitedIds.contains(p['id']);
@@ -71,8 +65,9 @@ class _VisitsScreenState extends State<VisitsScreen> {
     if (syncService.isOnline) {
       try {
         // Parallel yuklash + 10s umumiy timeout
+        final dateStr = _selectedDate.toIso8601String().substring(0, 10);
         final results = await Future.wait([
-          ApiService.getVisits(token),
+          ApiService.getVisits(token, date: dateStr),
           ApiService.getPartners(token),
         ]).timeout(const Duration(seconds: 10));
         final vResult = results[0];
@@ -208,100 +203,186 @@ class _VisitsScreenState extends State<VisitsScreen> {
     _loadData();
   }
 
+  bool get _isToday {
+    final now = DateTime.now();
+    return _selectedDate.year == now.year && _selectedDate.month == now.month && _selectedDate.day == now.day;
+  }
+
+  String get _selectedDateStr => _selectedDate.toIso8601String().substring(0, 10);
+
+  void _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+    );
+    if (picked != null && picked != _selectedDate) {
+      setState(() => _selectedDate = picked);
+      _loadData();
+    }
+  }
+
+  void _goDay(int delta) {
+    final next = _selectedDate.add(Duration(days: delta));
+    if (next.isAfter(DateTime.now())) return;
+    setState(() => _selectedDate = next);
+    _loadData();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final planned = _todayPlannedPartners;
-    // Bugungi vizitlar
-    final todayStr = DateTime.now().toIso8601String().substring(0, 10);
-    final todayVisits = _visits.where((v) {
-      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
-      return vDate.startsWith(todayStr);
-    }).toList();
+    final planned = _isToday ? _todayPlannedPartners : <Map<String, dynamic>>[];
     return Scaffold(
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadData,
-              child: ListView(
-                children: [
-                  // Bugungi reja
-                  if (planned.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      body: Column(
+        children: [
+          // Sana tanlash qatori
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  onPressed: () => _goDay(-1),
+                  icon: const Icon(Icons.chevron_left),
+                  visualDensity: VisualDensity.compact,
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDate,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: _isToday ? const Color(0xFF017449).withOpacity(0.1) : Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: _isToday ? const Color(0xFF017449) : Colors.grey.shade300),
+                      ),
                       child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Icon(Icons.today, size: 18, color: Color(0xFF017449)),
-                          const SizedBox(width: 6),
+                          Icon(Icons.calendar_today, size: 16, color: _isToday ? const Color(0xFF017449) : Colors.grey[700]),
+                          const SizedBox(width: 8),
                           Text(
-                            'Bugungi reja ($_todayName) — ${planned.length} ta mijoz',
-                            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF017449)),
+                            _isToday ? 'Bugun — $_selectedDateStr' : _selectedDateStr,
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _isToday ? const Color(0xFF017449) : Colors.grey[800],
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    ...planned.map((p) => Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      color: Colors.orange.shade50,
-                      child: ListTile(
-                        dense: true,
-                        leading: CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.orange.shade100,
-                          child: const Icon(Icons.store, color: Colors.orange, size: 18),
-                        ),
-                        title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
-                        subtitle: Text(p['address'] ?? p['phone'] ?? '', style: const TextStyle(fontSize: 11)),
-                        trailing: TextButton.icon(
-                          onPressed: () => _startVisitWithPartner(p),
-                          icon: const Icon(Icons.pin_drop, size: 16),
-                          label: const Text('Kirish', style: TextStyle(fontSize: 12)),
-                          style: TextButton.styleFrom(
-                            foregroundColor: const Color(0xFF017449),
-                            padding: const EdgeInsets.symmetric(horizontal: 8),
-                          ),
-                        ),
-                      ),
-                    )),
-                    const Divider(height: 20, indent: 16, endIndent: 16),
-                  ],
-                  if (planned.isEmpty && todayVisits.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        'Bugun ($_todayName) rejadagi mijozlar yo\'q',
-                        style: TextStyle(fontSize: 13, color: Colors.grey[600]),
-                      ),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _isToday ? null : () => _goDay(1),
+                  icon: const Icon(Icons.chevron_right),
+                  visualDensity: VisualDensity.compact,
+                ),
+                if (!_isToday)
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _selectedDate = DateTime.now());
+                      _loadData();
+                    },
+                    style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFF017449),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                     ),
-                  // Bugungi vizitlar (mijoz bo'yicha guruhlangan)
-                  if (todayVisits.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-                      child: Text(
-                        'Bugungi vizitlar — ${todayVisits.length} ta',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    ..._groupByPartner(todayVisits).entries.map((e) => _buildGroupedVisitTile(e.key, e.value)),
-                  ],
-                  // Oldingi vizitlar (mijoz bo'yicha guruhlangan)
-                  if (_visits.where((v) {
-                    final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
-                    return !vDate.startsWith(todayStr);
-                  }).isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text('Oldingi vizitlar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey)),
-                    ),
-                    ..._groupByPartner(_visits.where((v) {
-                      final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
-                      return !vDate.startsWith(todayStr);
-                    }).toList()).entries.map((e) => _buildGroupedVisitTile(e.key, e.value)),
-                  ],
-                  const SizedBox(height: 80),
-                ],
-              ),
+                    child: const Text('Bugun', style: TextStyle(fontSize: 12)),
+                  ),
+              ],
             ),
+          ),
+          // Kontent
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : RefreshIndicator(
+                    onRefresh: _loadData,
+                    child: ListView(
+                      children: [
+                        // Bugungi reja (faqat bugun tanlanganda)
+                        if (_isToday && planned.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.today, size: 18, color: Color(0xFF017449)),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Bugungi reja ($_todayName) — ${planned.length} ta mijoz',
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF017449)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          ...planned.map((p) => Card(
+                            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 3),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            color: Colors.orange.shade50,
+                            child: ListTile(
+                              dense: true,
+                              leading: CircleAvatar(
+                                radius: 18,
+                                backgroundColor: Colors.orange.shade100,
+                                child: const Icon(Icons.store, color: Colors.orange, size: 18),
+                              ),
+                              title: Text(p['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 14)),
+                              subtitle: Text(p['address'] ?? p['phone'] ?? '', style: const TextStyle(fontSize: 11)),
+                              trailing: TextButton.icon(
+                                onPressed: () => _startVisitWithPartner(p),
+                                icon: const Icon(Icons.pin_drop, size: 16),
+                                label: const Text('Kirish', style: TextStyle(fontSize: 12)),
+                                style: TextButton.styleFrom(
+                                  foregroundColor: const Color(0xFF017449),
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                ),
+                              ),
+                            ),
+                          )),
+                          const Divider(height: 20, indent: 16, endIndent: 16),
+                        ],
+                        if (_isToday && planned.isEmpty && _visits.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                            child: Text(
+                              'Bugun ($_todayName) rejadagi mijozlar yo\'q',
+                              style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                            ),
+                          ),
+                        // Vizitlar (mijoz bo'yicha guruhlangan)
+                        if (_visits.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                            child: Text(
+                              '${_isToday ? "Bugungi" : _selectedDateStr} vizitlar — ${_visits.length} ta',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          ..._groupByPartner(_visits).entries.map((e) => _buildGroupedVisitTile(e.key, e.value)),
+                        ],
+                        if (!_isToday && _visits.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text(
+                                '$_selectedDateStr — vizitlar yo\'q',
+                                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 80),
+                      ],
+                    ),
+                  ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _startVisit,
         backgroundColor: const Color(0xFF017449),

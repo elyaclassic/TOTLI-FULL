@@ -1,61 +1,279 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+<style>
+.map-wrap { position: relative; height: calc(100vh - 90px); min-height: 600px; }
+#mainMap { width: 100%; height: 100%; border-radius: 8px; }
+.map-sidebar {
+    position: absolute; top: 55px; right: 10px; z-index: 500;
+    width: 270px; background: rgba(255,255,255,0.96);
+    border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.15);
+    max-height: calc(100% - 20px); overflow-y: auto;
+}
+.map-sidebar.collapsed { width: auto; }
+.map-sidebar.collapsed .panel-section,
+.map-sidebar.collapsed .sidebar-content { display: none; }
+.sidebar-toggle {
+    position: absolute; top: 6px; right: 6px; z-index: 1;
+    background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 6px;
+    cursor: pointer; font-size: 14px; color: #374151;
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+}
+.sidebar-toggle:hover { background: #e5e7eb; }
+.map-sidebar .panel-section { border-bottom: 1px solid #e5e7eb; }
+.map-sidebar .panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; cursor: pointer; user-select: none;
+}
+.map-sidebar .panel-header h6 { margin: 0; color: var(--primary-color); font-size: 13px; font-weight: 600; }
+.map-sidebar .panel-body { padding: 0 6px 6px; }
+.agent-item {
+    display: flex; align-items: center; padding: 5px 8px; border-radius: 6px;
+    cursor: pointer; font-size: 12px; transition: background 0.15s;
+}
+.agent-item:hover { background: #f0fdf4; }
+.agent-item.active { background: #dcfce7; font-weight: 600; }
+.agent-item .agent-name { flex: 1; }
+.agent-item .agent-count { color: #6b7280; font-size: 11px; }
+.filter-row { padding: 4px 8px; }
+.filter-row label { font-size: 12px; cursor: pointer; }
+.filter-row input[type=checkbox] { margin-right: 4px; }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between mb-4">
-    <h4><i class="bi bi-geo-alt"></i> Real vaqtda xarita</h4>
-    <div>
-        <button class="btn btn-sm btn-outline-primary" onclick="location.reload()">
-            <i class="bi bi-arrow-clockwise"></i> Yangilash
-        </button>
-        <small class="text-muted ms-2">Auto: <span id="countdown">30</span>s</small>
-    </div>
-</div>
+<div class="map-wrap card">
+    <div id="mainMap"></div>
 
-<!-- Filtrlar -->
-<div class="row mb-3">
-    <div class="col-md-8">
-        <div class="btn-group flex-wrap" role="group">
-            <span class="btn btn-outline-primary">
-                <i class="bi bi-person-walking"></i> Agentlar ({{ agent_markers|length }})
-            </span>
-            <span class="btn btn-outline-info">
-                <i class="bi bi-truck"></i> Haydovchilar ({{ driver_markers|length }})
-            </span>
-            <span class="btn btn-outline-success">
-                <i class="bi bi-shop"></i> Mijozlar ({{ partner_markers|length }})
-            </span>
+    <!-- Overlay sidebar -->
+    <div class="map-sidebar" id="mapSidebar">
+        <div class="sidebar-content">
+        <!-- Agentlar -->
+        <div class="panel-section">
+            <div class="panel-header" onclick="togglePanel(this)">
+                <h6><i class="bi bi-people"></i> Agentlar (<span id="visibleCount">{{ partner_markers|length }}</span> / {{ agent_list|sum(attribute='total') + unassigned_total }})</h6>
+                <i class="bi bi-chevron-up"></i>
+            </div>
+            <div class="panel-body">
+                <div class="agent-item active" data-agent-id="all" onclick="filterByAgent('all', this)">
+                    <span class="agent-name">Barchasi</span>
+                    <span class="agent-count">{{ partner_markers|length }}</span>
+                </div>
+                {% for a in agent_list|sort(attribute='name') %}
+                <div class="agent-item" data-agent-id="{{ a.id }}" onclick="filterByAgent({{ a.id }}, this)">
+                    <span class="agent-name">{{ a.name }}</span>
+                    <span class="agent-count">{{ a.on_map }} / {{ a.total }}</span>
+                </div>
+                {% endfor %}
+                {% if unassigned_total > 0 %}
+                <div class="agent-item" data-agent-id="0" onclick="filterByAgent(0, this)">
+                    <span class="agent-name" style="color:#9ca3af;">Tayinlanmagan</span>
+                    <span class="agent-count">{{ unassigned_on_map }} / {{ unassigned_total }}</span>
+                </div>
+                {% endif %}
+            </div>
         </div>
-    </div>
-</div>
 
-<!-- Xarita -->
-<div class="card">
-    <div class="card-body p-0">
-        <div id="mainMap" style="height: 70vh; min-height: 500px;"></div>
-    </div>
-</div>
+        <!-- Qatlamlar -->
+        <div class="panel-section">
+            <div class="panel-header" onclick="togglePanel(this)">
+                <h6><i class="bi bi-funnel"></i> Qatlamlar</h6>
+                <i class="bi bi-chevron-up"></i>
+            </div>
+            <div class="panel-body">
+                <div class="filter-row">
+                    <label><input type="checkbox" id="showPartners" checked onchange="toggleLayer('partners')"> <i class="bi bi-shop text-success"></i> Mijozlar ({{ partner_markers|length }})</label>
+                </div>
+                <div class="filter-row">
+                    <label><input type="checkbox" id="showAgents" checked onchange="toggleLayer('agents')"> <i class="bi bi-person-walking text-primary"></i> Agentlar ({{ agent_markers|length }})</label>
+                </div>
+                <div class="filter-row">
+                    <label><input type="checkbox" id="showDrivers" checked onchange="toggleLayer('drivers')"> <i class="bi bi-truck text-info"></i> Haydovchilar ({{ driver_markers|length }})</label>
+                </div>
+            </div>
+        </div>
 
-<!-- Legend -->
-<div class="card mt-3">
-    <div class="card-body py-2">
-        <div class="d-flex flex-wrap justify-content-around gap-2">
-            <span><i class="bi bi-circle-fill text-primary"></i> Agent</span>
-            <span><i class="bi bi-circle-fill text-info"></i> Haydovchi</span>
-            <span><i class="bi bi-circle-fill text-success"></i> Mijoz</span>
+        <!-- Statistika -->
+        <div class="panel-section">
+            <div class="panel-header" onclick="togglePanel(this)">
+                <h6><i class="bi bi-bar-chart"></i> Statistika</h6>
+                <i class="bi bi-chevron-up"></i>
+            </div>
+            <div class="panel-body" style="font-size:12px;">
+                <div class="d-flex justify-content-between py-1">
+                    <span>Jami mijozlar:</span>
+                    <b>{{ agent_list|sum(attribute='total') + unassigned_total }}</b>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span>Xaritada:</span>
+                    <b>{{ partner_markers|length }}</b>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span>Agentlar:</span>
+                    <b>{{ agent_list|length }}</b>
+                </div>
+                <div class="d-flex justify-content-between py-1">
+                    <span>Haydovchilar:</span>
+                    <b>{{ driver_markers|length }}</b>
+                </div>
+            </div>
+        </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-{% include "map/_yandex_map.html" %}
+<script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ{% if yandex_maps_apikey %}&apikey={{ yandex_maps_apikey }}{% endif %}" type="text/javascript"></script>
 <script>
-// Auto-refresh
-var countdown = 30;
-setInterval(function() {
-    countdown--;
-    document.getElementById('countdown').textContent = countdown;
-    if (countdown <= 0) location.reload();
-}, 1000);
+// Sidebar toggle
+function toggleSidebar() {
+    var sb = document.getElementById('mapSidebar');
+    var icon = sb.querySelector('.sidebar-toggle i');
+    sb.classList.toggle('collapsed');
+    if (sb.classList.contains('collapsed')) {
+        icon.className = 'bi bi-chevron-right';
+    } else {
+        icon.className = 'bi bi-chevron-left';
+    }
+}
+
+// Panel toggle
+function togglePanel(el) {
+    var body = el.nextElementSibling;
+    var icon = el.querySelector('.bi-chevron-down, .bi-chevron-up');
+    if (body.style.display === 'none') {
+        body.style.display = '';
+        if (icon) { icon.classList.remove('bi-chevron-up'); icon.classList.add('bi-chevron-down'); }
+    } else {
+        body.style.display = 'none';
+        if (icon) { icon.classList.remove('bi-chevron-down'); icon.classList.add('bi-chevron-up'); }
+    }
+}
+
+// Ma'lumotlar
+var partnerData = [
+    {% for m in partner_markers %}
+    {id:{{ m.id }}, name:{{ m.name|tojson }}, lat:{{ m.lat }}, lng:{{ m.lng }}, address:{{ (m.address or "")|tojson }}, agent_id:{{ m.agent_id }}, agent_name:{{ m.agent_name|tojson }}},
+    {% endfor %}
+];
+var agentData = [
+    {% for m in agent_markers %}
+    {id:{{ m.id }}, name:{{ m.name|tojson }}, lat:{{ m.lat }}, lng:{{ m.lng }}, time:"{{ m.time }}"},
+    {% endfor %}
+];
+var driverData = [
+    {% for m in driver_markers %}
+    {id:{{ m.id }}, name:{{ m.name|tojson }}, lat:{{ m.lat }}, lng:{{ m.lng }}, time:"{{ m.time }}", vehicle:{{ (m.vehicle or "")|tojson }}},
+    {% endfor %}
+];
+
+var myMap, partnerCluster, agentGroup, driverGroup;
+var currentFilter = 'all';
+
+ymaps.ready(function() {
+    myMap = new ymaps.Map('mainMap', {
+        center: [40.533555, 70.930423],
+        zoom: 11,
+        controls: ['zoomControl', 'searchControl', 'fullscreenControl', 'trafficControl']
+    });
+
+    partnerCluster = new ymaps.GeoObjectCollection();
+
+    agentGroup = new ymaps.GeoObjectCollection();
+    driverGroup = new ymaps.GeoObjectCollection();
+
+    // Mijozlar (klaster bilan)
+    addPartners(partnerData);
+
+    // Agentlar
+    agentData.forEach(function(a) {
+        agentGroup.add(new ymaps.Placemark([a.lat, a.lng], {
+            balloonContent: '<b>' + a.name + '</b><br><small>Agent | ' + a.time + '</small>',
+            iconCaption: a.name
+        }, {preset: 'islands#bluePersonIcon'}));
+    });
+
+    // Haydovchilar
+    driverData.forEach(function(d) {
+        driverGroup.add(new ymaps.Placemark([d.lat, d.lng], {
+            balloonContent: '<b>' + d.name + '</b><br><small>Haydovchi | ' + d.vehicle + ' | ' + d.time + '</small>',
+            iconCaption: d.name
+        }, {preset: 'islands#darkGreenDeliveryIcon'}));
+    });
+
+    myMap.geoObjects.add(partnerCluster);
+    myMap.geoObjects.add(agentGroup);
+    myMap.geoObjects.add(driverGroup);
+
+    // Balloon ochilganda sidebar yashirish
+    myMap.events.add('balloonopen', function() {
+        document.getElementById('mapSidebar').classList.add('collapsed');
+    });
+    myMap.events.add('balloonclose', function() {
+        document.getElementById('mapSidebar').classList.remove('collapsed');
+    });
+
+    // Fit bounds
+    setTimeout(function() {
+        var bounds = myMap.geoObjects.getBounds();
+        if (bounds) myMap.setBounds(bounds, {checkZoomRange: true, zoomMargin: 50});
+    }, 500);
+});
+
+function addPartners(data) {
+    var placemarks = data.map(function(m) {
+        return new ymaps.Placemark([m.lat, m.lng], {
+            hintContent: m.name,
+            balloonContentHeader: '<b>' + m.name + '</b>',
+            balloonContentBody: '<small>' + m.address + '</small>' +
+                (m.agent_name ? '<br><span style="color:#065f46;">Agent: ' + m.agent_name + '</span>' : '')
+        }, {
+            preset: 'islands#greenDotIcon',
+            iconColor: '#065f46'
+        });
+    });
+    partnerCluster.removeAll();
+    placemarks.forEach(function(p) { partnerCluster.add(p); });
+    document.getElementById('visibleCount').textContent = data.length;
+}
+
+function filterByAgent(agentId, el) {
+    // Active class
+    document.querySelectorAll('.agent-item').forEach(function(i) { i.classList.remove('active'); });
+    if (el) el.classList.add('active');
+
+    currentFilter = agentId;
+    var filtered = (agentId === 'all') ? partnerData : partnerData.filter(function(m) { return m.agent_id === agentId; });
+    addPartners(filtered);
+
+    // Fit to filtered
+    if (filtered.length > 0) {
+        setTimeout(function() {
+            var bounds = partnerCluster.getBounds();
+            if (bounds) myMap.setBounds(bounds, {checkZoomRange: true, zoomMargin: 50});
+        }, 300);
+    }
+}
+
+function resetFilter() {
+    filterByAgent('all', document.querySelector('.agent-item[data-agent-id="all"]'));
+}
+
+function toggleLayer(layer) {
+    if (layer === 'partners') {
+        var show = document.getElementById('showPartners').checked;
+        if (show) myMap.geoObjects.add(partnerCluster);
+        else myMap.geoObjects.remove(partnerCluster);
+    } else if (layer === 'agents') {
+        var show = document.getElementById('showAgents').checked;
+        if (show) myMap.geoObjects.add(agentGroup);
+        else myMap.geoObjects.remove(agentGroup);
+    } else if (layer === 'drivers') {
+        var show = document.getElementById('showDrivers').checked;
+        if (show) myMap.geoObjects.add(driverGroup);
+        else myMap.geoObjects.remove(driverGroup);
+    }
+}
 </script>
 {% endblock %}
