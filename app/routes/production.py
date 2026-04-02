@@ -124,19 +124,8 @@ def calculate_production_tannarx(db, production, recipe):
 
 
 def _warehouse_id_for_ingredient(db, product_id, production):
-    """Yarim tayyor mahsulot bo'lsa — nomida 'yarim'/'semi' bor ombordan, aks holda production.warehouse_id."""
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product or getattr(product, "type", None) != "yarim_tayyor":
-        return production.warehouse_id
-    stocks = db.query(Stock).filter(Stock.product_id == product_id, Stock.quantity > 0).all()
-    for st in stocks:
-        wh = db.query(Warehouse).filter(Warehouse.id == st.warehouse_id).first()
-        if wh and st.warehouse_id:
-            name = (wh.name or "").lower()
-            if "yarim" in name or "semi" in name:
-                return st.warehouse_id
-    if stocks:
-        return stocks[0].warehouse_id
+    """Xom ashyo qaysi ombordan olinadi — production.warehouse_id (1-ombor) dan.
+    Retseptda belgilangan ombor → production yaratilganda tanlangan → shu ombordan oladi."""
     return production.warehouse_id
 
 
@@ -1029,6 +1018,7 @@ async def production_edit_materials(
             cost = float(prod.purchase_price or 0)
             total_material_cost += qty * cost
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0.0
+    total_material_qty = sum(float(pi.quantity or 0) for pi in production.production_items)
     return templates.TemplateResponse("production/edit_materials.html", {
         "request": request,
         "current_user": current_user,
@@ -1039,6 +1029,7 @@ async def production_edit_materials(
         "cost_per_unit": cost_per_unit,
         "output_units": output_units,
         "output_unit_name": output_unit_name,
+        "total_material_qty": total_material_qty,
         "page_title": f"Xom ashyo: {production.number}",
     })
 

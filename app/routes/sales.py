@@ -657,11 +657,18 @@ async def sales_revert(
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     status = (getattr(order, "status", None) or "").strip().lower()
-    if status == "waiting_production":
+    if status in ("waiting_production", "confirmed"):
         # Ombor hisobdan chiqarilmagan — faqat draft ga qaytarish
         order.status = "draft"
+        # Confirmed bo'lsa — tegishli yetkazishni ham bekor qilish
+        if status == "confirmed":
+            from app.models.database import Delivery as DeliveryModel
+            delivery = db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id, DeliveryModel.status.in_(["pending", "in_progress"])).first()
+            if delivery:
+                delivery.status = "cancelled"
         db.commit()
-        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+        referer = "/sales/edit/" + str(order_id)
+        return RedirectResponse(url=referer, status_code=303)
     if status != "completed":
         return RedirectResponse(
             url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),

@@ -1593,88 +1593,214 @@ async def report_partner_reconciliation_export(
         by_product_sale[key]["total"] += float(oi.total or 0)
     products_sold = sorted(by_product_sale.values(), key=lambda x: -x["total"])
 
+    from openpyxl.styles import Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Solishtirish"
-    ws["A1"] = "Hisob kitoblarni solishtirish"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws["A2"] = f"TOTLI HOLVA va {partner.name or ''}"
-    ws["A3"] = f"Davr: {date_from} — {date_to}"
-    ws.append([])
-    table_start = 5
-    headers = ["Hujjatlar", "TOTLI HOLVA DT (so'm)", "TOTLI HOLVA KT (so'm)", f"{partner.name or 'Kontragent'} DT (so'm)", f"{partner.name or 'Kontragent'} KT (so'm)"]
-    for c, h in enumerate(headers, 1):
-        cell = ws.cell(row=table_start, column=c, value=h)
-        cell.fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
-        cell.font = Font(bold=True, color="FFFFFF")
-    row_num = table_start + 1
-    ws.cell(row=row_num, column=1, value=f"Davr boshiga qoldiq ({date_from})")
-    ws.cell(row=row_num, column=2, value=opening_balance if opening_balance > 0 else 0)
-    ws.cell(row=row_num, column=3, value=-opening_balance if opening_balance < 0 else 0)
-    ws.cell(row=row_num, column=4, value=-opening_balance if opening_balance < 0 else 0)
-    ws.cell(row=row_num, column=5, value=opening_balance if opening_balance > 0 else 0)
+
+    # Stillar
+    thin_border = Border(
+        left=Side(style="thin"), right=Side(style="thin"),
+        top=Side(style="thin"), bottom=Side(style="thin"),
+    )
+    header_fill = PatternFill(start_color="017449", end_color="017449", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    subheader_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    balance_fill = PatternFill(start_color="E0F2F1", end_color="E0F2F1", fill_type="solid")
+    total_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+    num_fmt = '#,##0'
+    p_name = partner.name or "Kontragent"
+
+    # Sarlavha
+    ws.merge_cells("A1:E1")
+    c = ws["A1"]
+    c.value = "HISOB-KITOBLARNI SOLISHTIRISH"
+    c.font = Font(bold=True, size=16, color="017449")
+    c.alignment = Alignment(horizontal="center")
+
+    ws.merge_cells("A2:E2")
+    c = ws["A2"]
+    c.value = f"TOTLI HOLVA  va  {p_name}"
+    c.font = Font(bold=True, size=12)
+    c.alignment = Alignment(horizontal="center")
+
+    ws.merge_cells("A3:E3")
+    c = ws["A3"]
+    c.value = f"Davr: {date_from}  —  {date_to}"
+    c.font = Font(size=11, color="555555")
+    c.alignment = Alignment(horizontal="center")
+
+    # Jadval sarlavhalari — 2 qatorli merged
+    # 5-qator: Hujjatlar | TOTLI HOLVA (merged B5:C5) | Kontragent (merged D5:E5)
+    # 6-qator: (bo'sh) | DT Haqdor | KT Qarzdor | DT Haqdor | KT Qarzdor
+    ws.merge_cells("A5:A6")
+    c = ws.cell(row=5, column=1, value="HUJJATLAR")
+    c.fill = header_fill
+    c.font = header_font
+    c.alignment = Alignment(horizontal="center", vertical="center")
+    ws.cell(row=6, column=1).fill = header_fill
+
+    ws.merge_cells("B5:C5")
+    c = ws.cell(row=5, column=2, value="TOTLI HOLVA")
+    c.fill = header_fill
+    c.font = header_font
+    c.alignment = Alignment(horizontal="center")
+    ws.cell(row=5, column=3).fill = header_fill
+
+    ws.merge_cells("D5:E5")
+    c = ws.cell(row=5, column=4, value=p_name.upper())
+    c.fill = header_fill
+    c.font = header_font
+    c.alignment = Alignment(horizontal="center")
+    ws.cell(row=5, column=5).fill = header_fill
+
+    sub_headers = {2: "DT Haqdor (so'm)", 3: "KT Qarzdor (so'm)", 4: "DT Haqdor (so'm)", 5: "KT Qarzdor (so'm)"}
+    for ci, h in sub_headers.items():
+        c = ws.cell(row=6, column=ci, value=h)
+        c.fill = subheader_fill
+        c.font = Font(bold=True, size=10)
+        c.alignment = Alignment(horizontal="center")
+        c.border = thin_border
+
+    def _set_balance_row(rn, label, ob):
+        ws.cell(row=rn, column=1, value=label).font = Font(bold=True)
+        for ci in range(1, 6):
+            ws.cell(row=rn, column=ci).fill = balance_fill
+            ws.cell(row=rn, column=ci).border = thin_border
+        vals = [
+            ob if ob > 0 else None,
+            -ob if ob < 0 else None,
+            -ob if ob < 0 else None,
+            ob if ob > 0 else None,
+        ]
+        for ci, v in enumerate(vals, 2):
+            cell = ws.cell(row=rn, column=ci)
+            if v:
+                cell.value = v
+                cell.number_format = num_fmt
+            else:
+                cell.value = "—"
+            cell.alignment = Alignment(horizontal="right")
+            cell.font = Font(bold=True)
+
+    row_num = 7
+    # Davr boshiga qoldiq
+    _set_balance_row(row_num, f"Davr boshiga qoldiq ({date_from})", opening_balance)
     row_num += 1
+
+    # Hujjatlar
     for r in rows:
         ws.cell(row=row_num, column=1, value=r.get("doc_label") or f"{r.get('doc_type', '')} {r.get('doc_number', '')}")
-        ws.cell(row=row_num, column=2, value=r["debit"] if r["debit"] else 0)
-        ws.cell(row=row_num, column=3, value=r["credit"] if r["credit"] else 0)
-        ws.cell(row=row_num, column=4, value=r["credit"] if r["credit"] else 0)
-        ws.cell(row=row_num, column=5, value=r["debit"] if r["debit"] else 0)
+        vals = [
+            (r["debit"], r["credit"]),   # TOTLI HOLVA: DT, KT
+            (r["credit"], r["debit"]),   # Kontragent: DT, KT
+        ]
+        col = 2
+        for dt_val, kt_val in vals:
+            for v in [dt_val, kt_val]:
+                cell = ws.cell(row=row_num, column=col)
+                if v:
+                    cell.value = v
+                    cell.number_format = num_fmt
+                else:
+                    cell.value = "—"
+                cell.alignment = Alignment(horizontal="right")
+                cell.border = thin_border
+                col += 1
+        ws.cell(row=row_num, column=1).border = thin_border
         row_num += 1
-    ws.cell(row=row_num, column=1, value="Jami davr:")
-    ws.cell(row=row_num, column=2, value=total_debit)
-    ws.cell(row=row_num, column=3, value=total_credit)
-    ws.cell(row=row_num, column=4, value=total_credit)
-    ws.cell(row=row_num, column=5, value=total_debit)
+
+    # Jami davr
+    ws.cell(row=row_num, column=1, value="Jami davr:").font = Font(bold=True)
+    ws.cell(row=row_num, column=1).alignment = Alignment(horizontal="right")
+    for ci in range(1, 6):
+        ws.cell(row=row_num, column=ci).fill = total_fill
+        ws.cell(row=row_num, column=ci).border = thin_border
+        ws.cell(row=row_num, column=ci).font = Font(bold=True)
+    for ci, v in [(2, total_debit), (3, total_credit), (4, total_credit), (5, total_debit)]:
+        cell = ws.cell(row=row_num, column=ci, value=v)
+        cell.number_format = num_fmt
+        cell.alignment = Alignment(horizontal="right")
     row_num += 1
-    ws.cell(row=row_num, column=1, value=f"Davr oxiriga qoldiq ({date_to})")
-    ws.cell(row=row_num, column=2, value=closing_balance if closing_balance > 0 else 0)
-    ws.cell(row=row_num, column=3, value=-closing_balance if closing_balance < 0 else 0)
-    ws.cell(row=row_num, column=4, value=-closing_balance if closing_balance < 0 else 0)
-    ws.cell(row=row_num, column=5, value=closing_balance if closing_balance > 0 else 0)
-    row_num += 2  # bo'sh qator, keyin xulosa
-    ws.cell(row=row_num, column=1, value="Bizning foydamizga (kontragent qarzdor):")
-    ws.cell(row=row_num, column=2, value=closing_balance if closing_balance > 0 else 0)
+
+    # Davr oxiriga qoldiq
+    _set_balance_row(row_num, f"Davr oxiriga qoldiq ({date_to})", closing_balance)
+    row_num += 2
+
+    # Xulosa
+    ws.cell(row=row_num, column=1, value="Bizning foydamizga (kontragent qarzdor):").font = Font(bold=True)
+    c = ws.cell(row=row_num, column=2, value=closing_balance if closing_balance > 0 else 0)
+    c.number_format = num_fmt
+    c.font = Font(bold=True, color="CC0000")
     row_num += 1
-    ws.cell(row=row_num, column=1, value="Kontragent foydasiga (biz qarzdormiz):")
-    ws.cell(row=row_num, column=2, value=-closing_balance if closing_balance < 0 else 0)
+    ws.cell(row=row_num, column=1, value="Kontragent foydasiga (biz qarzdormiz):").font = Font(bold=True)
+    c = ws.cell(row=row_num, column=2, value=-closing_balance if closing_balance < 0 else 0)
+    c.number_format = num_fmt
+    c.font = Font(bold=True, color="2E7D32")
+
     ws.column_dimensions["A"].width = 52
-    for col in ["B", "C", "D", "E"]:
-        ws.column_dimensions[col].width = 18
+    for col_letter in ["B", "C", "D", "E"]:
+        ws.column_dimensions[col_letter].width = 22
+    ws.print_area = f"A1:E{row_num}"
+
+    def _build_product_sheet(ws_p, title, color, items, label_empty):
+        ws_p.merge_cells("A1:D1")
+        c = ws_p["A1"]
+        c.value = title
+        c.font = Font(bold=True, size=14, color=color)
+        c.alignment = Alignment(horizontal="center")
+        ws_p.merge_cells("A2:D2")
+        c = ws_p["A2"]
+        c.value = f"Kontragent: {p_name}  |  Davr: {date_from} — {date_to}"
+        c.font = Font(size=11, color="555555")
+        c.alignment = Alignment(horizontal="center")
+        p_headers = ["Mahsulot", "Kod", "Miqdor", "Summa (so'm)"]
+        for ci, h in enumerate(p_headers, 1):
+            cell = ws_p.cell(row=4, column=ci, value=h)
+            cell.fill = PatternFill(start_color=color, end_color=color, fill_type="solid")
+            cell.font = Font(bold=True, color="FFFFFF")
+            cell.border = thin_border
+            cell.alignment = Alignment(horizontal="center")
+        total_sum = 0
+        for i, p in enumerate(items, 5):
+            ws_p.cell(row=i, column=1, value=p["product_name"]).border = thin_border
+            ws_p.cell(row=i, column=2, value=p["product_code"]).border = thin_border
+            c = ws_p.cell(row=i, column=3, value=p["quantity"])
+            c.number_format = '#,##0'
+            c.border = thin_border
+            c.alignment = Alignment(horizontal="right")
+            c = ws_p.cell(row=i, column=4, value=p["total"])
+            c.number_format = num_fmt
+            c.border = thin_border
+            c.alignment = Alignment(horizontal="right")
+            total_sum += p["total"]
+        if items:
+            tr = 5 + len(items)
+            ws_p.cell(row=tr, column=3, value="JAMI:").font = Font(bold=True)
+            ws_p.cell(row=tr, column=3).alignment = Alignment(horizontal="right")
+            c = ws_p.cell(row=tr, column=4, value=total_sum)
+            c.number_format = num_fmt
+            c.font = Font(bold=True)
+            c.alignment = Alignment(horizontal="right")
+            for ci in range(1, 5):
+                ws_p.cell(row=tr, column=ci).fill = total_fill
+                ws_p.cell(row=tr, column=ci).border = thin_border
+        else:
+            ws_p.cell(row=5, column=1, value=label_empty).font = Font(color="999999")
+        ws_p.column_dimensions["A"].width = 40
+        ws_p.column_dimensions["B"].width = 15
+        ws_p.column_dimensions["C"].width = 12
+        ws_p.column_dimensions["D"].width = 20
 
     # Varaq: Kontragentdan xarid qilingan mahsulotlar
     ws_purchase = wb.create_sheet("Xarid qilingan", 1)
-    ws_purchase["A1"] = "Kontragentdan xarid qilingan mahsulotlar"
-    ws_purchase["A1"].font = Font(bold=True, size=12)
-    ws_purchase["A2"] = f"Kontragent: {partner.name or ''}  |  Davr: {date_from} — {date_to}"
-    for c, h in enumerate(["Mahsulot", "Kod", "Miqdor", "Summa (so'm)"], 1):
-        cell = ws_purchase.cell(row=4, column=c, value=h)
-        cell.fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
-        cell.font = Font(bold=True, color="FFFFFF")
-    for i, p in enumerate(products_purchased, 5):
-        ws_purchase.cell(row=i, column=1, value=p["product_name"])
-        ws_purchase.cell(row=i, column=2, value=p["product_code"])
-        ws_purchase.cell(row=i, column=3, value=p["quantity"])
-        ws_purchase.cell(row=i, column=4, value=p["total"])
-    if not products_purchased:
-        ws_purchase.cell(row=5, column=1, value="Davrda xarid qilinmagan.")
+    _build_product_sheet(ws_purchase, "Kontragentdan xarid qilingan mahsulotlar", "2E7D32", products_purchased, "Davrda xarid qilinmagan.")
 
     # Varaq: Kontragentga sotilgan mahsulotlar
     ws_sale = wb.create_sheet("Sotilgan", 2)
-    ws_sale["A1"] = "Kontragentga sotilgan mahsulotlar"
-    ws_sale["A1"].font = Font(bold=True, size=12)
-    ws_sale["A2"] = f"Kontragent: {partner.name or ''}  |  Davr: {date_from} — {date_to}"
-    for c, h in enumerate(["Mahsulot", "Kod", "Miqdor", "Summa (so'm)"], 1):
-        cell = ws_sale.cell(row=4, column=c, value=h)
-        cell.fill = PatternFill(start_color="1565C0", end_color="1565C0", fill_type="solid")
-        cell.font = Font(bold=True, color="FFFFFF")
-    for i, p in enumerate(products_sold, 5):
-        ws_sale.cell(row=i, column=1, value=p["product_name"])
-        ws_sale.cell(row=i, column=2, value=p["product_code"])
-        ws_sale.cell(row=i, column=3, value=p["quantity"])
-        ws_sale.cell(row=i, column=4, value=p["total"])
-    if not products_sold:
-        ws_sale.cell(row=5, column=1, value="Davrda sotuv bo'lmagan.")
+    _build_product_sheet(ws_sale, "Kontragentga sotilgan mahsulotlar", "1565C0", products_sold, "Davrda sotuv bo'lmagan.")
 
     buf = io.BytesIO()
     wb.save(buf)

@@ -126,11 +126,35 @@
                                 <span class="badge-waiting">{{ order.status }}</span>
                                 {% endif %}
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 {% if order.status == 'draft' %}
-                                <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm btn-outline-success py-0 px-2">
-                                    <i class="bi bi-check-lg"></i> Tasdiqlash
+                                <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm btn-outline-success py-0 px-2" title="Tasdiqlash">
+                                    <i class="bi bi-check-lg"></i>
                                 </a>
+                                {% endif %}
+                                {% if order.status in ('draft', 'confirmed') %}
+                                <a href="/sales/edit/{{ order.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Tahrirlash">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                {% endif %}
+                                {% if order.status == 'confirmed' %}
+                                <form action="/sales/{{ order.id }}/revert" method="POST" style="display:inline" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi? (Draft ga qaytadi)')">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Draft ga qaytarish">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                </form>
+                                <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani bekor qilasizmi?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Bekor qilish">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                                {% if order.status in ('cancelled', 'draft') %}
+                                <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani o`chirasizmi?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="O'chirish">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
                                 {% endif %}
                             </td>
                         </tr>
@@ -227,22 +251,24 @@
 </div>
 {% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-{% endblock %}
-
 {% block extra_js %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 {% if locations %}
+<script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=096da66c-342b-4bab-80cd-3b44b851429c" type="text/javascript"></script>
 <script>
-    var map = L.map('miniMap').setView([{{ locations[0].latitude }}, {{ locations[0].longitude }}], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-    }).addTo(map);
+    ymaps.ready(function () {
+        var myMap = new ymaps.Map('miniMap', {
+            center: [{{ locations[0].latitude }}, {{ locations[0].longitude }}],
+            zoom: 15,
+            controls: ['zoomControl']
+        });
 
-    L.marker([{{ locations[0].latitude }}, {{ locations[0].longitude }}])
-        .addTo(map)
-        .bindPopup('<b>{{ agent.full_name }}</b><br>{{ locations[0].recorded_at.strftime("%H:%M") }}');
+        myMap.geoObjects.add(new ymaps.Placemark([{{ locations[0].latitude }}, {{ locations[0].longitude }}], {
+            balloonContent: '<b>{{ agent.full_name }}</b><br><small>{{ locations[0].recorded_at.strftime("%H:%M") }}</small>',
+            iconCaption: '{{ agent.full_name }}'
+        }, {
+            preset: 'islands#blueCircleDotIcon'
+        }));
+    });
 </script>
 {% endif %}
 {% endblock %}

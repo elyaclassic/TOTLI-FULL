@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from sqlalchemy import func, extract
 from app.models.database import (
     get_db, User, Product, Partner, Order, Stock,
-    CashRegister, Employee, Production, Recipe, Warehouse, Notification,
+    CashRegister, Employee, Production, Recipe, Warehouse, Notification, Attendance,
 )
 from app.deps import get_current_user, require_auth
 from app.utils.notifications import get_user_notifications, mark_as_read
@@ -206,6 +206,25 @@ async def home(
         except Exception as e:
             print(f"[Premium] Qo'shimcha ma'lumot xatosi: {e}")
 
+    # Bugungi ishga kelgan hodimlar (davomat)
+    today_staff = []
+    try:
+        today_att = db.query(Attendance).filter(
+            Attendance.date == today,
+            Attendance.status == "present",
+        ).all()
+        for a in today_att:
+            emp = db.query(Employee).filter(Employee.id == a.employee_id).first()
+            if emp and emp.is_active:
+                today_staff.append({
+                    "id": emp.id,
+                    "name": emp.full_name or emp.code or "",
+                    "position": emp.position or "",
+                    "check_in": a.check_in.strftime("%H:%M") if a.check_in else "",
+                })
+    except Exception:
+        pass
+
     template_name = "index_premium.html" if view == "premium" else "index.html"
     return templates.TemplateResponse(template_name, {
         "request": request,
@@ -223,6 +242,7 @@ async def home(
         "pending_orders": pending_orders,
         "completed_orders": completed_orders,
         "in_progress_count": in_progress_count,
+        "today_staff": today_staff,
     })
 
 

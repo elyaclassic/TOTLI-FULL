@@ -902,6 +902,29 @@ class Payment(Base):
 
 
 # ==========================================
+# AGENT TO'LOVLARI (inkassatsiya)
+# ==========================================
+
+class AgentPayment(Base):
+    """Agent mijozdan pul olib kelgan — supervisor tasdiqlaydi."""
+    __tablename__ = "agent_payments"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"))
+    partner_id = Column(Integer, ForeignKey("partners.id"))
+    amount = Column(Float, default=0)
+    payment_type = Column(String(20), default="naqd")  # naqd, plastik, perechisleniye
+    notes = Column(Text, nullable=True)
+    status = Column(String(20), default="pending")  # pending, confirmed, cancelled
+    confirmed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    agent = relationship("Agent")
+    partner = relationship("Partner")
+
+
+# ==========================================
 # HARAJATLAR JURNALI (1C uslubida)
 # ==========================================
 

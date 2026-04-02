@@ -58,6 +58,11 @@
             <form method="POST" action="/purchases/create" id="purchaseCreateForm">
                 {% if from_pos %}<input type="hidden" name="from_pos" value="1">{% endif %}
                 <div class="row mb-4">
+                    <div class="col-md-12 mb-3">
+                        <label class="form-label fw-600">Sana</label>
+                        <input type="datetime-local" name="purchase_date" class="form-control" style="max-width:280px;"
+                            value="{{ now.strftime('%Y-%m-%dT%H:%M') if now is defined else '' }}">
+                    </div>
                     <div class="col-md-6">
                         <div class="mb-3 position-relative">
                             <label class="form-label fw-600">Ta'minotchi *</label>

@@ -1,7 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
+import '../services/offline_db_service.dart';
+import '../services/sync_service.dart';
+import '../services/location_service.dart';
 
 class VisitsScreen extends StatefulWidget {
   const VisitsScreen({super.key});
@@ -55,39 +60,118 @@ class _VisitsScreenState extends State<VisitsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     final token = await _session.getToken();
-    if (token == null) return;
-    final vResult = await ApiService.getVisits(token);
-    final pResult = await ApiService.getPartners(token);
-    if (mounted) {
-      setState(() {
-        _isLoading = false;
-        if (vResult['success'] == true) _visits = List<Map<String, dynamic>>.from(vResult['visits'] ?? []);
-        if (pResult['success'] == true) _partners = List<Map<String, dynamic>>.from(pResult['partners'] ?? []);
-      });
+    if (token == null) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    final syncService = SyncService();
+    final offlineDb = OfflineDbService();
+
+    if (syncService.isOnline) {
+      try {
+        // Parallel yuklash + 10s umumiy timeout
+        final results = await Future.wait([
+          ApiService.getVisits(token),
+          ApiService.getPartners(token),
+        ]).timeout(const Duration(seconds: 10));
+        final vResult = results[0];
+        final pResult = results[1];
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            if (vResult['success'] == true) _visits = List<Map<String, dynamic>>.from(vResult['visits'] ?? []);
+            if (pResult['success'] == true) {
+              _partners = List<Map<String, dynamic>>.from(pResult['partners'] ?? []);
+              offlineDb.cachePartners(_partners);
+            }
+          });
+        }
+        // Online bo'lganda — offline vizitlarni sinxronlash
+        syncService.syncPendingVisits();
+      } catch (_) {
+        // API xato yoki timeout — offline rejimga o'tish
+        await _loadOfflineData(offlineDb);
+      }
+    } else {
+      await _loadOfflineData(offlineDb);
     }
   }
 
+  Future<void> _loadOfflineData(OfflineDbService offlineDb) async {
+    _partners = await offlineDb.getCachedPartners();
+    final offlineVisits = await offlineDb.getOfflineVisitsToday();
+    _visits = offlineVisits.map((v) => {
+      'partner_id': v['partner_id'],
+      'partner_name': v['partner_name'],
+      'check_in_time': v['check_in_time'],
+      'check_out_time': v['check_out_time'],
+      'visit_date': v['check_in_time'],
+      'local_id': v['local_id'],
+      'is_offline': true,
+    }).toList();
+    if (mounted) setState(() => _isLoading = false);
+  }
+
   Future<void> _startVisitWithPartner(Map<String, dynamic> partner) async {
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GPS aniqlanmoqda...')));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GPS aniqlanmoqda...'), duration: Duration(seconds: 5)));
     try {
-      final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high, timeLimit: const Duration(seconds: 10));
+      final pos = await LocationService().getPosition();
       final token = await _session.getToken();
       if (token == null) return;
-      final result = await ApiService.checkIn(token, partnerId: partner['id'], latitude: pos.latitude, longitude: pos.longitude);
-      if (!mounted) return;
-      if (result['success'] == true) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${partner['name']} ga kirish belgilandi'), backgroundColor: Colors.green));
-        _openActiveVisit({
-          'id': result['visit_id'],
-          'partner_id': partner['id'],
-          'partner_name': partner['name'],
-          'check_in_time': DateTime.now().toIso8601String(),
-          'check_out_time': null,
-          'status': 'visited',
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'] ?? 'Xato'), backgroundColor: Colors.red));
+
+      final syncService = SyncService();
+      if (syncService.isOnline) {
+        try {
+          // Online — serverga yuborish
+          final result = await ApiService.checkIn(token, partnerId: partner['id'], latitude: pos.latitude, longitude: pos.longitude);
+          if (!mounted) return;
+          if (result['success'] == true) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${partner['name']} ga kirish belgilandi'), backgroundColor: Colors.green));
+            _openActiveVisit({
+              'id': result['visit_id'],
+              'partner_id': partner['id'],
+              'partner_name': partner['name'],
+              'check_in_time': DateTime.now().toIso8601String(),
+              'check_out_time': null,
+              'status': 'visited',
+            });
+            return;
+          } else {
+            final err = result['error']?.toString() ?? '';
+            if (err.contains('Timeout') || err.contains('Ulanish')) {
+              // Server javob bermadi — offline saqlash
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.isNotEmpty ? err : 'Xato'), backgroundColor: Colors.red));
+              return;
+            }
+          }
+        } catch (_) {
+          // API xato — offline ga tushish
+        }
       }
+      // Offline — local saqlash
+      final offlineDb = OfflineDbService();
+      final localId = await offlineDb.saveOfflineVisit(
+        partnerId: partner['id'] as int,
+        partnerName: (partner['name'] ?? '').toString(),
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('${partner['name']} — offline vizit saqlandi'),
+        backgroundColor: Colors.orange,
+      ));
+      _openActiveVisit({
+        'local_id': localId,
+        'partner_id': partner['id'],
+        'partner_name': partner['name'],
+        'check_in_time': DateTime.now().toIso8601String(),
+        'check_out_time': null,
+        'status': 'visited',
+        'is_offline': true,
+      });
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GPS xato: $e'), backgroundColor: Colors.red));
     }
@@ -189,7 +273,7 @@ class _VisitsScreenState extends State<VisitsScreen> {
                         style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                       ),
                     ),
-                  // Bugungi vizitlar
+                  // Bugungi vizitlar (mijoz bo'yicha guruhlangan)
                   if (todayVisits.isNotEmpty) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -198,9 +282,9 @@ class _VisitsScreenState extends State<VisitsScreen> {
                         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
                       ),
                     ),
-                    ...todayVisits.map((v) => _buildVisitTile(v)),
+                    ..._groupByPartner(todayVisits).entries.map((e) => _buildGroupedVisitTile(e.key, e.value)),
                   ],
-                  // Oldingi vizitlar
+                  // Oldingi vizitlar (mijoz bo'yicha guruhlangan)
                   if (_visits.where((v) {
                     final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
                     return !vDate.startsWith(todayStr);
@@ -209,10 +293,10 @@ class _VisitsScreenState extends State<VisitsScreen> {
                       padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                       child: Text('Oldingi vizitlar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.grey)),
                     ),
-                    ..._visits.where((v) {
+                    ..._groupByPartner(_visits.where((v) {
                       final vDate = (v['visit_date'] ?? v['check_in_time'] ?? '').toString();
                       return !vDate.startsWith(todayStr);
-                    }).map((v) => _buildVisitTile(v)),
+                    }).toList()).entries.map((e) => _buildGroupedVisitTile(e.key, e.value)),
                   ],
                   const SizedBox(height: 80),
                 ],
@@ -224,6 +308,85 @@ class _VisitsScreenState extends State<VisitsScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.pin_drop),
         label: const Text('Vizit boshlash'),
+      ),
+    );
+  }
+
+  /// Vizitlarni partner_id bo'yicha guruhlash (tartib saqlanadi)
+  Map<String, List<Map<String, dynamic>>> _groupByPartner(List<Map<String, dynamic>> visits) {
+    final map = <String, List<Map<String, dynamic>>>{};
+    for (final v in visits) {
+      final key = '${v['partner_id'] ?? 0}';
+      map.putIfAbsent(key, () => []).add(v);
+    }
+    return map;
+  }
+
+  Widget _buildGroupedVisitTile(String partnerId, List<Map<String, dynamic>> visits) {
+    final first = visits.first;
+    final name = first['partner_name'] ?? 'Mijoz #$partnerId';
+    final hasActive = visits.any((v) => v['check_out_time'] == null);
+    final activeVisit = hasActive ? visits.firstWhere((v) => v['check_out_time'] == null) : null;
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      color: hasActive ? Colors.green.shade50 : null,
+      elevation: hasActive ? 3 : 1,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: hasActive ? () => _openActiveVisit(activeVisit!) : null,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: hasActive ? const Color(0xFF017449) : Colors.grey.shade200,
+                child: Icon(Icons.pin_drop, color: hasActive ? Colors.white : Colors.grey, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                    const SizedBox(height: 2),
+                    ...visits.map((v) {
+                      final checkIn = _formatTime(v['check_in_time']);
+                      final checkOut = _formatTime(v['check_out_time']);
+                      final isActive = v['check_out_time'] == null;
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          'Kirish: $checkIn${checkOut.isNotEmpty ? '  →  Chiqish: $checkOut' : ''}${isActive ? '  (Faol)' : ''}',
+                          style: TextStyle(fontSize: 11, color: isActive ? const Color(0xFF017449) : Colors.grey[600]),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              if (hasActive)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF017449),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Text('Faol', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500)),
+                )
+              else
+                Column(
+                  children: [
+                    Text('Tugallangan', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
+                    if (visits.length > 1)
+                      Text('${visits.length} vizit', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -314,6 +477,7 @@ class _ActiveVisitPage extends StatefulWidget {
 }
 
 class _ActiveVisitPageState extends State<_ActiveVisitPage> {
+  final SessionService _session = SessionService();
   Map<String, dynamic>? _partnerDetail;
   List<Map<String, dynamic>> _debts = [];
   double _totalDebt = 0;
@@ -329,7 +493,15 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
     _loadPartnerInfo();
   }
 
+  bool get _isOfflineVisit => widget.visit['is_offline'] == true;
+
   Future<void> _loadPartnerInfo() async {
+    final syncService = SyncService();
+    if (!syncService.isOnline) {
+      // Offline — faqat asosiy ma'lumotlarni ko'rsatish
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     setState(() => _isLoading = true);
     final detailFuture = ApiService.getPartnerDetail(widget.token, _partnerId);
     final debtsFuture = ApiService.getPartnerDebts(widget.token, _partnerId);
@@ -366,23 +538,80 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
     );
     if (confirm != true) return;
     setState(() => _isEnding = true);
-    final result = await ApiService.checkOut(widget.token, visitId: widget.visit['id']);
-    if (!mounted) return;
-    setState(() => _isEnding = false);
-    if (result['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vizit yakunlandi'), backgroundColor: Colors.green));
+
+    if (_isOfflineVisit) {
+      // Offline vizitni yakunlash
+      final offlineDb = OfflineDbService();
+      await offlineDb.checkOutOfflineVisit(widget.visit['local_id'] as int);
+      if (!mounted) return;
+      setState(() => _isEnding = false);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vizit yakunlandi (offline)'), backgroundColor: Colors.orange));
       Navigator.pop(context);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'] ?? 'Xato'), backgroundColor: Colors.red));
+      // Online vizitni yakunlash
+      try {
+        final result = await ApiService.checkOut(widget.token, visitId: widget.visit['id']).timeout(const Duration(seconds: 10));
+        if (!mounted) return;
+        setState(() => _isEnding = false);
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vizit yakunlandi'), backgroundColor: Colors.green));
+          Navigator.pop(context);
+        } else {
+          final err = result['error']?.toString() ?? '';
+          if (err.contains('Timeout') || err.contains('Ulanish')) {
+            // Server javob bermadi — vizitni lokal yakunlash
+            setState(() => _isEnding = false);
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vizit yakunlandi (offline). Internet qaytganda sinxronlanadi.'), backgroundColor: Colors.orange));
+            Navigator.pop(context);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.isNotEmpty ? err : 'Xato'), backgroundColor: Colors.red));
+          }
+        }
+      } catch (_) {
+        // Timeout/xato — vizitni baribir yakunlash
+        if (!mounted) return;
+        setState(() => _isEnding = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vizit yakunlandi (offline). Internet qaytganda sinxronlanadi.'), backgroundColor: Colors.orange));
+        Navigator.pop(context);
+      }
     }
   }
 
   void _openCreateOrder() async {
-    final productsResult = await ApiService.getProducts(widget.token);
+    // Loading ko'rsatish
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mahsulotlar yuklanmoqda...'), duration: Duration(seconds: 2)));
+
+    List<Map<String, dynamic>> products;
+    final offlineDb = OfflineDbService();
+
+    // Avval cache dan o'qish (darhol)
+    products = await offlineDb.getCachedProducts();
+
+    // Cache bo'sh va online bo'lsa — serverdan yuklash
+    if (products.isEmpty && SyncService().isOnline) {
+      try {
+        final productsResult = await ApiService.getProducts(widget.token).timeout(const Duration(seconds: 5));
+        products = List<Map<String, dynamic>>.from(productsResult['products'] ?? []);
+        if (products.isNotEmpty) offlineDb.cacheProducts(products);
+      } catch (_) {}
+    }
+
+    // Online bo'lsa va cache eski bo'lsa — yangilash (lekin cache bor, shuning uchun kutmaymiz)
+    if (products.isNotEmpty && SyncService().isOnline) {
+      // Fon da yangilash
+      ApiService.getProducts(widget.token).timeout(const Duration(seconds: 5)).then((r) {
+        final p = List<Map<String, dynamic>>.from(r['products'] ?? []);
+        if (p.isNotEmpty) offlineDb.cacheProducts(p);
+      }).catchError((_) {});
+    }
+
     if (!mounted) return;
-    final products = List<Map<String, dynamic>>.from(productsResult['products'] ?? []);
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     if (products.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mahsulotlar topilmadi')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Mahsulotlar topilmadi. Avval internetga ulanib ilovani oching — keyin offline ham ishlaydi.'),
+        duration: Duration(seconds: 4),
+      ));
       return;
     }
     final result = await Navigator.push(
@@ -508,10 +737,101 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
               if ((p['discount_percent'] ?? 0) > 0)
                 _infoRow(Icons.discount, 'Chegirma: ${p['discount_percent']}%'),
             ],
+            const Divider(height: 16),
+            Row(
+              children: [
+                if (p != null && p['lat'] != null && p['lng'] != null)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        final lat = p['lat'].toString();
+                        final lng = p['lng'].toString();
+                        final geoUri = Uri.parse('geo:$lat,$lng?q=$lat,$lng');
+                        final webUri = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+
+                        if (await launchUrl(geoUri, mode: LaunchMode.externalNonBrowserApplication)) {
+                          return;
+                        }
+                        if (await launchUrl(webUri, mode: LaunchMode.externalApplication)) {
+                          return;
+                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Xarita ilovasini ochib bo\'lmadi'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.map, size: 16),
+                      label: const Text('Xaritada', style: TextStyle(fontSize: 11)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF017449),
+                        side: const BorderSide(color: Color(0xFF017449)),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                if (p != null && p['lat'] != null && p['lng'] != null)
+                  const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _setPartnerLocation(p ?? {'id': _partnerId}),
+                    icon: const Icon(Icons.my_location, size: 16),
+                    label: Text(
+                      (p != null && p['lat'] != null) ? 'Lokatsiya yangilash' : 'Lokatsiya o\'rnatish',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF017449),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
+  }
+
+  Future<void> _setPartnerLocation(Map<String, dynamic> partner) async {
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('GPS aniqlanmoqda...'), duration: Duration(seconds: 5)));
+    try {
+      final pos = await LocationService().getPosition();
+      final syncService = SyncService();
+      if (syncService.isOnline) {
+        try {
+          final token = widget.token;
+          final result = await ApiService.setPartnerLocation(token, partner['id'], pos.latitude, pos.longitude).timeout(const Duration(seconds: 10));
+          if (!mounted) return;
+          if (result['success'] == true) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Lokatsiya saqlandi!'), backgroundColor: Colors.green));
+            setState(() {
+              partner['lat'] = pos.latitude;
+              partner['lng'] = pos.longitude;
+            });
+            return;
+          }
+        } catch (_) {
+          // Server javob bermadi — lokal saqlash
+        }
+      }
+      // Offline yoki server xato — lokal saqlash
+      if (!mounted) return;
+      setState(() {
+        partner['lat'] = pos.latitude;
+        partner['lng'] = pos.longitude;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Lokatsiya saqlandi (offline). Internet qaytganda sinxronlanadi.'),
+        backgroundColor: Colors.orange,
+      ));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GPS xatosi: $e'), backgroundColor: Colors.red));
+    }
   }
 
   Widget _infoRow(IconData icon, String text) {
@@ -657,7 +977,7 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('${_formatMoney((d['debt'] ?? 0).toDouble())}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red)),
+                      Text(_formatMoney((d['debt'] ?? 0).toDouble()), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.red)),
                       Text('/ ${_formatMoney((d['total'] ?? 0).toDouble())}', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                     ],
                   ),
@@ -671,9 +991,13 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
   }
 
   String _formatMoney(double v) {
-    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(0)}K';
-    return v.toStringAsFixed(0);
+    final s = v.toStringAsFixed(0);
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0 && s[i] != '-') buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 }
 
@@ -740,7 +1064,11 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
     );
     if (result == null) return;
     setState(() {
-      if (result <= 0) _cart.remove(pid); else _cart[pid] = result;
+      if (result <= 0) {
+        _cart.remove(pid);
+      } else {
+        _cart[pid] = result;
+      }
     });
   }
 
@@ -751,22 +1079,54 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
     }
     setState(() => _isSending = true);
     final items = _cart.entries.map((e) => {'product_id': e.key, 'qty': e.value}).toList();
-    final result = await ApiService.createOrder(widget.token, {
-      'partner_id': widget.partnerId,
-      'payment_type': _paymentType,
-      'items': items,
-    });
+    final syncService = SyncService();
+
+    if (syncService.isOnline) {
+      try {
+        final result = await ApiService.createOrder(widget.token, {
+          'partner_id': widget.partnerId,
+          'payment_type': _paymentType,
+          'items': items,
+        }).timeout(const Duration(seconds: 10));
+        if (!mounted) return;
+        setState(() => _isSending = false);
+        if (result['success'] == true) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Buyurtma: ${result['order_number'] ?? ''}'),
+            backgroundColor: Colors.green,
+          ));
+          Navigator.pop(context, true);
+          return;
+        }
+        // Server xato — offline ga tushish
+      } catch (_) {
+        // Timeout — offline saqlash
+      }
+    }
+
+    // Offline — lokal bazaga saqlash
+    final offlineDb = OfflineDbService();
+    final itemsWithDetails = _cart.entries.map((e) {
+      final product = widget.products.firstWhere((p) => p['id'] == e.key, orElse: () => {});
+      return {'product_id': e.key, 'qty': e.value, 'name': product['name'] ?? '', 'price': product['price'] ?? 0};
+    }).toList();
+    double total = 0;
+    for (final i in itemsWithDetails) { total += (i['qty'] as num) * ((i['price'] as num?)?.toDouble() ?? 0); }
+
+    await offlineDb.saveOfflineOrder(
+      partnerId: widget.partnerId,
+      partnerName: widget.partnerName,
+      paymentType: _paymentType,
+      items: itemsWithDetails,
+      total: total,
+    );
     if (!mounted) return;
     setState(() => _isSending = false);
-    if (result['success'] == true) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('Buyurtma: ${result['order_number'] ?? ''}'),
-        backgroundColor: Colors.green,
-      ));
-      Navigator.pop(context, true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'] ?? 'Xato'), backgroundColor: Colors.red));
-    }
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Buyurtma offline saqlandi. Internet qaytganda sinxronlanadi.'),
+      backgroundColor: Colors.orange,
+    ));
+    Navigator.pop(context, true);
   }
 
   @override
@@ -825,7 +1185,11 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
                     children: [
                       if (qty > 0) IconButton(
                         icon: const Icon(Icons.remove_circle_outline, size: 22),
-                        onPressed: () => setState(() { if (qty <= 1) _cart.remove(pid); else _cart[pid] = qty - 1; }),
+                        onPressed: () => setState(() { if (qty <= 1) {
+                          _cart.remove(pid);
+                        } else {
+                          _cart[pid] = qty - 1;
+                        } }),
                       ),
                       if (qty > 0) GestureDetector(
                         onTap: () => _editQty(pid, p['name'] ?? '', qty),
@@ -885,8 +1249,13 @@ class _VisitOrderPageState extends State<_VisitOrderPage> {
 
   String _formatPrice(dynamic v) {
     final d = (v is num) ? v.toDouble() : 0.0;
-    if (d >= 1000) return '${(d / 1000).toStringAsFixed(0)}K';
-    return d.toStringAsFixed(0);
+    final s = d.toStringAsFixed(0);
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 }
 
@@ -1040,10 +1409,14 @@ class _VisitReturnPageState extends State<_VisitReturnPage> {
                     if (retQty > 0) IconButton(
                       icon: const Icon(Icons.remove_circle_outline, size: 22, color: Colors.red),
                       onPressed: () => setState(() {
-                        if (retQty <= 1) _returnQty.remove(pid); else _returnQty[pid] = retQty - 1;
+                        if (retQty <= 1) {
+                          _returnQty.remove(pid);
+                        } else {
+                          _returnQty[pid] = retQty - 1;
+                        }
                       }),
                     ),
-                    if (retQty > 0) Text('${retQty.toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
+                    if (retQty > 0) Text(retQty.toStringAsFixed(0), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.red)),
                     IconButton(
                       icon: const Icon(Icons.add_circle, size: 22, color: Colors.red),
                       onPressed: retQty >= maxQty ? null : () => setState(() => _returnQty[pid] = retQty + 1),
@@ -1087,8 +1460,13 @@ class _VisitReturnPageState extends State<_VisitReturnPage> {
 
   String _formatPrice(dynamic v) {
     final d = (v is num) ? v.toDouble() : 0.0;
-    if (d >= 1000) return '${(d / 1000).toStringAsFixed(0)}K';
-    return d.toStringAsFixed(0);
+    final s = d.toStringAsFixed(0);
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 }
 
@@ -1162,8 +1540,12 @@ class _PartnerPickerState extends State<_PartnerPicker> {
   }
 
   String _formatMoney(double v) {
-    if (v >= 1000000) return '${(v / 1000000).toStringAsFixed(1)}M';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(0)}K';
-    return v.toStringAsFixed(0);
+    final s = v.toStringAsFixed(0);
+    final buf = StringBuffer();
+    for (var i = 0; i < s.length; i++) {
+      if (i > 0 && (s.length - i) % 3 == 0 && s[i] != '-') buf.write(',');
+      buf.write(s[i]);
+    }
+    return buf.toString();
   }
 }

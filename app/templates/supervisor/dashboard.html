@@ -18,16 +18,14 @@
                 <div>
                     <div class="num text-primary">{{ agents|length }}</div>
                     <div class="lbl">Jami agentlar</div>
-                    {% set online_count = agents|selectattr('is_active', 'eq', true)|list|length %}
-                    <div style="font-size:11px;color:#2e7d32;margin-top:3px;"><i class="bi bi-circle-fill" style="font-size:8px;"></i> {{ online_count }} online</div>
+                    <div style="font-size:11px;color:#2e7d32;margin-top:3px;"><i class="bi bi-circle-fill" style="font-size:8px;"></i> {{ stats.active_agents }} online</div>
                 </div>
                 <div style="width:40px;height:40px;border-radius:10px;background:#e3f2fd;color:#1a73e8;display:flex;align-items:center;justify-content:center;font-size:1.2rem;flex-shrink:0;">
                     <i class="bi bi-people"></i>
                 </div>
             </div>
             <div class="progress mt-2" style="height: 4px; border-radius:2px;">
-                {% set online_count = agents|selectattr('is_active', 'eq', true)|list|length %}
-                <div class="progress-bar bg-success" style="width: {{ (online_count / agents|length * 100) if agents|length > 0 else 0 }}%;"></div>
+                <div class="progress-bar bg-success" style="width: {{ (stats.active_agents / agents|length * 100) if agents|length > 0 else 0 }}%;"></div>
             </div>
         </div>
     </div>
@@ -105,6 +103,7 @@
                         {% for agent in agents %}
                         <tr>
                             <td>
+                                <i class="bi bi-circle-fill" style="font-size:7px;color:{% if agent.is_online is defined and agent.is_online %}#2e7d32{% else %}#bbb{% endif %};vertical-align:middle;margin-right:4px;"></i>
                                 <a href="/agents/{{ agent.id }}" class="text-decoration-none">
                                     {{ agent.full_name }}
                                 </a>
@@ -112,7 +111,7 @@
                             <td><small>{{ agent.region or '-' }}</small></td>
                             <td>
                                 {% if agent.last_location %}
-                                <small class="{% if agent.is_active %}text-success{% else %}text-danger{% endif %}">
+                                <small class="{% if agent.is_online is defined and agent.is_online %}text-success{% else %}text-danger{% endif %}">
                                     {{ agent.last_location.recorded_at.strftime('%H:%M') if agent.last_location else '-' }}
                                 </small>
                                 {% else %}
@@ -209,13 +208,13 @@
 </div>
 
 <!-- Oxirgi faoliyatlar -->
-<div class="row mt-3">
-    <div class="col-md-6">
-        <div class="data-table">
-            <div class="card-header">
+<div class="row mt-3 g-3">
+    <div class="col-md-6 d-flex">
+        <div class="data-table w-100" style="max-height:400px;display:flex;flex-direction:column;">
+            <div class="card-header" style="flex-shrink:0;">
                 <i class="bi bi-activity"></i> Oxirgi tashriflar
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0" style="overflow-y:auto;flex:1;">
                 <ul class="list-group list-group-flush">
                     {% for visit in recent_visits[:10] if recent_visits is defined %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-1">
@@ -240,13 +239,13 @@
         </div>
     </div>
 
-    <div class="col-md-6">
-        <div class="data-table">
-            <div class="card-header d-flex justify-content-between align-items-center">
+    <div class="col-md-6 d-flex">
+        <div class="data-table w-100" style="max-height:400px;display:flex;flex-direction:column;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="flex-shrink:0;">
                 <span><i class="bi bi-cart-check"></i> Agent buyurtmalari (bugun)</span>
                 <a href="/supervisor/agent-orders" class="btn btn-sm btn-outline-primary">Barchasi</a>
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0" style="overflow-y:auto;flex:1;">
                 <ul class="list-group list-group-flush">
                     {% for order in agent_orders[:10] if agent_orders is defined %}
                     <li class="list-group-item d-flex justify-content-between align-items-center py-1">
@@ -275,13 +274,47 @@
     </div>
 </div>
 
-<div class="row mt-3">
-    <div class="col-md-6">
-        <div class="data-table">
-            <div class="card-header">
+<div class="row mt-3 g-3">
+    <div class="col-md-6 d-flex">
+        <div class="data-table w-100" style="max-height:400px;display:flex;flex-direction:column;">
+            <div class="card-header d-flex justify-content-between align-items-center" style="flex-shrink:0;">
+                <span><i class="bi bi-cash-stack"></i> Agent to'lovlari (kutilmoqda)</span>
+                <a href="/supervisor/agent-payments" class="btn btn-sm btn-outline-primary">Barchasi</a>
+            </div>
+            <div class="card-body p-0" style="overflow-y:auto;flex:1;">
+                <ul class="list-group list-group-flush">
+                    {% for ap in agent_payments[:10] if agent_payments is defined %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                        <div>
+                            <strong>{{ ap._partner.name if ap._partner else '#' ~ ap.partner_id }}</strong>
+                            <br><small class="text-muted">{{ ap._agent.full_name if ap._agent else '' }} | {{ ap.created_at.strftime('%d.%m %H:%M') if ap.created_at else '' }}</small>
+                        </div>
+                        <div class="text-end">
+                            <span class="fw-bold">{{ "{:,.0f}".format(ap.amount or 0) }}</span>
+                            <br>
+                            {% if ap.payment_type == 'naqd' %}
+                            <span class="badge bg-success-subtle text-success" style="font-size:10px;">Naqd</span>
+                            {% elif ap.payment_type == 'plastik' %}
+                            <span class="badge bg-primary-subtle text-primary" style="font-size:10px;">Plastik</span>
+                            {% else %}
+                            <span class="badge bg-info-subtle text-info" style="font-size:10px;">Perechisl.</span>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-center text-muted">Kutilayotgan to'lovlar yo'q</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 d-flex">
+        <div class="data-table w-100" style="max-height:400px;display:flex;flex-direction:column;">
+            <div class="card-header" style="flex-shrink:0;">
                 <i class="bi bi-box-seam"></i> Oxirgi yetkazishlar
             </div>
-            <div class="card-body p-0">
+            <div class="card-body p-0" style="overflow-y:auto;flex:1;">
                 <ul class="list-group list-group-flush">
                     {% for delivery in recent_deliveries[:5] if recent_deliveries is defined %}
                     <li class="list-group-item d-flex justify-content-between align-items-center">
@@ -301,44 +334,6 @@
         </div>
     </div>
 </div>
-{% endblock %}
 
-{% block extra_css %}
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-{% endblock %}
-
-{% block extra_js %}
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-(function() {
-    var mapEl = document.getElementById('supervisorMap');
-    if (!mapEl) return;
-    var map = L.map('supervisorMap').setView([40.533420, 70.930426], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap'
-    }).addTo(map);
-
-    var bounds = [];
-
-    // Agentlar
-    {% for m in agent_markers %}
-    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 8, color: '#0d6efd', fillColor: '#0d6efd', fillOpacity: 0.8})
-        .bindPopup('<b>{{ m.name }}</b><br><small>{{ m.time }}</small>')
-        .addTo(map);
-    bounds.push([{{ m.lat }}, {{ m.lng }}]);
-    {% endfor %}
-
-    // Haydovchilar
-    {% for m in driver_markers %}
-    L.circleMarker([{{ m.lat }}, {{ m.lng }}], {radius: 8, color: '#0dcaf0', fillColor: '#0dcaf0', fillOpacity: 0.8})
-        .bindPopup('<b>{{ m.name }}</b><br><small>{{ m.vehicle }}</small>')
-        .addTo(map);
-    bounds.push([{{ m.lat }}, {{ m.lng }}]);
-    {% endfor %}
-
-    if (bounds.length > 0) {
-        map.fitBounds(bounds, {padding: [30, 30]});
-    }
-})();
-</script>
+{% include "supervisor/_supervisor_map.html" %}
 {% endblock %}

@@ -111,11 +111,43 @@
                     </div>
                 </div>
                 {% elif order.status == 'confirmed' %}
-                <span class="text-info"><i class="bi bi-truck"></i> Haydovchiga berilgan</span>
+                <div class="d-flex flex-column gap-2 align-items-end">
+                    <span class="text-info"><i class="bi bi-truck"></i> Haydovchiga berilgan</span>
+                    <div class="d-flex gap-1">
+                        <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" class="d-inline"
+                              onsubmit="return confirm('{{ order.number }} tasdiqlashni bekor qilasizmi?')">
+                            <button type="submit" class="btn btn-outline-warning btn-sm">
+                                <i class="bi bi-arrow-counterclockwise"></i> Bekor qilish
+                            </button>
+                        </form>
+                        <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
+                              onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
+                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                                <i class="bi bi-trash"></i> O'chirish
+                            </button>
+                        </form>
+                    </div>
+                </div>
                 {% elif order.status == 'completed' %}
-                <span class="text-success"><i class="bi bi-check-circle"></i> Yakunlangan</span>
+                <div class="d-flex flex-column gap-2 align-items-end">
+                    <span class="text-success"><i class="bi bi-check-circle"></i> Yakunlangan</span>
+                    <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
+                          onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash"></i> O'chirish
+                        </button>
+                    </form>
+                </div>
                 {% elif order.status == 'cancelled' %}
-                <span class="text-danger"><i class="bi bi-x-circle"></i> Bekor qilingan</span>
+                <div class="d-flex flex-column gap-2 align-items-end">
+                    <span class="text-danger"><i class="bi bi-x-circle"></i> Bekor qilingan</span>
+                    <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
+                          onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash"></i> O'chirish
+                        </button>
+                    </form>
+                </div>
                 {% endif %}
             </div>
         </div>

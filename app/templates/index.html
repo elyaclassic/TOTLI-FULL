@@ -42,9 +42,11 @@
 .notif-item .icon-b { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; }
 </style>
 
+<!-- Premium ko'rinish tugmasi vaqtincha yashirilgan
 <div class="d-flex justify-content-end mb-2">
     <a href="/?view=premium" class="btn btn-sm btn-outline-primary" style="font-size:12px;"><i class="bi bi-stars me-1"></i> Premium ko'rinish</a>
 </div>
+-->
 
 <!-- Stat kartalar -->
 <div class="row g-3 mb-3">
@@ -120,8 +122,20 @@
 
 <!-- Tezkor tugmalar -->
 <div class="card mb-3" style="border-radius:16px;">
-  <div class="card-header">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
     <span class="fw-bold"><i class="bi bi-lightning-charge text-warning"></i> Tezkor amallar</span>
+    {% if today_staff is defined and today_staff %}
+    <div class="d-flex align-items-center gap-1">
+      <span class="text-muted small me-1"><i class="bi bi-people-fill"></i> {{ today_staff|length }}</span>
+      {% for s in today_staff %}
+      <div class="d-inline-flex align-items-center justify-content-center rounded-circle border"
+           style="width:32px;height:32px;background:{{ ['#017449','#1a73e8','#e65100','#6a1b9a','#00838f','#c62828','#2e7d32','#ad1457','#4527a0','#00695c','#ef6c00','#1565c0'][loop.index0 % 12] }};color:#fff;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;"
+           title="{{ s.name }}{% if s.position %} — {{ s.position }}{% endif %}{% if s.check_in %} ({{ s.check_in }}){% endif %}">
+        {{ s.name.split()[0][:1] }}{{ s.name.split()[1][:1] if s.name.split()|length > 1 else '' }}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
   </div>
   <div class="card-body">
     <div class="row g-2">

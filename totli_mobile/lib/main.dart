@@ -5,10 +5,11 @@ import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'services/session_service.dart';
 import 'services/api_service.dart';
+import 'services/sync_service.dart';
 
 // Joriy ilova versiyasi
-const String appVersion = '1.4.0';
-const int appBuild = 5;
+const String appVersion = '1.8.1';
+const int appBuild = 41;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -93,10 +94,16 @@ class _SplashScreenState extends State<SplashScreen> {
           if (forceUpdate) return; // Majburiy yangilash — ilovaga kirmaslik
         }
       }
-    } catch (_) {
+    } catch (e) {
       // Yangilash tekshirib bo'lmadi — davom etamiz
+      debugPrint('Yangilash tekshirish xatosi: $e');
+      if (mounted) setState(() => _statusText = '');
     }
 
+    if (!mounted) return;
+    setState(() => _statusText = 'Ma\'lumotlar tayyorlanmoqda...');
+    // Offline tizimni ishga tushirish
+    await SyncService().init();
     if (!mounted) return;
     setState(() => _statusText = '');
     final isLoggedIn = await session.isLoggedIn();
@@ -117,11 +124,11 @@ class _SplashScreenState extends State<SplashScreen> {
       context: context,
       barrierDismissible: !forceUpdate,
       builder: (ctx) => AlertDialog(
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.system_update, color: Color(0xFF017449)),
-            const SizedBox(width: 8),
-            const Text('Yangilanish'),
+            Icon(Icons.system_update, color: Color(0xFF017449)),
+            SizedBox(width: 8),
+            Text('Yangilanish'),
           ],
         ),
         content: Column(
@@ -170,10 +177,10 @@ class _SplashScreenState extends State<SplashScreen> {
         return prev;
       });
 
-      // Faylga saqlash
-      final dir = Directory('/storage/emulated/0/Download');
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-      final file = File('${dir.path}/totli-agent.apk');
+      // Faylga saqlash — cache papkasiga (FileProvider taniydi)
+      final cacheDir = Directory('${Directory.systemTemp.path}/totli_apk');
+      if (!await cacheDir.exists()) await cacheDir.create(recursive: true);
+      final file = File('${cacheDir.path}/totli-agent.apk');
       await file.writeAsBytes(bytes);
 
       if (!mounted) return;
@@ -183,27 +190,34 @@ class _SplashScreenState extends State<SplashScreen> {
       const platform = MethodChannel('app.totli/installer');
       try {
         await platform.invokeMethod('installApk', {'path': file.path});
-      } catch (_) {
-        // MethodChannel ishlamasa, foydalanuvchiga xabar berish
+        // Intent yuborildi — o'rnatish dialogi ko'rinishi kerak
+        // Foydalanuvchi o'rnatgandan keyin ilova qayta ochiladi
+      } catch (e) {
+        debugPrint('APK install xatosi: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('APK yuklandi: ${file.path}\nFayl menejerdan o\'rnating.'),
-              duration: const Duration(seconds: 5),
+              content: Text('O\'rnatish xatosi: $e\nFayl: ${file.path}'),
+              duration: const Duration(seconds: 8),
+              backgroundColor: Colors.red,
             ),
           );
-          // Ilovaga kirish
-          await Future.delayed(const Duration(seconds: 2));
+          await Future.delayed(const Duration(seconds: 3));
           _continueToApp();
         }
       }
     } catch (e) {
+      debugPrint('APK yuklash xatosi: $e');
       if (mounted) {
-        setState(() => _statusText = 'Yuklab bo\'lmadi');
+        setState(() => _statusText = '');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Xato: $e'), backgroundColor: Colors.red),
+          const SnackBar(
+            content: Text('Yangilanish yuklab bo\'lmadi. Keyinroq qayta uriniladi.'),
+            backgroundColor: Colors.orange,
+            duration: Duration(seconds: 3),
+          ),
         );
-        await Future.delayed(const Duration(seconds: 2));
+        await Future.delayed(const Duration(seconds: 1));
         _continueToApp();
       }
     }

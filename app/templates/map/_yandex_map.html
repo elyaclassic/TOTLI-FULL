@@ -1,6 +1,5 @@
 <!-- Yandex Maps Template -->
 
-{% block extra_js %}
 <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ{% if yandex_maps_apikey %}&apikey={{ yandex_maps_apikey }}{% endif %}" type="text/javascript"></script>
 <script>
     ymaps.ready(function () {
@@ -12,32 +11,32 @@
 
         var allCoords = [];
 
-        // Agentlar (agent_markers dan)
+        // Agentlar
         {% for m in agent_markers %}
         myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
-            balloonContent: '<b>{{ m.name }}</b><br><small>Agent | {{ m.time }}</small>'
+            balloonContent: '<b>' + {{ m.name | tojson }} + '</b><br><small>Agent | {{ m.time }}</small>',
+            iconCaption: {{ m.name | tojson }}
         }, {
-            preset: 'islands#circleIcon',
-            iconColor: '#0d6efd'
+            preset: 'islands#blueCircleDotIcon'
         }));
         allCoords.push([{{ m.lat }}, {{ m.lng }}]);
         {% endfor %}
 
-        // Haydovchilar (driver_markers dan)
+        // Haydovchilar
         {% for m in driver_markers %}
         myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
-            balloonContent: '<b>{{ m.name }}</b><br><small>Haydovchi | {{ m.vehicle }} | {{ m.time }}</small>'
+            balloonContent: '<b>' + {{ m.name | tojson }} + '</b><br><small>Haydovchi | {{ m.vehicle }} | {{ m.time }}</small>',
+            iconCaption: {{ m.name | tojson }}
         }, {
-            preset: 'islands#circleIcon',
-            iconColor: '#0dcaf0'
+            preset: 'islands#darkGreenCircleDotIcon'
         }));
         allCoords.push([{{ m.lat }}, {{ m.lng }}]);
         {% endfor %}
 
-        // Mijozlar (partner_markers dan)
+        // Mijozlar
         {% for m in partner_markers %}
         myMap.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
-            balloonContent: '<b>{{ m.name }}</b><br><small>{{ m.address or "" }}</small>'
+            balloonContent: '<b>' + {{ m.name | tojson }} + '</b><br><small>{{ m.address or "" }}</small>'
         }, {
             preset: 'islands#circleIcon',
             iconColor: '#198754'
@@ -56,4 +55,3 @@
         }
     });
 </script>
-{% endblock %}

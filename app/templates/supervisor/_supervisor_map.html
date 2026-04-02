@@ -1,0 +1,50 @@
+<script>
+var s = document.createElement('script');
+s.src = 'https://api-maps.yandex.ru/2.1/?lang=uz_UZ' + '&apikey={{ yandex_maps_apikey }}';
+s.onload = function() { initSupervisorMap(); };
+document.head.appendChild(s);
+
+function initSupervisorMap() {
+ymaps.ready(function() {
+    var mapEl = document.getElementById('supervisorMap');
+    if (!mapEl) return;
+
+    var map = new ymaps.Map('supervisorMap', {
+        center: [40.533420, 70.930426],
+        zoom: 13,
+        controls: ['zoomControl', 'fullscreenControl']
+    });
+
+    var allCoords = [];
+
+    {% for m in agent_markers %}
+    map.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
+        balloonContent: '<b>' + {{ m.name | tojson }} + '</b><br><small>Agent | {{ m.time }}</small>',
+        iconCaption: {{ m.name | tojson }}
+    }, {
+        preset: 'islands#blueCircleDotIcon'
+    }));
+    allCoords.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
+
+    {% for m in driver_markers %}
+    map.geoObjects.add(new ymaps.Placemark([{{ m.lat }}, {{ m.lng }}], {
+        balloonContent: '<b>' + {{ m.name | tojson }} + '</b><br><small>Haydovchi | {{ m.vehicle }}</small>',
+        iconCaption: {{ m.name | tojson }}
+    }, {
+        preset: 'islands#darkGreenCircleDotIcon'
+    }));
+    allCoords.push([{{ m.lat }}, {{ m.lng }}]);
+    {% endfor %}
+
+    if (allCoords.length > 0) {
+        setTimeout(function() {
+            var bounds = map.geoObjects.getBounds();
+            if (bounds) {
+                map.setBounds(bounds, {checkZoomRange: true, zoomMargin: 50});
+            }
+        }, 500);
+    }
+    });
+}
+</script>

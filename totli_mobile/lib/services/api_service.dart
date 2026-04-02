@@ -150,9 +150,39 @@ class ApiService {
     return _postJson('/api/agent/return/create', data, token: token);
   }
 
+  // ===== AGENT: PARTNER ORDERS =====
+  static Future<Map<String, dynamic>> getPartnerOrders(String token, int partnerId) async {
+    return _get('/api/agent/partner/$partnerId/orders', token);
+  }
+
+  static Future<Map<String, dynamic>> updateOrder(String token, int orderId, Map<String, dynamic> data) async {
+    return _postJson('/api/agent/order/$orderId/update', data, token: token);
+  }
+
+  // ===== AGENT: KASSA (PAYMENTS) =====
+  static Future<Map<String, dynamic>> getAgentPayments(String token) async {
+    return _get('/api/agent/payments', token);
+  }
+
+  static Future<Map<String, dynamic>> createAgentPayment(String token, Map<String, dynamic> data) async {
+    return _postJson('/api/agent/payment/create', data, token: token);
+  }
+
   // ===== AGENT: STATS =====
   static Future<Map<String, dynamic>> getAgentStats(String token) async {
     return _get('/api/agent/stats', token);
+  }
+
+  static Future<Map<String, dynamic>> getAgentDebtors(String token) async {
+    return _get('/api/agent/debtors', token);
+  }
+
+  // ===== AGENT: SET PARTNER LOCATION =====
+  static Future<Map<String, dynamic>> setPartnerLocation(String token, int partnerId, double latitude, double longitude) async {
+    return _post('/api/agent/partner/$partnerId/set-location', {
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
+    }, token: token);
   }
 
   // ===== DRIVER: DELIVERIES =====
@@ -161,13 +191,17 @@ class ApiService {
   }
 
   static Future<Map<String, dynamic>> updateDeliveryStatus(String token, int deliveryId, String status, {
-    double? latitude, double? longitude, String? notes,
+    double? latitude, double? longitude, String? notes, String? items,
+    double? naqdAmount, double? plastikAmount,
   }) async {
     return _post('/api/driver/delivery/$deliveryId/status', {
       'status': status,
       if (latitude != null) 'latitude': latitude.toString(),
       if (longitude != null) 'longitude': longitude.toString(),
       if (notes != null) 'notes': notes,
+      if (items != null) 'items': items,
+      if (naqdAmount != null && naqdAmount > 0) 'naqd': naqdAmount.toString(),
+      if (plastikAmount != null && plastikAmount > 0) 'plastik': plastikAmount.toString(),
     }, token: token);
   }
 
@@ -191,7 +225,7 @@ class ApiService {
       final r = await http.get(Uri.parse('$_baseUrl/api/pwa/config'));
       if (r.statusCode == 200) {
         final data = jsonDecode(r.body) as Map<String, dynamic>;
-        return data['apiBaseUrl']?.toString()?.trim();
+        return data['apiBaseUrl']?.toString().trim();
       }
     } catch (_) {}
     return null;

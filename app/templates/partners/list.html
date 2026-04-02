@@ -166,7 +166,7 @@
                             <th>Telefon</th>
                             <th>Manzil/Hudud</th>
                             <th class="text-end">Balans</th>
-                            <th style="width:80px"></th>
+                            <th style="width:120px"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -218,6 +218,16 @@
                             </td>
                             <td>
                                 <div class="d-flex gap-1">
+                                    {% if partner.latitude and partner.longitude %}
+                                    <button class="btn-act" title="Xaritada ko'rish"
+                                        onclick="openPartnerLocation({{ partner.latitude }}, {{ partner.longitude }}, {{ (partner.name or 'Kontragent')|tojson }})">
+                                        <i class="bi bi-geo-alt"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn-act" title="Lokatsiya yo'q" disabled style="opacity:.45; cursor:not-allowed;">
+                                        <i class="bi bi-geo-alt"></i>
+                                    </button>
+                                    {% endif %}
                                     <button class="btn-act" title="Tahrirlash"
                                         data-partner-id="{{ partner.id }}"
                                         data-partner-name="{{ partner.name or '' }}"
@@ -879,6 +889,15 @@
     function editPartnerFromData(btn) {
         var id = btn.getAttribute('data-partner-id');
         editPartner(id);
+    }
+    function openPartnerLocation(lat, lng, name) {
+        if (!lat || !lng) {
+            showNotification('Bu kontragent uchun lokatsiya saqlanmagan', 'warning');
+            return;
+        }
+        var label = encodeURIComponent(name || 'Kontragent');
+        var url = 'https://yandex.uz/maps/?pt=' + lng + ',' + lat + '&z=16&l=map&text=' + label;
+        window.open(url, '_blank', 'noopener,noreferrer');
     }
     function editPartner(id) {
         document.getElementById('editPartnerForm').action = '/partners/edit/' + id;

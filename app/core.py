@@ -45,7 +45,8 @@ templates.env.globals["csrf_token_from_request"] = _csrf_token_from_request
 
 def _tojson(val):
     """Jinja filtri: obyektni JSON qatoriga aylantirish (transfer_form, movement va b.)."""
-    return json.dumps(val)
+    from markupsafe import Markup
+    return Markup(json.dumps(val))
 
 
 templates.env.filters["tojson"] = _tojson

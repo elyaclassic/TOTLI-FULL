@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <div>
+        <h5 class="mb-0"><i class="bi bi-cash-stack"></i> Agent to'lovlari (inkassatsiya)</h5>
+        <p class="text-muted mb-0 small">Agent mijozdan olgan pullarni tasdiqlash</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/supervisor" class="top-btn"><i class="bi bi-arrow-left"></i> Supervayzer</a>
+    </div>
+</div>
+
+<!-- Filtr -->
+<div class="d-flex gap-2 mb-3">
+    <a href="/supervisor/agent-payments?status=all" class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Barchasi</a>
+    <a href="/supervisor/agent-payments?status=pending" class="btn btn-sm {% if status_filter == 'pending' %}btn-warning{% else %}btn-outline-secondary{% endif %}">
+        Kutilmoqda {% set pending_count = payments|selectattr('status', 'eq', 'pending')|list|length if status_filter == 'all' else payments|length %}
+    </a>
+    <a href="/supervisor/agent-payments?status=confirmed" class="btn btn-sm {% if status_filter == 'confirmed' %}btn-success{% else %}btn-outline-secondary{% endif %}">Tasdiqlangan</a>
+    <a href="/supervisor/agent-payments?status=cancelled" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-danger{% else %}btn-outline-secondary{% endif %}">Rad etilgan</a>
+</div>
+
+{% if payments %}
+<div class="card data-table">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Agent</th>
+                        <th>Mijoz</th>
+                        <th class="text-end">Summa</th>
+                        <th>Tur</th>
+                        <th>Izoh</th>
+                        <th>Sana</th>
+                        <th>Status</th>
+                        <th class="text-center">Amallar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in payments %}
+                    <tr>
+                        <td>{{ p.id }}</td>
+                        <td>
+                            {% if p._agent %}
+                                <strong>{{ p._agent.full_name or p._agent.code }}</strong>
+                            {% else %}
+                                Agent #{{ p.agent_id }}
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p._partner %}
+                                {{ p._partner.name }}
+                                {% if p._partner.code %}<span class="text-muted small">({{ p._partner.code }})</span>{% endif %}
+                            {% else %}
+                                #{{ p.partner_id }}
+                            {% endif %}
+                        </td>
+                        <td class="text-end fw-bold" style="font-size:1.05rem;">{{ "{:,.0f}".format(p.amount or 0) }}</td>
+                        <td>
+                            {% if p.payment_type == 'naqd' %}
+                                <span class="badge bg-success-subtle text-success"><i class="bi bi-cash"></i> Naqd</span>
+                            {% elif p.payment_type == 'plastik' %}
+                                <span class="badge bg-primary-subtle text-primary"><i class="bi bi-credit-card"></i> Plastik</span>
+                            {% else %}
+                                <span class="badge bg-info-subtle text-info"><i class="bi bi-bank"></i> Perechisl.</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-muted small">{{ p.notes or '—' }}</td>
+                        <td class="small">{{ p.created_at.strftime('%d.%m.%Y %H:%M') if p.created_at else '' }}</td>
+                        <td>
+                            {% if p.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Kutilmoqda</span>
+                            {% elif p.status == 'confirmed' %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                            {% else %}
+                                <span class="badge bg-danger">Rad etilgan</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if p.status == 'pending' %}
+                                <a href="/supervisor/agent-payments/edit/{{ p.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Tahrirlash">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="/supervisor/agent-payments/confirm/{{ p.id }}" style="display:inline;" onsubmit="return confirm('{{ "{:,.0f}".format(p.amount or 0) }} so\'m tasdiqlansimi?')">
+                                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash">
+                                        <i class="bi bi-check-lg"></i>
+                                    </button>
+                                </form>
+                                <form method="post" action="/supervisor/agent-payments/reject/{{ p.id }}" style="display:inline;" onsubmit="return confirm('Rad etilsinmi?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="Rad etish">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </form>
+                            {% elif p.status == 'confirmed' %}
+                                <a href="/supervisor/agent-payments/edit/{{ p.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Izoh tahrirlash">
+                                    <i class="bi bi-pencil"></i>
+                                </a>
+                                <form method="post" action="/supervisor/agent-payments/revert/{{ p.id }}" style="display:inline;" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Tasdiqlashni bekor qilish">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                </form>
+                            {% else %}
+                                {% if current_user and (current_user.role or '')|lower == 'admin' %}
+                                <form method="post" action="/supervisor/agent-payments/delete/{{ p.id }}" style="display:inline;" onsubmit="return confirm('O`chirasizmi?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="O'chirish">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                                {% endif %}
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="text-center text-muted py-5">
+    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+    <p class="mt-2">To'lovlar yo'q</p>
+</div>
+{% endif %}
+{% endblock %}

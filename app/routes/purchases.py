@@ -45,12 +45,33 @@ async def purchases_list(
     from urllib.parse import unquote
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    purchases = db.query(Purchase).order_by(Purchase.date.desc()).limit(100).all()
+    query = db.query(Purchase).order_by(Purchase.date.desc())
+    # Filtrlar
+    date_from = request.query_params.get("date_from", "").strip()
+    date_to = request.query_params.get("date_to", "").strip()
+    wh_id = request.query_params.get("warehouse_id", "").strip()
+    if date_from:
+        try:
+            from datetime import datetime
+            query = query.filter(Purchase.date >= datetime.strptime(date_from, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            from datetime import datetime, timedelta
+            query = query.filter(Purchase.date <= datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
+        except ValueError:
+            pass
+    if wh_id and wh_id.isdigit():
+        query = query.filter(Purchase.warehouse_id == int(wh_id))
+    purchases = query.limit(200).all()
+    warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
     return templates.TemplateResponse("purchases/list.html", {
         "request": request,
         "purchases": purchases,
+        "warehouses": warehouses,
         "current_user": current_user,
         "page_title": "Tovar kirimlari",
         "error": error,
@@ -115,7 +136,18 @@ async def purchase_create(
             continue
     if not items_data:
         raise HTTPException(status_code=400, detail="Kamida bitta mahsulot qo'shing (mahsulot, miqdor va narx).")
-    today = datetime.now()
+    # Sana: formadan yoki bugun
+    purchase_date_raw = form.get("purchase_date", "").strip()
+    if purchase_date_raw:
+        try:
+            today = datetime.strptime(purchase_date_raw, "%Y-%m-%dT%H:%M")
+        except ValueError:
+            try:
+                today = datetime.strptime(purchase_date_raw, "%Y-%m-%d")
+            except ValueError:
+                today = datetime.now()
+    else:
+        today = datetime.now()
     count = db.query(Purchase).filter(
         Purchase.date >= today.replace(hour=0, minute=0, second=0)
     ).count()
@@ -135,6 +167,7 @@ async def purchase_create(
         number=number,
         partner_id=partner_id,
         warehouse_id=warehouse_id,
+        date=today,
         total=total,
         total_expenses=total_expenses,
         status="draft",

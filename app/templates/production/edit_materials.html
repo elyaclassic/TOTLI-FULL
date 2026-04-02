@@ -82,8 +82,9 @@
                             {% if read_only %}
                             {{ "%.3f"|format(pi.quantity) }} {{ _unit }}
                             {% else %}
-                            <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm"
-                                   value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width:120px;">
+                            <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm qty-input"
+                                   value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width:120px;"
+                                   data-cost="{{ (pi.product.purchase_price or 0)|float }}">
                             <span class="muted-cell ms-1">{{ _unit }}</span>
                             {% endif %}
                         </td>
@@ -91,7 +92,7 @@
                         {% set _cost = (pi.product.purchase_price or 0)|float %}
                         {% set _qty = (pi.quantity or 0)|float %}
                         <td class="text-end" style="white-space:nowrap;"><small>{{ "{:,.0f}".format(_cost) }}</small></td>
-                        <td class="text-end fw-semibold" style="white-space:nowrap;">{{ "{:,.0f}".format(_qty * _cost) }}</td>
+                        <td class="text-end fw-semibold summa-cell" style="white-space:nowrap;">{{ "{:,.0f}".format(_qty * _cost) }}</td>
                         {% endif %}
                         {% if production.warehouse_id %}
                         <td class="text-center">
@@ -105,6 +106,20 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+                {% if production.production_items %}
+                <tfoot>
+                    <tr class="table-light fw-bold" style="border-top:2px solid #017449;">
+                        <td class="text-end">Jami:</td>
+                        <td></td>
+                        <td id="totalQty">{{ "%.3f"|format(total_material_qty) }} kg</td>
+                        {% if current_user and (current_user.role or '')|lower in ['admin', 'rahbar', 'raxbar', 'manager'] %}
+                        <td></td>
+                        <td class="text-end" id="totalCost">{{ "{:,.0f}".format(total_material_cost) }}</td>
+                        {% endif %}
+                        {% if production.warehouse_id %}<td></td>{% endif %}
+                    </tr>
+                </tfoot>
+                {% endif %}
             </table>
             {% if production.production_items and not read_only %}
             <div class="p-3 d-flex gap-2">
@@ -126,8 +141,28 @@
 {% if not read_only and production.production_items %}
 <script>
 (function() {
-    var inputs = document.querySelectorAll('input[name^="qty_"]');
+    var inputs = document.querySelectorAll('input.qty-input');
+    function recalc() {
+        var totalQty = 0, totalCost = 0;
+        inputs.forEach(function(inp) {
+            var q = parseFloat(inp.value) || 0;
+            var c = parseFloat(inp.dataset.cost) || 0;
+            totalQty += q;
+            totalCost += q * c;
+            // Summa cell yangilash
+            var row = inp.closest('tr');
+            var summaCell = row ? row.querySelector('.summa-cell') : null;
+            if (summaCell) {
+                summaCell.textContent = Math.round(q * c).toLocaleString('en-US');
+            }
+        });
+        var tqEl = document.getElementById('totalQty');
+        var tcEl = document.getElementById('totalCost');
+        if (tqEl) tqEl.textContent = totalQty.toFixed(3) + ' kg';
+        if (tcEl) tcEl.textContent = Math.round(totalCost).toLocaleString('en-US');
+    }
     inputs.forEach(function(inp, i) {
+        inp.addEventListener('input', recalc);
         inp.addEventListener('keydown', function(e) {
             if (e.key !== 'Enter') return;
             e.preventDefault();

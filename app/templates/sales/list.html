@@ -134,6 +134,8 @@
             <span class="badge-draft">Qoralama</span>
             {% elif order.status == 'waiting_production' %}
             <span class="badge-waiting">Ishlab chiqarishda</span>
+            {% elif order.status == 'confirmed' %}
+            <span class="badge-waiting">Tasdiqlangan</span>
             {% elif order.status == 'cancelled' %}
             <span class="badge-cancelled">Bekor qilingan</span>
             {% else %}
@@ -146,13 +148,21 @@
               {% if order.status == 'completed' %}
               <a href="/sales/return/{{ order.id }}" class="btn-act" title="Qaytarish"><i class="bi bi-arrow-return-left"></i></a>
               {% endif %}
+              {% if order.status == 'confirmed' %}
+              <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Draft ga qaytarasizmi?');">
+                <button type="submit" class="btn-act warning" title="Draft ga qaytarish"><i class="bi bi-arrow-counterclockwise"></i></button>
+              </form>
+              <form method="POST" action="/supervisor/agent-orders/reject/{{ order.id }}" class="d-inline" onsubmit="return confirm('Bekor qilasizmi?');">
+                <button type="submit" class="btn-act danger" title="Bekor qilish"><i class="bi bi-x-lg"></i></button>
+              </form>
+              {% endif %}
               {% if current_user and (current_user.role or '')|lower == 'admin' %}
                 {% if order.status in ('completed', 'waiting_production') %}
                 <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');">
                   <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
                 </form>
                 {% endif %}
-                {% if order.status in ('draft', 'cancelled', 'waiting_production') %}
+                {% if order.status in ('draft', 'cancelled', 'waiting_production', 'confirmed') %}
                 <form method="POST" action="/sales/delete/{{ order.id }}" class="d-inline" onsubmit="return confirm('O\'chirish?');">
                   <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                 </form>

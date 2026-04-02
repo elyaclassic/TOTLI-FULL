@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../services/location_service.dart';
+import '../services/sync_service.dart';
 import 'dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -17,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _serverController = TextEditingController(text: 'http://10.0.2.2:8080');
   bool _isLoading = false;
+  bool _obscurePassword = true;
   String? _errorMessage;
 
   @override
@@ -115,6 +117,13 @@ class _LoginScreenState extends State<LoginScreen> {
           locService.startPeriodicTracking();
         }
 
+        // Offline cache — partners va products ni yuklash
+        try {
+          final syncService = SyncService();
+          await syncService.init();
+          await syncService.refreshCache();
+        } catch (_) {}
+
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const DashboardScreen()),
         );
@@ -143,13 +152,14 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
                   const SizedBox(height: 48),
                   Icon(Icons.store, size: 72, color: Colors.white.withOpacity(0.9)),
                   const SizedBox(height: 16),
@@ -190,7 +200,14 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     label: 'Parol',
                     hint: 'Parol',
-                    obscureText: true,
+                    obscureText: _obscurePassword,
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword ? Icons.visibility_off : Icons.visibility,
+                        color: Colors.white.withOpacity(0.7),
+                      ),
+                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    ),
                   ),
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 16),
@@ -225,7 +242,8 @@ class _LoginScreenState extends State<LoginScreen> {
                           )
                         : const Text('KIRISH', style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -240,6 +258,7 @@ class _LoginScreenState extends State<LoginScreen> {
     required String hint,
     bool obscureText = false,
     TextInputType? keyboardType,
+    Widget? suffixIcon,
   }) {
     return TextFormField(
       controller: controller,
@@ -251,6 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
         hintText: hint,
         labelStyle: TextStyle(color: Colors.white.withOpacity(0.9)),
         hintStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+        suffixIcon: suffixIcon,
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.white.withOpacity(0.5)),

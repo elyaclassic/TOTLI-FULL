@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <div>
+        <h5 class="mb-0"><i class="bi bi-pencil-square"></i> To'lov tahrirlash #{{ payment.id }}</h5>
+        <p class="text-muted mb-0 small">
+            {% if payment.status == 'pending' %}Summani, turini va izohni o'zgartirish mumkin{% else %}Faqat izohni o'zgartirish mumkin{% endif %}
+        </p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="/supervisor/agent-payments" class="top-btn"><i class="bi bi-arrow-left"></i> Orqaga</a>
+    </div>
+</div>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card data-table">
+            <div class="card-body">
+                <!-- Info -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Agent:</span>
+                        <strong>{{ payment._agent.full_name if payment._agent else 'Agent #' ~ payment.agent_id }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Mijoz:</span>
+                        <strong>{{ payment._partner.name if payment._partner else '#' ~ payment.partner_id }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="text-muted">Status:</span>
+                        {% if payment.status == 'pending' %}
+                            <span class="badge bg-warning text-dark">Kutilmoqda</span>
+                        {% elif payment.status == 'confirmed' %}
+                            <span class="badge bg-success">Tasdiqlangan</span>
+                        {% else %}
+                            <span class="badge bg-danger">Rad etilgan</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <hr>
+
+                <form method="post" action="/supervisor/agent-payments/edit/{{ payment.id }}">
+                    <!-- Summa -->
+                    <div class="mb-3">
+                        <label for="amount" class="form-label">Summa</label>
+                        <input type="number" class="form-control" id="amount" name="amount"
+                               value="{{ payment.amount or 0 }}" step="100" min="0"
+                               {% if payment.status != 'pending' %}disabled{% endif %}>
+                        {% if payment.status != 'pending' %}
+                        <div class="form-text text-warning">Tasdiqlangan to'lov summasini o'zgartirish mumkin emas</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- To'lov turi -->
+                    <div class="mb-3">
+                        <label for="payment_type" class="form-label">To'lov turi</label>
+                        <select class="form-select" id="payment_type" name="payment_type"
+                                {% if payment.status != 'pending' %}disabled{% endif %}>
+                            <option value="naqd" {% if payment.payment_type == 'naqd' %}selected{% endif %}>Naqd</option>
+                            <option value="plastik" {% if payment.payment_type == 'plastik' %}selected{% endif %}>Plastik</option>
+                            <option value="perechisleniye" {% if payment.payment_type == 'perechisleniye' %}selected{% endif %}>Perechisleniye</option>
+                        </select>
+                        {% if payment.status != 'pending' %}
+                        <div class="form-text text-warning">Tasdiqlangan to'lov turini o'zgartirish mumkin emas</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Izoh -->
+                    <div class="mb-3">
+                        <label for="notes" class="form-label">Izoh</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3">{{ payment.notes or '' }}</textarea>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Saqlash
+                        </button>
+                        <a href="/supervisor/agent-payments" class="btn btn-outline-secondary">Bekor qilish</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

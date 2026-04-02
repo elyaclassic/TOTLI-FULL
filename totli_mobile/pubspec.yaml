@@ -1,7 +1,7 @@
 name: totli_mobile
 description: TOTLI HOLVA - Agent va Haydovchi mobil ilovasi
 publish_to: 'none'
-version: 1.4.0+5
+version: 1.8.1+41
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -15,6 +15,10 @@ dependencies:
   permission_handler: ^11.0.0
   shared_preferences: ^2.2.2
   battery_plus: ^5.0.2
+  url_launcher: ^6.2.1
+  sqflite: ^2.3.0
+  path: ^1.8.3
+  connectivity_plus: ^5.0.2
 
 dev_dependencies:
   flutter_test:

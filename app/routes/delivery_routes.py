@@ -19,6 +19,9 @@ from app.models.database import (
     PartnerLocation,
     Order,
     User,
+    AgentPayment,
+    Payment,
+    CashRegister,
 )
 from app.deps import require_admin, require_admin_or_manager
 from sqlalchemy.orm import joinedload
@@ -267,11 +270,18 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         )
         if last_loc:
             agent.last_location = last_loc
-            agent_markers.append({
-                "id": agent.id, "name": agent.full_name, "type": "agent",
-                "lat": last_loc.latitude, "lng": last_loc.longitude,
-                "time": last_loc.recorded_at.strftime("%H:%M"),
-            })
+            agent.is_online = (datetime.now() - last_loc.recorded_at).total_seconds() < 600
+            if last_loc.latitude is not None and last_loc.longitude is not None:
+                agent_markers.append({
+                    "id": agent.id,
+                    "name": agent.full_name,
+                    "type": "agent",
+                    "lat": float(last_loc.latitude),
+                    "lng": float(last_loc.longitude),
+                    "time": last_loc.recorded_at.strftime("%H:%M"),
+                })
+        else:
+            agent.is_online = False
     driver_markers = []
     for driver in drivers:
         last_loc = (
@@ -282,12 +292,16 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         )
         if last_loc:
             driver.last_location = last_loc
-            driver_markers.append({
-                "id": driver.id, "name": driver.full_name, "type": "driver",
-                "lat": last_loc.latitude, "lng": last_loc.longitude,
-                "time": last_loc.recorded_at.strftime("%H:%M"),
-                "vehicle": driver.vehicle_number,
-            })
+            if last_loc.latitude is not None and last_loc.longitude is not None:
+                driver_markers.append({
+                    "id": driver.id,
+                    "name": driver.full_name,
+                    "type": "driver",
+                    "lat": float(last_loc.latitude),
+                    "lng": float(last_loc.longitude),
+                    "time": last_loc.recorded_at.strftime("%H:%M"),
+                    "vehicle": driver.vehicle_number or "",
+                })
     recent_visits = db.query(Visit).filter(Visit.visit_date >= today).order_by(Visit.visit_date.desc()).limit(20).all()
     recent_deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(10).all()
     # Agent buyurtmalari (bugungi)
@@ -310,6 +324,8 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         "recent_visits": recent_visits,
         "recent_deliveries": recent_deliveries,
         "agent_orders": agent_orders,
+        "agent_payments": [p for p in _get_pending_agent_payments(db)],
+        "yandex_maps_apikey": _get_yandex_apikey(),
         "page_title": "Supervayzer",
         "now": datetime.now(),
     })
@@ -409,9 +425,304 @@ async def supervisor_reject_agent_order(
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    # Agar tasdiqlangan bo'lsa — yetkazishni ham bekor qilish
+    if order.status == "confirmed":
+        from app.models.database import Delivery as DeliveryModel
+        delivery = db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id, DeliveryModel.status == "pending").first()
+        if delivery:
+            delivery.status = "cancelled"
     order.status = "cancelled"
     db.commit()
+    referer = request.headers.get("referer", "/supervisor/agent-orders")
+    return RedirectResponse(url=referer, status_code=303)
+
+
+@router.post("/supervisor/agent-orders/delete/{order_id}")
+async def supervisor_delete_agent_order(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent buyurtmasini o'chirish (faqat bekor qilingan yoki draft)."""
+    from app.models.database import OrderItem as OI, Delivery as DeliveryModel
+    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
+    if not order:
+        return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    # Bog'liq yetkazishlarni o'chirish
+    db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id).delete()
+    # Order itemlarni o'chirish
+    db.query(OI).filter(OI.order_id == order.id).delete()
+    # Buyurtmani o'chirish
+    db.delete(order)
+    db.commit()
     return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
+
+
+def _get_yandex_apikey():
+    try:
+        from app.config.maps_config import YANDEX_MAPS_API_KEY
+        return YANDEX_MAPS_API_KEY or ""
+    except Exception:
+        return ""
+
+
+def _get_pending_agent_payments(db):
+    payments = db.query(AgentPayment).filter(AgentPayment.status == "pending").order_by(AgentPayment.id.desc()).limit(20).all()
+    for p in payments:
+        p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
+        p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
+    return payments
+
+
+# ==========================================
+# SUPERVISOR: AGENT TO'LOVLARI (INKASSATSIYA)
+# ==========================================
+
+@router.get("/supervisor/agent-payments", response_class=HTMLResponse)
+async def supervisor_agent_payments(
+    request: Request,
+    status: str = "all",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
+    q = db.query(AgentPayment).order_by(AgentPayment.id.desc())
+    if status == "pending":
+        q = q.filter(AgentPayment.status == "pending")
+    elif status == "confirmed":
+        q = q.filter(AgentPayment.status == "confirmed")
+    elif status == "cancelled":
+        q = q.filter(AgentPayment.status == "cancelled")
+    payments = q.limit(200).all()
+    # Agent va partner ma'lumotlarini biriktirish
+    for p in payments:
+        p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
+        p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
+    return templates.TemplateResponse("supervisor/agent_payments.html", {
+        "request": request,
+        "payments": payments,
+        "status_filter": status,
+        "current_user": current_user,
+    })
+
+
+@router.post("/supervisor/agent-payments/confirm/{payment_id}")
+async def supervisor_confirm_agent_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovini tasdiqlash — mijoz qarzidan ayirish va kassaga kirim qilish."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+    if ap.status != "pending":
+        return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
+
+    # 1. Agent to'lovini tasdiqlash
+    ap.status = "confirmed"
+    ap.confirmed_by = current_user.id
+    ap.confirmed_at = datetime.now()
+
+    # 2. Mijoz qarzidan ayirish (balance = qarzdorlik)
+    partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
+    if partner:
+        partner.balance = float(partner.balance or 0) - float(ap.amount or 0)
+
+    # 3. Tegishli kassaga kirim qilish
+    pay_type_map = {"naqd": "naqd", "plastik": "plastik", "perechisleniye": "perechisleniye"}
+    cash_type = pay_type_map.get(ap.payment_type, "naqd")
+    cash_register = db.query(CashRegister).filter(
+        CashRegister.payment_type == cash_type,
+        CashRegister.is_active == True,
+    ).first()
+    # Agar mos kassa topilmasa, birinchi faol kassani olish
+    if not cash_register:
+        cash_register = db.query(CashRegister).filter(CashRegister.is_active == True).first()
+
+    if cash_register:
+        # To'lov hujjati yaratish (Payment)
+        last_payment = db.query(Payment).order_by(Payment.id.desc()).first()
+        next_num = (last_payment.id + 1) if last_payment else 1
+        payment_number = f"AGT-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
+
+        payment = Payment(
+            number=payment_number,
+            date=datetime.now(),
+            type="income",
+            cash_register_id=cash_register.id,
+            partner_id=ap.partner_id,
+            amount=float(ap.amount or 0),
+            payment_type=ap.payment_type,
+            category="agent_collection",
+            description=f"Agent inkassatsiya: {partner.name if partner else ''}" + (f" — {ap.notes}" if ap.notes else ""),
+            user_id=current_user.id,
+            status="confirmed",
+        )
+        db.add(payment)
+
+    # 4. Buyurtmalar qarzini kamaytirish (FIFO — eng eski buyurtmadan boshlab)
+    remaining = float(ap.amount or 0)
+    if remaining > 0:
+        debt_orders = (
+            db.query(Order)
+            .filter(Order.partner_id == ap.partner_id, Order.debt > 0, Order.type == "sale")
+            .order_by(Order.date.asc())
+            .all()
+        )
+        for order in debt_orders:
+            if remaining <= 0:
+                break
+            order_debt = float(order.debt or 0)
+            if order_debt <= 0:
+                continue
+            pay_this = min(remaining, order_debt)
+            order.paid = float(order.paid or 0) + pay_this
+            order.debt = order_debt - pay_this
+            remaining -= pay_this
+
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
+
+
+@router.post("/supervisor/agent-payments/reject/{payment_id}")
+async def supervisor_reject_agent_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovini rad etish."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+    if ap.status != "pending":
+        return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
+    ap.status = "cancelled"
+    ap.confirmed_by = current_user.id
+    ap.confirmed_at = datetime.now()
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
+
+
+@router.post("/supervisor/agent-payments/revert/{payment_id}")
+async def supervisor_revert_agent_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Tasdiqlangan to'lovni bekor qilish — kassadan chiqarish, mijoz qarzini qaytarish."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+    if ap.status != "confirmed":
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_confirmed", status_code=303)
+
+    # 1. Mijoz qarzini qaytarish
+    partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
+    if partner:
+        partner.balance = float(partner.balance or 0) + float(ap.amount or 0)
+
+    # 2. Tegishli Payment ni o'chirish (agar yaratilgan bo'lsa)
+    # AGT- raqamli to'lovlarni topish
+    payments = db.query(Payment).filter(
+        Payment.partner_id == ap.partner_id,
+        Payment.amount == float(ap.amount or 0),
+        Payment.category == "agent_collection",
+    ).all()
+    for p in payments:
+        db.delete(p)
+
+    # 3. Statusni pending ga qaytarish
+    ap.status = "pending"
+    ap.confirmed_by = None
+    ap.confirmed_at = None
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
+
+
+@router.post("/supervisor/agent-payments/delete/{payment_id}")
+async def supervisor_delete_agent_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovini o'chirish."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+
+    # Agar tasdiqlangan bo'lsa — avval revert qilish
+    if ap.status == "confirmed":
+        partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
+        if partner:
+            partner.balance = float(partner.balance or 0) + float(ap.amount or 0)
+        payments = db.query(Payment).filter(
+            Payment.partner_id == ap.partner_id,
+            Payment.amount == float(ap.amount or 0),
+            Payment.category == "agent_collection",
+        ).all()
+        for p in payments:
+            db.delete(p)
+
+    db.delete(ap)
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
+
+
+@router.get("/supervisor/agent-payments/edit/{payment_id}", response_class=HTMLResponse)
+async def supervisor_edit_agent_payment_form(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovini tahrirlash formasi."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+    ap._agent = db.query(Agent).filter(Agent.id == ap.agent_id).first()
+    ap._partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
+    return templates.TemplateResponse("supervisor/agent_payment_edit.html", {
+        "request": request,
+        "current_user": current_user,
+        "payment": ap,
+        "page_title": f"To'lov tahrirlash #{ap.id}",
+    })
+
+
+@router.post("/supervisor/agent-payments/edit/{payment_id}")
+async def supervisor_edit_agent_payment_save(
+    request: Request,
+    payment_id: int,
+    amount: float = Form(None),
+    payment_type: str = Form(None),
+    notes: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent to'lovini saqlash."""
+    ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
+    if not ap:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+
+    if ap.status == "pending":
+        # Pending — amount, type, notes tahrirlash mumkin
+        if amount is not None and amount > 0:
+            ap.amount = amount
+        if payment_type in ("naqd", "plastik", "perechisleniye"):
+            ap.payment_type = payment_type
+        ap.notes = notes
+    else:
+        # Confirmed/cancelled — faqat notes tahrirlash mumkin
+        ap.notes = notes
+
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
 
 @router.post("/delivery/add-driver")
