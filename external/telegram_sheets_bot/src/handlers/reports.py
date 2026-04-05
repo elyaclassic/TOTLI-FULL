@@ -34,9 +34,9 @@ async def cb_report_summary(callback: CallbackQuery) -> None:
     report = await asyncio.to_thread(summary_report)
     text = (
         "<b>Umumiy hisobot</b>\n\n"
-        f"Jami kirim: <b>{_fmt_money(report['jami_kirim'])}</b>\n"
-        f"Jami chiqim: <b>{_fmt_money(report['jami_chiqim'])}</b>\n"
-        f"Farq: <b>{_fmt_money(report['farq'])}</b>\n"
+        f"Mijozlar to'lagan: <b>{_fmt_money(report['jami_kirim'])}</b>\n"
+        f"Biz bergan: <b>{_fmt_money(report['jami_chiqim'])}</b>\n"
+        f"Jami qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>\n"
         f"Operatsiyalar soni: <b>{report['operatsiyalar_soni']}</b>"
     )
     if callback.message:
@@ -56,9 +56,9 @@ async def cb_report_customer(callback: CallbackQuery, state: FSMContext) -> None
 
     lines = [
         f"<b>{customer['name']}</b>",
-        f"Jami kirim: <b>{_fmt_money(customer.get('kirim') or 0)}</b>",
-        f"Jami chiqim: <b>{_fmt_money(customer.get('chiqim') or 0)}</b>",
-        f"Qoldiq: <b>{_fmt_money(customer.get('qoldiq') or 0)}</b>",
+        f"Mijoz to'lagan: <b>{_fmt_money(customer.get('kirim') or 0)}</b>",
+        f"Biz bergan: <b>{_fmt_money(customer.get('chiqim') or 0)}</b>",
+        f"Qarz qoldiq: <b>{_fmt_money(customer.get('qoldiq') or 0)}</b>",
         "",
         "<b>Oxirgi operatsiyalar:</b>",
     ]

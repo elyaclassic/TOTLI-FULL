@@ -1,5 +1,5 @@
 """
-Excel shablon: Mijozlar + Operatsiyalar + Hisobot (formulalar).
+Excel shablon: Mijozlar + Operatsiyalar + Hisobot (qarzdorlik formulalari).
 Ishga tushirish: python scripts/build_excel_template.py
 """
 from pathlib import Path
@@ -47,31 +47,33 @@ def main() -> None:
     )
 
     mj = wb.create_sheet("Mijozlar")
-    mj.append(["ID", "Nomi", "Telefon", "Boshlang'ich", "Jami_kirim", "Jami_chiqim", "Qoldiq"])
+    mj.append(["ID", "Nomi", "Telefon", "Boshlang'ich_qarz", "Mijoz_to'lagan", "Biz_bergan", "Qarz_qoldiq"])
     for c in mj[1]:
         c.font = Font(bold=True)
     mj.append([1, "Namuna mijoz", "+998901234567", 0, None, None, None])
     mj.append([2, "Ikkinchi mijoz", "+998901112233", 100000, None, None, None])
 
-    # Formulalar: Operatsiyalar!F = Summa, C = Mijoz_ID, E = Turi
+    # Qarz mantiqi:
+    # kirim = mijoz to'lovi -> qarz kamayadi
+    # chiqim = biz berdik -> qarz oshadi
     mj["E2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"kirim")'
     mj["F2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"chiqim")'
-    mj["G2"] = "=D2+E2-F2"
+    mj["G2"] = "=D2+F2-E2"
 
     hs = wb.create_sheet("Hisobot")
     hs.append(["Ko'rsatkich", "Qiymat"])
     for c in hs[1]:
         c.font = Font(bold=True)
-    hs["A2"] = "Jami kirim"
+    hs["A2"] = "Mijozlar to'lagan"
     hs["B2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
-    hs["A3"] = "Jami chiqim"
+    hs["A3"] = "Biz bergan"
     hs["B3"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
-    hs["A4"] = "Farq"
-    hs["B4"] = "=B2-B3"
+    hs["A4"] = "Jami qarz qoldiq"
+    hs["B4"] = "=B3-B2"
     hs["A5"] = "Operatsiyalar soni"
     hs["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
     hs["A7"] = "Izoh"
-    hs["B7"] = "Bot tugmalari: Mijozlar -> mijoz tanlash -> Kirim/Chiqim -> summa"
+    hs["B7"] = "Bot tugmalari: Mijozlar -> mijoz tanlash -> Mijoz to'ladi/Biz berdik -> summa"
 
     wb.save(OUT)
     print(f"Yaratildi: {OUT}")

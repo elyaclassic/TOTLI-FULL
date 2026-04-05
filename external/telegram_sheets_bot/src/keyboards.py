@@ -39,8 +39,8 @@ def customer_list_kb(customers: list[dict], page: int = 1, page_size: int = 10) 
 def customer_actions_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMarkup:
     rows = [
         [
-            InlineKeyboardButton(text="Kirim", callback_data=f"customer:op:{customer_id}:kirim"),
-            InlineKeyboardButton(text="Chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
+            InlineKeyboardButton(text="Mijoz to'ladi", callback_data=f"customer:op:{customer_id}:kirim"),
+            InlineKeyboardButton(text="Biz berdik", callback_data=f"customer:op:{customer_id}:chiqim"),
         ],
     ]
     if can_report:
@@ -53,8 +53,8 @@ def customer_actions_kb(customer_id: int, can_report: bool = True) -> InlineKeyb
 def after_save_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMarkup:
     rows = [
         [
-            InlineKeyboardButton(text="Yana kirim", callback_data=f"customer:op:{customer_id}:kirim"),
-            InlineKeyboardButton(text="Yana chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
+            InlineKeyboardButton(text="Yana to'lov oldim", callback_data=f"customer:op:{customer_id}:kirim"),
+            InlineKeyboardButton(text="Yana pul berdim", callback_data=f"customer:op:{customer_id}:chiqim"),
         ],
     ]
     if can_report:

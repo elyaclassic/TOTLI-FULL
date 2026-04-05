@@ -19,7 +19,7 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
 
 4) Tugmali bot oqimi
    - `Mijozlar` -> Exceldagi mijozlar ro'yxati chiqadi
-   - Mijoz tanlang -> `Kirim` yoki `Chiqim`
+   - Mijoz tanlang -> `Mijoz to'ladi` yoki `Biz berdik`
    - Summa yuboring -> bot `Operatsiyalar` varag'iga yozadi
    - `Hisobot` -> umumiy hisobot va tanlangan mijoz bo'yicha tafsilot
    - `Yangi mijoz` -> nom, telefon, boshlang'ich qoldiq so'raladi va `Mijozlar` ga yoziladi
@@ -32,7 +32,9 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
 
 6) Excel logikasi
    - `Mijozlar` dagi formulalar `Mijoz_ID` bo'yicha operatsiyalarni yig'adi
-   - `Hisobot` varag'ida jami kirim, chiqim, farq va operatsiyalar soni turadi
+   - `kirim` = mijoz to'lovi, qarzni kamaytiradi
+   - `chiqim` = biz bergan summa, qarzni oshiradi
+   - `Hisobot` varag'ida mijozlar to'lagan, biz bergan, jami qarz qoldiq va operatsiyalar soni turadi
 
 7) Aniqroq hisob
    - Matnda aniq yozing: masalan "kirim 500000" yoki "chiqim 500 ming".

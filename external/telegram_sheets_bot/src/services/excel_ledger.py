@@ -21,7 +21,7 @@ OPERATIONS_HEADERS = [
     "Manba",
 ]
 
-CUSTOMERS_HEADERS = ["ID", "Nomi", "Telefon", "Boshlang'ich", "Jami_kirim", "Jami_chiqim", "Qoldiq"]
+CUSTOMERS_HEADERS = ["ID", "Nomi", "Telefon", "Boshlang'ich_qarz", "Mijoz_to'lagan", "Biz_bergan", "Qarz_qoldiq"]
 SUMMARY_HEADERS = ["Ko'rsatkich", "Qiymat"]
 
 
@@ -68,14 +68,14 @@ def _ensure_headers(ws, headers: list[str]) -> None:
 
 def _ensure_summary_formulas(summary_ws, operations_ws) -> None:
     if not summary_ws["A2"].value:
-        summary_ws["A2"] = "Jami kirim"
+        summary_ws["A2"] = "Mijozlar to'lagan"
         summary_ws["B2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
     if not summary_ws["A3"].value:
-        summary_ws["A3"] = "Jami chiqim"
+        summary_ws["A3"] = "Biz bergan"
         summary_ws["B3"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
     if not summary_ws["A4"].value:
-        summary_ws["A4"] = "Farq"
-        summary_ws["B4"] = "=B2-B3"
+        summary_ws["A4"] = "Jami qarz qoldiq"
+        summary_ws["B4"] = "=B3-B2"
     if not summary_ws["A5"].value:
         summary_ws["A5"] = "Operatsiyalar soni"
         summary_ws["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
@@ -91,7 +91,7 @@ def _ensure_customer_formulas(customers_ws) -> None:
         customers_ws[f"F{row}"] = (
             f'=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"chiqim")'
         )
-        customers_ws[f"G{row}"] = f"=D{row}+E{row}-F{row}"
+        customers_ws[f"G{row}"] = f"=D{row}+F{row}-E{row}"
 
 
 def _num(value) -> float:
@@ -167,7 +167,7 @@ def list_customers() -> list[dict]:
                 "opening": opening,
                 "kirim": kirim,
                 "chiqim": chiqim,
-                "qoldiq": opening + kirim - chiqim,
+                "qoldiq": opening + chiqim - kirim,
             }
         )
     return items
@@ -243,7 +243,7 @@ def summary_report() -> dict:
     return {
         "jami_kirim": jami_kirim,
         "jami_chiqim": jami_chiqim,
-        "farq": jami_kirim - jami_chiqim,
+        "farq": jami_chiqim - jami_kirim,
         "operatsiyalar_soni": operatsiyalar_soni,
     }
 

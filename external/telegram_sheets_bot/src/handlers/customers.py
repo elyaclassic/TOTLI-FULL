@@ -66,7 +66,7 @@ async def cb_customer_pick(callback: CallbackQuery, state: FSMContext) -> None:
     text = (
         f"<b>{customer['name']}</b>\n"
         f"Telefon: {customer.get('phone') or '-'}\n"
-        f"Qoldiq: {_fmt_money(customer.get('qoldiq') or 0)}"
+        f"Qarz qoldiq: {_fmt_money(customer.get('qoldiq') or 0)}"
     )
     if callback.message:
         can_report = has_role(callback.from_user.id if callback.from_user else None, "admin", "rahbar")
@@ -92,8 +92,9 @@ async def cb_customer_operation(callback: CallbackQuery, state: FSMContext) -> N
         selected_operation=operation_type,
     )
     if callback.message:
+        action_label = "mijoz to'lovi" if operation_type == "kirim" else "biz bergan summa"
         await callback.message.answer(
-            f"<b>{customer['name']}</b> uchun <b>{operation_type}</b> summasini yozing.\n\n"
+            f"<b>{customer['name']}</b> uchun <b>{action_label}</b> summasini yozing.\n\n"
             "Masalan: <code>500000</code>",
             parse_mode="HTML",
         )
@@ -138,7 +139,7 @@ async def on_amount_entered(message: Message, state: FSMContext) -> None:
 
     await state.clear()
     await message.answer(
-        f"✅ <b>{customer_name}</b> uchun <b>{operation_type}</b> saqlandi.\n"
+        f"✅ <b>{customer_name}</b> uchun amaliyot saqlandi.\n"
         f"Summa: <b>{_fmt_money(amount)}</b>",
         parse_mode="HTML",
         reply_markup=after_save_kb(
