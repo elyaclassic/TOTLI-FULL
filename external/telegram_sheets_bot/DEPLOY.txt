@@ -1,0 +1,27 @@
+Bulutda ishlatish (kompyuter o'chsa ham bot javob beradi)
+============================================================
+
+1) Webhook rejimi: Telegram yangilanishlarni sizning HTTPS serveringizga yuboradi.
+   Shuning uchun bot kodini internetga ochiq serverda ishlatish kerak.
+
+2) Qisqa yo'l — Docker + bepul/balli hosting:
+   - Render.com, Fly.io, Railway.app va hokazo: "Docker" yoki "GitHub" deploy.
+   - Loyiha papkasi: external/telegram_sheets_bot (shu Dockerfile bilan).
+
+3) Muhit o'zgaruvchilari (hosting panelida):
+   TELEGRAM_BOT_TOKEN = @BotFather dan
+   BOT_MODE = webhook
+   WEBHOOK_BASE_URL = https://<sizning-domen>.onrender.com   (oxirida / yo'q)
+   WEBHOOK_SECRET = tasodifiy 32+ belgi (ixtiyoriy, tavsiya)
+   PORT = ko'pincha platforma o'zi beradi (Render: 10000 yoki PORT)
+
+4) Deploy qilgandan keyin brauzerda oching: https://<domen>/
+   "ok" yozuvi chiqsa — servis tirik.
+
+5) Mahalliy sinov uchun BOT_MODE=polling yetarli (kompyuter yoqilguncha).
+
+Eslatma: "Hech qayerga o'rnatmasdan" faqat Telegram serverlari bilan to'liq
+hisobot/bot imkonsiz — biror joyda (bulut yoki o'z serveringiz) jarayon ishlashi kerak.
+
+Bepul tariflarda servis uzoq vaqt ishlatilmasa "uyqu" rejimiga o'tishi mumkin —
+birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.

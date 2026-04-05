@@ -1,7 +1,7 @@
-# Alohida bot — TOTLI BI dan mustaqil. Versiyalarni kerak bo'lsa yangilang.
+# Alohida bot — TOTLI BI dan mustaqil
 aiogram>=3.4,<4
+aiohttp>=3.9,<4
 httpx>=0.27
 python-dotenv>=1.0
-# Google Sheets (keyin ulash uchun)
 gspread>=6.0
 google-auth>=2.29
