@@ -26,6 +26,11 @@ hisobot/bot imkonsiz — biror joyda (bulut yoki o'z serveringiz) jarayon ishlas
 Bepul tariflarda servis uzoq vaqt ishlatilmasa "uyqu" rejimiga o'tishi mumkin —
 birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.
 
+--- Conflict: "terminated by other getUpdates request" ---
+Bir vaqtda faqat BITTA polling jarayoni: Cursor terminal + run.bat + Task Scheduler
+ikkalasini birga ishlatmang. Ortiqcha python.exe ni Task Manager dan to'xtating.
+Yoki: netstat -ano | findstr :47891  -> PID ni taskkill /PID ... /F
+
 --- Windows: Cursor/terminal yopsa ham bot ishlasin ---
 1) external/telegram_sheets_bot/windows/install_startup_task.ps1
    faylni o'ng tugma -> "Run with PowerShell" (Administrator tavsiya).

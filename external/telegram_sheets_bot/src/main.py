@@ -16,6 +16,7 @@ Ishga tushirish:
 """
 import asyncio
 import logging
+import socket
 import sys
 
 from aiohttp import web
@@ -24,6 +25,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from src.config import (
+    BOT_LOCK_PORT,
     BOT_MODE,
     HOST,
     PORT,
@@ -39,6 +41,27 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
     stream=sys.stdout,
 )
+
+# Bir kompyuterda ikkinchi polling ni ishga tushirmaslik (TelegramConflictError oldini olish)
+_POLLING_LOCK_SOCK: socket.socket | None = None
+
+
+def _acquire_polling_singleton() -> None:
+    """127.0.0.1:BOT_LOCK_PORT band bo'lsa — boshqa bot jarayoni allaqachon ishlayapti."""
+    global _POLLING_LOCK_SOCK
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", BOT_LOCK_PORT))
+    except OSError:
+        s.close()
+        logging.error(
+            "Polling allaqachon ishlamoqda (bir token — bir jarayon). "
+            "Boshqa terminal / run.bat / Task Scheduler dagi nusxani to'xtating. "
+            "Task Manager: python.exe; yoki: netstat -ano | findstr :%s",
+            BOT_LOCK_PORT,
+        )
+        sys.exit(1)
+    _POLLING_LOCK_SOCK = s
 
 
 def _build_bot_dp() -> tuple[Bot, Dispatcher]:
@@ -109,6 +132,7 @@ def main() -> None:
     if BOT_MODE == "webhook":
         _run_webhook()
     else:
+        _acquire_polling_singleton()
         asyncio.run(_run_polling())
 
 

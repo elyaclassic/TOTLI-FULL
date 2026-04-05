@@ -27,6 +27,9 @@ HOST = os.environ.get("HOST", "0.0.0.0").strip()
 # Render / Fly / Railway odatda PORT beradi
 PORT = int(os.environ.get("PORT", "8080"))
 
+# Polling: bir kompyuterda faqat bitta jarayon (getUpdates konfliktini oldini olish)
+BOT_LOCK_PORT = int(os.environ.get("BOT_LOCK_PORT", "47891"))
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
 GOOGLE_SHEETS_CREDENTIALS_JSON = os.environ.get("GOOGLE_SHEETS_CREDENTIALS_JSON", "").strip()
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "").strip()
