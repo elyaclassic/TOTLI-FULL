@@ -24,10 +24,16 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
    - `Hisobot` -> umumiy hisobot va tanlangan mijoz bo'yicha tafsilot
    - `Yangi mijoz` -> nom, telefon, boshlang'ich qoldiq so'raladi va `Mijozlar` ga yoziladi
 
-5) Excel logikasi
+5) Rollar
+   - `admin` -> hammasi: mijozlar, hisobot, yangi mijoz
+   - `rahbar` -> mijozlar va hisobot
+   - `xodim` -> barcha mijozlarni ko'radi va kirim/chiqim kiritadi
+   - `.env`: `ADMIN_TELEGRAM_IDS`, `RAHBAR_TELEGRAM_IDS`, `XODIM_TELEGRAM_IDS`
+
+6) Excel logikasi
    - `Mijozlar` dagi formulalar `Mijoz_ID` bo'yicha operatsiyalarni yig'adi
    - `Hisobot` varag'ida jami kirim, chiqim, farq va operatsiyalar soni turadi
 
-6) Aniqroq hisob
+7) Aniqroq hisob
    - Matnda aniq yozing: masalan "kirim 500000" yoki "chiqim 500 ming".
    - Ovozli xabar ham shu logikaga tushadi.

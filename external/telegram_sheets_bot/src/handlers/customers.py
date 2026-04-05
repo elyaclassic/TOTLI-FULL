@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.access import AllowedUserFilter
+from src.access import AllowedUserFilter, RoleFilter, deny_role_message, get_user_role, has_role
 from src.keyboards import after_save_kb, customer_actions_kb, customer_list_kb, main_menu_kb
 from src.services.excel_ledger import add_customer, append_operation_row, get_customer, list_customers
 from src.states import CustomerEntryState, NewCustomerState
@@ -37,7 +37,8 @@ async def cb_menu_main(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     text = "Asosiy menyu:"
     if callback.message:
-        await callback.message.answer(text, reply_markup=main_menu_kb())
+        role = get_user_role(callback.from_user.id if callback.from_user else None)
+        await callback.message.answer(text, reply_markup=main_menu_kb(role))
     await callback.answer()
 
 
@@ -68,7 +69,12 @@ async def cb_customer_pick(callback: CallbackQuery, state: FSMContext) -> None:
         f"Qoldiq: {_fmt_money(customer.get('qoldiq') or 0)}"
     )
     if callback.message:
-        await callback.message.edit_text(text, reply_markup=customer_actions_kb(customer_id), parse_mode="HTML")
+        can_report = has_role(callback.from_user.id if callback.from_user else None, "admin", "rahbar")
+        await callback.message.edit_text(
+            text,
+            reply_markup=customer_actions_kb(customer_id, can_report=can_report),
+            parse_mode="HTML",
+        )
     await callback.answer()
 
 
@@ -135,15 +141,23 @@ async def on_amount_entered(message: Message, state: FSMContext) -> None:
         f"✅ <b>{customer_name}</b> uchun <b>{operation_type}</b> saqlandi.\n"
         f"Summa: <b>{_fmt_money(amount)}</b>",
         parse_mode="HTML",
-        reply_markup=after_save_kb(customer_id),
+        reply_markup=after_save_kb(
+            customer_id,
+            can_report=has_role(message.from_user.id if message.from_user else None, "admin", "rahbar"),
+        ),
     )
 
 
-@router.message(Command("add_customer"))
-@router.message(F.text == "Yangi mijoz")
+@router.message(Command("add_customer"), RoleFilter("admin"))
+@router.message(RoleFilter("admin"), F.text == "Yangi mijoz")
 async def add_customer_start(message: Message, state: FSMContext) -> None:
     await state.set_state(NewCustomerState.waiting_name)
     await message.answer("Yangi mijoz nomini yozing:")
+
+
+@router.message(F.text == "Yangi mijoz")
+async def add_customer_denied(message: Message) -> None:
+    await deny_role_message(message)
 
 
 @router.message(NewCustomerState.waiting_name)
@@ -188,5 +202,11 @@ async def add_customer_balance(message: Message, state: FSMContext) -> None:
     await message.answer(
         f"✅ Yangi mijoz qo'shildi:\n<b>{customer['name']}</b>",
         parse_mode="HTML",
-        reply_markup=customer_actions_kb(int(customer["id"])),
+        reply_markup=customer_actions_kb(int(customer["id"]), can_report=True),
     )
+
+
+@router.callback_query(F.data.startswith("customer:"))
+async def customer_callback_fallback(_callback: CallbackQuery) -> None:
+    # Aniq callback handlerlar yuqorida ishlaydi; bu yer faqat mos kelmagan customer callbacklar uchun.
+    return

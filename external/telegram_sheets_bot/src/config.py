@@ -15,6 +15,16 @@ ALLOWED_TELEGRAM_IDS = [
     if x.strip().isdigit()
 ]
 
+
+def _parse_role_ids(env_name: str) -> list[int]:
+    raw = os.environ.get(env_name, "").strip()
+    return [int(x.strip()) for x in raw.split(",") if x.strip().isdigit()]
+
+
+ADMIN_TELEGRAM_IDS = _parse_role_ids("ADMIN_TELEGRAM_IDS")
+RAHBAR_TELEGRAM_IDS = _parse_role_ids("RAHBAR_TELEGRAM_IDS")
+XODIM_TELEGRAM_IDS = _parse_role_ids("XODIM_TELEGRAM_IDS")
+
 # polling = mahalliy sinov (kompyuter yoqilguncha ishlaydi)
 # webhook = bulut / server (kompyuter o'chsa ham ishlaydi — HTTPS URL kerak)
 BOT_MODE = os.environ.get("BOT_MODE", "polling").strip().lower()

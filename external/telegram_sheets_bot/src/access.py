@@ -2,7 +2,7 @@
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from src.config import ALLOWED_TELEGRAM_IDS
+from src.config import ADMIN_TELEGRAM_IDS, ALLOWED_TELEGRAM_IDS, RAHBAR_TELEGRAM_IDS, XODIM_TELEGRAM_IDS
 
 
 def is_allowed_user_id(user_id: int | None) -> bool:
@@ -13,10 +13,39 @@ def is_allowed_user_id(user_id: int | None) -> bool:
     return user_id in ALLOWED_TELEGRAM_IDS
 
 
+def get_user_role(user_id: int | None) -> str | None:
+    if user_id is None:
+        return None
+    if user_id in ADMIN_TELEGRAM_IDS:
+        return "admin"
+    if user_id in RAHBAR_TELEGRAM_IDS:
+        return "rahbar"
+    if user_id in XODIM_TELEGRAM_IDS:
+        return "xodim"
+    # Agar role listlari hali sozlanmagan bo'lsa, allowlist dagilar vaqtincha admin sifatida ishlaydi.
+    if not ADMIN_TELEGRAM_IDS and not RAHBAR_TELEGRAM_IDS and not XODIM_TELEGRAM_IDS and is_allowed_user_id(user_id):
+        return "admin"
+    return None
+
+
+def has_role(user_id: int | None, *roles: str) -> bool:
+    role = get_user_role(user_id)
+    return role in roles
+
+
 class AllowedUserFilter(BaseFilter):
     async def __call__(self, event: TelegramObject) -> bool:
         user = getattr(event, "from_user", None)
         return is_allowed_user_id(getattr(user, "id", None))
+
+
+class RoleFilter(BaseFilter):
+    def __init__(self, *roles: str):
+        self.roles = roles
+
+    async def __call__(self, event: TelegramObject) -> bool:
+        user = getattr(event, "from_user", None)
+        return has_role(getattr(user, "id", None), *self.roles)
 
 
 async def deny_message(message: Message) -> None:
@@ -36,4 +65,14 @@ async def deny_callback(callback: CallbackQuery) -> None:
             f"Sizning Telegram ID: <code>{uid}</code>",
             parse_mode="HTML",
         )
+    await callback.answer("Ruxsat yo'q", show_alert=True)
+
+
+async def deny_role_message(message: Message) -> None:
+    await message.answer("⛔ Sizda bu bo'limga ruxsat yo'q.")
+
+
+async def deny_role_callback(callback: CallbackQuery) -> None:
+    if callback.message:
+        await callback.message.answer("⛔ Sizda bu bo'limga ruxsat yo'q.")
     await callback.answer("Ruxsat yo'q", show_alert=True)

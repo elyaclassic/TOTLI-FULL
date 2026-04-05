@@ -5,8 +5,8 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.access import AllowedUserFilter
-from src.keyboards import reports_kb
+from src.access import AllowedUserFilter, RoleFilter, deny_role_callback, deny_role_message
+from src.keyboards import main_menu_kb, reports_kb
 from src.services.excel_ledger import customer_history, get_customer, summary_report
 
 router = Router()
@@ -18,13 +18,18 @@ def _fmt_money(value: float) -> str:
     return f"{float(value):,.0f}".replace(",", " ")
 
 
-@router.message(F.text == "Hisobot")
+@router.message(RoleFilter("admin", "rahbar"), F.text == "Hisobot")
 async def reports_menu(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     await message.answer("Hisobot turini tanlang:", reply_markup=reports_kb(data.get("selected_customer_id")))
 
 
-@router.callback_query(F.data == "report:summary")
+@router.message(F.text == "Hisobot")
+async def reports_menu_denied(message: Message) -> None:
+    await deny_role_message(message)
+
+
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:summary")
 async def cb_report_summary(callback: CallbackQuery) -> None:
     report = await asyncio.to_thread(summary_report)
     text = (
@@ -39,7 +44,7 @@ async def cb_report_summary(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
-@router.callback_query(F.data.startswith("report:customer:"))
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("report:customer:"))
 async def cb_report_customer(callback: CallbackQuery, state: FSMContext) -> None:
     customer_id = int(callback.data.split(":")[-1])
     customer = await asyncio.to_thread(get_customer, customer_id)
@@ -72,3 +77,8 @@ async def cb_report_customer(callback: CallbackQuery, state: FSMContext) -> None
             reply_markup=reports_kb(customer_id),
         )
     await callback.answer()
+
+
+@router.callback_query(F.data.startswith("report:"))
+async def reports_callback_denied(callback: CallbackQuery) -> None:
+    await deny_role_callback(callback)

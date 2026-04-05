@@ -2,14 +2,13 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
 
 
-def main_menu_kb() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Mijozlar"), KeyboardButton(text="Hisobot")],
-            [KeyboardButton(text="Yangi mijoz")],
-        ],
-        resize_keyboard=True,
-    )
+def main_menu_kb(role: str | None = None) -> ReplyKeyboardMarkup:
+    keyboard: list[list[KeyboardButton]] = [[KeyboardButton(text="Mijozlar")]]
+    if role in {"admin", "rahbar"}:
+        keyboard[0].append(KeyboardButton(text="Hisobot"))
+    if role == "admin":
+        keyboard.append([KeyboardButton(text="Yangi mijoz")])
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 def customer_list_kb(customers: list[dict], page: int = 1, page_size: int = 10) -> InlineKeyboardMarkup:
@@ -37,31 +36,31 @@ def customer_list_kb(customers: list[dict], page: int = 1, page_size: int = 10) 
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def customer_actions_kb(customer_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Kirim", callback_data=f"customer:op:{customer_id}:kirim"),
-                InlineKeyboardButton(text="Chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
-            ],
-            [InlineKeyboardButton(text="Hisobot", callback_data=f"report:customer:{customer_id}")],
-            [InlineKeyboardButton(text="Mijozlar", callback_data="customer:list:1")],
-            [InlineKeyboardButton(text="Menyu", callback_data="menu:main")],
-        ]
-    )
+def customer_actions_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text="Kirim", callback_data=f"customer:op:{customer_id}:kirim"),
+            InlineKeyboardButton(text="Chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
+        ],
+    ]
+    if can_report:
+        rows.append([InlineKeyboardButton(text="Hisobot", callback_data=f"report:customer:{customer_id}")])
+    rows.append([InlineKeyboardButton(text="Mijozlar", callback_data="customer:list:1")])
+    rows.append([InlineKeyboardButton(text="Menyu", callback_data="menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def after_save_kb(customer_id: int) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(text="Yana kirim", callback_data=f"customer:op:{customer_id}:kirim"),
-                InlineKeyboardButton(text="Yana chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
-            ],
-            [InlineKeyboardButton(text="Hisobot", callback_data=f"report:customer:{customer_id}")],
-            [InlineKeyboardButton(text="Menyu", callback_data="menu:main")],
-        ]
-    )
+def after_save_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(text="Yana kirim", callback_data=f"customer:op:{customer_id}:kirim"),
+            InlineKeyboardButton(text="Yana chiqim", callback_data=f"customer:op:{customer_id}:chiqim"),
+        ],
+    ]
+    if can_report:
+        rows.append([InlineKeyboardButton(text="Hisobot", callback_data=f"report:customer:{customer_id}")])
+    rows.append([InlineKeyboardButton(text="Menyu", callback_data="menu:main")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def reports_kb(selected_customer_id: int | None = None) -> InlineKeyboardMarkup:
