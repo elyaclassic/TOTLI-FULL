@@ -11,6 +11,6 @@ async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom!\n\n"
         "🎤 Ovoz yoki matn: hisob-kitob yozuvi (summa, kirim/chiqim) "
-        "Google Sheets <b>Operatsiyalar</b> varag'iga yoziladi.\n\n"
+        "Excel yoki Google Sheets <b>Operatsiyalar</b> varag'iga yoziladi.\n\n"
         "/help — yordam"
     )

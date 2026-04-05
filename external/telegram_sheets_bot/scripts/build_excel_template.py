@@ -1,5 +1,5 @@
 """
-Excel shablon: Mijozlar + Operatsiyalar (formulalar).
+Excel shablon: Mijozlar + Operatsiyalar + Hisobot (formulalar).
 Ishga tushirish: python scripts/build_excel_template.py
 """
 from pathlib import Path
@@ -56,6 +56,19 @@ def main() -> None:
     mj["E2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"kirim")'
     mj["F2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"chiqim")'
     mj["G2"] = "=D2+E2-F2"
+
+    hs = wb.create_sheet("Hisobot")
+    hs.append(["Ko'rsatkich", "Qiymat"])
+    for c in hs[1]:
+        c.font = Font(bold=True)
+    hs["A2"] = "Jami kirim"
+    hs["B2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
+    hs["A3"] = "Jami chiqim"
+    hs["B3"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
+    hs["A4"] = "Farq"
+    hs["B4"] = "=B2-B3"
+    hs["A5"] = "Operatsiyalar soni"
+    hs["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
 
     wb.save(OUT)
     print(f"Yaratildi: {OUT}")

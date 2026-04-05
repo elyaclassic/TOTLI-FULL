@@ -65,3 +65,11 @@ GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "").strip()
 GOOGLE_SHEET_OPERATIONS_WORKSHEET = (
     os.environ.get("GOOGLE_SHEET_OPERATIONS_WORKSHEET", "Operatsiyalar").strip() or "Operatsiyalar"
 )
+
+# Asosiy saqlash joyi: excel | sheets
+STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "excel").strip().lower() or "excel"
+# Oddiy Excel fayl yo'li
+EXCEL_FILE_PATH = os.environ.get(
+    "EXCEL_FILE_PATH",
+    str(_ROOT / "templates" / "mijoz_hisob_kitobi.xlsx"),
+).strip()

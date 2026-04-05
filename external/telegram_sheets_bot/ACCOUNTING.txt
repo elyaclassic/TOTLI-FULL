@@ -1,21 +1,27 @@
-Hisob-kitob bazasi (Excel + Telegram)
+Hisob-kitob bazasi (oddiy Excel + Telegram)
 ======================================
 
-1) Excel shablon
+1) Oddiy Excel shablon
    - Loyihada: scripts/build_excel_template.py ni ishga tushiring:
      python scripts/build_excel_template.py
    - Fayl: templates/mijoz_hisob_kitobi.xlsx
-   - Ichida: "Operatsiyalar" (qatorlar) va "Mijozlar" (Qoldiq formulalari).
+   - Ichida: "Operatsiyalar", "Mijozlar", "Hisobot".
 
-2) Google Sheetsga o'tkazish
+2) Botning saqlash joyi
+   - .env da: STORAGE_BACKEND=excel
+   - EXCEL_FILE_PATH=templates/mijoz_hisob_kitobi.xlsx
+   - Shu faylga bot matn/ovoz yozadi.
+
+3) Google Sheetsga o'tkazish (ixtiyoriy)
    - Google Sheetsda yangi jadval yoki Excelni fayl sifatida import qiling.
-   - Varoq nomlari: Operatsiyalar, Mijozlar (shablon bilan bir xil).
+   - Varoq nomlari: Operatsiyalar, Mijozlar, Hisobot.
    - Service account emailni jadvalga "Tahrirlovchi" qiling.
 
-3) Bot
+4) Bot
    - Matn yoki ovoz: matndan avtomatik summa va kirim/chiqim kalit so'zlari qidiriladi.
    - "Operatsiyalar" varag'iga qator qo'shiladi (Mijoz_ID bo'sh bo'lishi mumkin — keyin qo'lda to'ldirasiz).
    - "Mijozlar" dagi formulalar faqat Mijoz_ID ustuniga bog'langan operatsiyalarni yig'adi.
+   - "Hisobot" varag'ida jami kirim, chiqim, farq va operatsiyalar soni turadi.
 
-4) Aniqroq hisob
+5) Aniqroq hisob
    - Matnda aniq yozing: masalan "kirim 500000" yoki "chiqim 500 ming".
