@@ -1,1 +1,1 @@
-# Alohida Telegram + Sheets loyihasi (TOTLI BI dan mustaqil)
+# Telegram bot + Sheets yordamchilari

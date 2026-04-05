@@ -1,5 +1,5 @@
 """
-Alohida Telegram bot — TOTLI BI kodiga bog'lanmaydi.
+Telegram bot (polling yoki webhook).
 
 Mahalliy (sinov):
   BOT_MODE=polling — kompyuter yoqilguncha ishlaydi

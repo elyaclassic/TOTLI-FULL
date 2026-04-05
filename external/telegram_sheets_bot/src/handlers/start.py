@@ -9,7 +9,7 @@ router = Router()
 @router.message(Command("start", "help"))
 async def cmd_start(message: Message) -> None:
     await message.answer(
-        "Salom. Bu alohida bot (TOTLI BI dan mustaqil).\n\n"
+        "Salom!\n\n"
         "🎤 Ovoz yuborsangiz: matnga aylantiriladi (OpenAI) va "
         "Google Sheets sozlangan bo'lsa jadvalga yoziladi.\n\n"
         "/help — yordam"
