@@ -8,6 +8,7 @@ from pathlib import Path
 from aiogram import Bot, F, Router
 from aiogram.types import Message
 
+from src.access import AllowedUserFilter
 from src.config import EXCEL_FILE_PATH, GOOGLE_SHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON, STORAGE_BACKEND
 from src.services.excel_ledger import append_voice_row as append_voice_row_excel
 from src.services.parse_operation import parse_operation_text
@@ -15,6 +16,7 @@ from src.services.sheets_append import append_voice_row as append_voice_row_shee
 from src.services.transcribe import can_transcribe, transcribe_audio_file
 
 router = Router()
+router.message.filter(AllowedUserFilter())
 logger = logging.getLogger(__name__)
 
 

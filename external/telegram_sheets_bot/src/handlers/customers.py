@@ -7,11 +7,14 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.access import AllowedUserFilter
 from src.keyboards import after_save_kb, customer_actions_kb, customer_list_kb, main_menu_kb
 from src.services.excel_ledger import add_customer, append_operation_row, get_customer, list_customers
 from src.states import CustomerEntryState, NewCustomerState
 
 router = Router()
+router.message.filter(AllowedUserFilter())
+router.callback_query.filter(AllowedUserFilter())
 logger = logging.getLogger(__name__)
 
 

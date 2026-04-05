@@ -5,10 +5,13 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
+from src.access import AllowedUserFilter
 from src.keyboards import reports_kb
 from src.services.excel_ledger import customer_history, get_customer, summary_report
 
 router = Router()
+router.message.filter(AllowedUserFilter())
+router.callback_query.filter(AllowedUserFilter())
 
 
 def _fmt_money(value: float) -> str:

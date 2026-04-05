@@ -6,12 +6,14 @@ from aiogram import Router
 from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
+from src.access import AllowedUserFilter
 from src.config import EXCEL_FILE_PATH, GOOGLE_SHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON, STORAGE_BACKEND
 from src.services.excel_ledger import append_operation_row as append_operation_row_excel
 from src.services.parse_operation import parse_operation_text
 from src.services.sheets_append import append_operation_row as append_operation_row_sheets
 
 router = Router()
+router.message.filter(AllowedUserFilter())
 logger = logging.getLogger(__name__)
 
 

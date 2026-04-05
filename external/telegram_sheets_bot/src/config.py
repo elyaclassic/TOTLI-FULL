@@ -8,6 +8,12 @@ _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+_allowed_ids_raw = os.environ.get("ALLOWED_TELEGRAM_IDS", "").strip()
+ALLOWED_TELEGRAM_IDS = [
+    int(x.strip())
+    for x in _allowed_ids_raw.split(",")
+    if x.strip().isdigit()
+]
 
 # polling = mahalliy sinov (kompyuter yoqilguncha ishlaydi)
 # webhook = bulut / server (kompyuter o'chsa ham ishlaydi — HTTPS URL kerak)
