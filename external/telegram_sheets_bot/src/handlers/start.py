@@ -17,6 +17,7 @@ async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom!\n\n"
         "Tugmalar orqali mijoz tanlang, mijoz to'lovi yoki biz bergan summani kiriting, hisobot oling.\n\n"
+        "Hisobotda davr tanlanadi va botda ko'rish yoki Excelda olish mumkin.\n\n"
         "Matn va ovoz ham fallback sifatida ishlaydi.",
         reply_markup=main_menu_kb(role),
         parse_mode="HTML",

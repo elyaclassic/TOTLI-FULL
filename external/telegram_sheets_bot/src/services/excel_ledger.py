@@ -1,5 +1,5 @@
 """Oddiy Excel (.xlsx) ga operatsiyalar yozish va hisobot formulalarini saqlash."""
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from openpyxl import Workbook, load_workbook
@@ -126,6 +126,21 @@ def _calc_customer_totals(operations_ws, customer_id: int) -> tuple[float, float
     return kirim, chiqim
 
 
+def _match_period(row_date: str, period: str) -> bool:
+    if period == "all":
+        return True
+    try:
+        d = datetime.strptime(str(row_date), "%Y-%m-%d").date()
+    except Exception:
+        return False
+    today = date.today()
+    if period == "today":
+        return d == today
+    if period == "this_month":
+        return d.year == today.year and d.month == today.month
+    return True
+
+
 def _load_book():
     path = _ensure_workbook()
     wb = load_workbook(path)
@@ -223,6 +238,91 @@ def customer_history(customer_id: int, limit: int = 20) -> list[dict]:
             }
         )
     return rows[-limit:]
+
+
+def customer_history_by_period(customer_id: int, period: str = "all", limit: int = 50) -> list[dict]:
+    rows = customer_history(customer_id, limit=10000)
+    filtered = [row for row in rows if _match_period(row["date"], period)]
+    return filtered[-limit:]
+
+
+def summary_report_by_period(period: str = "all") -> dict:
+    _path, _wb, operations, _customers, _summary = _load_book()
+    jami_kirim = 0.0
+    jami_chiqim = 0.0
+    operatsiyalar_soni = 0
+    for row in range(2, operations.max_row + 1):
+        row_date = str(operations[f"A{row}"].value or "")
+        if not _match_period(row_date, period):
+            continue
+        operatsiyalar_soni += 1
+        amount = _num(operations[f"F{row}"].value)
+        op_type = str(operations[f"E{row}"].value or "").strip().lower()
+        if op_type == "kirim":
+            jami_kirim += amount
+        elif op_type == "chiqim":
+            jami_chiqim += amount
+    return {
+        "jami_kirim": jami_kirim,
+        "jami_chiqim": jami_chiqim,
+        "farq": jami_chiqim - jami_kirim,
+        "operatsiyalar_soni": operatsiyalar_soni,
+    }
+
+
+def customer_report_by_period(customer_id: int, period: str = "all") -> dict | None:
+    customer = get_customer(customer_id)
+    if not customer:
+        return None
+    history = customer_history_by_period(customer_id, period, limit=1000)
+    kirim = sum(float(item["amount"] or 0) for item in history if item["type"] == "kirim")
+    chiqim = sum(float(item["amount"] or 0) for item in history if item["type"] == "chiqim")
+    return {
+        "customer": customer,
+        "history": history[-20:],
+        "period": period,
+        "kirim": kirim,
+        "chiqim": chiqim,
+        "farq": customer.get("opening", 0) + chiqim - kirim,
+    }
+
+
+def export_report_excel(report_type: str, period: str = "all", customer_id: int | None = None) -> str:
+    out_dir = _excel_path().parent
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    path = out_dir / f"hisobot_{report_type}_{period}_{ts}.xlsx"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Hisobot"
+
+    if report_type == "summary":
+        report = summary_report_by_period(period)
+        ws.append(["Ko'rsatkich", "Qiymat"])
+        ws.append(["Mijozlar to'lagan", report["jami_kirim"]])
+        ws.append(["Biz bergan", report["jami_chiqim"]])
+        ws.append(["Qarz qoldiq", report["farq"]])
+        ws.append(["Operatsiyalar soni", report["operatsiyalar_soni"]])
+    else:
+        report = customer_report_by_period(int(customer_id or 0), period)
+        if not report:
+            raise RuntimeError("Mijoz topilmadi")
+        customer = report["customer"]
+        ws.append(["Mijoz", customer["name"]])
+        ws.append(["Telefon", customer.get("phone") or ""])
+        ws.append(["Mijoz to'lagan", report["kirim"]])
+        ws.append(["Biz bergan", report["chiqim"]])
+        ws.append(["Qarz qoldiq", report["farq"]])
+        ws.append([])
+        ws.append(["Sana", "Vaqt", "Turi", "Summa", "Izoh"])
+        for item in report["history"]:
+            ws.append([item["date"], item["time"], item["type"], item["amount"], item["note"]])
+
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+    wb.save(path)
+    return str(path)
 
 
 def summary_report() -> dict:

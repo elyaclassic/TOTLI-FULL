@@ -1,13 +1,21 @@
-"""Hisobotlar: umumiy va tanlangan mijoz bo'yicha."""
+"""Hisobotlar: tur, davr va chiqish bo'yicha."""
 import asyncio
+from pathlib import Path
 
 from aiogram import F, Router
+from aiogram.types import FSInputFile
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.access import AllowedUserFilter, RoleFilter, deny_role_callback, deny_role_message
-from src.keyboards import main_menu_kb, reports_kb
-from src.services.excel_ledger import customer_history, get_customer, summary_report
+from src.keyboards import report_output_kb, report_period_kb, report_type_kb, reports_kb
+from src.services.excel_ledger import (
+    customer_report_by_period,
+    export_report_excel,
+    get_customer,
+    summary_report_by_period,
+)
+from src.states import ReportState
 
 router = Router()
 router.message.filter(AllowedUserFilter())
@@ -21,7 +29,8 @@ def _fmt_money(value: float) -> str:
 @router.message(RoleFilter("admin", "rahbar"), F.text == "Hisobot")
 async def reports_menu(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    await message.answer("Hisobot turini tanlang:", reply_markup=reports_kb(data.get("selected_customer_id")))
+    await state.set_state(ReportState.choosing_type)
+    await message.answer("Hisobot turini tanlang:", reply_markup=report_type_kb(data.get("selected_customer_id")))
 
 
 @router.message(F.text == "Hisobot")
@@ -29,53 +38,125 @@ async def reports_menu_denied(message: Message) -> None:
     await deny_role_message(message)
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:summary")
-async def cb_report_summary(callback: CallbackQuery) -> None:
-    report = await asyncio.to_thread(summary_report)
-    text = (
-        "<b>Umumiy hisobot</b>\n\n"
-        f"Mijozlar to'lagan: <b>{_fmt_money(report['jami_kirim'])}</b>\n"
-        f"Biz bergan: <b>{_fmt_money(report['jami_chiqim'])}</b>\n"
-        f"Jami qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>\n"
-        f"Operatsiyalar soni: <b>{report['operatsiyalar_soni']}</b>"
-    )
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:menu")
+async def cb_report_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.set_state(ReportState.choosing_type)
     if callback.message:
-        await callback.message.answer(text, parse_mode="HTML", reply_markup=reports_kb())
+        await callback.message.edit_text(
+            "Hisobot turini tanlang:",
+            reply_markup=report_type_kb(data.get("selected_customer_id")),
+        )
+    await callback.answer()
+
+
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reporttype:"))
+async def cb_report_type(callback: CallbackQuery, state: FSMContext) -> None:
+    report_type = callback.data.split(":")[-1]
+    if report_type == "customer":
+        data = await state.get_data()
+        if not data.get("selected_customer_id"):
+            await callback.answer("Avval mijoz tanlang", show_alert=True)
+            return
+    await state.update_data(report_type=report_type)
+    await state.set_state(ReportState.choosing_period)
+    if callback.message:
+        await callback.message.edit_text("Davrni tanlang:", reply_markup=report_period_kb())
+    await callback.answer()
+
+
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:period")
+async def cb_report_period_back(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(ReportState.choosing_period)
+    if callback.message:
+        await callback.message.edit_text("Davrni tanlang:", reply_markup=report_period_kb())
+    await callback.answer()
+
+
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reportperiod:"))
+async def cb_report_period(callback: CallbackQuery, state: FSMContext) -> None:
+    period = callback.data.split(":")[-1]
+    await state.update_data(report_period=period)
+    await state.set_state(ReportState.choosing_output)
+    if callback.message:
+        await callback.message.edit_text(
+            "Hisobotni qayerda ko'rasiz?",
+            reply_markup=report_output_kb(),
+        )
     await callback.answer()
 
 
 @router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("report:customer:"))
-async def cb_report_customer(callback: CallbackQuery, state: FSMContext) -> None:
+async def cb_report_customer_open(callback: CallbackQuery, state: FSMContext) -> None:
     customer_id = int(callback.data.split(":")[-1])
     customer = await asyncio.to_thread(get_customer, customer_id)
     if not customer:
         await callback.answer("Mijoz topilmadi", show_alert=True)
         return
     await state.update_data(selected_customer_id=customer_id, selected_customer_name=customer["name"])
-    history = await asyncio.to_thread(customer_history, customer_id, 10)
-
-    lines = [
-        f"<b>{customer['name']}</b>",
-        f"Mijoz to'lagan: <b>{_fmt_money(customer.get('kirim') or 0)}</b>",
-        f"Biz bergan: <b>{_fmt_money(customer.get('chiqim') or 0)}</b>",
-        f"Qarz qoldiq: <b>{_fmt_money(customer.get('qoldiq') or 0)}</b>",
-        "",
-        "<b>Oxirgi operatsiyalar:</b>",
-    ]
-    if not history:
-        lines.append("Ma'lumot yo'q.")
-    else:
-        for item in history[-10:]:
-            lines.append(
-                f"{item['date']} {item['time']} | {item['type']} | {_fmt_money(item['amount'])}"
-            )
-
+    await state.set_state(ReportState.choosing_type)
     if callback.message:
-        await callback.message.answer(
-            "\n".join(lines),
+        await callback.message.edit_text(
+            f"<b>{customer['name']}</b> tanlandi. Hisobot turini tanlang:",
             parse_mode="HTML",
-            reply_markup=reports_kb(customer_id),
+            reply_markup=report_type_kb(customer_id),
         )
+    await callback.answer()
+
+
+@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reportoutput:"))
+async def cb_report_output(callback: CallbackQuery, state: FSMContext) -> None:
+    output = callback.data.split(":")[-1]
+    data = await state.get_data()
+    report_type = data.get("report_type")
+    period = data.get("report_period", "all")
+    customer_id = data.get("selected_customer_id")
+    if report_type not in {"summary", "customer"}:
+        await callback.answer("Avval hisobot turini tanlang", show_alert=True)
+        return
+
+    if output == "bot":
+        if report_type == "summary":
+            report = await asyncio.to_thread(summary_report_by_period, period)
+            text = (
+                "<b>Umumiy hisobot</b>\n\n"
+                f"Davr: <b>{period}</b>\n"
+                f"Mijozlar to'lagan: <b>{_fmt_money(report['jami_kirim'])}</b>\n"
+                f"Biz bergan: <b>{_fmt_money(report['jami_chiqim'])}</b>\n"
+                f"Jami qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>\n"
+                f"Operatsiyalar soni: <b>{report['operatsiyalar_soni']}</b>"
+            )
+        else:
+            report = await asyncio.to_thread(customer_report_by_period, int(customer_id or 0), period)
+            if not report:
+                await callback.answer("Mijoz topilmadi", show_alert=True)
+                return
+            customer = report["customer"]
+            lines = [
+                f"<b>{customer['name']}</b>",
+                f"Davr: <b>{period}</b>",
+                f"Mijoz to'lagan: <b>{_fmt_money(report['kirim'])}</b>",
+                f"Biz bergan: <b>{_fmt_money(report['chiqim'])}</b>",
+                f"Qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>",
+                "",
+                "<b>Operatsiyalar:</b>",
+            ]
+            if not report["history"]:
+                lines.append("Ma'lumot yo'q.")
+            else:
+                for item in report["history"]:
+                    lines.append(
+                        f"{item['date']} {item['time']} | {item['type']} | {_fmt_money(item['amount'])}"
+                    )
+            text = "\n".join(lines)
+
+        if callback.message:
+            await callback.message.answer(text, parse_mode="HTML", reply_markup=reports_kb(customer_id))
+    else:
+        path = await asyncio.to_thread(export_report_excel, report_type, period, customer_id)
+        if callback.message:
+            await callback.message.answer_document(FSInputFile(Path(path)), caption="Excel hisobot tayyor.")
+            await callback.message.answer("Yana hisobot kerak bo'lsa tanlang:", reply_markup=reports_kb(customer_id))
     await callback.answer()
 
 

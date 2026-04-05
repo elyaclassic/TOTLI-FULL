@@ -13,6 +13,8 @@ OUT = ROOT / "templates" / "mijoz_hisob_kitobi.xlsx"
 
 def main() -> None:
     OUT.parent.mkdir(parents=True, exist_ok=True)
+    if OUT.exists():
+        OUT.unlink()
     wb = Workbook()
     op = wb.active
     op.title = "Operatsiyalar"
@@ -31,34 +33,14 @@ def main() -> None:
     op.append(headers)
     for c in op[1]:
         c.font = Font(bold=True)
-    op.append(
-        [
-            "2026-04-05",
-            "12:00:00",
-            "1",
-            "Namuna mijoz",
-            "kirim",
-            500000,
-            "birinchi qator",
-            "@user",
-            "kirim 500 ming",
-            "matn",
-        ]
-    )
-
     mj = wb.create_sheet("Mijozlar")
     mj.append(["ID", "Nomi", "Telefon", "Boshlang'ich_qarz", "Mijoz_to'lagan", "Biz_bergan", "Qarz_qoldiq"])
     for c in mj[1]:
         c.font = Font(bold=True)
-    mj.append([1, "Namuna mijoz", "+998901234567", 0, None, None, None])
-    mj.append([2, "Ikkinchi mijoz", "+998901112233", 100000, None, None, None])
 
     # Qarz mantiqi:
     # kirim = mijoz to'lovi -> qarz kamayadi
     # chiqim = biz berdik -> qarz oshadi
-    mj["E2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"kirim")'
-    mj["F2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"chiqim")'
-    mj["G2"] = "=D2+F2-E2"
 
     hs = wb.create_sheet("Hisobot")
     hs.append(["Ko'rsatkich", "Qiymat"])
@@ -73,7 +55,7 @@ def main() -> None:
     hs["A5"] = "Operatsiyalar soni"
     hs["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
     hs["A7"] = "Izoh"
-    hs["B7"] = "Bot tugmalari: Mijozlar -> mijoz tanlash -> Mijoz to'ladi/Biz berdik -> summa"
+    hs["B7"] = "Bot: Mijozlar -> mijoz tanlash -> Mijoz to'ladi/Biz berdik -> summa; Hisobot -> tur -> davr -> bot/excel"
 
     wb.save(OUT)
     print(f"Yaratildi: {OUT}")

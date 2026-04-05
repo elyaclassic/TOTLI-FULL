@@ -32,6 +32,13 @@ async def customers_menu(message: Message) -> None:
     await message.answer("Mijozni tanlang:", reply_markup=customer_list_kb(customers, page=1))
 
 
+@router.message(F.text == "Orqaga")
+async def text_back_to_menu(message: Message, state: FSMContext) -> None:
+    await state.clear()
+    role = get_user_role(message.from_user.id if message.from_user else None)
+    await message.answer("Asosiy menyu:", reply_markup=main_menu_kb(role))
+
+
 @router.callback_query(F.data == "menu:main")
 async def cb_menu_main(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()

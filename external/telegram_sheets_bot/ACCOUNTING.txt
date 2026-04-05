@@ -21,8 +21,11 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
    - `Mijozlar` -> Exceldagi mijozlar ro'yxati chiqadi
    - Mijoz tanlang -> `Mijoz to'ladi` yoki `Biz berdik`
    - Summa yuboring -> bot `Operatsiyalar` varag'iga yozadi
-   - `Hisobot` -> umumiy hisobot va tanlangan mijoz bo'yicha tafsilot
+   - `Hisobot` -> 2 tur: `Umumiy hisobot` va `Mijoz bo'yicha hisobot`
+   - keyin `Davr`: `Bugun`, `Shu oy`, `Hammasi`
+   - keyin chiqish: `Botda ko'raman` yoki `Excelda olaman`
    - `Yangi mijoz` -> nom, telefon, boshlang'ich qoldiq so'raladi va `Mijozlar` ga yoziladi
+   - `Orqaga` tugmalari orqali qaytish mumkin
 
 5) Rollar
    - `admin` -> hammasi: mijozlar, hisobot, yangi mijoz
