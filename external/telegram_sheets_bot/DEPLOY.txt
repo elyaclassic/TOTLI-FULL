@@ -29,6 +29,8 @@ birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.
 --- Ovoz → matn → Google Sheets ---
 Bepul (lokal): pip install faster-whisper — OPENAI_API_KEY bo'sh + TRANSCRIBE_BACKEND=auto yoki local.
 Birinchi marta model yuklanadi (Internet kerak). Pullik: OPENAI_API_KEY.
+O'zbek nutq: standart sozlamalar small model + initial_prompt + hotwords (ismingizni WHISPER_HOTWORDS ga).
+100% emas — eng yaxshi aniqlik odatda OpenAI API (pullik).
 
 1) OpenAI (ixtiyoriy): OPENAI_API_KEY (https://platform.openai.com)
 2) Google Cloud: service account yaratish, JSON kalitni saqlash.

@@ -9,8 +9,11 @@ import httpx
 from src.config import (
     OPENAI_API_KEY,
     TRANSCRIBE_BACKEND,
+    WHISPER_BEAM_SIZE,
     WHISPER_COMPUTE_TYPE,
     WHISPER_DEVICE,
+    WHISPER_HOTWORDS,
+    WHISPER_INITIAL_PROMPT,
     WHISPER_LANGUAGE,
     WHISPER_LOCAL_MODEL,
 )
@@ -86,9 +89,24 @@ def _get_local_model():
 
 def _transcribe_local_sync(path: Path) -> str:
     model = _get_local_model()
-    kwargs = {"beam_size": 5}
+    kwargs: dict = {
+        "beam_size": WHISPER_BEAM_SIZE,
+        # Suxrang va shovqinni kesish — qisqa ismlar aniqroq
+        "vad_filter": True,
+        "vad_parameters": {
+            "min_silence_duration_ms": 350,
+            "speech_pad_ms": 300,
+        },
+        # Qisqa audio uchun oldingi segmentga bog'lanmaslik — "Aik mal" kabi bo'linish kamayadi
+        "condition_on_previous_text": False,
+        "temperature": 0.0,
+    }
     if WHISPER_LANGUAGE:
         kwargs["language"] = WHISPER_LANGUAGE
+    if WHISPER_INITIAL_PROMPT:
+        kwargs["initial_prompt"] = WHISPER_INITIAL_PROMPT
+    if WHISPER_HOTWORDS:
+        kwargs["hotwords"] = WHISPER_HOTWORDS
     segments, _info = model.transcribe(str(path), **kwargs)
     parts = [s.text.strip() for s in segments]
     text = " ".join(parts).strip()
@@ -107,6 +125,8 @@ async def _transcribe_openai(path: Path) -> str:
     data: dict = {"model": "whisper-1"}
     if WHISPER_LANGUAGE:
         data["language"] = WHISPER_LANGUAGE
+    if WHISPER_INITIAL_PROMPT:
+        data["prompt"] = WHISPER_INITIAL_PROMPT[:1200]
 
     raw = path.read_bytes()
     buf = io.BytesIO(raw)
