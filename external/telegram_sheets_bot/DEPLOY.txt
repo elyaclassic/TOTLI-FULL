@@ -26,6 +26,14 @@ hisobot/bot imkonsiz — biror joyda (bulut yoki o'z serveringiz) jarayon ishlas
 Bepul tariflarda servis uzoq vaqt ishlatilmasa "uyqu" rejimiga o'tishi mumkin —
 birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.
 
+--- Ovoz → matn → Google Sheets ---
+1) OpenAI: OPENAI_API_KEY (https://platform.openai.com)
+2) Google Cloud: service account yaratish, JSON kalitni saqlash.
+3) Google Sheets: jadvalni oching → "Ulash" → service account email (JSON dagi client_email) ga
+   "Tahrirlovchi" huquqi bering.
+4) .env: GOOGLE_SHEETS_CREDENTIALS_JSON=to'liq yo'l, GOOGLE_SHEET_ID=URL dagi ID
+5) Jadval ustunlari avtomatik qo'shiladi: vaqt, user id, @username, matn
+
 --- Conflict: "terminated by other getUpdates request" ---
 Bir vaqtda faqat BITTA polling jarayoni: Cursor terminal + run.bat + Task Scheduler
 ikkalasini birga ishlatmang. Ortiqcha python.exe ni Task Manager dan to'xtating.

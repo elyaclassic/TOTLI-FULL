@@ -31,5 +31,11 @@ PORT = int(os.environ.get("PORT", "8080"))
 BOT_LOCK_PORT = int(os.environ.get("BOT_LOCK_PORT", "47891"))
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+# Whisper: bo'sh qoldirsangiz til avtomatik aniqlanadi
+_wlang = os.environ.get("WHISPER_LANGUAGE", "uz").strip()
+WHISPER_LANGUAGE: str | None = _wlang if _wlang else None
+
 GOOGLE_SHEETS_CREDENTIALS_JSON = os.environ.get("GOOGLE_SHEETS_CREDENTIALS_JSON", "").strip()
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "").strip()
+# Jadval varag'i nomi (Google Sheets da)
+GOOGLE_SHEET_WORKSHEET = os.environ.get("GOOGLE_SHEET_WORKSHEET", "Sheet1").strip() or "Sheet1"
