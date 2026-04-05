@@ -7,3 +7,4 @@ gspread>=6.0
 google-auth>=2.29
 # Bepul ovoz (lokal Whisper; OPENAI kaliti shart emas)
 faster-whisper>=1.0.0
+openpyxl>=3.1.0

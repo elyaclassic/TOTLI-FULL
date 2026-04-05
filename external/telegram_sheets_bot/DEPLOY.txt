@@ -26,6 +26,9 @@ hisobot/bot imkonsiz — biror joyda (bulut yoki o'z serveringiz) jarayon ishlas
 Bepul tariflarda servis uzoq vaqt ishlatilmasa "uyqu" rejimiga o'tishi mumkin —
 birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.
 
+--- Hisob-kitob Excel shablon ---
+templates/mijoz_hisob_kitobi.xlsx yoki scripts/build_excel_template.py — batafsil ACCOUNTING.txt
+
 --- Ovoz → matn → Google Sheets ---
 Bepul (lokal): pip install faster-whisper — OPENAI_API_KEY bo'sh + TRANSCRIBE_BACKEND=auto yoki local.
 Birinchi marta model yuklanadi (Internet kerak). Pullik: OPENAI_API_KEY.

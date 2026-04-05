@@ -9,6 +9,7 @@ from aiogram import Bot, F, Router
 from aiogram.types import Message
 
 from src.config import GOOGLE_SHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON
+from src.services.parse_operation import parse_operation_text
 from src.services.sheets_append import append_voice_row
 from src.services.transcribe import can_transcribe, transcribe_audio_file
 
@@ -60,9 +61,14 @@ async def on_voice(message: Message, bot: Bot) -> None:
                 message.from_user.username,
             )
 
+        turi, summa, _ = parse_operation_text(text)
         lines = [f"📝 <b>Matn:</b>\n{text}"]
+        if summa is not None:
+            lines.append(f"\n📊 Summa: <b>{summa:,.0f}</b> so'm")
+        if turi:
+            lines.append(f"\n📌 Tur: <b>{turi}</b>")
         if sheet_ok:
-            lines.append("\n✅ Google Sheets ga yozildi.")
+            lines.append("\n\n✅ <b>Operatsiyalar</b> varag'iga yozildi.")
         else:
             lines.append(
                 "\n⚠️ Sheets ulanmagan. Jadvalga yozish uchun <code>.env</code> da "

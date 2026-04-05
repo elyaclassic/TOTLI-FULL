@@ -61,5 +61,7 @@ WHISPER_LANGUAGE: str | None = _wlang if _wlang else None
 
 GOOGLE_SHEETS_CREDENTIALS_JSON = os.environ.get("GOOGLE_SHEETS_CREDENTIALS_JSON", "").strip()
 GOOGLE_SHEET_ID = os.environ.get("GOOGLE_SHEET_ID", "").strip()
-# Jadval varag'i nomi (Google Sheets da)
-GOOGLE_SHEET_WORKSHEET = os.environ.get("GOOGLE_SHEET_WORKSHEET", "Sheet1").strip() or "Sheet1"
+# Bot yozadigan varoq (Operatsiyalar jadvali)
+GOOGLE_SHEET_OPERATIONS_WORKSHEET = (
+    os.environ.get("GOOGLE_SHEET_OPERATIONS_WORKSHEET", "Operatsiyalar").strip() or "Operatsiyalar"
+)

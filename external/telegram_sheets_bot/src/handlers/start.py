@@ -1,5 +1,5 @@
 """Minimal handlerlar — keyin kengaytirasiz."""
-from aiogram import Router, F
+from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
@@ -10,13 +10,7 @@ router = Router()
 async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom!\n\n"
-        "🎤 Ovoz yuborsangiz: matnga aylantiriladi (lokal bepul yoki OpenAI) va "
-        "Google Sheets sozlangan bo'lsa jadvalga yoziladi.\n\n"
+        "🎤 Ovoz yoki matn: hisob-kitob yozuvi (summa, kirim/chiqim) "
+        "Google Sheets <b>Operatsiyalar</b> varag'iga yoziladi.\n\n"
         "/help — yordam"
     )
-
-
-@router.message(F.text)
-async def echo_stub(message: Message) -> None:
-    """Vaqtinchalik — matnni qaytaradi (Sheets ulanmaguncha)."""
-    await message.answer(f"Siz yozdingiz: {message.text[:500]}")
