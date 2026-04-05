@@ -8,9 +8,9 @@ from pathlib import Path
 from aiogram import Bot, F, Router
 from aiogram.types import Message
 
-from src.config import GOOGLE_SHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON, OPENAI_API_KEY
+from src.config import GOOGLE_SHEET_ID, GOOGLE_SHEETS_CREDENTIALS_JSON
 from src.services.sheets_append import append_voice_row
-from src.services.transcribe import transcribe_audio_file
+from src.services.transcribe import can_transcribe, transcribe_audio_file
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -21,11 +21,16 @@ async def on_voice(message: Message, bot: Bot) -> None:
     if not message.from_user:
         return
 
-    if not OPENAI_API_KEY:
+    if not can_transcribe():
         await message.answer(
-            "Ovozni matnga o'tkazish uchun <code>.env</code> da "
-            "<code>OPENAI_API_KEY</code> ni qo'ying (OpenAI hisobi).\n\n"
-            "Sheets uchun keyin: <code>GOOGLE_SHEETS_CREDENTIALS_JSON</code> va "
+            "Ovozni matnga o'tkazish uchun <b>bittasi</b> kerak:\n\n"
+            "🆓 <b>Bepul (sizning kompyuteringizda):</b>\n"
+            "<code>pip install faster-whisper</code>\n"
+            "<code>OPENAI_API_KEY</code> ni .env da bo'sh qoldiring yoki "
+            "<code>TRANSCRIBE_BACKEND=local</code>\n"
+            "(birinchi marta model yuklanadi, 300–1500 MB).\n\n"
+            "💳 <b>OpenAI (pullik):</b> <code>OPENAI_API_KEY</code> qo'shing.\n\n"
+            "Sheets: <code>GOOGLE_SHEETS_CREDENTIALS_JSON</code> + "
             "<code>GOOGLE_SHEET_ID</code>.",
             parse_mode="HTML",
         )
@@ -42,7 +47,7 @@ async def on_voice(message: Message, bot: Bot) -> None:
 
         await bot.download_file(tg_file.file_path, destination=tmp_path)
 
-        await status.edit_text("⏳ Matnga aylantirilmoqda (Whisper)...")
+        await status.edit_text("⏳ Matnga aylantirilmoqda (Whisper — birinchi marta uzoqroq bo'lishi mumkin)...")
         text = await transcribe_audio_file(tmp_path)
 
         sheet_ok = bool(GOOGLE_SHEETS_CREDENTIALS_JSON and GOOGLE_SHEET_ID)

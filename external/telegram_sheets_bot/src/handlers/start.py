@@ -10,7 +10,7 @@ router = Router()
 async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom!\n\n"
-        "🎤 Ovoz yuborsangiz: matnga aylantiriladi (OpenAI) va "
+        "🎤 Ovoz yuborsangiz: matnga aylantiriladi (lokal bepul yoki OpenAI) va "
         "Google Sheets sozlangan bo'lsa jadvalga yoziladi.\n\n"
         "/help — yordam"
     )

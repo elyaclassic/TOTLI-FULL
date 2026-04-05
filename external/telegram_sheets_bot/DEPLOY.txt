@@ -27,7 +27,10 @@ Bepul tariflarda servis uzoq vaqt ishlatilmasa "uyqu" rejimiga o'tishi mumkin �
 birinchi xabar biroz kechikishi mumkin; keyin barqarorlashadi.
 
 --- Ovoz → matn → Google Sheets ---
-1) OpenAI: OPENAI_API_KEY (https://platform.openai.com)
+Bepul (lokal): pip install faster-whisper — OPENAI_API_KEY bo'sh + TRANSCRIBE_BACKEND=auto yoki local.
+Birinchi marta model yuklanadi (Internet kerak). Pullik: OPENAI_API_KEY.
+
+1) OpenAI (ixtiyoriy): OPENAI_API_KEY (https://platform.openai.com)
 2) Google Cloud: service account yaratish, JSON kalitni saqlash.
 3) Google Sheets: jadvalni oching → "Ulash" → service account email (JSON dagi client_email) ga
    "Tahrirlovchi" huquqi bering.

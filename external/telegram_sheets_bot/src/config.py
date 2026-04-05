@@ -31,6 +31,14 @@ PORT = int(os.environ.get("PORT", "8080"))
 BOT_LOCK_PORT = int(os.environ.get("BOT_LOCK_PORT", "47891"))
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
+# auto = kalit bo'lsa OpenAI, yo'q bo'lsa lokal faster-whisper (bepul)
+# local = faqat lokal | openai = faqat OpenAI API
+TRANSCRIBE_BACKEND = os.environ.get("TRANSCRIBE_BACKEND", "auto").strip().lower()
+# Lokal model: tiny, base, small, medium (katta = aniqroq, sekinroq)
+WHISPER_LOCAL_MODEL = os.environ.get("WHISPER_LOCAL_MODEL", "base").strip() or "base"
+WHISPER_DEVICE = os.environ.get("WHISPER_DEVICE", "cpu").strip() or "cpu"
+WHISPER_COMPUTE_TYPE = os.environ.get("WHISPER_COMPUTE_TYPE", "int8").strip() or "int8"
+
 # Whisper: bo'sh qoldirsangiz til avtomatik aniqlanadi
 _wlang = os.environ.get("WHISPER_LANGUAGE", "uz").strip()
 WHISPER_LANGUAGE: str | None = _wlang if _wlang else None
