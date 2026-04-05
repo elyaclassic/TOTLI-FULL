@@ -3,6 +3,8 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
+from src.keyboards import main_menu_kb
+
 router = Router()
 
 
@@ -10,7 +12,8 @@ router = Router()
 async def cmd_start(message: Message) -> None:
     await message.answer(
         "Salom!\n\n"
-        "🎤 Ovoz yoki matn: hisob-kitob yozuvi (summa, kirim/chiqim) "
-        "Excel yoki Google Sheets <b>Operatsiyalar</b> varag'iga yoziladi.\n\n"
-        "/help — yordam"
+        "Tugmalar orqali mijoz tanlang, kirim/chiqim kiriting yoki hisobot oling.\n\n"
+        "Matn va ovoz ham fallback sifatida ishlaydi.",
+        reply_markup=main_menu_kb(),
+        parse_mode="HTML",
     )

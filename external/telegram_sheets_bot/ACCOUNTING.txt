@@ -1,4 +1,4 @@
-Hisob-kitob bazasi (oddiy Excel + Telegram)
+Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
 ======================================
 
 1) Oddiy Excel shablon
@@ -17,11 +17,17 @@ Hisob-kitob bazasi (oddiy Excel + Telegram)
    - Varoq nomlari: Operatsiyalar, Mijozlar, Hisobot.
    - Service account emailni jadvalga "Tahrirlovchi" qiling.
 
-4) Bot
-   - Matn yoki ovoz: matndan avtomatik summa va kirim/chiqim kalit so'zlari qidiriladi.
-   - "Operatsiyalar" varag'iga qator qo'shiladi (Mijoz_ID bo'sh bo'lishi mumkin — keyin qo'lda to'ldirasiz).
-   - "Mijozlar" dagi formulalar faqat Mijoz_ID ustuniga bog'langan operatsiyalarni yig'adi.
-   - "Hisobot" varag'ida jami kirim, chiqim, farq va operatsiyalar soni turadi.
+4) Tugmali bot oqimi
+   - `Mijozlar` -> Exceldagi mijozlar ro'yxati chiqadi
+   - Mijoz tanlang -> `Kirim` yoki `Chiqim`
+   - Summa yuboring -> bot `Operatsiyalar` varag'iga yozadi
+   - `Hisobot` -> umumiy hisobot va tanlangan mijoz bo'yicha tafsilot
+   - `Yangi mijoz` -> nom, telefon, boshlang'ich qoldiq so'raladi va `Mijozlar` ga yoziladi
 
-5) Aniqroq hisob
+5) Excel logikasi
+   - `Mijozlar` dagi formulalar `Mijoz_ID` bo'yicha operatsiyalarni yig'adi
+   - `Hisobot` varag'ida jami kirim, chiqim, farq va operatsiyalar soni turadi
+
+6) Aniqroq hisob
    - Matnda aniq yozing: masalan "kirim 500000" yoki "chiqim 500 ming".
+   - Ovozli xabar ham shu logikaga tushadi.

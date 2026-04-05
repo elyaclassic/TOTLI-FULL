@@ -51,6 +51,7 @@ def main() -> None:
     for c in mj[1]:
         c.font = Font(bold=True)
     mj.append([1, "Namuna mijoz", "+998901234567", 0, None, None, None])
+    mj.append([2, "Ikkinchi mijoz", "+998901112233", 100000, None, None, None])
 
     # Formulalar: Operatsiyalar!F = Summa, C = Mijoz_ID, E = Turi
     mj["E2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A2,Operatsiyalar!$E:$E,"kirim")'
@@ -69,6 +70,8 @@ def main() -> None:
     hs["B4"] = "=B2-B3"
     hs["A5"] = "Operatsiyalar soni"
     hs["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
+    hs["A7"] = "Izoh"
+    hs["B7"] = "Bot tugmalari: Mijozlar -> mijoz tanlash -> Kirim/Chiqim -> summa"
 
     wb.save(OUT)
     print(f"Yaratildi: {OUT}")
