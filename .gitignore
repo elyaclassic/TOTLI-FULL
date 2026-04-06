@@ -86,3 +86,6 @@ totli_mobile/ios/Flutter/Flutter.framework
 totli_mobile/ios/Flutter/Flutter.podspec
 
 app/static/attendance_snapshots/
+
+# Claude skills source (kerak emas, .claude/commands/ ga ko'chirilgan)
+claude-skills-main/
