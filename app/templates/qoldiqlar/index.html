@@ -54,6 +54,11 @@
             <i class="bi bi-people me-1"></i>Kontragent qoldiqlari
         </button>
     </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link{% if request.query_params.get('saved') == 'xodim' %} active{% endif %}" id="xodim-tab" data-bs-toggle="tab" data-bs-target="#xodim" type="button" role="tab">
+            <i class="bi bi-person-badge me-1"></i>Xodimlar qoldiqlari
+        </button>
+    </li>
 </ul>
 
 <div class="tab-content" id="qoldiqTabContent">
@@ -330,6 +335,79 @@
                         </tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== XODIMLAR QOLDIQLARI ===== -->
+    <div class="tab-pane fade{% if request.query_params.get('saved') == 'xodim' %} show active{% endif %}" id="xodim" role="tabpanel">
+        <div class="card data-table">
+            <div class="card-header">
+                <span class="fw-bold"><i class="bi bi-person-badge text-primary"></i> Xodimlar qoldiqlari</span>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/qoldiqlar/xodim-qoldiq" class="row g-2 align-items-end mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label small">Xodim *</label>
+                        <select name="employee_id" class="form-select form-select-sm" required>
+                            <option value="">— Tanlang —</option>
+                            {% for e in employees|default([]) %}
+                            <option value="{{ e.id }}">{{ e.full_name }} ({{ e.code or e.id }})</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Yil *</label>
+                        <input type="number" name="year" class="form-control form-control-sm" value="2026" min="2020" max="2030" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Oy *</label>
+                        <select name="month" class="form-select form-select-sm" required>
+                            {% for m in range(1,13) %}
+                            <option value="{{ m }}" {% if m == 1 %}selected{% endif %}>{{ m }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Qoldiq (so'm)</label>
+                        <input type="number" name="total" class="form-control form-control-sm" step="1" value="0" required title="Musbat = xodimga to'lash kerak. Manfiy = xodim qarzda.">
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-plus-circle"></i> Saqlash</button>
+                    </div>
+                    <div class="col-12">
+                        <small class="text-muted">Musbat qiymat = xodimga to'lash kerak (masalan 500,000). Manfiy = xodim qarzda (masalan -300,000). Oy/yil: qaysi oy uchun qoldiq kiritilmoqda.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th width="40">#</th>
+                            <th>Xodim</th>
+                            <th>Lavozim</th>
+                            <th class="text-center">Oxirgi oy</th>
+                            <th class="text-end">Qoldiq (so'm)</th>
+                            <th>Holat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for emp in employees|default([]) %}
+                        {% set b = emp_balances.get(emp.id) if emp_balances else None %}
+                        {% if b %}
+                        <tr>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td>{{ emp.full_name }} <small class="text-muted">({{ emp.code or emp.id }})</small></td>
+                            <td class="muted-cell">{{ emp.position or '—' }}</td>
+                            <td class="text-center">{{ b.year }}-{{ "%02d"|format(b.month) }}</td>
+                            <td class="text-end fw-bold {% if b.total < 0 %}text-danger{% elif b.total > 0 %}text-success{% endif %}">{{ "{:,.0f}".format(b.total) }}</td>
+                            <td>{% if b.total < 0 %}<span class="badge-cancelled">Qarzda</span>{% elif b.total > 0 %}<span class="badge-waiting">To'lanmagan</span>{% else %}<span class="badge-done">Hisoblashilgan</span>{% endif %}</td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>

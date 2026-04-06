@@ -1000,6 +1000,8 @@ class Employee(Base):
     birth_date = Column(Date, nullable=True)  # Tug'ilgan kun (bosh sahifa bildirishnomalari uchun)
     salary = Column(Float, default=0)
     salary_type = Column(String(50), nullable=True)  # oylik, soatlik, bo'lak
+    work_schedule = Column(String(20), nullable=True, default="6_day")  # deprecated
+    monthly_rest_days = Column(Integer, nullable=True, default=4)  # Oyiga dam olish kunlari (xodimga xos)
     piecework_task_id = Column(Integer, ForeignKey("piecework_tasks.id"), nullable=True)  # Bo'lak turi uchun ish
     is_active = Column(Boolean, default=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)

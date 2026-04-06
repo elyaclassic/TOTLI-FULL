@@ -555,6 +555,7 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
             </div>
             <form method="POST" id="changePasswordForm">
+                <input type="hidden" name="csrf_token" id="change_password_csrf" value="">
                 <input type="hidden" name="username" id="change_password_username" value="" autocomplete="username" aria-hidden="true">
                 <div class="modal-body py-2">
                     <p class="small mb-2">Foydalanuvchi: <strong id="password_username"></strong></p>
@@ -816,6 +817,8 @@
         document.getElementById('changePasswordForm').action = '/info/users/change-password/' + id;
         document.getElementById('password_username').textContent = username;
         document.getElementById('change_password_username').value = username;
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        document.getElementById('change_password_csrf').value = meta ? meta.getAttribute('content') : '';
         new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
     }
 

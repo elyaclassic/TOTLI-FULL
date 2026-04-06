@@ -57,6 +57,11 @@
                             <option value="bo'lak_oylik" {% if doc.salary_type == "bo'lak_oylik" %}selected{% endif %}>Bo'lak + oylik</option>
                         </select>
                     </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Dam olish (oyiga)</label>
+                        <input type="number" class="form-control" name="monthly_rest_days" min="0" max="15" value="{{ doc.employee.monthly_rest_days if doc.employee and doc.employee.monthly_rest_days is not none else 4 }}" title="Oyiga necha kun dam olishi">
+                        <small class="text-muted">Masalan: 4 = oyiga 4 kun</small>
+                    </div>
                     <div class="col-md-5" id="pieceworkWrap" style="display:none;">
                         <label class="form-label">Bo'lak ishlar (bo'lak turlari) — bir nechta tanlash mumkin</label>
                         <div class="border rounded p-2" style="max-height: 180px; overflow:auto;">

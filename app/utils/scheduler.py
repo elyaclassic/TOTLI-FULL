@@ -71,12 +71,13 @@ def _daily_hikvision_sync_job():
     try:
         from app.utils.hikvision import sync_hikvision_attendance
         today = date.today()
+        yesterday = today - timedelta(days=1)
         result = sync_hikvision_attendance(
             hikvision_host=_HIKVISION_HOST,
             hikvision_port=_HIKVISION_PORT,
             hikvision_username=_HIKVISION_USERNAME,
             hikvision_password=_HIKVISION_PASSWORD,
-            start_date=today,
+            start_date=yesterday,
             end_date=today,
             db_session=db,
         )
@@ -181,31 +182,17 @@ def _daily_attendance_create():
         db.close()
 
 
-def _tg_absent_check():
-    """Ertalab — kim kelmagan"""
-    try:
-        from app.bot.services.notifier import check_absent_employees
-        check_absent_employees()
-    except Exception as e:
-        print(f"[Scheduler] TG absent check xato: {e}")
-
-
-def _tg_low_stock():
-    """Ertalab — kam qolgan tovarlar"""
-    try:
-        from app.bot.services.notifier import check_low_stock_notify
-        check_low_stock_notify()
-    except Exception as e:
-        print(f"[Scheduler] TG low stock xato: {e}")
 
 
 def _tg_daily_summary():
-    """Kechqurun — kunlik yakuniy hisobot"""
+    """Kechqurun — kunlik yakuniy hisobot (@RD2197 uchun)"""
     try:
         from app.bot.services.notifier import send_daily_summary
         send_daily_summary()
     except Exception as e:
         print(f"[Scheduler] TG daily summary xato: {e}")
+
+
 
 
 _scheduler = None
@@ -233,12 +220,7 @@ def start_scheduler():
     _scheduler.add_job(_daily_attendance_create, "cron", hour=7, minute=0, id="daily_attendance")
     # Hozir ham bir marta yaratish
     _scheduler.add_job(_daily_attendance_create, "date", run_date=datetime.now() + timedelta(seconds=15), id="attendance_first")
-    # Telegram bildirish vazifalari
-    # Ertalab 10:00 — kim kelmagan
-    _scheduler.add_job(_tg_absent_check, "cron", hour=10, minute=0, id="tg_absent")
-    # Ertalab 09:00 — kam qolgan tovarlar
-    _scheduler.add_job(_tg_low_stock, "cron", hour=9, minute=0, id="tg_low_stock")
-    # Kechqurun 21:00 — kunlik yakuniy hisobot
+    # Telegram: kechqurun 21:00 — kunlik yakuniy hisobot (@RD2197)
     _scheduler.add_job(_tg_daily_summary, "cron", hour=21, minute=0, id="tg_daily_summary")
     _scheduler.start()
     print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + Hikvision sync + TG notify)")

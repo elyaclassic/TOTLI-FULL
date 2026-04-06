@@ -37,6 +37,11 @@
                         </select>
                     </div>
                     <div class="col-md-3">
+                        <label class="form-label">Dam olish (oyiga)</label>
+                        <input type="number" class="form-control" name="monthly_rest_days" min="0" max="15" value="{{ emp.monthly_rest_days if emp.monthly_rest_days is not none else 4 }}" title="Oyiga necha kun dam olishi (oylik kunlik hisoblashda ishlatiladi)">
+                        <small class="text-muted">Masalan: 4 = oyiga 4 kun dam</small>
+                    </div>
+                    <div class="col-md-3">
                         <label class="form-label">Bo'lak ishlar (bir nechta tanlash mumkin)</label>
                         <div class="border rounded p-2" style="max-height: 180px; overflow:auto;">
                             {% for t in piecework_tasks %}

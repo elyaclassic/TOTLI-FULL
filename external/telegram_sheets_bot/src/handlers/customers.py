@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from src.access import AllowedUserFilter, RoleFilter, deny_role_message, get_user_role, has_role
+from src.access import AllowedUserFilter, RoleFilter, deny_role_callback, deny_role_message, get_user_role, has_role
 from src.keyboards import after_save_kb, customer_actions_kb, customer_list_kb, main_menu_kb
 from src.services.excel_ledger import add_customer, append_operation_row, get_customer, list_customers
 from src.states import CustomerEntryState, NewCustomerState
@@ -22,14 +22,35 @@ def _fmt_money(value: float) -> str:
     return f"{float(value):,.0f}".replace(",", " ")
 
 
+async def _show_customers_menu(target: Message | CallbackQuery) -> None:
+    customers = await asyncio.to_thread(list_customers)
+    if isinstance(target, Message):
+        if not customers:
+            await target.answer("Mijozlar hali yo'q. `Yangi mijoz` orqali qo'shing.", parse_mode="HTML")
+            return
+        await target.answer("Mijozni tanlang:", reply_markup=customer_list_kb(customers, page=1))
+        return
+
+    if not customers:
+        await target.answer("Mijozlar hali yo'q.", show_alert=True)
+        if target.message:
+            role = get_user_role(target.from_user.id if target.from_user else None)
+            await target.message.edit_text("Asosiy menyu:", reply_markup=main_menu_kb(role))
+        return
+    if target.message:
+        await target.message.edit_text("Mijozni tanlang:", reply_markup=customer_list_kb(customers, page=1))
+    await target.answer()
+
+
 @router.message(Command("customers"))
 @router.message(F.text == "Mijozlar")
 async def customers_menu(message: Message) -> None:
-    customers = await asyncio.to_thread(list_customers)
-    if not customers:
-        await message.answer("Mijozlar hali yo'q. `Yangi mijoz` orqali qo'shing.", parse_mode="HTML")
-        return
-    await message.answer("Mijozni tanlang:", reply_markup=customer_list_kb(customers, page=1))
+    await _show_customers_menu(message)
+
+
+@router.callback_query(F.data == "menu:customers")
+async def cb_customers_menu(callback: CallbackQuery) -> None:
+    await _show_customers_menu(callback)
 
 
 @router.message(F.text == "Orqaga")
@@ -45,7 +66,7 @@ async def cb_menu_main(callback: CallbackQuery, state: FSMContext) -> None:
     text = "Asosiy menyu:"
     if callback.message:
         role = get_user_role(callback.from_user.id if callback.from_user else None)
-        await callback.message.answer(text, reply_markup=main_menu_kb(role))
+        await callback.message.edit_text(text, reply_markup=main_menu_kb(role))
     await callback.answer()
 
 
@@ -76,10 +97,9 @@ async def cb_customer_pick(callback: CallbackQuery, state: FSMContext) -> None:
         f"Qarz qoldiq: {_fmt_money(customer.get('qoldiq') or 0)}"
     )
     if callback.message:
-        can_report = has_role(callback.from_user.id if callback.from_user else None, "admin", "rahbar")
         await callback.message.edit_text(
             text,
-            reply_markup=customer_actions_kb(customer_id, can_report=can_report),
+            reply_markup=customer_actions_kb(customer_id, can_report=True),
             parse_mode="HTML",
         )
     await callback.answer()
@@ -87,7 +107,7 @@ async def cb_customer_pick(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.callback_query(F.data.startswith("customer:op:"))
 async def cb_customer_operation(callback: CallbackQuery, state: FSMContext) -> None:
-    _prefix, _kind, _op, customer_id, operation_type = callback.data.split(":")
+    _prefix, _op, customer_id, operation_type = callback.data.split(":")
     customer = await asyncio.to_thread(get_customer, int(customer_id))
     if not customer:
         await callback.answer("Mijoz topilmadi", show_alert=True)
@@ -149,23 +169,33 @@ async def on_amount_entered(message: Message, state: FSMContext) -> None:
         f"✅ <b>{customer_name}</b> uchun amaliyot saqlandi.\n"
         f"Summa: <b>{_fmt_money(amount)}</b>",
         parse_mode="HTML",
-        reply_markup=after_save_kb(
-            customer_id,
-            can_report=has_role(message.from_user.id if message.from_user else None, "admin", "rahbar"),
-        ),
+        reply_markup=after_save_kb(customer_id, can_report=True),
     )
 
 
-@router.message(Command("add_customer"), RoleFilter("admin"))
-@router.message(RoleFilter("admin"), F.text == "Yangi mijoz")
+@router.message(Command("add_customer"), RoleFilter("admin", "rahbar", "xodim"))
+@router.message(RoleFilter("admin", "rahbar", "xodim"), F.text == "Yangi mijoz")
 async def add_customer_start(message: Message, state: FSMContext) -> None:
     await state.set_state(NewCustomerState.waiting_name)
     await message.answer("Yangi mijoz nomini yozing:")
 
 
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data == "menu:add_customer")
+async def cb_add_customer_start(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.set_state(NewCustomerState.waiting_name)
+    if callback.message:
+        await callback.message.edit_text("Yangi mijoz nomini yozing:")
+    await callback.answer()
+
+
 @router.message(F.text == "Yangi mijoz")
 async def add_customer_denied(message: Message) -> None:
     await deny_role_message(message)
+
+
+@router.callback_query(F.data == "menu:add_customer")
+async def add_customer_denied_callback(callback: CallbackQuery) -> None:
+    await deny_role_callback(callback)
 
 
 @router.message(NewCustomerState.waiting_name)

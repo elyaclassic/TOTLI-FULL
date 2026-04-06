@@ -36,6 +36,31 @@ def _bold_first_row(ws) -> None:
         cell.font = Font(bold=True)
 
 
+def _find_header_row(ws, first_header: str) -> int | None:
+    for row in range(1, min(ws.max_row, 20) + 1):
+        value = str(ws[f"A{row}"].value or "").strip()
+        if value == first_header:
+            return row
+    return None
+
+
+def _next_data_row(
+    ws,
+    first_header: str,
+    default_header_row: int = 1,
+    data_columns: tuple[int, ...] | None = None,
+) -> int:
+    header_row = _find_header_row(ws, first_header) or default_header_row
+    check_columns = data_columns or tuple(range(1, ws.max_column + 1))
+    row = header_row + 1
+    while row <= ws.max_row:
+        if any(ws.cell(row=row, column=col).value not in (None, "") for col in check_columns):
+            row += 1
+            continue
+        break
+    return row
+
+
 def _ensure_workbook() -> Path:
     path = _excel_path()
     if path.exists():
@@ -61,28 +86,38 @@ def _ensure_workbook() -> Path:
 
 
 def _ensure_headers(ws, headers: list[str]) -> None:
+    header_row = _find_header_row(ws, headers[0])
+    if header_row:
+        return
     if not ws["A1"].value:
         ws.append(headers)
         _bold_first_row(ws)
+        return
+    for idx, header in enumerate(headers, start=1):
+        ws.cell(row=1, column=idx, value=header)
+    _bold_first_row(ws)
 
 
 def _ensure_summary_formulas(summary_ws, operations_ws) -> None:
-    if not summary_ws["A2"].value:
-        summary_ws["A2"] = "Mijozlar to'lagan"
-        summary_ws["B2"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
-    if not summary_ws["A3"].value:
-        summary_ws["A3"] = "Biz bergan"
-        summary_ws["B3"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
-    if not summary_ws["A4"].value:
-        summary_ws["A4"] = "Jami qarz qoldiq"
-        summary_ws["B4"] = "=B3-B2"
-    if not summary_ws["A5"].value:
-        summary_ws["A5"] = "Operatsiyalar soni"
-        summary_ws["B5"] = '=COUNTA(Operatsiyalar!$A:$A)-1'
+    header_row = _find_header_row(summary_ws, SUMMARY_HEADERS[0]) or 1
+    base_row = header_row + 1
+    if not summary_ws[f"A{base_row}"].value:
+        summary_ws[f"A{base_row}"] = "Mijozlar to'lagan"
+        summary_ws[f"B{base_row}"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
+    if not summary_ws[f"A{base_row + 1}"].value:
+        summary_ws[f"A{base_row + 1}"] = "Biz bergan"
+        summary_ws[f"B{base_row + 1}"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
+    if not summary_ws[f"A{base_row + 2}"].value:
+        summary_ws[f"A{base_row + 2}"] = "Jami qarz qoldiq"
+        summary_ws[f"B{base_row + 2}"] = f"=B{base_row + 1}-B{base_row}"
+    if not summary_ws[f"A{base_row + 3}"].value:
+        summary_ws[f"A{base_row + 3}"] = "Operatsiyalar soni"
+        summary_ws[f"B{base_row + 3}"] = '=COUNTA(Operatsiyalar!$A:$A)-3'
 
 
 def _ensure_customer_formulas(customers_ws) -> None:
-    for row in range(2, max(customers_ws.max_row, 2) + 1):
+    header_row = _find_header_row(customers_ws, CUSTOMERS_HEADERS[0]) or 1
+    for row in range(header_row + 1, max(customers_ws.max_row, header_row + 1) + 1):
         if not customers_ws[f"A{row}"].value:
             continue
         customers_ws[f"E{row}"] = (
@@ -105,17 +140,31 @@ def _num(value) -> float:
         return 0.0
 
 
+def _int_or_none(value) -> int | None:
+    try:
+        if value is None or value == "":
+            return None
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        text = str(value).strip()
+        if text.isdigit():
+            return int(text)
+        return None
+    except Exception:
+        return None
+
+
 def _calc_customer_totals(operations_ws, customer_id: int) -> tuple[float, float]:
     kirim = 0.0
     chiqim = 0.0
-    for row in range(2, operations_ws.max_row + 1):
-        cid = operations_ws[f"C{row}"].value
-        if not cid:
+    header_row = _find_header_row(operations_ws, OPERATIONS_HEADERS[0]) or 1
+    for row in range(header_row + 1, operations_ws.max_row + 1):
+        cid = _int_or_none(operations_ws[f"C{row}"].value)
+        if cid is None:
             continue
-        try:
-            if int(cid) != int(customer_id):
-                continue
-        except Exception:
+        if cid != int(customer_id):
             continue
         amount = _num(operations_ws[f"F{row}"].value)
         op_type = str(operations_ws[f"E{row}"].value or "").strip().lower()
@@ -167,10 +216,11 @@ def list_customers() -> list[dict]:
     wb.save(path)
 
     items: list[dict] = []
-    for row in range(2, customers.max_row + 1):
-        cid = customers[f"A{row}"].value
+    header_row = _find_header_row(customers, CUSTOMERS_HEADERS[0]) or 1
+    for row in range(header_row + 1, customers.max_row + 1):
+        cid = _int_or_none(customers[f"A{row}"].value)
         name = customers[f"B{row}"].value
-        if not cid or not name:
+        if cid is None or not name:
             continue
         kirim, chiqim = _calc_customer_totals(operations, int(cid))
         opening = _num(customers[f"D{row}"].value)
@@ -199,13 +249,23 @@ def add_customer(name: str, phone: str = "", opening_balance: float = 0) -> dict
     path, wb, _operations, customers, _summary = _load_book()
 
     max_id = 0
-    for row in range(2, customers.max_row + 1):
-        cid = customers[f"A{row}"].value
-        if cid:
-            max_id = max(max_id, int(cid))
+    header_row = _find_header_row(customers, CUSTOMERS_HEADERS[0]) or 1
+    for row in range(header_row + 1, customers.max_row + 1):
+        cid = _int_or_none(customers[f"A{row}"].value)
+        if cid is not None:
+            max_id = max(max_id, cid)
     new_id = max_id + 1
 
-    customers.append([new_id, name.strip(), phone.strip(), float(opening_balance or 0), None, None, None])
+    target_row = _next_data_row(
+        customers,
+        CUSTOMERS_HEADERS[0],
+        default_header_row=header_row,
+        data_columns=(1, 2, 3, 4),
+    )
+    customers[f"A{target_row}"] = new_id
+    customers[f"B{target_row}"] = name.strip()
+    customers[f"C{target_row}"] = phone.strip()
+    customers[f"D{target_row}"] = float(opening_balance or 0)
     _ensure_customer_formulas(customers)
     wb.save(path)
     return get_customer(new_id) or {"id": new_id, "name": name.strip(), "phone": phone.strip()}
@@ -214,14 +274,12 @@ def add_customer(name: str, phone: str = "", opening_balance: float = 0) -> dict
 def customer_history(customer_id: int, limit: int = 20) -> list[dict]:
     _path, _wb, operations, _customers, _summary = _load_book()
     rows: list[dict] = []
-    for row in range(2, operations.max_row + 1):
-        cid = operations[f"C{row}"].value
-        if not cid:
+    header_row = _find_header_row(operations, OPERATIONS_HEADERS[0]) or 1
+    for row in range(header_row + 1, operations.max_row + 1):
+        cid = _int_or_none(operations[f"C{row}"].value)
+        if cid is None:
             continue
-        try:
-            if int(cid) != int(customer_id):
-                continue
-        except Exception:
+        if cid != int(customer_id):
             continue
         rows.append(
             {
@@ -251,7 +309,8 @@ def summary_report_by_period(period: str = "all") -> dict:
     jami_kirim = 0.0
     jami_chiqim = 0.0
     operatsiyalar_soni = 0
-    for row in range(2, operations.max_row + 1):
+    header_row = _find_header_row(operations, OPERATIONS_HEADERS[0]) or 1
+    for row in range(header_row + 1, operations.max_row + 1):
         row_date = str(operations[f"A{row}"].value or "")
         if not _match_period(row_date, period):
             continue
@@ -332,8 +391,12 @@ def summary_report() -> dict:
     wb.save(path)
     jami_kirim = 0.0
     jami_chiqim = 0.0
-    operatsiyalar_soni = max(0, operations.max_row - 1)
-    for row in range(2, operations.max_row + 1):
+    header_row = _find_header_row(operations, OPERATIONS_HEADERS[0]) or 1
+    operatsiyalar_soni = 0
+    for row in range(header_row + 1, operations.max_row + 1):
+        if not any(operations.cell(row=row, column=col).value not in (None, "") for col in range(1, operations.max_column + 1)):
+            continue
+        operatsiyalar_soni += 1
         amount = _num(operations[f"F{row}"].value)
         op_type = str(operations[f"E{row}"].value or "").strip().lower()
         if op_type == "kirim":
@@ -379,20 +442,25 @@ def append_operation_row(
         if customer:
             customer_name = customer["name"]
 
-    operations.append(
-        [
-            now.strftime("%Y-%m-%d"),
-            now.strftime("%H:%M:%S"),
-            customer_id or "",
-            customer_name or "",
-            turi or "",
-            summa if summa is not None else "",
-            izoh or "",
-            uname,
-            text[:5000],
-            manba,
-        ]
+    target_row = _next_data_row(
+        operations,
+        OPERATIONS_HEADERS[0],
+        data_columns=(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
     )
+    values = [
+        now.strftime("%Y-%m-%d"),
+        now.strftime("%H:%M:%S"),
+        customer_id or "",
+        customer_name or "",
+        turi or "",
+        summa if summa is not None else "",
+        izoh or "",
+        uname,
+        text[:5000],
+        manba,
+    ]
+    for idx, value in enumerate(values, start=1):
+        operations.cell(row=target_row, column=idx, value=value)
 
     _ensure_customer_formulas(customers)
     _ensure_summary_formulas(summary, operations)

@@ -15,8 +15,9 @@ from app.core import templates
 from app.models.database import (
     get_db, User, CashRegister, Payment, CashTransfer,
     Partner, Purchase, PurchaseExpense, ExpenseDoc, ExpenseDocItem, ExpenseType,
-    Direction, Department,
+    Direction, Department, EmployeeAdvance, Employee, Salary,
 )
+import re as _re
 from app.deps import require_auth, require_admin
 from app.utils.db_schema import ensure_payments_status_column, ensure_cash_opening_balance_column
 from app.utils.audit import log_action
@@ -101,6 +102,40 @@ async def finance(
         except ValueError:
             pass
     payments = q.limit(200).all()
+    # Har payment uchun ExpenseDoc va EmployeeAdvance linklari (klikab havolalar uchun)
+    payment_ids_all = [p.id for p in payments if p.id]
+    expense_doc_by_payment = {}
+    advance_by_payment = {}
+    if payment_ids_all:
+        for ed in db.query(ExpenseDoc.id, ExpenseDoc.payment_id, ExpenseDoc.number).filter(
+            ExpenseDoc.payment_id.in_(payment_ids_all)
+        ).all():
+            expense_doc_by_payment[ed.payment_id] = {"id": ed.id, "number": ed.number}
+        # Avans linklari
+        avans_payments = [p for p in payments if p.description and p.description.startswith("Avans:")]
+        if avans_payments:
+            p_dates = [p.date for p in avans_payments if p.date]
+            if p_dates:
+                advs = db.query(EmployeeAdvance).options(joinedload(EmployeeAdvance.employee)).filter(
+                    EmployeeAdvance.confirmed_at.isnot(None),
+                    EmployeeAdvance.advance_date >= min(p_dates).date(),
+                    EmployeeAdvance.advance_date <= max(p_dates).date(),
+                ).all()
+                adv_idx = {}
+                for a in advs:
+                    key = (round(float(a.amount or 0), 2), a.advance_date, a.cash_register_id)
+                    adv_idx.setdefault(key, []).append(a)
+                used_ids = set()
+                for p in avans_payments:
+                    if not p.date: continue
+                    key = (round(float(p.amount or 0), 2), p.date.date(), p.cash_register_id)
+                    for a in adv_idx.get(key, []):
+                        if a.id in used_ids: continue
+                        emp_name = (a.employee.full_name or "")[:100] if a.employee else ""
+                        if emp_name and emp_name in p.description:
+                            advance_by_payment[p.id] = a.id
+                            used_ids.add(a.id)
+                            break
     today = datetime.now().date()
     _status_ok = or_(Payment.status == "confirmed", Payment.status == None)
 
@@ -164,6 +199,8 @@ async def finance(
         "cash_data": cash_data,
         "partners": partners,
         "payments": payments,
+        "expense_doc_by_payment": expense_doc_by_payment,
+        "advance_by_payment": advance_by_payment,
         "stats": stats,
         "has_date_filter": has_date_filter,
         "filter_date_from": filter_date_from,
@@ -187,6 +224,7 @@ async def finance_harajatlar(
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     expense_docs = (
         db.query(ExpenseDoc)
+        .filter(ExpenseDoc.status != "deleted")
         .options(
             joinedload(ExpenseDoc.cash_register),
             joinedload(ExpenseDoc.direction),
@@ -252,7 +290,7 @@ async def finance_harajatlar(
     q = (
         db.query(Payment)
         .options(joinedload(Payment.cash_register), joinedload(Payment.partner))
-        .filter(Payment.type == "expense")
+        .filter(Payment.type == "expense", Payment.status != "cancelled")
         .order_by(Payment.date.desc())
     )
     if (date_from or "").strip():
@@ -292,6 +330,46 @@ async def finance_harajatlar(
         except ValueError:
             pass
     purchase_expenses_list = purchase_expenses_q.order_by(Purchase.date.desc()).limit(200).all()
+    # Har payment uchun bog'langan ExpenseDoc (HD-... raqamlari klikab bo'lishi uchun)
+    payment_ids_expense = [p.id for p in payments if p.id]
+    expense_doc_by_payment = {}
+    if payment_ids_expense:
+        for ed in db.query(ExpenseDoc.id, ExpenseDoc.payment_id, ExpenseDoc.number).filter(
+            ExpenseDoc.payment_id.in_(payment_ids_expense)
+        ).all():
+            expense_doc_by_payment[ed.payment_id] = {"id": ed.id, "number": ed.number}
+    # "Avans: ..." bilan boshlanadigan payment lar uchun EmployeeAdvance ni topish
+    # (amount + date + cash_register mosligi bilan)
+    advance_by_payment = {}
+    avans_payments = [p for p in payments if p.description and p.description.startswith("Avans:")]
+    if avans_payments:
+        # Barcha mos keluvchi avanslar (sana oralig'i paymentlar bilan mos)
+        p_dates = [p.date for p in avans_payments if p.date]
+        if p_dates:
+            advs = db.query(EmployeeAdvance).options(joinedload(EmployeeAdvance.employee)).filter(
+                EmployeeAdvance.confirmed_at.isnot(None),
+                EmployeeAdvance.advance_date >= min(p_dates).date(),
+                EmployeeAdvance.advance_date <= max(p_dates).date(),
+            ).all()
+            # Index: (amount, advance_date, cash_register_id) -> list of advances
+            adv_idx = {}
+            for a in advs:
+                key = (round(float(a.amount or 0), 2), a.advance_date, a.cash_register_id)
+                adv_idx.setdefault(key, []).append(a)
+            used_ids = set()
+            for p in avans_payments:
+                if not p.date: continue
+                key = (round(float(p.amount or 0), 2), p.date.date(), p.cash_register_id)
+                candidates = adv_idx.get(key, [])
+                # First unused match
+                for a in candidates:
+                    if a.id in used_ids: continue
+                    # Name check
+                    emp_name = (a.employee.full_name or "")[:100] if a.employee else ""
+                    if emp_name and emp_name in p.description:
+                        advance_by_payment[p.id] = a.id
+                        used_ids.add(a.id)
+                        break
     all_outflows = []
     for p in payments:
         all_outflows.append({
@@ -303,6 +381,8 @@ async def finance_harajatlar(
             "cash_register": p.cash_register,
             "payment": p,
             "purchase_id": None,
+            "expense_doc": expense_doc_by_payment.get(p.id),
+            "advance_id": advance_by_payment.get(p.id),
         })
     for pe in purchase_expenses_list:
         pu = pe.purchase
@@ -315,6 +395,8 @@ async def finance_harajatlar(
             "cash_register": pu.expense_cash_register if pu else None,
             "payment": None,
             "purchase_id": pu.id if pu else None,
+            "expense_doc": None,
+            "advance_id": None,
         })
     all_outflows.sort(key=lambda x: x["date"] or datetime.min, reverse=True)
     all_outflows = all_outflows[:200]
@@ -393,6 +475,14 @@ async def finance_kassa_detail(
     total_pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
     page = min(page, total_pages)
     payments = q.offset((page - 1) * per_page).limit(per_page).all()
+    # Har payment uchun bog'langan ExpenseDoc id ni topish (HD-... raqamlari klikab bo'lishi uchun)
+    payment_ids = [p.id for p in payments if p.id]
+    expense_doc_by_payment = {}
+    if payment_ids:
+        for ed in db.query(ExpenseDoc.id, ExpenseDoc.payment_id, ExpenseDoc.number).filter(
+            ExpenseDoc.payment_id.in_(payment_ids)
+        ).all():
+            expense_doc_by_payment[ed.payment_id] = {"id": ed.id, "number": ed.number}
     filter_date_from = str(date_from or "").strip()[:10] if date_from else ""
     filter_date_to = str(date_to or "").strip()[:10] if date_to else ""
     total_income = sum(p.amount or 0 for p in payments if getattr(p, "type", None) == "income")
@@ -407,6 +497,7 @@ async def finance_kassa_detail(
         "request": request,
         "cash": cash,
         "payments": payments,
+        "expense_doc_by_payment": expense_doc_by_payment,
         "filter_date_from": filter_date_from,
         "filter_date_to": filter_date_to,
         "total_income": total_income,
@@ -446,6 +537,20 @@ async def finance_payment_post(
     amount = float(amount)
     if amount <= 0:
         return RedirectResponse(url="/finance?error=amount", status_code=303)
+    # Dublikat himoyasi: 3 daqiqa ichida bir xil tur+summa+kassa+mijoz
+    from datetime import timedelta
+    three_min_ago = datetime.now() - timedelta(minutes=3)
+    dup_q = db.query(Payment).filter(
+        Payment.type == type,
+        Payment.amount == amount,
+        Payment.cash_register_id == cash_register_id,
+        Payment.created_at >= three_min_ago,
+    )
+    if partner_id and int(partner_id) > 0:
+        dup_q = dup_q.filter(Payment.partner_id == int(partner_id))
+    if dup_q.first():
+        from urllib.parse import quote
+        return RedirectResponse(url="/finance?error=" + quote("Oxirgi 3 daqiqada aynan shu to'lov yaratilgan. Takroriy bo'lsa, biroz kuting."), status_code=303)
     pid = None
     if partner_id is not None and int(partner_id) > 0:
         p = db.query(Partner).filter(Partner.id == int(partner_id)).first()
@@ -752,6 +857,33 @@ async def finance_harajat_hujjat_edit(
         doc_date = doc.date.date() if hasattr(doc.date, "date") and callable(getattr(doc.date, "date")) else doc.date
     else:
         doc_date = datetime.now().date()
+    # Oylik to'lovi item bormi? "Oylik to'lovi YYYY-MM" pattern
+    salary_rows = []
+    salary_year = None
+    salary_month = None
+    for item in (doc.items or []):
+        m = _re.search(r"Oylik to'lovi\s*(\d{4})-(\d{1,2})", item.description or "")
+        if m:
+            salary_year = int(m.group(1))
+            salary_month = int(m.group(2))
+            break
+    if salary_year and salary_month:
+        sals = db.query(Salary).options(joinedload(Salary.employee)).filter(
+            Salary.year == salary_year, Salary.month == salary_month
+        ).order_by(Salary.employee_id).all()
+        for s in sals:
+            if (s.total or 0) <= 0 and (s.paid or 0) <= 0:
+                continue
+            salary_rows.append({
+                "employee": s.employee,
+                "base_salary": float(s.base_salary or 0),
+                "bonus": float(s.bonus or 0),
+                "deduction": float(s.deduction or 0),
+                "advance_deduction": float(s.advance_deduction or 0),
+                "total": float(s.total or 0),
+                "paid": float(s.paid or 0),
+                "status": s.status or "pending",
+            })
     return templates.TemplateResponse("finance/harajat_hujjat_form.html", {
         "request": request,
         "doc": doc,
@@ -760,9 +892,164 @@ async def finance_harajat_hujjat_edit(
         "directions": directions,
         "departments": departments,
         "expense_types": expense_types,
+        "salary_rows": salary_rows,
+        "salary_year": salary_year,
+        "salary_month": salary_month,
         "current_user": current_user,
         "page_title": f"Harajat hujjati #{doc.number or doc_id}",
     })
+
+
+def _get_salary_doc_data(db, doc_id):
+    """Oylik to'lovi hujjati ma'lumotlari (export uchun)."""
+    doc = db.query(ExpenseDoc).options(
+        joinedload(ExpenseDoc.items),
+        joinedload(ExpenseDoc.cash_register),
+    ).filter(ExpenseDoc.id == doc_id).first()
+    if not doc:
+        return None, None, None, None
+    salary_year = None
+    salary_month = None
+    for item in (doc.items or []):
+        m = _re.search(r"Oylik to'lovi\s*(\d{4})-(\d{1,2})", item.description or "")
+        if m:
+            salary_year = int(m.group(1))
+            salary_month = int(m.group(2))
+            break
+    if not (salary_year and salary_month):
+        return doc, None, None, None
+    sals = db.query(Salary).options(joinedload(Salary.employee)).filter(
+        Salary.year == salary_year, Salary.month == salary_month
+    ).order_by(Salary.employee_id).all()
+    rows = []
+    for s in sals:
+        if (s.total or 0) <= 0 and (s.paid or 0) <= 0:
+            continue
+        rows.append(s)
+    return doc, rows, salary_year, salary_month
+
+
+@router.get("/harajat/hujjat/{doc_id}/salary-export/excel")
+async def finance_salary_export_excel(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Oylik to'lovi hujjatini Excel ga eksport qilish."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    doc, rows, y, m = _get_salary_doc_data(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if not rows:
+        raise HTTPException(status_code=400, detail="Oylik ro'yxati topilmadi")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Oylik {y}-{m:02d}"
+    # Header
+    ws['A1'] = f"Oylik to'lovi hujjati — {doc.number}"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws.merge_cells('A1:I1')
+    ws['A2'] = f"{y}-yil {m}-oy | Kassa: {doc.cash_register.name if doc.cash_register else '—'} | Sana: {doc.date.strftime('%d.%m.%Y') if doc.date else '—'}"
+    ws.merge_cells('A2:I2')
+    # Column headers
+    headers = ["#", "Xodim", "Kod", "Lavozim", "Oylik asos", "Bonus", "Ushlab qolish", "Avans", "Jami"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col, value=h)
+        cell.font = Font(bold=True)
+        cell.fill = PatternFill(start_color="D4EDDA", end_color="D4EDDA", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center")
+    # Rows
+    total_sum = 0
+    for i, s in enumerate(rows, 1):
+        ws.cell(row=4 + i, column=1, value=i)
+        ws.cell(row=4 + i, column=2, value=s.employee.full_name if s.employee else "—")
+        ws.cell(row=4 + i, column=3, value=s.employee.code if s.employee else "")
+        ws.cell(row=4 + i, column=4, value=s.employee.position if s.employee and s.employee.position else "")
+        ws.cell(row=4 + i, column=5, value=float(s.base_salary or 0))
+        ws.cell(row=4 + i, column=6, value=float(s.bonus or 0))
+        ws.cell(row=4 + i, column=7, value=float(s.deduction or 0))
+        ws.cell(row=4 + i, column=8, value=float(s.advance_deduction or 0))
+        ws.cell(row=4 + i, column=9, value=float(s.total or 0))
+        total_sum += float(s.total or 0)
+    # Total row
+    tr = 4 + len(rows) + 1
+    ws.cell(row=tr, column=1, value="Jami:").font = Font(bold=True)
+    ws.merge_cells(start_row=tr, start_column=1, end_row=tr, end_column=8)
+    ws.cell(row=tr, column=1).alignment = Alignment(horizontal="right")
+    ws.cell(row=tr, column=9, value=total_sum).font = Font(bold=True)
+    # Column widths
+    widths = [5, 30, 8, 20, 14, 12, 14, 14, 14]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+    # Number format
+    for row in ws.iter_rows(min_row=5, max_row=tr, min_col=5, max_col=9):
+        for cell in row:
+            cell.number_format = '#,##0'
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"oylik_{y}_{m:02d}_{doc.number}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/harajat/hujjat/{doc_id}/salary-export/word")
+async def finance_salary_export_word(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Oylik to'lovi hujjatini Word ga eksport qilish."""
+    from docx import Document
+    from docx.shared import Pt, Cm
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from fastapi.responses import StreamingResponse
+    from io import BytesIO
+    doc, rows, y, m = _get_salary_doc_data(db, doc_id)
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if not rows:
+        raise HTTPException(status_code=400, detail="Oylik ro'yxati topilmadi")
+    d = Document()
+    d.add_heading(f"Oylik to'lovi hujjati — {doc.number}", 0)
+    p = d.add_paragraph(f"{y}-yil {m}-oy | Kassa: {doc.cash_register.name if doc.cash_register else '—'} | Sana: {doc.date.strftime('%d.%m.%Y') if doc.date else '—'}")
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # Table
+    table = d.add_table(rows=1, cols=8)
+    table.style = 'Light Grid Accent 1'
+    hdr = table.rows[0].cells
+    for i, h in enumerate(["#", "Xodim", "Lavozim", "Oylik asos", "Bonus", "Ushlab", "Avans", "Jami"]):
+        hdr[i].text = h
+    total_sum = 0
+    for i, s in enumerate(rows, 1):
+        r = table.add_row().cells
+        r[0].text = str(i)
+        r[1].text = (s.employee.full_name or "—") if s.employee else "—"
+        r[2].text = (s.employee.position or "—") if s.employee and s.employee.position else "—"
+        r[3].text = f"{float(s.base_salary or 0):,.0f}"
+        r[4].text = f"{float(s.bonus or 0):,.0f}"
+        r[5].text = f"{float(s.deduction or 0):,.0f}"
+        r[6].text = f"{float(s.advance_deduction or 0):,.0f}"
+        r[7].text = f"{float(s.total or 0):,.0f}"
+        total_sum += float(s.total or 0)
+    r = table.add_row().cells
+    r[0].text = ""; r[1].text = ""; r[2].text = ""; r[3].text = ""
+    r[4].text = ""; r[5].text = ""; r[6].text = "Jami:"; r[7].text = f"{total_sum:,.0f}"
+    buf = BytesIO()
+    d.save(buf)
+    buf.seek(0)
+    filename = f"oylik_{y}_{m:02d}_{doc.number}.docx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 
 @router.post("/harajat/hujjat/save")
@@ -885,7 +1172,7 @@ async def finance_harajat_hujjat_tasdiqlash(
         )
         _sync_cash_balance(db, doc.cash_register_id)
         db.commit()
-        # Telegram bildirish
+        # Telegram bildirish (ELYA CLASSIC — real-time)
         try:
             from app.bot.services.notifier import notify_expense
             notify_expense(doc.number or f"#{doc_id}", total, "")

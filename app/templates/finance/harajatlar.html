@@ -67,8 +67,8 @@
                 </thead>
                 <tbody>
                     {% for row in harajat_hujjatlari|default([]) %}
-                    <tr>
-                        <td class="muted-cell">{% if row.is_purchase_expense_doc %}{{ row.number }}{% else %}{{ row.doc_id }}{% endif %}</td>
+                    <tr style="cursor:pointer" onclick="if(!event.target.closest('a,button,form')){window.open('{{ row.url }}', '{% if row.is_purchase_expense_doc %}_blank{% else %}_self{% endif %}')}" title="Hujjatni ochish">
+                        <td class="muted-cell">{% if row.is_purchase_expense_doc %}{{ row.number }}{% else %}{{ row.number or row.doc_id }}{% endif %}</td>
                         <td class="muted-cell">{{ row.date.strftime('%d.%m.%Y %H:%M') if row.date else '—' }}</td>
                         <td class="muted-cell">{{ row.cash_register.name if row.cash_register else '—' }}</td>
                         <td class="muted-cell">{{ row.direction.name if row.direction else '—' }}</td>
@@ -147,6 +147,10 @@
                             <td>
                                 {% if row.is_purchase_expense and row.purchase_id %}
                                     <a href="/purchases/edit/{{ row.purchase_id }}" target="_blank" title="Kirim hujjatini ochish">{{ row.description }}</a>
+                                {% elif row.expense_doc %}
+                                    {% set parts = row.description.split(row.expense_doc.number) %}{{ parts[0] }}<a href="/finance/harajat/hujjat/{{ row.expense_doc.id }}" target="_blank" class="fw-bold text-decoration-none" title="Harajat hujjatini ochish">{{ row.expense_doc.number }}</a>{{ parts[1] if parts|length > 1 else '' }}
+                                {% elif row.advance_id %}
+                                    <a href="/employees/advances/view/{{ row.advance_id }}" target="_blank" class="fw-bold text-decoration-none" title="Avans hujjatini ochish">{{ row.description }}</a>
                                 {% else %}
                                     {{ row.description }}
                                 {% endif %}

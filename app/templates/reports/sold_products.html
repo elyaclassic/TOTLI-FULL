@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-bag-check"></i> Sotilgan mahsulotlar</h5>
+    <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+</div>
+
+<!-- Filtr -->
+<div class="filter-card mb-3">
+    <form method="get" class="d-flex flex-wrap gap-3 align-items-end">
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Dan</label>
+            <input type="datetime-local" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Gacha</label>
+            <input type="datetime-local" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-house"></i> Ombor</label>
+            <select name="warehouse_id" class="form-select form-select-sm">
+                <option value="">Barcha omborlar</option>
+                {% for w in warehouses %}
+                <option value="{{ w.id }}" {% if selected_warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel"></i> Ko'rsatish</button>
+    </form>
+</div>
+
+<!-- Statistika -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num">{{ items|length }}</div>
+            <div class="lbl"><i class="bi bi-box-seam"></i> Mahsulot turi</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num">{{ "{:,.0f}".format(grand_qty) }}</div>
+            <div class="lbl"><i class="bi bi-boxes"></i> Jami miqdor</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</div>
+            <div class="lbl"><i class="bi bi-cash"></i> Jami summa</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num">{{ "{:,.0f}".format(grand_sum / grand_qty if grand_qty else 0) }}</div>
+            <div class="lbl"><i class="bi bi-tag"></i> O'rtacha narx</div>
+        </div>
+    </div>
+</div>
+
+<!-- Jadval -->
+<div class="data-table">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span class="fw-600"><i class="bi bi-table"></i> Sotilgan mahsulotlar — {{ items|length }} ta</span>
+        <div>
+            <input type="text" id="searchInput" class="form-control form-control-sm" placeholder="Qidirish..." style="width:200px;display:inline-block;">
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover mb-0" id="soldTable">
+            <thead class="sticky-top">
+                <tr>
+                    <th>#</th>
+                    <th>Mahsulot</th>
+                    <th class="text-end">Miqdor</th>
+                    <th class="text-end">O'rtacha narx</th>
+                    <th class="text-end">Summa</th>
+                    <th class="text-center">Sotuvlar soni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in items %}
+                <tr>
+                    <td class="muted-cell">{{ loop.index }}</td>
+                    <td><strong>{{ item.product_name }}</strong></td>
+                    <td class="text-end num-cell">{{ "{:,.0f}".format(item.quantity) }}</td>
+                    <td class="text-end muted-cell">{{ "{:,.0f}".format(item.avg_price) }}</td>
+                    <td class="text-end fw-bold" style="color:#065f46;">{{ "{:,.0f}".format(item.total) }}</td>
+                    <td class="text-center muted-cell">{{ item.order_count }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-muted text-center py-4">Ma'lumot yo'q</td></tr>
+                {% endfor %}
+            </tbody>
+            {% if items %}
+            <tfoot>
+                <tr style="background:#f0fdf4;font-weight:bold;">
+                    <td colspan="2">JAMI</td>
+                    <td class="text-end">{{ "{:,.0f}".format(grand_qty) }}</td>
+                    <td></td>
+                    <td class="text-end" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.getElementById('searchInput').addEventListener('input', function() {
+    var val = this.value.toLowerCase();
+    var rows = document.querySelectorAll('#soldTable tbody tr');
+    rows.forEach(function(row) {
+        var text = row.textContent.toLowerCase();
+        row.style.display = text.includes(val) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

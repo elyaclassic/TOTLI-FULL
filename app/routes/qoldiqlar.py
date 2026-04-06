@@ -33,6 +33,8 @@ from app.models.database import (
     Order,
     Purchase,
     Payment,
+    Employee,
+    Salary,
 )
 from app.deps import require_auth, require_admin
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
@@ -83,6 +85,13 @@ async def qoldiqlar_page(
         .limit(200)
         .all()
     )
+    # Xodimlar qoldiqlari — har xodimning oxirgi Salary.total qiymati
+    employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
+    emp_balances = {}
+    for emp in employees:
+        s = db.query(Salary).filter(Salary.employee_id == emp.id).order_by(Salary.year.desc(), Salary.month.desc()).first()
+        if s:
+            emp_balances[emp.id] = {"year": s.year, "month": s.month, "total": float(s.total or 0), "status": s.status}
     return templates.TemplateResponse("qoldiqlar/index.html", {
         "request": request,
         "cash_registers": cash_registers,
@@ -93,6 +102,8 @@ async def qoldiqlar_page(
         "tovar_docs": tovar_docs,
         "cash_docs": cash_docs,
         "kontragent_docs": kontragent_docs,
+        "employees": employees,
+        "emp_balances": emp_balances,
         "current_user": current_user,
         "page_title": "Qoldiqlar",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
@@ -518,21 +529,51 @@ async def qoldiqlar_tovar_save(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Tovar qoldig'ini kiritish yoki qo'shish (omborda mavjud bo'lsa qo'shiladi)"""
+    """Tovar qoldig'ini kiritish yoki qo'shish (omborda mavjud bo'lsa qo'shiladi). StockMovement audit trail bilan."""
     if quantity < 0:
         return RedirectResponse(url="/qoldiqlar#tovar", status_code=303)
-    stock = db.query(Stock).filter(
-        Stock.warehouse_id == warehouse_id,
-        Stock.product_id == product_id,
-    ).first()
-    if stock:
-        stock.quantity = (stock.quantity or 0) + quantity
-        stock.updated_at = datetime.now()
-    else:
-        stock = Stock(warehouse_id=warehouse_id, product_id=product_id, quantity=quantity)
-        db.add(stock)
+    from app.services.stock_service import create_stock_movement
+    create_stock_movement(
+        db=db,
+        warehouse_id=warehouse_id,
+        product_id=product_id,
+        quantity_change=quantity,
+        operation_type="manual_add",
+        document_type="ManualAdjustment",
+        document_id=0,
+        document_number="MANUAL",
+        user_id=current_user.id if current_user else None,
+        note="Qo'lda qoldiq kiritish",
+    )
     db.commit()
     return RedirectResponse(url="/qoldiqlar#tovar", status_code=303)
+
+
+@router.post("/xodim-qoldiq")
+async def qoldiqlar_xodim_save(
+    employee_id: int = Form(...),
+    year: int = Form(...),
+    month: int = Form(...),
+    total: float = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Xodim oylik qoldig'ini kiritish (boshlang'ich qoldiq yoki tuzatish). Salary jadvaliga yoziladi."""
+    emp = db.query(Employee).filter(Employee.id == employee_id).first()
+    if not emp:
+        return RedirectResponse(url="/qoldiqlar?error=Xodim+topilmadi#xodim", status_code=303)
+    if not (1 <= month <= 12) or year < 2020 or year > 2030:
+        return RedirectResponse(url="/qoldiqlar?error=Noto'g'ri+oy+yoki+yil#xodim", status_code=303)
+    s = db.query(Salary).filter(Salary.employee_id == employee_id, Salary.year == year, Salary.month == month).first()
+    if not s:
+        s = Salary(employee_id=employee_id, year=year, month=month)
+        db.add(s)
+    s.base_salary = max(0, total)
+    s.total = total
+    s.paid = 0
+    s.status = "paid" if total <= 0 else "pending"
+    db.commit()
+    return RedirectResponse(url="/qoldiqlar?saved=xodim#xodim", status_code=303)
 
 
 @router.post("/kontragent/recalculate")
@@ -572,10 +613,21 @@ async def qoldiqlar_kontragent_recalculate(
         bal -= float(purchase_total or 0)
 
         # 4. To'lovlar (confirmed)
+        # POS naqd sotuvlarda order.debt=0 lekin Payment yaratiladi (kassa uchun).
+        # Bu paymentlarni hisobga olmaslik kerak — aks holda balans manfiy bo'ladi.
+        pos_paid_order_ids = db.query(Order.id).filter(
+            Order.partner_id == partner.id,
+            Order.type == "sale",
+            Order.debt == 0,
+            Order.paid > 0,
+            Order.status.in_(["confirmed", "completed"]),
+        ).subquery()
+
         income_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
             Payment.partner_id == partner.id,
             Payment.type == "income",
             or_(Payment.status == "confirmed", Payment.status == None),
+            or_(Payment.order_id == None, ~Payment.order_id.in_(pos_paid_order_ids)),
         ).scalar()
         bal -= float(income_total or 0)
 
@@ -706,6 +758,7 @@ async def qoldiqlar_tovar_hujjat_new(
         "current_user": current_user,
         "page_title": "Tovar qoldiqlari — yangi hujjat",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
+        "now": datetime.now(),
     })
 
 
@@ -742,18 +795,27 @@ async def qoldiqlar_tovar_hujjat_create(
             except ValueError:
                 continue
 
-    today = datetime.now()
+    # Sana: formdan kelgan yoki hozirgi vaqt
+    doc_date_str = form.get("doc_date", "")
+    if doc_date_str and str(doc_date_str).strip():
+        try:
+            doc_date = datetime.fromisoformat(str(doc_date_str))
+        except (ValueError, TypeError):
+            doc_date = datetime.now()
+    else:
+        doc_date = datetime.now()
+
     count = db.query(StockAdjustmentDoc).filter(
-        StockAdjustmentDoc.date >= today.replace(hour=0, minute=0, second=0)
+        StockAdjustmentDoc.date >= doc_date.replace(hour=0, minute=0, second=0)
     ).count()
-    number = f"QLD-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    number = f"QLD-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
 
     total_tannarx = sum(qty * cp for _, _, qty, cp, _ in items_data)
     total_sotuv = sum(qty * sp for _, _, qty, _, sp in items_data)
 
     doc = StockAdjustmentDoc(
         number=number,
-        date=today,
+        date=doc_date,
         user_id=current_user.id if current_user else None,
         status="draft",
         total_tannarx=total_tannarx,
@@ -1016,6 +1078,8 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
     doc_warehouse_ids = list({item.warehouse_id for item in doc.items})
     doc_pairs = {(item.warehouse_id, item.product_id) for item in doc.items}
 
+    is_qld = (doc.number or "").startswith("QLD")  # QLD = qo'shish, INV = almashtirish
+
     for item in doc.items:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == item.warehouse_id,
@@ -1023,7 +1087,15 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
         ).first()
         old_quantity = float(stock.quantity or 0) if stock else 0
         new_quantity = float(item.quantity or 0)
-        quantity_change = new_quantity - old_quantity
+
+        if is_qld:
+            # QLD: mavjud qoldiqqa qo'shish
+            quantity_change = new_quantity
+            item.previous_quantity = old_quantity
+        else:
+            # INV: aniq raqamga almashtirish
+            quantity_change = new_quantity - old_quantity
+            item.previous_quantity = old_quantity
 
         if abs(quantity_change) > 1e-9:
             create_stock_movement(
@@ -1036,7 +1108,7 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
                 document_id=doc.id,
                 document_number=doc.number,
                 user_id=current_user.id if current_user else None,
-                note=f"Qoldiq tuzatish: {doc.number}"
+                note=f"{'Qoldiq kiritish' if is_qld else 'Inventarizatsiya'}: {doc.number}"
             )
         if (item.cost_price or 0) > 0:
             prod = db.query(Product).filter(Product.id == item.product_id).first()

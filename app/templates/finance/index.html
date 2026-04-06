@@ -66,6 +66,9 @@
 <div class="card mb-3">
   <div class="card-header">
     <span class="fw-bold"><i class="bi bi-safe text-primary"></i> Kassalar</span>
+    <a href="/cash/transfers" class="btn btn-outline-primary top-btn me-2">
+      <i class="bi bi-bank"></i> Kassadan kassaga
+    </a>
     <button class="btn btn-primary top-btn" data-bs-toggle="modal" data-bs-target="#addPaymentModal">
       <i class="bi bi-plus-circle"></i> To'lov kiritish
     </button>
@@ -142,7 +145,17 @@
               {% endif %}
             </td>
             <td>{{ payment.partner.name if payment.partner else '—' }}</td>
-            <td class="muted-cell">{{ payment.description or '—' }}</td>
+            <td class="muted-cell">
+                {% set ed = expense_doc_by_payment.get(payment.id) if expense_doc_by_payment else None %}
+                {% set aid = advance_by_payment.get(payment.id) if advance_by_payment else None %}
+                {% if ed %}
+                    {% set parts = (payment.description or '').split(ed.number) %}{{ parts[0] }}<a href="/finance/harajat/hujjat/{{ ed.id }}" target="_blank" class="fw-bold text-decoration-none" title="Harajat hujjatini ochish">{{ ed.number }}</a>{{ parts[1] if parts|length > 1 else '' }}
+                {% elif aid %}
+                    <a href="/employees/advances/view/{{ aid }}" target="_blank" class="fw-bold text-decoration-none" title="Avans hujjatini ochish">{{ payment.description }}</a>
+                {% else %}
+                    {{ payment.description or '—' }}
+                {% endif %}
+            </td>
             <td class="text-end fw-semibold {% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %}">
               {% if payment.type == 'income' %}+{% else %}−{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
             </td>

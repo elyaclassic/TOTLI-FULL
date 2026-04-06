@@ -131,12 +131,13 @@
                                     <th>Vaqt</th>
                                     <th>Mijoz</th>
                                     <th>Ombor</th>
+                                    <th>To'lov</th>
                                     <th class="text-end">Jami</th>
                                     <th></th>
                                 </tr>
                             </thead>
                             <tbody id="posDailyOrdersBody">
-                                <tr><td colspan="7" class="text-muted text-center py-4">Sana tanlang va «Ko'rsatish» bosing.</td></tr>
+                                <tr><td colspan="8" class="text-muted text-center py-4">Sana tanlang va «Ko'rsatish» bosing.</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -341,6 +342,7 @@
                                     <button type="button" class="pos-action-btn-premium" id="posBtnChekniSaqlash"><i class="bi bi-receipt"></i><span>Saqlash</span></button>
                                     <button type="button" class="pos-action-btn-premium" id="posBtnChekniYuklash"><i class="bi bi-download"></i><span>Yuklash</span></button>
                                     <a href="/purchases?from=pos" class="pos-action-btn-premium text-decoration-none"><i class="bi bi-box-arrow-in-down"></i><span>Kirimi</span></a>
+                                    <a href="/sales/returns" class="pos-action-btn-premium text-decoration-none"><i class="bi bi-arrow-return-left"></i><span>Qaytarish</span></a>
                                     <button type="button" class="pos-action-btn-premium" id="posBtnXHisobot"><i class="bi bi-file-earmark-text"></i><span>X hisobot</span></button>
                                     <button type="button" class="pos-action-btn-premium" id="posBtnOmborniTasdiqlash"><i class="bi bi-box-seam"></i><span>Ombor</span></button>
                                 </div>
@@ -627,25 +629,17 @@
         else if (document.mozCancelFullScreen) document.mozCancelFullScreen();
         else if (document.msExitFullscreen) document.msExitFullscreen();
     }
-    /* To'liq ekran faqat foydalanuvchi tugmasini bosganda ishlatiladi (brauzer "user gesture" talab qiladi) */
+    /* To'liq ekran taklifi — har sahifa ochilganda ko'rsatiladi (sotuvchi doim eslatilsin) */
     if (fullscreenPrompt && !isFullscreen()) {
-        try {
-            if (!sessionStorage.getItem(POS_FULLSCREEN_DISMISSED)) {
-                setTimeout(function() {
-                    if (!isFullscreen() && fullscreenPrompt) fullscreenPrompt.style.display = 'flex';
-                }, 400);
-            }
-        } catch (e) {
-            if (fullscreenPrompt) fullscreenPrompt.style.display = 'flex';
-        }
+        setTimeout(function() {
+            if (!isFullscreen() && fullscreenPrompt) fullscreenPrompt.style.display = 'flex';
+        }, 400);
     }
     if (fullscreenBtn) fullscreenBtn.addEventListener('click', function() {
         requestFullscreen();
-        try { sessionStorage.removeItem(POS_FULLSCREEN_DISMISSED); } catch (e) {}
     });
     if (fullscreenDismiss) fullscreenDismiss.addEventListener('click', function() {
         fullscreenPrompt.style.display = 'none';
-        try { sessionStorage.setItem(POS_FULLSCREEN_DISMISSED, '1'); } catch (e) {}
     });
     document.addEventListener('fullscreenchange', function() {
         if (!isFullscreen() && fullscreenPrompt) fullscreenPrompt.style.display = 'none';
@@ -1211,7 +1205,7 @@
             .then(function(orders) {
                 var emptyMsg = type === 'return_sale' ? 'Tanlangan sanalarda qaytarishlar yo\'q.' : 'Tanlangan sanalarda sotuvlar yo\'q.';
                 if (!orders || orders.length === 0) {
-                    dailyOrdersBody.innerHTML = '<tr><td colspan="7" class="text-muted text-center py-4">' + emptyMsg + '</td></tr>';
+                    dailyOrdersBody.innerHTML = '<tr><td colspan="8" class="text-muted text-center py-4">' + emptyMsg + '</td></tr>';
                     return;
                 }
                 var html = '';
@@ -1219,12 +1213,14 @@
                     var totalStr = (o.total || 0).toLocaleString('ru-RU');
                     var linkUrl = (o.type === 'return_sale') ? '/sales/returns' : '/sales/edit/' + o.id;
                     var linkText = (o.type === 'return_sale') ? 'Ro\'yxat' : 'Ochish';
-                    html += '<tr><td>' + (i + 1) + '</td><td>' + (o.number || '') + '</td><td>' + (o.created_at || '-') + '</td><td>' + (o.partner_name || '-') + '</td><td>' + (o.warehouse_name || '-') + '</td><td class="text-end fw-bold">' + totalStr + ' so\'m</td><td><a href="' + linkUrl + '" class="btn btn-sm btn-outline-primary" target="_blank">' + linkText + '</a></td></tr>';
+                    var pt = (o.payment_type || 'naqd').toLowerCase();
+                    var ptLabel = pt === 'plastik' ? '<span class="badge bg-info">Plastik</span>' : pt === 'perechisleniye' ? '<span class="badge bg-warning text-dark">Bank</span>' : '<span class="badge bg-success">Naqd</span>';
+                    html += '<tr><td>' + (i + 1) + '</td><td>' + (o.number || '') + '</td><td>' + (o.created_at || '-') + '</td><td>' + (o.partner_name || '-') + '</td><td>' + (o.warehouse_name || '-') + '</td><td>' + ptLabel + '</td><td class="text-end fw-bold">' + totalStr + ' so\'m</td><td><a href="' + linkUrl + '" class="btn btn-sm btn-outline-primary" target="_blank">' + linkText + '</a></td></tr>';
                 });
                 dailyOrdersBody.innerHTML = html;
             })
             .catch(function() {
-                dailyOrdersBody.innerHTML = '<tr><td colspan="7" class="text-danger text-center py-4">Yuklashda xato.</td></tr>';
+                dailyOrdersBody.innerHTML = '<tr><td colspan="8" class="text-danger text-center py-4">Yuklashda xato.</td></tr>';
             });
     }
     document.querySelectorAll('.pos-daily-tab').forEach(function(btn) {

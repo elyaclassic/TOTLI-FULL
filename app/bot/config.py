@@ -10,5 +10,8 @@ ALLOWED_ROLES = ("admin", "manager", "rahbar", "raxbar")
 # Yangi odam qo'shish uchun shu ro'yxatga ID qo'shing
 ALLOWED_CHAT_IDS = [1340383182, 1057546370]
 
-# Bildirish yuboriladi shu chat ID larga
-NOTIFY_CHAT_IDS = [1340383182, 1057546370]
+# Kunlik yakuniy hisobot (kechqurun 21:00)
+NOTIFY_CHAT_IDS = [1057546370]  # @RD2197 — rahbar
+
+# Har bir hodisada alohida xabar (real-time)
+REALTIME_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC

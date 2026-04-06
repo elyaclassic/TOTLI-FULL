@@ -115,7 +115,7 @@
                                 {% endif %}
                             </td>
                             <td>{{ payment.partner.name if payment.partner else '—' }}</td>
-                            <td class="muted-cell"><small>{{ payment.description or '—' }}</small></td>
+                            <td class="muted-cell"><small>{% set ed = expense_doc_by_payment.get(payment.id) if expense_doc_by_payment else None %}{% if ed %}{% set parts = (payment.description or '').split(ed.number) %}{{ parts[0] }}<a href="/finance/harajat/hujjat/{{ ed.id }}" class="fw-bold text-decoration-none" title="Harajat hujjatini ochish">{{ ed.number }}</a>{{ parts[1] if parts|length > 1 else '' }}{% else %}{{ payment.description or '—' }}{% endif %}</small></td>
                             <td class="sum-cell {% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %}">
                                 {% if payment.type == 'income' %}+{% else %}-{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
                             </td>

@@ -91,6 +91,9 @@ async def login(
         token = create_session_token(user.id, role)
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
         redirect_url = _redirect_after_login(user)
+        # Login ovozi uchun parametr qo'shish
+        sep = "&" if "?" in redirect_url else "?"
+        redirect_url += sep + "logged_in=1"
         # Agent uchun: session cookie o'rniga Bearer token bilan /agent ga redirect
         if role == "agent":
             from app.models.database import Agent as AgentModel

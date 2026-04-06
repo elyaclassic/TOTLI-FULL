@@ -26,11 +26,23 @@ def _fmt_money(value: float) -> str:
     return f"{float(value):,.0f}".replace(",", " ")
 
 
-@router.message(RoleFilter("admin", "rahbar"), F.text == "Hisobot")
+@router.message(RoleFilter("admin", "rahbar", "xodim"), F.text == "Hisobot")
 async def reports_menu(message: Message, state: FSMContext) -> None:
     data = await state.get_data()
     await state.set_state(ReportState.choosing_type)
     await message.answer("Hisobot turini tanlang:", reply_markup=report_type_kb(data.get("selected_customer_id")))
+
+
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data == "menu:reports")
+async def cb_reports_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    data = await state.get_data()
+    await state.set_state(ReportState.choosing_type)
+    if callback.message:
+        await callback.message.edit_text(
+            "Hisobot turini tanlang:",
+            reply_markup=report_type_kb(data.get("selected_customer_id")),
+        )
+    await callback.answer()
 
 
 @router.message(F.text == "Hisobot")
@@ -38,7 +50,12 @@ async def reports_menu_denied(message: Message) -> None:
     await deny_role_message(message)
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:menu")
+@router.callback_query(F.data == "menu:reports")
+async def reports_menu_denied_callback(callback: CallbackQuery) -> None:
+    await deny_role_callback(callback)
+
+
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data == "report:menu")
 async def cb_report_menu(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
     await state.set_state(ReportState.choosing_type)
@@ -50,7 +67,7 @@ async def cb_report_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reporttype:"))
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data.startswith("reporttype:"))
 async def cb_report_type(callback: CallbackQuery, state: FSMContext) -> None:
     report_type = callback.data.split(":")[-1]
     if report_type == "customer":
@@ -65,7 +82,7 @@ async def cb_report_type(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data == "report:period")
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data == "report:period")
 async def cb_report_period_back(callback: CallbackQuery, state: FSMContext) -> None:
     await state.set_state(ReportState.choosing_period)
     if callback.message:
@@ -73,7 +90,7 @@ async def cb_report_period_back(callback: CallbackQuery, state: FSMContext) -> N
     await callback.answer()
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reportperiod:"))
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data.startswith("reportperiod:"))
 async def cb_report_period(callback: CallbackQuery, state: FSMContext) -> None:
     period = callback.data.split(":")[-1]
     await state.update_data(report_period=period)
@@ -86,7 +103,7 @@ async def cb_report_period(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("report:customer:"))
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data.startswith("report:customer:"))
 async def cb_report_customer_open(callback: CallbackQuery, state: FSMContext) -> None:
     customer_id = int(callback.data.split(":")[-1])
     customer = await asyncio.to_thread(get_customer, customer_id)
@@ -104,7 +121,7 @@ async def cb_report_customer_open(callback: CallbackQuery, state: FSMContext) ->
     await callback.answer()
 
 
-@router.callback_query(RoleFilter("admin", "rahbar"), F.data.startswith("reportoutput:"))
+@router.callback_query(RoleFilter("admin", "rahbar", "xodim"), F.data.startswith("reportoutput:"))
 async def cb_report_output(callback: CallbackQuery, state: FSMContext) -> None:
     output = callback.data.split(":")[-1]
     data = await state.get_data()

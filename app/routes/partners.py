@@ -326,9 +326,12 @@ async def template_partners():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Template"
-    ws.append(["Nomi", "Turi", "Telefon", "Manzil", "Kredit Limit", "Chegirma %"])
-    ws.append(["Mijoz MCHJ", "customer", "+998901234567", "Toshkent", 1000000, 0])
-    ws.append(["Yetkazib Beruvchi", "supplier", "+998909876543", "Samarqand", 0, 0])
+    ws.append([
+        "Nomi", "Turi", "Telefon", "Manzil", "Kredit Limit", "Chegirma %",
+        "Agent", "Tashrif kuni", "Latitude", "Longitude", "Izoh"
+    ])
+    ws.append(["Mijoz MCHJ", "customer", "+998901234567", "Toshkent", 1000000, 0, "Akbarjon", 1, 41.311081, 69.240562, "Demo yozuv"])
+    ws.append(["Yetkazib Beruvchi", "supplier", "+998909876543", "Samarqand", 0, 0, "", "", "", "", ""])
     stream = io.BytesIO()
     wb.save(stream)
     stream.seek(0)
@@ -345,6 +348,32 @@ async def import_partners(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    def _parse_visit_day(value):
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            iv = int(value)
+            return iv if iv in (0, 1, 2, 3, 4, 5, 6) else None
+        raw = str(value).strip().lower()
+        day_map = {
+            "0": 0, "yak": 0, "yakshanba": 0, "воскресенье": 0,
+            "1": 1, "dush": 1, "dushanba": 1, "понедельник": 1,
+            "2": 2, "sesh": 2, "seshanba": 2, "вторник": 2,
+            "3": 3, "chor": 3, "chorshanba": 3, "среда": 3,
+            "4": 4, "pay": 4, "payshanba": 4, "четверг": 4,
+            "5": 5, "juma": 5, "пятница": 5,
+            "6": 6, "shan": 6, "shanba": 6, "суббота": 6,
+        }
+        return day_map.get(raw)
+
+    def _parse_float(value):
+        if value in (None, ""):
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
     contents = await file.read()
     if len(contents) > 5 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="Fayl hajmi 5MB dan oshmasligi kerak")
@@ -356,10 +385,20 @@ async def import_partners(
     for row in rows:
         if not row[0]:
             continue
-        name, type_, phone, address, credit_limit, discount_percent = (row[0:6] if len(row) >= 6 else row + [None] * (6 - len(row)))[:6]
+        values = list(row) + [None] * max(0, 11 - len(row))
+        name, type_, phone, address, credit_limit, discount_percent, agent_name, visit_day, latitude, longitude, notes = values[:11]
         if name is None:
             continue
         partner = db.query(Partner).filter(Partner.name == name).first()
+        agent_id = None
+        if agent_name not in (None, ""):
+            agent = (
+                db.query(Agent)
+                .filter(Agent.full_name.ilike(str(agent_name).strip()))
+                .first()
+            )
+            if agent:
+                agent_id = agent.id
         if not partner:
             count = db.query(Partner).count()
             code = f"P{count + 1:04d}"
@@ -371,6 +410,11 @@ async def import_partners(
                 address=address or "",
                 credit_limit=credit_limit or 0,
                 discount_percent=discount_percent or 0,
+                agent_id=agent_id,
+                visit_day=_parse_visit_day(visit_day),
+                latitude=_parse_float(latitude),
+                longitude=_parse_float(longitude),
+                notes=str(notes).strip() if notes not in (None, "") else "",
             )
             db.add(partner)
         else:
@@ -382,5 +426,18 @@ async def import_partners(
                 partner.credit_limit = credit_limit
             if discount_percent is not None:
                 partner.discount_percent = discount_percent
+            if agent_id is not None:
+                partner.agent_id = agent_id
+            parsed_visit_day = _parse_visit_day(visit_day)
+            if parsed_visit_day is not None:
+                partner.visit_day = parsed_visit_day
+            parsed_lat = _parse_float(latitude)
+            parsed_lng = _parse_float(longitude)
+            if parsed_lat is not None:
+                partner.latitude = parsed_lat
+            if parsed_lng is not None:
+                partner.longitude = parsed_lng
+            if notes not in (None, ""):
+                partner.notes = str(notes).strip()
         db.commit()
     return RedirectResponse(url="/partners", status_code=303)

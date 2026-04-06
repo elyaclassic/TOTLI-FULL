@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-receipt-cutoff text-primary"></i> Avans hujjatlari</h5>
+        <div class="d-flex gap-2">
+            <a href="/employees/advances" class="top-btn"><i class="bi bi-list-ul"></i> Avanslar ro'yxati</a>
+        </div>
+    </div>
+
+    <div class="filter-card mb-3">
+        <form method="get" action="/employees/advance-docs" class="row g-2 align-items-end">
+            <div class="col-auto">
+                <label class="form-label small">Sanadan</label>
+                <input type="date" name="date_from" class="form-control form-control-sm" value="{{ filter_date_from }}">
+            </div>
+            <div class="col-auto">
+                <label class="form-label small">Sanagacha</label>
+                <input type="date" name="date_to" class="form-control form-control-sm" value="{{ filter_date_to }}">
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel-fill"></i> Qidirish</button>
+                <a href="/employees/advance-docs" class="btn btn-outline-secondary top-btn"><i class="bi bi-x-circle"></i> Tozalash</a>
+            </div>
+        </form>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="fw-bold fs-4 text-primary">{{ docs|length }}</div>
+                    <div class="text-muted small">Jami hujjatlar</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="fw-bold fs-4 text-success">{{ "{:,.0f}".format(docs|sum(attribute='total')) }}</div>
+                    <div class="text-muted small">Jami summa (so'm)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <div class="fw-bold fs-4 text-info">{{ docs|sum(attribute='count') }}</div>
+                    <div class="text-muted small">Jami avanslar</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span class="fw-bold"><i class="bi bi-receipt-cutoff"></i> Avans hujjatlari</span>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="50">#</th>
+                        <th>Sana</th>
+                        <th>Kassa</th>
+                        <th class="text-end">Xodimlar soni</th>
+                        <th class="text-end">Jami summa (so'm)</th>
+                        <th>Holat</th>
+                        <th width="60"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in docs %}
+                    <tr style="cursor:pointer" onclick="if(!event.target.closest('a,button')){window.location='/employees/advances/view/{{ doc.first_id }}'}" title="Hujjatni ochish">
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td>{{ doc.date.strftime('%d.%m.%Y') if doc.date else '—' }}</td>
+                        <td>{{ doc.cash_register.name if doc.cash_register else '—' }}</td>
+                        <td class="text-end fw-bold">{{ doc.count }}</td>
+                        <td class="text-end fw-bold text-danger">{{ "{:,.0f}".format(doc.total) }}</td>
+                        <td><span class="badge-done"><i class="bi bi-check-circle-fill"></i> Tasdiqlangan</span></td>
+                        <td>
+                            <a href="/employees/advances/view/{{ doc.first_id }}" class="btn-act" title="Ochish"><i class="bi bi-eye"></i></a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">Hujjatlar topilmadi</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

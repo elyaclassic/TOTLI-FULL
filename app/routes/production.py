@@ -1084,11 +1084,13 @@ async def production_orders(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     recipe: Optional[str] = None,
+    q: Optional[str] = None,
     operator_id: Optional[str] = None,
 ):
     from urllib.parse import unquote
     from sqlalchemy import func
     from datetime import datetime
+    search_input = (q or "").strip()  # URL param "q" ni saqlash (keyingi q = query builder)
     operator_id = _parse_optional_int(operator_id)
     q = (
         db.query(Production)
@@ -1117,13 +1119,16 @@ async def production_orders(
             q = q.filter(Production.user_id == current_user.id)
     if operator_id is not None and int(operator_id) > 0:
         q = q.filter(Production.operator_id == int(operator_id))
-    if number and str(number).strip():
-        num_filter = "%" + str(number).strip() + "%"
-        q = q.filter(func.lower(Production.number).like(func.lower(num_filter)))
-    if recipe and str(recipe).strip():
-        q = q.join(Recipe, Production.recipe_id == Recipe.id)
-        recipe_filter = "%" + str(recipe).strip() + "%"
-        q = q.filter(func.lower(Recipe.name).like(func.lower(recipe_filter)))
+    # "q" parametri — raqam YOKI retsept nomi bo'yicha qidirish
+    search_text = (search_input or recipe or number or "").strip()
+    if search_text:
+        search_filter = "%" + search_text + "%"
+        from sqlalchemy import or_ as or_clause
+        q = q.outerjoin(Recipe, Production.recipe_id == Recipe.id)
+        q = q.filter(or_clause(
+            func.lower(Production.number).like(func.lower(search_filter)),
+            func.lower(Recipe.name).like(func.lower(search_filter)),
+        ))
     if date_from and str(date_from).strip():
         try:
             d_from = datetime.strptime(str(date_from).strip()[:10], "%Y-%m-%d").date()
@@ -1184,7 +1189,7 @@ async def production_orders(
         "filter_date_from": (date_from or "").strip()[:10] if date_from else "",
         "filter_date_to": (date_to or "").strip()[:10] if date_to else "",
         "filter_operator_id": int(operator_id) if (operator_id is not None and int(operator_id) > 0) else None,
-        "filter_q": "",
+        "filter_q": search_text,
         "user_id_to_employee_id": {},
     })
 
@@ -1418,6 +1423,28 @@ async def create_production(
         return RedirectResponse(url="/production?error=warehouse", status_code=303)
     if quantity <= 0:
         return RedirectResponse(url="/production?error=quantity", status_code=303)
+    # Dublikat himoyasi: oxirgi 5 daqiqada bir xil retsept + miqdor + ichidagi miqdorlar
+    from datetime import timedelta
+    five_min_ago = datetime.now() - timedelta(minutes=5)
+    candidates = db.query(Production).filter(
+        Production.recipe_id == recipe_id,
+        Production.quantity == quantity,
+        Production.created_at >= five_min_ago,
+    ).all()
+    if candidates:
+        # Yangi production uchun kutilgan ichidagi miqdorlar
+        recipe_check = db.query(Recipe).filter(Recipe.id == recipe_id).first()
+        new_items = {}
+        if recipe_check:
+            for ri in recipe_check.items:
+                new_items[ri.product_id] = round(ri.quantity * quantity, 4)
+        for cand in candidates:
+            # Mavjud production ning ichidagi miqdorlarni olish
+            existing_items = {pi.product_id: round(float(pi.quantity or 0), 4) for pi in cand.production_items}
+            if existing_items == new_items:
+                from urllib.parse import quote
+                msg = quote(f"Oxirgi 5 daqiqada aynan shu retsept, miqdor va tarkib bilan buyurtma yaratilgan: {cand.number}.")
+                return RedirectResponse(url=f"/production?error=duplicate&msg={msg}", status_code=303)
     if output_warehouse_id is None:
         output_warehouse_id = warehouse_id
     recipe = db.query(Recipe).options(joinedload(Recipe.stages)).filter(Recipe.id == recipe_id).first()
@@ -1559,18 +1586,15 @@ async def complete_production_stage(
     check_low_stock_and_notify(db)
     # Oxirgi bosqich (qadoqlash) tugadi — admin va menejerga bildirish
     notify_managers_production_ready(db, production)
-    # Telegram bildirish
+    # Telegram bildirish (ELYA CLASSIC — real-time)
     try:
         from app.bot.services.notifier import notify_production_ready
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        if p_type == "yarim_tayyor":
-            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=True)
-        else:
-            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=False)
-    except Exception as e:
-        print(f"[TG Notify] production complete-stage xato: {e}")
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+    except Exception:
+        pass
     return RedirectResponse(url="/production", status_code=303)
 
 
@@ -1594,18 +1618,15 @@ async def complete_production(
     db.commit()
     check_low_stock_and_notify(db)
     notify_managers_production_ready(db, production)
-    # Telegram bildirish
+    # Telegram bildirish (ELYA CLASSIC — real-time)
     try:
         from app.bot.services.notifier import notify_production_ready
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        if p_type == "yarim_tayyor":
-            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=True)
-        else:
-            notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=False)
-    except Exception as e:
-        print(f"[TG Notify] production complete xato: {e}")
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+    except Exception:
+        pass
     return RedirectResponse(url="/production", status_code=303)
 
 

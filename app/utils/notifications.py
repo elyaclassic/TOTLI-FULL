@@ -108,10 +108,16 @@ def check_low_stock_and_notify(db: Session, warehouse_id: Optional[int] = None) 
     Admin/manager — barcha omborlar uchun.
     Sotuvchi — faqat o'z omboridagi mahsulotlar uchun.
     Bir xil mahsulot+user uchun 24 soat ichida takroriy bildirishnoma yaratilmaydi."""
+    from app.models.database import Warehouse
+    # "aralash" va "vozvrat" omborlarini chiqarib tashlash
+    skip_wh_ids = [w.id for w in db.query(Warehouse).all()
+                   if any(x in (w.name or "").lower() for x in ("aralash", "vozvrat", "qaytarilgan"))]
     low_stocks = db.query(Stock).join(Product, Stock.product_id == Product.id).filter(
         Stock.quantity < Product.min_stock,
         Product.is_active == True,
     )
+    if skip_wh_ids:
+        low_stocks = low_stocks.filter(~Stock.warehouse_id.in_(skip_wh_ids))
     if warehouse_id is not None:
         low_stocks = low_stocks.filter(Stock.warehouse_id == warehouse_id)
     low_stocks = low_stocks.all()

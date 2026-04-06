@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="uz">
+<html lang="en-GB">
 
 <head>
     <meta charset="UTF-8">
@@ -49,7 +49,7 @@
             top: 0;
             left: 0;
             height: 100vh;
-            width: 260px;
+            width: 220px;
             background-color: var(--primary-color);
             padding-top: 0;
             z-index: 40;
@@ -142,8 +142,8 @@
         }
 
         .main-content {
-            margin-left: 260px;
-            padding: 20px;
+            margin-left: 220px;
+            padding: 8px;
             position: relative;
             z-index: 50;
         }
@@ -154,8 +154,8 @@
 
         .top-bar {
             background: white;
-            padding: 15px 25px;
-            margin: -20px -20px 20px -20px;
+            padding: 10px 12px;
+            margin: -8px -8px 10px -8px;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
             display: flex;
             justify-content: space-between;
@@ -361,7 +361,7 @@
                 display: block !important;
                 visibility: visible !important;
                 opacity: 1 !important;
-                width: 260px !important;
+                width: 220px !important;
                 overflow-y: auto !important;
                 z-index: 999;
                 box-shadow: 4px 0 20px rgba(0,0,0,0.2);
@@ -946,8 +946,13 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link {% if 'Avans' in page_title %}active{% endif %}" href="/employees/advances">
+                            <a class="nav-link {% if page_title == 'Avans berish' %}active{% endif %}" href="/employees/advances">
                                 <i class="bi bi-cash-coin"></i> Avans berish
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if page_title == 'Avans hujjatlari' %}active{% endif %}" href="/employees/advance-docs">
+                                <i class="bi bi-receipt-cutoff"></i> Avans hujjatlari
                             </a>
                         </li>
                         <li class="nav-item">
@@ -1023,6 +1028,11 @@
                         <li class="nav-item">
                             <a class="nav-link {% if page_title == 'Moliya' %}active{% endif %}" href="/finance">
                                 <i class="bi bi-wallet2"></i> Moliya
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link {% if page_title and 'Kassadan kassaga' in page_title %}active{% endif %}" href="/cash/transfers">
+                                <i class="bi bi-bank"></i> Kassadan kassaga
                             </a>
                         </li>
                         <li class="nav-item">
@@ -1326,12 +1336,20 @@
         var _actx = null;
         var _bufCache = {};
 
+        // Ovoz xaritasi: sarlavha yoki bildirishnoma turiga qarab
         var _soundMap = {
             'Qiyom tayyorlash kerak':              '/static/sounds/qiyom.wav',
             'Kesish va qadoqlash kerak':           '/static/sounds/kesish.wav',
             'Qiyom tayyor \u2014 kesish va qadoqlash navbati': '/static/sounds/qiyom_tayyor.wav',
             'Kesish tugadi \u2014 qadoqlash navbati':          '/static/sounds/kesish_tayyor.wav',
             'Ishlab chiqarish tayyor':             '/static/sounds/tayyor.wav',
+        };
+        // Bildirishnoma turiga qarab ovoz (title topilmasa shu ishlatiladi)
+        var _typeSoundMap = {
+            'warning':  '/static/sounds/warning.wav',
+            'success':  '/static/sounds/success.wav',
+            'info':     '/static/sounds/info.wav',
+            'error':    '/static/sounds/error.wav',
         };
 
         function _getActx() {
@@ -1361,14 +1379,13 @@
                 }).catch(function(){ _tts('Bildirishnoma', true); });
         }
 
-        function playNotifSound(title, isHigh) {
-            var url = _soundMap[title] || (isHigh ? '/static/sounds/tayyor.wav' : null);
+        function playNotifSound(title, isHigh, notifType) {
+            var url = _soundMap[title] || _typeSoundMap[notifType] || (isHigh ? '/static/sounds/tayyor.wav' : null);
             if (url && _actx) {
                 _playBuffer(url);
                 return;
             }
             if (url) {
-                // AudioContext hali ochilmagan — TTS fallback
                 _tts(title, isHigh);
                 return;
             }
@@ -1386,10 +1403,10 @@
             } catch(e) {}
         }
 
-        function showToast(title, message, priority, url) {
+        function showToast(title, message, priority, url, notifType) {
             if (!_container) return;
             var isHigh = priority === 'high';
-            playNotifSound(title, isHigh);
+            playNotifSound(title, isHigh, notifType || '');
             var toast = document.createElement('div');
             toast.style.cssText = [
                 'background:' + (isHigh ? '#fff3cd' : '#fff'),
@@ -1445,7 +1462,7 @@
                         _lastNotifId = n.id;
                         localStorage.setItem(_STORAGE_KEY, _lastNotifId);
                         markRead(n.id);
-                        showToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null);
+                        showToast(n.title || '', n.message || '', n.priority || 'normal', n.action_url || null, n.type || 'info');
                     }
                 })
                 .catch(function(){});
@@ -1457,7 +1474,8 @@
             if (_actx) return;
             try {
                 _actx = new (window.AudioContext || window.webkitAudioContext)();
-                Object.values(_soundMap).forEach(function(url){
+                var allUrls = Object.values(_soundMap).concat(Object.values(_typeSoundMap));
+                allUrls.forEach(function(url){
                     fetch(url).then(function(r){ return r.arrayBuffer(); })
                         .then(function(ab){ return _actx.decodeAudioData(ab); })
                         .then(function(b){ _bufCache[url] = b; })
@@ -1477,6 +1495,20 @@
         var style = document.createElement('style');
         style.textContent = '@keyframes slideIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:translateX(0)}}';
         document.head.appendChild(style);
+
+        // Login ovozi
+        if (new URLSearchParams(window.location.search).get('logged_in') === '1') {
+            // URL dan parametrni tozalash
+            var cleanUrl = window.location.pathname + window.location.search.replace(/[?&]logged_in=1/, '').replace(/^\&/, '?');
+            if (cleanUrl.endsWith('?')) cleanUrl = cleanUrl.slice(0, -1);
+            history.replaceState(null, '', cleanUrl || window.location.pathname);
+            // Ovoz chiqarish (AudioContext ochilmagan bo'lishi mumkin, shuning uchun Audio ishlatamiz)
+            try {
+                var loginAudio = new Audio('/static/sounds/login.wav');
+                loginAudio.volume = 0.6;
+                loginAudio.play().catch(function(){});
+            } catch(e) {}
+        }
 
         // Har 20 soniyada tekshirish
         setTimeout(pollNotifications, 3000);

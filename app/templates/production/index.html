@@ -27,6 +27,11 @@
     <small><i class="bi bi-exclamation-triangle"></i> Ombor tanlanmagan. Tezkor ishlab chiqarish uchun 1- va 2-omborni tanlang.</small>
 </div>
 {% endif %}
+{% if request and request.query_params and request.query_params.get('error') == 'duplicate' %}
+<div class="alert alert-danger py-2">
+    <small><i class="bi bi-exclamation-triangle-fill"></i> {{ request.query_params.get('msg', 'Dublikat! Oxirgi 5 daqiqada shu buyurtma yaratilgan.') }}</small>
+</div>
+{% endif %}
 
 <!-- Statistika -->
 <div class="row g-3 mb-3" style="min-height:0;">

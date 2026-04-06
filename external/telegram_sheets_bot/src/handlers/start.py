@@ -11,17 +11,19 @@ router = Router()
 router.message.filter(AllowedUserFilter())
 
 
-@router.message(Command("start", "help"))
-async def cmd_start(message: Message) -> None:
-    role = get_user_role(message.from_user.id if message.from_user else None)
-    await message.answer(
+def _start_text() -> str:
+    return (
         "Salom!\n\n"
         "Tugmalar orqali mijoz tanlang, mijoz to'lovi yoki biz bergan summani kiriting, hisobot oling.\n\n"
         "Hisobotda davr tanlanadi va botda ko'rish yoki Excelda olish mumkin.\n\n"
-        "Matn va ovoz ham fallback sifatida ishlaydi.",
-        reply_markup=main_menu_kb(role),
-        parse_mode="HTML",
+        "Matn va ovoz ham fallback sifatida ishlaydi."
     )
+
+
+@router.message(Command("start", "help"))
+async def cmd_start(message: Message) -> None:
+    role = get_user_role(message.from_user.id if message.from_user else None)
+    await message.answer(_start_text(), reply_markup=main_menu_kb(role), parse_mode="HTML")
 
 
 @router.message(F.text.startswith("/"))

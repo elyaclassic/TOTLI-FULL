@@ -30,6 +30,7 @@ from app.models.database import (
     WarehouseTransferItem,
     Unit,
     ProductPrice,
+    StockMovement,
 )
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.deps import require_auth, require_admin
@@ -184,7 +185,21 @@ async def warehouse_stock_zero(
     stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not stock:
         raise HTTPException(status_code=404, detail="Qoldiq topilmadi")
-    stock.quantity = 0
+    old_qty = float(stock.quantity or 0)
+    if old_qty > 0:
+        from app.services.stock_service import create_stock_movement
+        create_stock_movement(
+            db=db,
+            warehouse_id=stock.warehouse_id,
+            product_id=stock.product_id,
+            quantity_change=-old_qty,
+            operation_type="manual_zero",
+            document_type="ManualAdjustment",
+            document_id=stock.id,
+            document_number="ZERO",
+            user_id=current_user.id if current_user else None,
+            note="Qoldiq qo'lda 0 ga tushirildi",
+        )
     db.commit()
     return RedirectResponse(url="/warehouse", status_code=303)
 
@@ -551,22 +566,7 @@ async def warehouse_transfer_confirm(
             )
     from app.services.stock_service import create_stock_movement
     for item in items:
-        src = db.query(Stock).filter(
-            Stock.warehouse_id == transfer.from_warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        src.quantity -= item.quantity
-        if src.quantity <= 0:
-            src.quantity = 0
-        dest = db.query(Stock).filter(
-            Stock.warehouse_id == transfer.to_warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if dest:
-            dest.quantity += item.quantity
-        else:
-            db.add(Stock(warehouse_id=transfer.to_warehouse_id, product_id=item.product_id, quantity=item.quantity))
-        # Stock movement yozish
+        # Stock.quantity ni faqat create_stock_movement o'zgartiradi (ikki marta o'zgarmaslik uchun)
         create_stock_movement(
             db=db,
             warehouse_id=transfer.from_warehouse_id,
@@ -607,24 +607,34 @@ async def warehouse_transfer_revert(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if transfer.status != "confirmed":
         return RedirectResponse(url="/warehouse/transfers?error=" + quote("Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin."), status_code=303)
+    from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
     items = db.query(WarehouseTransferItem).filter(WarehouseTransferItem.transfer_id == transfer_id).all()
     for item in items:
-        dest = db.query(Stock).filter(
-            Stock.warehouse_id == transfer.to_warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if dest:
-            dest.quantity -= item.quantity
-            if dest.quantity < 0:
-                dest.quantity = 0
-        src = db.query(Stock).filter(
-            Stock.warehouse_id == transfer.from_warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if src:
-            src.quantity += item.quantity
-        else:
-            db.add(Stock(warehouse_id=transfer.from_warehouse_id, product_id=item.product_id, quantity=item.quantity))
+        # Teskari harakatlar: dest dan chiqim, src ga kirim
+        create_stock_movement(
+            db=db,
+            warehouse_id=transfer.to_warehouse_id,
+            product_id=item.product_id,
+            quantity_change=-item.quantity,
+            operation_type="transfer_out",
+            document_type="WarehouseTransfer",
+            document_id=transfer.id,
+            document_number=f"{transfer.number}-REVERT",
+            user_id=current_user.id if current_user else None,
+            note=f"O'tkazma bekor: {transfer.number}",
+        )
+        create_stock_movement(
+            db=db,
+            warehouse_id=transfer.from_warehouse_id,
+            product_id=item.product_id,
+            quantity_change=+item.quantity,
+            operation_type="transfer_in",
+            document_type="WarehouseTransfer",
+            document_id=transfer.id,
+            document_number=f"{transfer.number}-REVERT",
+            user_id=current_user.id if current_user else None,
+            note=f"O'tkazma bekor: {transfer.number}",
+        )
     transfer.status = "draft"
     db.commit()
     return RedirectResponse(url="/warehouse/transfers?reverted=1", status_code=303)
@@ -949,7 +959,7 @@ async def inventory_load_warehouse(
             by_product[pid] += qty
     existing_ids = {item.product_id for item in doc.items}
     for pid, qty in by_product.items():
-        if qty is None or float(qty or 0) <= 0:
+        if qty is None or float(qty or 0) == 0:
             continue
         if pid in existing_ids:
             continue
@@ -1244,11 +1254,27 @@ async def inventory_confirm(
         for item in doc.items
     ]
     for snap in items_snapshot:
-        stocks = db.query(Stock).filter(
-            Stock.warehouse_id == snap["warehouse_id"],
-            Stock.product_id == snap["product_id"],
-        ).all()
-        old_qty = sum(float(s.quantity or 0) for s in stocks)
+        # Hujjat sanasidagi qoldiqni aniqlash (shu sanadan oldingi oxirgi movement)
+        doc_date = doc.date or datetime.now()
+        last_mv = (
+            db.query(StockMovement)
+            .filter(
+                StockMovement.warehouse_id == snap["warehouse_id"],
+                StockMovement.product_id == snap["product_id"],
+                StockMovement.created_at <= doc_date,
+            )
+            .order_by(StockMovement.id.desc())
+            .first()
+        )
+        if last_mv:
+            old_qty = float(last_mv.quantity_after or 0)
+        else:
+            # Movement yo'q — Stock jadvalidan olish
+            stocks = db.query(Stock).filter(
+                Stock.warehouse_id == snap["warehouse_id"],
+                Stock.product_id == snap["product_id"],
+            ).all()
+            old_qty = sum(float(s.quantity or 0) for s in stocks)
         new_qty = snap["quantity"]
         if hasattr(snap["item"], "previous_quantity"):
             snap["item"].previous_quantity = old_qty
@@ -1266,6 +1292,23 @@ async def inventory_confirm(
                 user_id=current_user.id,
                 note=f"Inventarizatsiya: {doc.number}",
             )
+            # Stock.quantity = new_qty + (hujjat sanasidan keyingi harakatlar)
+            stock_row = db.query(Stock).filter(
+                Stock.warehouse_id == snap["warehouse_id"],
+                Stock.product_id == snap["product_id"],
+            ).first()
+            if stock_row:
+                # Hujjat sanasidan keyingi harakatlar yig'indisi
+                from sqlalchemy import func as sqla_func
+                after_changes = db.query(
+                    sqla_func.coalesce(sqla_func.sum(StockMovement.quantity_change), 0)
+                ).filter(
+                    StockMovement.warehouse_id == snap["warehouse_id"],
+                    StockMovement.product_id == snap["product_id"],
+                    StockMovement.created_at > doc_date,
+                    StockMovement.operation_type != "adjustment",
+                ).scalar() or 0
+                stock_row.quantity = new_qty + float(after_changes)
     doc.status = "confirmed"
     db.commit()
     return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)

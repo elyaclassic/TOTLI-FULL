@@ -213,10 +213,16 @@ async def purchase_edit(
     products = db.query(Product).filter(Product.is_active == True).all()
     revert_error = request.query_params.get("error") == "revert"
     revert_detail = unquote(request.query_params.get("detail", "") or "")
+    cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).all()
+    directions = db.query(Direction).filter(Direction.is_active == True).all()
+    departments = db.query(Department).filter(Department.is_active == True).all()
     return templates.TemplateResponse("purchases/edit.html", {
         "request": request,
         "purchase": purchase,
         "products": products,
+        "cash_registers": cash_registers,
+        "directions": directions,
+        "departments": departments,
         "current_user": current_user,
         "page_title": f"Tovar kirimi: {purchase.number}",
         "revert_error": revert_error,
@@ -242,8 +248,7 @@ async def purchase_add_item(
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
     total = quantity * price
     db.add(PurchaseItem(purchase_id=purchase_id, product_id=product_id, quantity=quantity, price=price, total=total))
-    purchase.total = db.query(PurchaseItem).filter(PurchaseItem.purchase_id == purchase_id).with_entities(func.sum(PurchaseItem.total)).scalar() or 0
-    purchase.total += total
+    purchase.total = (db.query(PurchaseItem).filter(PurchaseItem.purchase_id == purchase_id).with_entities(func.sum(PurchaseItem.total)).scalar() or 0) + total
     db.commit()
     return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
 
@@ -405,12 +410,7 @@ async def purchase_confirm(
             # Mahsulotning o'rtacha tannarxini yangilash
             product.purchase_price = average_cost
         
-        # Qoldiqni yangilash
-        if stock:
-            stock.quantity += item.quantity
-        else:
-            db.add(Stock(warehouse_id=purchase.warehouse_id, product_id=item.product_id, quantity=item.quantity))
-        # Stock movement yozish
+        # Qoldiqni yangilash — create_stock_movement o'zi stock.quantity ni o'zgartiradi (double-count bo'lmasin)
         from app.services.stock_service import create_stock_movement
         create_stock_movement(
             db=db,
@@ -453,6 +453,7 @@ async def purchase_revert(
             url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote("Faqat tasdiqlangan kirimning tasdiqini bekor qilish mumkin."),
             status_code=303,
         )
+    # Avval qoldiq yetarliligini tekshirish
     for item in purchase.items:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == purchase.warehouse_id,
@@ -463,12 +464,28 @@ async def purchase_revert(
                 url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote("Ombor qoldig'i topilmadi."),
                 status_code=303,
             )
-        stock.quantity -= item.quantity
-        if stock.quantity < 0:
+        if (stock.quantity or 0) < item.quantity:
+            prod = db.query(Product).filter(Product.id == item.product_id).first()
+            name = prod.name if prod else f"#{item.product_id}"
             return RedirectResponse(
-                url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote("Ombor qoldig'i yetarli emas."),
+                url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote(f"Ombor qoldig'i yetarli emas: {name}"),
                 status_code=303,
             )
+    # Stock movement orqali qaytarish (audit trail saqlanadi)
+    from app.services.stock_service import create_stock_movement
+    for item in purchase.items:
+        create_stock_movement(
+            db=db,
+            warehouse_id=purchase.warehouse_id,
+            product_id=item.product_id,
+            quantity_change=-item.quantity,
+            operation_type="purchase_revert",
+            document_type="Purchase",
+            document_id=purchase.id,
+            document_number=f"{purchase.number}-REVERT",
+            user_id=current_user.id if current_user else None,
+            note=f"Xarid bekor: {purchase.number}",
+        )
     total_with_expenses = purchase.total + (purchase.total_expenses or 0)
     if purchase.partner_id:
         partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()

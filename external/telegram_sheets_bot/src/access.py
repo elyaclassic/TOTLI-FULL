@@ -22,8 +22,8 @@ def get_user_role(user_id: int | None) -> str | None:
         return "rahbar"
     if user_id in XODIM_TELEGRAM_IDS:
         return "xodim"
-    # Agar role listlari hali sozlanmagan bo'lsa, allowlist dagilar vaqtincha admin sifatida ishlaydi.
-    if not ADMIN_TELEGRAM_IDS and not RAHBAR_TELEGRAM_IDS and not XODIM_TELEGRAM_IDS and is_allowed_user_id(user_id):
+    # Role ro'yxatlari to'liq kiritilmaguncha, allowlist dagi eski foydalanuvchilar blok bo'lib qolmasin.
+    if is_allowed_user_id(user_id):
         return "admin"
     return None
 

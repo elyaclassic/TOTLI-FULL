@@ -249,37 +249,38 @@ class HikvisionAPI:
         Berilgan sana oralig'ida kirish/chiqish hodisalarini olish.
         Bir nechta vaqt formati sinanadi (qurilma firmwaresiga qarab).
         """
-        out: List[Dict[str, Any]] = []
-        max_results = 100
-        max_position = 20000
-        time_formats = [
-            (start_date.strftime("%Y-%m-%d") + "T00:00:00+05:00", end_date.strftime("%Y-%m-%d") + "T23:59:59+05:00"),
-        ]
-        best_out = []
-        for start_str, end_str in time_formats:
-            out = []
+        # Kunma-kun so'rash — katta oraliqda qurilma pagination buziladi
+        from datetime import timedelta as _td
+        all_events: List[Dict[str, Any]] = []
+        current = start_date
+        while current <= end_date:
+            start_str = current.strftime("%Y-%m-%d") + "T00:00:00+05:00"
+            end_str = current.strftime("%Y-%m-%d") + "T23:59:59+05:00"
             position = 0
             while True:
                 try:
                     url = f"{self.base_url}/ISAPI/AccessControl/AcsEvent?format=json"
                     payload = {
                         "AcsEventCond": {
-                            "searchID": "1",
+                            "searchID": current.strftime("%Y%m%d"),
                             "searchResultPosition": position,
-                            "maxResults": max_results,
+                            "maxResults": 30,
                             "major": 0,
                             "minor": 0,
                             "startTime": start_str,
                             "endTime": end_str,
                         }
                     }
-                    r = self._get_session().post(url, json=payload, timeout=60)
+                    r = self._get_session().post(url, json=payload, timeout=30)
                     if r.status_code != 200:
                         self._last_status = r.status_code
                         break
-                    data = r.json()
+                    try:
+                        data = r.json()
+                    except Exception:
+                        break
                     chunk = self._parse_events_from_response(data)
-                    out.extend(chunk)
+                    all_events.extend(chunk)
                     acs = (data.get("AcsEvent") or data.get("acsEvent")) if isinstance(data, dict) else None
                     acs_dict = acs if isinstance(acs, dict) else {}
                     status_str = acs_dict.get("responseStatusStrg", "")
@@ -288,13 +289,12 @@ class HikvisionAPI:
                         position += num_of_matches
                     else:
                         break
-                    if position >= max_position:
+                    if position >= 5000:
                         break
                 except Exception:
                     break
-            if len(out) > len(best_out):
-                best_out = out
-        return best_out
+            current += _td(days=1)
+        return all_events
 
     def get_event_image_url(self, event: Dict[str, Any]) -> Optional[str]:
         """Hodisa rasmi URI/pictureURL ni qaytaradi (agar bor bo'lsa)."""

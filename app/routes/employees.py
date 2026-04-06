@@ -14,7 +14,8 @@ from docx.shared import Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, File, UploadFile, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, Response
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_
 
@@ -146,6 +147,7 @@ async def employee_update(
     phone: str = Form(""),
     salary: float = Form(0),
     salary_type: str = Form(""),
+    monthly_rest_days: int = Form(4),
     piecework_task_ids: List[int] = Form([]),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
@@ -171,6 +173,8 @@ async def employee_update(
     if st and st not in ("oylik", "soatlik", "bo'lak", "bo'lak_oylik"):
         st = None
     emp.salary_type = st
+    if monthly_rest_days is not None and 0 <= monthly_rest_days <= 15:
+        emp.monthly_rest_days = int(monthly_rest_days)
     task_ids = [int(x) for x in (piecework_task_ids or []) if str(x).strip().isdigit()]
     task_ids = list(dict.fromkeys(task_ids))
     emp.piecework_task_id = task_ids[0] if task_ids else None  # legacy
@@ -412,7 +416,7 @@ async def employment_doc_create_page(
         existing = db.query(EmploymentDoc).filter(EmploymentDoc.employee_id == emp.id).order_by(EmploymentDoc.doc_date.desc()).first()
         if existing:
             return RedirectResponse(
-                url="/hiring-docs?error=" + quote(f"«{emp.full_name}» allaqachon ishga qabul qilingan. Yangi hujjat yaratib bo'lmaydi — mavjud hujjatni ko'ring yoki tahrirlang.")
+                url="/employees/hiring-docs?error=" + quote(f"«{emp.full_name}» allaqachon ishga qabul qilingan. Yangi hujjat yaratib bo'lmaydi — mavjud hujjatni ko'ring yoki tahrirlang.")
                 + "&existing_doc_id=" + str(existing.id),
                 status_code=303,
             )
@@ -442,6 +446,7 @@ async def employment_doc_create(
     department: str = Form(""),
     salary: float = Form(0),
     salary_type: str = Form(""),
+    monthly_rest_days: int = Form(4),
     piecework_task_ids: List[int] = Form([]),
     rest_days: List[str] = Form([]),
     probation: str = Form(""),
@@ -457,18 +462,18 @@ async def employment_doc_create(
     from urllib.parse import quote
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
-        return RedirectResponse(url="/hiring-docs?error=" + quote("Xodim topilmadi"), status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=" + quote("Xodim topilmadi"), status_code=303)
     existing = db.query(EmploymentDoc).filter(EmploymentDoc.employee_id == emp.id).first()
     if existing:
         return RedirectResponse(
-            url="/hiring-docs?error=" + quote(f"«{emp.full_name}» allaqachon ishga qabul qilingan. Yangi hujjat yaratib bo'lmaydi.")
+            url="/employees/hiring-docs?error=" + quote(f"«{emp.full_name}» allaqachon ishga qabul qilingan. Yangi hujjat yaratib bo'lmaydi.")
             + "&existing_doc_id=" + str(existing.id),
             status_code=303,
         )
     try:
         doc_d = datetime.strptime(doc_date.strip(), "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        return RedirectResponse(url="/hiring-doc/create?employee_id=" + str(employee_id) + "&error=" + quote("Noto'g'ri sana"), status_code=303)
+        return RedirectResponse(url="/employees/hiring-doc/create?employee_id=" + str(employee_id) + "&error=" + quote("Noto'g'ri sana"), status_code=303)
     hire_d = None
     if hire_date and hire_date.strip():
         try:
@@ -518,6 +523,8 @@ async def employment_doc_create(
     emp.salary = doc_salary
     if st:
         emp.salary_type = st
+    if monthly_rest_days is not None and 0 <= monthly_rest_days <= 15:
+        emp.monthly_rest_days = int(monthly_rest_days)
     if st in ("bo'lak", "bo'lak_oylik"):
         if task_ids:
             tasks = db.query(PieceworkTask).filter(PieceworkTask.id.in_(task_ids)).all()
@@ -533,7 +540,7 @@ async def employment_doc_create(
     if doc_department:
         emp.department = doc_department
     db.commit()
-    return RedirectResponse(url=f"/hiring-doc/{doc.id}?created=1", status_code=303)
+    return RedirectResponse(url=f"/employees/hiring-doc/{doc.id}?created=1", status_code=303)
 
 
 @router.get("/hiring-doc/{doc_id}", response_class=HTMLResponse)
@@ -551,7 +558,7 @@ async def employment_doc_view(
         .first()
     )
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     # Bo'lim: hujjatdagi yoki xodimdagi (matn) yoki xodimning department_id orqali
     display_department = (doc.department or "").strip() or None
     if not display_department and doc.employee:
@@ -600,7 +607,7 @@ async def employment_doc_contract(
         .first()
     )
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
 
     # Bo'lim ko'rsatish
     display_department = (doc.department or "").strip() or None
@@ -852,7 +859,7 @@ async def employment_docs_bulk_confirm(
     except (ValueError, TypeError):
         doc_ids = []
     if not doc_ids:
-        return RedirectResponse(url="/hiring-docs?error=" + quote("Hech qanday hujjat tanlanmagan."), status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=" + quote("Hech qanday hujjat tanlanmagan."), status_code=303)
     confirmed = 0
     for did in doc_ids:
         doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == did).first()
@@ -860,7 +867,7 @@ async def employment_docs_bulk_confirm(
             doc.confirmed_at = datetime.now()
             confirmed += 1
     db.commit()
-    return RedirectResponse(url=f"/hiring-docs?confirmed=1&count={confirmed}", status_code=303)
+    return RedirectResponse(url=f"/employees/hiring-docs?confirmed=1&count={confirmed}", status_code=303)
 
 
 @router.post("/hiring-docs/bulk-cancel-confirm")
@@ -878,7 +885,7 @@ async def employment_docs_bulk_cancel_confirm(
     except (ValueError, TypeError):
         doc_ids = []
     if not doc_ids:
-        return RedirectResponse(url="/hiring-docs?error=" + quote("Hech qanday hujjat tanlanmagan."), status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=" + quote("Hech qanday hujjat tanlanmagan."), status_code=303)
     unconfirmed = 0
     for did in doc_ids:
         doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == did).first()
@@ -886,7 +893,7 @@ async def employment_docs_bulk_cancel_confirm(
             doc.confirmed_at = None
             unconfirmed += 1
     db.commit()
-    return RedirectResponse(url=f"/hiring-docs?unconfirmed=1&count={unconfirmed}", status_code=303)
+    return RedirectResponse(url=f"/employees/hiring-docs?unconfirmed=1&count={unconfirmed}", status_code=303)
 
 
 @router.post("/hiring-doc/{doc_id}/confirm")
@@ -898,10 +905,10 @@ async def employment_doc_confirm(
     """Ishga qabul hujjatini tasdiqlash"""
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     doc.confirmed_at = datetime.now()
     db.commit()
-    return RedirectResponse(url="/hiring-docs?confirmed=1", status_code=303)
+    return RedirectResponse(url="/employees/hiring-docs?confirmed=1", status_code=303)
 
 
 @router.post("/hiring-doc/{doc_id}/cancel-confirm")
@@ -913,10 +920,10 @@ async def employment_doc_cancel_confirm(
     """Ishga qabul hujjati tasdiqlashni bekor qilish"""
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     doc.confirmed_at = None
     db.commit()
-    return RedirectResponse(url="/hiring-docs?unconfirmed=1", status_code=303)
+    return RedirectResponse(url="/employees/hiring-docs?unconfirmed=1", status_code=303)
 
 
 @router.post("/hiring-doc/{doc_id}/delete")
@@ -929,15 +936,15 @@ async def employment_doc_delete(
     from urllib.parse import quote
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     if doc.confirmed_at:
         return RedirectResponse(
-            url="/hiring-docs?error=" + quote("Tasdiqlangan hujjatni o'chirish mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
+            url="/employees/hiring-docs?error=" + quote("Tasdiqlangan hujjatni o'chirish mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
             status_code=303
         )
     db.delete(doc)
     db.commit()
-    return RedirectResponse(url="/hiring-docs?deleted=1", status_code=303)
+    return RedirectResponse(url="/employees/hiring-docs?deleted=1", status_code=303)
 
 
 @router.get("/hiring-doc/{doc_id}/edit", response_class=HTMLResponse)
@@ -955,11 +962,11 @@ async def employment_doc_edit_page(
         .first()
     )
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     if doc.confirmed_at:
         from urllib.parse import quote
         return RedirectResponse(
-            url="/hiring-docs?error=" + quote("Tasdiqlangan hujjatni tahrirlash mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
+            url="/employees/hiring-docs?error=" + quote("Tasdiqlangan hujjatni tahrirlash mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
             status_code=303,
         )
     departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
@@ -994,6 +1001,7 @@ async def employment_doc_edit_save(
     department: str = Form(""),
     salary: float = Form(0),
     salary_type: str = Form(""),
+    monthly_rest_days: int = Form(4),
     piecework_task_ids: List[int] = Form([]),
     rest_days: List[str] = Form([]),
     probation: str = Form(""),
@@ -1009,19 +1017,19 @@ async def employment_doc_edit_save(
     from urllib.parse import quote
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
-        return RedirectResponse(url="/hiring-docs?error=Hujjat topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
     if doc.confirmed_at:
         return RedirectResponse(
-            url="/hiring-docs?error=" + quote("Tasdiqlangan hujjatni tahrirlash mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
+            url="/employees/hiring-docs?error=" + quote("Tasdiqlangan hujjatni tahrirlash mumkin emas. Avval «Bekor qilish» orqali tasdiqlashni bekor qiling."),
             status_code=303,
         )
     emp = db.query(Employee).filter(Employee.id == doc.employee_id).first()
     if not emp:
-        return RedirectResponse(url="/hiring-docs?error=" + quote("Xodim topilmadi"), status_code=303)
+        return RedirectResponse(url="/employees/hiring-docs?error=" + quote("Xodim topilmadi"), status_code=303)
     try:
         doc_d = datetime.strptime(doc_date.strip(), "%Y-%m-%d").date()
     except (ValueError, TypeError):
-        return RedirectResponse(url=f"/hiring-doc/{doc_id}/edit?error=" + quote("Noto'g'ri sana"), status_code=303)
+        return RedirectResponse(url=f"/employees/hiring-doc/{doc_id}/edit?error=" + quote("Noto'g'ri sana"), status_code=303)
     hire_d = None
     if hire_date and hire_date.strip():
         try:
@@ -1062,6 +1070,8 @@ async def employment_doc_edit_save(
     emp.salary = doc.salary
     if st:
         emp.salary_type = st
+    if monthly_rest_days is not None and 0 <= monthly_rest_days <= 15:
+        emp.monthly_rest_days = int(monthly_rest_days)
     if hire_d:
         emp.hire_date = hire_d
     if doc.position:
@@ -1078,7 +1088,7 @@ async def employment_doc_edit_save(
             emp.piecework_task_id = None
 
     db.commit()
-    return RedirectResponse(url=f"/hiring-doc/{doc.id}?edited=1", status_code=303)
+    return RedirectResponse(url=f"/employees/hiring-doc/{doc.id}?edited=1", status_code=303)
 
 
 # --- EMPLOYEES EXCEL OPERATIONS ---
@@ -1947,6 +1957,59 @@ async def employee_advances_list(
     })
 
 
+@router.get("/advance-docs", response_class=HTMLResponse)
+async def employee_advance_docs_list(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+):
+    """Avans hujjatlari — sana+kassa bo'yicha guruhlangan avanslar ro'yxati (inventarizatsiya ko'rinishidek)."""
+    q = db.query(EmployeeAdvance).options(
+        joinedload(EmployeeAdvance.cash_register),
+    ).filter(EmployeeAdvance.confirmed_at.isnot(None))
+    if (date_from or "").strip():
+        try:
+            df = datetime.strptime(str(date_from).strip()[:10], "%Y-%m-%d").date()
+            q = q.filter(EmployeeAdvance.advance_date >= df)
+        except ValueError:
+            pass
+    if (date_to or "").strip():
+        try:
+            dt = datetime.strptime(str(date_to).strip()[:10], "%Y-%m-%d").date()
+            q = q.filter(EmployeeAdvance.advance_date <= dt)
+        except ValueError:
+            pass
+    advances = q.order_by(EmployeeAdvance.advance_date.desc(), EmployeeAdvance.id).all()
+    # (date, cash_register_id) bo'yicha guruhlash
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for a in advances:
+        key = (a.advance_date, a.cash_register_id)
+        if key not in groups:
+            groups[key] = {
+                "date": a.advance_date,
+                "cash_register": a.cash_register,
+                "first_id": a.id,
+                "count": 0,
+                "total": 0.0,
+            }
+        groups[key]["count"] += 1
+        groups[key]["total"] += float(a.amount or 0)
+    docs = list(groups.values())
+    filter_date_from = str(date_from or "").strip()[:10] if date_from else ""
+    filter_date_to = str(date_to or "").strip()[:10] if date_to else ""
+    return templates.TemplateResponse("employees/advance_docs_list.html", {
+        "request": request,
+        "docs": docs,
+        "filter_date_from": filter_date_from,
+        "filter_date_to": filter_date_to,
+        "current_user": current_user,
+        "page_title": "Avans hujjatlari",
+    })
+
+
 @router.post("/advances/add")
 async def employee_advance_add(
     request: Request,
@@ -1962,17 +2025,17 @@ async def employee_advance_add(
     try:
         adv_date = datetime.strptime(advance_date, "%Y-%m-%d").date()
     except ValueError:
-        return RedirectResponse(url="/advances?error=Noto'g'ri sana", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Noto'g'ri sana", status_code=303)
     if amount <= 0:
-        return RedirectResponse(url="/advances?error=Summa 0 dan katta bo'lishi kerak", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Summa 0 dan katta bo'lishi kerak", status_code=303)
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
-        return RedirectResponse(url="/advances?error=Xodim topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Xodim topilmadi", status_code=303)
     cash = None
     if cash_register_id:
         cash = db.query(CashRegister).filter(CashRegister.id == cash_register_id, CashRegister.is_active == True).first()
     if not cash:
-        return RedirectResponse(url="/advances?error=Kassani tanlang", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Kassani tanlang", status_code=303)
     # Duplikat tekshirish — 5 daqiqa ichida shu xodimga shu summada avans bo'lsa rad etish
     five_min_ago = datetime.now() - timedelta(minutes=5)
     dup = db.query(EmployeeAdvance).filter(
@@ -1982,7 +2045,7 @@ async def employee_advance_add(
         EmployeeAdvance.confirmed_at >= five_min_ago,
     ).first()
     if dup:
-        return RedirectResponse(url="/advances?error=" + quote("Bu avans allaqachon yozilgan (duplikat)"), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Bu avans allaqachon yozilgan (duplikat)"), status_code=303)
     today = datetime.now()
     adv = EmployeeAdvance(
         employee_id=employee_id,
@@ -2010,14 +2073,48 @@ async def employee_advance_add(
         user_id=current_user.id if current_user else None,
         status="confirmed",
     ))
+    from app.routes.finance import _sync_cash_balance
     _sync_cash_balance(db, cash.id)
     try:
         db.commit()
     except Exception as e:
         db.rollback()
-        return RedirectResponse(url="/advances?error=" + quote("Avansni saqlashda xatolik yuz berdi"), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Avansni saqlashda xatolik yuz berdi"), status_code=303)
     # Filtrsiz qaytamiz — ro'yxat sana bo'yicha kamayishda, yangi avans birinchi qatorda
-    return RedirectResponse(url="/advances?added=1", status_code=303)
+    return RedirectResponse(url="/employees/advances?added=1", status_code=303)
+
+
+@router.get("/advances/view/{advance_id}", response_class=HTMLResponse)
+async def employee_advance_view_page(
+    advance_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Avans hujjatini ko'rish — shu kun+kassadagi barcha avanslarni guruh sifatida ko'rsatish."""
+    adv = db.query(EmployeeAdvance).options(
+        joinedload(EmployeeAdvance.employee),
+        joinedload(EmployeeAdvance.cash_register),
+    ).filter(EmployeeAdvance.id == advance_id).first()
+    if not adv:
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
+    # Shu sana + kassadagi barcha avanslar (guruh/hujjat)
+    batch = db.query(EmployeeAdvance).options(
+        joinedload(EmployeeAdvance.employee),
+    ).filter(
+        EmployeeAdvance.advance_date == adv.advance_date,
+        EmployeeAdvance.cash_register_id == adv.cash_register_id,
+        EmployeeAdvance.confirmed_at.isnot(None),
+    ).order_by(EmployeeAdvance.id).all()
+    batch_total = sum(float(a.amount or 0) for a in batch)
+    return templates.TemplateResponse("employees/advance_view.html", {
+        "request": request,
+        "advance": adv,
+        "batch": batch,
+        "batch_total": batch_total,
+        "current_user": current_user,
+        "page_title": f"Avans hujjati — {adv.advance_date.strftime('%d.%m.%Y')}",
+    })
 
 
 @router.get("/advances/edit/{advance_id}", response_class=HTMLResponse)
@@ -2033,10 +2130,10 @@ async def employee_advance_edit_page(
         joinedload(EmployeeAdvance.cash_register),
     ).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
-        return RedirectResponse(url="/advances?error=Avans topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
     if adv.confirmed_at:
         return RedirectResponse(
-            url="/advances?error=" + quote("Tasdiqlangan avansni tahrirlash mumkin emas. Avval tasdiqni bekor qiling."),
+            url="/employees/advances?error=" + quote("Tasdiqlangan avansni tahrirlash mumkin emas. Avval tasdiqni bekor qiling."),
             status_code=303,
         )
     employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
@@ -2073,10 +2170,10 @@ async def employee_advance_edit_save(
     """Avansni saqlash (tahrirlash) — faqat tasdiqlanmagan avanslar."""
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
-        return RedirectResponse(url="/advances?error=Avans topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
     if adv.confirmed_at:
         return RedirectResponse(
-            url="/advances?error=" + quote("Tasdiqlangan avansni tahrirlash mumkin emas."),
+            url="/employees/advances?error=" + quote("Tasdiqlangan avansni tahrirlash mumkin emas."),
             status_code=303,
         )
     try:
@@ -2113,7 +2210,7 @@ async def employee_advance_edit_save(
                 return RedirectResponse(url=url, status_code=303)
             except (ValueError, TypeError):
                 pass
-    return RedirectResponse(url="/advances?edited=1", status_code=303)
+    return RedirectResponse(url="/employees/advances?edited=1", status_code=303)
 
 
 @router.post("/advances/confirm/{advance_id}")
@@ -2125,10 +2222,10 @@ async def employee_advance_confirm(
     """Avansni tasdiqlash"""
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
-        return RedirectResponse(url="/advances?error=Avans topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
     adv.confirmed_at = datetime.now()
     db.commit()
-    return RedirectResponse(url="/advances?confirmed=1", status_code=303)
+    return RedirectResponse(url="/employees/advances?confirmed=1", status_code=303)
 
 
 @router.post("/advances/unconfirm/{advance_id}")
@@ -2140,10 +2237,10 @@ async def employee_advance_unconfirm(
     """Avans tasdiqini bekor qilish"""
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
-        return RedirectResponse(url="/advances?error=Avans topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
     adv.confirmed_at = None
     db.commit()
-    return RedirectResponse(url="/advances?unconfirmed=1", status_code=303)
+    return RedirectResponse(url="/employees/advances?unconfirmed=1", status_code=303)
 
 
 @router.post("/advances/delete/{advance_id}")
@@ -2155,15 +2252,15 @@ async def employee_advance_delete(
     """Avansni ro'yxatdan o'chirish — faqat tasdiqlanmagan (tasdiq bekor qilingan) avanslar."""
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
-        return RedirectResponse(url="/advances?error=Avans topilmadi", status_code=303)
+        return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
     if adv.confirmed_at:
         return RedirectResponse(
-            url="/advances?error=" + quote("Tasdiqlangan avansni o'chirish mumkin emas. Avval tasdiqni bekor qiling."),
+            url="/employees/advances?error=" + quote("Tasdiqlangan avansni o'chirish mumkin emas. Avval tasdiqni bekor qiling."),
             status_code=303,
         )
     db.delete(adv)
     db.commit()
-    return RedirectResponse(url="/advances?deleted=1", status_code=303)
+    return RedirectResponse(url="/employees/advances?deleted=1", status_code=303)
 
 
 @router.post("/advances/bulk-edit", response_class=RedirectResponse)
@@ -2182,7 +2279,7 @@ async def employee_advances_bulk_edit(
         except (TypeError, ValueError):
             pass
     if not ids:
-        return RedirectResponse(url="/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
     unconfirmed = (
         db.query(EmployeeAdvance.id)
         .filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None))
@@ -2191,7 +2288,7 @@ async def employee_advances_bulk_edit(
     )
     unconfirmed_ids = [r[0] for r in unconfirmed]
     if not unconfirmed_ids:
-        return RedirectResponse(url="/advances?error=" + quote("Tanlangan avanslar tasdiqlangan. Faqat tasdiqlanmagan avanslarni tahrirlash mumkin."), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Tanlangan avanslar tasdiqlangan. Faqat tasdiqlanmagan avanslarni tahrirlash mumkin."), status_code=303)
     first_id = unconfirmed_ids[0]
     next_ids = unconfirmed_ids[1:]
     next_param = ",".join(str(i) for i in next_ids) if next_ids else ""
@@ -2217,7 +2314,7 @@ async def employee_advances_bulk_unconfirm(
         except (TypeError, ValueError):
             pass
     if not ids:
-        return RedirectResponse(url="/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
     updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.isnot(None)).update({EmployeeAdvance.confirmed_at: None}, synchronize_session=False)
     db.commit()
     base = "/advances?bulk_unconfirmed=" + str(updated)
@@ -2241,7 +2338,7 @@ async def employee_advances_bulk_confirm(
         except (TypeError, ValueError):
             pass
     if not ids:
-        return RedirectResponse(url="/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
+        return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
     now = datetime.now()
     updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None)).update({EmployeeAdvance.confirmed_at: now}, synchronize_session=False)
     db.commit()
@@ -2288,6 +2385,7 @@ async def employee_salary_page(
     request: Request,
     year: Optional[int] = None,
     month: Optional[int] = None,
+    rest_days: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -2318,6 +2416,14 @@ async def employee_salary_page(
             .all()
         )
     salaries = {s.employee_id: s for s in db.query(Salary).filter(Salary.year == year, Salary.month == month).all()}
+    # Oldingi oyning qoldiq qarzi (agar Salary.total < 0 bo'lsa) — hozirgi oyga avtomatik o'tkaziladi
+    prev_month = 12 if month == 1 else month - 1
+    prev_year = year - 1 if month == 1 else year
+    prev_debt_by_emp = {}
+    for s in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
+        prev_total = float(s.total or 0)
+        if prev_total < 0:
+            prev_debt_by_emp[s.employee_id] = -prev_total  # musbat qiymat (qarz)
     # Ishga qabul hujjatidagi oylik — avval tasdiqlangan, keyin har qanday oxirgi hujjat (qadoqlovchilar va b. uchun)
     emp_ids = [e.id for e in employees]
     latest_doc_salary = {}
@@ -2388,12 +2494,25 @@ async def employee_salary_page(
                 worked_days_by_emp[r.employee_id] = int(r.days or 0)
         except Exception:
             pass
+    # "rest_days" endi bayram kunlari (holidays) uchun ishlatiladi — barcha xodimlarga bir xil ta'sir qiladi
+    holiday_days = rest_days if rest_days is not None else 0
+    if holiday_days < 0 or holiday_days >= last_day:
+        holiday_days = 0
     days_in_month = last_day
+    # Har xodim uchun ish kunlari: oy_kunlari − xodim_dam_kuni − bayram_kuni
+    working_days_by_emp_total = {}
+    for emp in employees:
+        emp_rest = int(getattr(emp, "monthly_rest_days", None) or 4)
+        if emp_rest < 0: emp_rest = 0
+        if emp_rest >= last_day: emp_rest = last_day - 1
+        working_days_by_emp_total[emp.id] = max(1, last_day - emp_rest - holiday_days)
+    # Umumiy ish kunlari (statistika uchun): default dam olish asosida
+    working_days_in_month = last_day - 4 - holiday_days
     # Hikvision dan o'tmaydigan xodimlar (hikvision_id yo'q) — davomat yozuvi bo'lmasa to'liq oy ishlagan deb hisoblanadi
     for emp in employees:
         if emp.id not in worked_days_by_emp:
             if not getattr(emp, "hikvision_id", None):
-                worked_days_by_emp[emp.id] = days_in_month
+                worked_days_by_emp[emp.id] = working_days_by_emp_total.get(emp.id, working_days_in_month)
     # Bo'lak ish haqi: ishlab chiqarilgan miqdor * (bitta bo'lak narxi). Bitta stavka ishlatiladi (min), yig'indi emas.
     piecework_calculated = {}
     emp_by_id = {e.id: e for e in employees}
@@ -2562,14 +2681,15 @@ async def employee_salary_page(
         base = float(base or 0)
         # Hisoblangan oylik (tabel bo'yicha): Oylik turi — doim; Bo'lak+oylik / guruh a'zosi — faqat asos "oylikdan" bo'lsa
         calculated_base = None
-        if days_in_month and days_in_month > 0:
+        emp_working_days = working_days_by_emp_total.get(emp.id, working_days_in_month)
+        if emp_working_days and emp_working_days > 0:
             contract_monthly = float(latest_doc_salary.get(emp.id, 0) or 0) or float(emp.salary or 0)
             worked_days = worked_days_by_emp.get(emp.id, 0) or 0
             if getattr(emp, "salary_type", None) == "oylik":
-                calculated_base = round((contract_monthly / days_in_month) * worked_days, 2)
+                calculated_base = round((contract_monthly / emp_working_days) * worked_days, 2)
             elif base_source == "oylik" and contract_monthly > 0:
                 # Bo'lak+oylik yoki guruh a'zosi, asos oylikdan — tabel bo'yicha hisoblangan oylik
-                calculated_base = round((contract_monthly / days_in_month) * worked_days, 2)
+                calculated_base = round((contract_monthly / emp_working_days) * worked_days, 2)
         amount_for_total = calculated_base if calculated_base is not None else base
         bonus = float(s.bonus if s and s.bonus is not None else 0) or 0
         deduction = float(s.deduction if s and s.deduction is not None else 0) or 0
@@ -2577,7 +2697,8 @@ async def employee_salary_page(
         adv_ded = float(advance_sums.get(emp.id, 0) or 0)
         if adv_ded == 0 and s and getattr(s, "advance_deduction", None) is not None:
             adv_ded = float(s.advance_deduction)
-        total = amount_for_total + bonus - deduction - adv_ded
+        prev_debt = float(prev_debt_by_emp.get(emp.id, 0) or 0)
+        total = amount_for_total + bonus - deduction - adv_ded - prev_debt
         total = round(total, 2)
         paid = float(s.paid if s and s.paid is not None else 0) or 0
         if s and s.status == "paid":
@@ -2596,11 +2717,12 @@ async def employee_salary_page(
             "bonus": bonus,
             "deduction": deduction,
             "advance_deduction": adv_ded,
+            "prev_debt": prev_debt,
             "total": total,
             "paid": paid,
             "status": status,
             "worked_days": worked_days_by_emp.get(emp.id, 0) or 0,
-            "days_in_month": days_in_month,
+            "days_in_month": working_days_by_emp_total.get(emp.id, working_days_in_month),
         })
     cash_doc_id = request.query_params.get("cash_doc")
     try:
@@ -2639,6 +2761,8 @@ async def employee_salary_page(
         "cash_registers": cash_registers,
         "harajatlar_date_from": harajatlar_date_from,
         "harajatlar_date_to": harajatlar_date_to,
+        "rest_days": holiday_days,
+        "working_days": working_days_in_month,
     })
 
 
@@ -2660,13 +2784,22 @@ async def employee_salary_save(
         employees = []
     else:
         employees = db.query(Employee).filter(Employee.is_active == True, Employee.id.in_(hired_ids)).all()
+    # Oldingi oy qarzi (manfiy JAMI) — hozirgi oyga avtomatik o'tkaziladi
+    prev_month = 12 if month == 1 else month - 1
+    prev_year = year - 1 if month == 1 else year
+    prev_debt_by_emp = {}
+    for ps in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
+        pt = float(ps.total or 0)
+        if pt < 0:
+            prev_debt_by_emp[ps.employee_id] = -pt
     total_payroll = 0.0
     for emp in employees:
         base = float(form.get(f"base_{emp.id}", 0) or 0)
         bonus = float(form.get(f"bonus_{emp.id}", 0) or 0)
         deduction = float(form.get(f"deduction_{emp.id}", 0) or 0)
         advance_deduction = float(form.get(f"advance_{emp.id}", 0) or 0)
-        total = base + bonus - deduction - advance_deduction
+        prev_debt = float(prev_debt_by_emp.get(emp.id, 0) or 0)
+        total = base + bonus - deduction - advance_deduction - prev_debt
         total_payroll += max(0, float(total))  # Kassadan faqat musbat to'lovlar chiqadi
         s = db.query(Salary).filter(Salary.employee_id == emp.id, Salary.year == year, Salary.month == month).first()
         if not s:
@@ -2682,6 +2815,22 @@ async def employee_salary_save(
         s.status = "paid" if (s.paid or 0) >= total else "pending"
     db.commit()
     # Oylik to'lovi — avval Harajatlar jurnalida hujjat (qoralama) yaratiladi; tasdiqlashdan keyin kassadan chiqim yoziladi
+    # Agar shu oy uchun allaqachon draft hujjat yaratilgan bo'lsa — qayta yaratmaslik (dublikat oldini olish)
+    existing_expense = db.query(ExpenseDocItem).join(ExpenseDoc).filter(
+        ExpenseDocItem.description == f"Oylik to'lovi {year}-{month:02d}",
+        ExpenseDoc.status == "draft",
+    ).first()
+    if existing_expense:
+        # Mavjud draft hujjatni yangilash
+        ex_doc = db.query(ExpenseDoc).filter(ExpenseDoc.id == existing_expense.expense_doc_id).first()
+        if ex_doc:
+            ex_doc.total_amount = total_payroll
+            existing_expense.amount = total_payroll
+            db.commit()
+        params = f"year={year}&month={month}&saved=1&expense_doc_id={ex_doc.id if ex_doc else ''}"
+        if no_cash_warn:
+            params += "&no_cash=1"
+        return RedirectResponse(url=f"/employees/salary?{params}", status_code=303)
     expense_doc_id = None
     no_cash_warn = False
     if total_payroll > 0:
@@ -2707,6 +2856,7 @@ async def employee_salary_save(
                 doc_date = datetime(year, month, last_day)
             except (ValueError, TypeError):
                 doc_date = datetime.now()
+            from app.routes.finance import _next_expense_doc_number
             doc_number = _next_expense_doc_number(db)
             doc = ExpenseDoc(
                 number=doc_number,

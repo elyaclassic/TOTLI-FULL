@@ -107,7 +107,7 @@ async def report_sales(
         Order.date >= start_date,
         Order.date <= end_date + " 23:59:59",
     ).all()
-    total = sum(o.total for o in orders)
+    total = sum(o.total or 0 for o in orders)
     return templates.TemplateResponse("reports/sales.html", {
         "request": request,
         "orders": orders,
@@ -732,7 +732,15 @@ async def report_stock_recalculate_from_movements(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Stock qoldiqlarini StockMovement tarixidan qayta hisoblash (faqat admin). Eski ikki marta qo'shilgan xatolikni tuzatish uchun."""
+    """O'CHIRILGAN: Bu endpoint xavfli edi — tarixiy nomuvofiq movementlar sababli
+    qoldiqlarni 0 ga tushirib ma'lumotni yo'qotgan (2026-04-04 incident).
+    Endi ishlamaydi."""
+    raise HTTPException(
+        status_code=410,
+        detail="Bu funksiya o'chirildi. Tarixiy harakatlardan qoldiq qayta hisoblash xavfli edi. Inventarizatsiya hujjati orqali tuzating.",
+    )
+    # Eski kod (o'chirilgan):
+    _disabled = """
     from collections import defaultdict
     # O'chirilgan ishlab chiqarish hujjatlariga tegishli "orfan" harakatlarni o'chirish (qoldiq to'g'ri tushadi)
     existing_production_ids = {r[0] for r in db.query(Production.id).all()}
@@ -770,7 +778,7 @@ async def report_stock_recalculate_from_movements(
         .order_by(StockMovement.created_at.asc())
         .all()
     )
-    # (warehouse_id, product_id) -> ro'yxatda har bir hujjat (document_type, document_id) uchun bitta harakat (oldingi ikki marta qo'shilgan xatoni bartaraf etish)
+    # (warehouse_id, product_id) -> har bir movement uchun dedup (bitta hujjatda bir nechta mahsulot bo'lishi mumkin)
     by_key = defaultdict(list)
     for m in movements:
         if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id not in confirmed_adj_ids:
@@ -782,7 +790,8 @@ async def report_stock_recalculate_from_movements(
         seen_doc = set()
         s = 0.0
         for m in lst:
-            doc_key = (m.document_type or "", m.document_id)
+            # Dedup: hujjat + mahsulot + ombor (bitta Sale/Purchase da ko'p mahsulot bo'ladi)
+            doc_key = (m.document_type or "", m.document_id, m.product_id, m.warehouse_id)
             if doc_key in seen_doc:
                 continue
             seen_doc.add(doc_key)
@@ -811,6 +820,7 @@ async def report_stock_recalculate_from_movements(
         msg_parts.append(f" O'chirilgan ishlab chiqarish hujjatlariga tegishli {deleted_orphans} ta harakat olib tashlandi.")
     msg = quote("".join(msg_parts))
     return RedirectResponse(url=f"/reports/stock?recalculated=1&msg={msg}", status_code=303)
+    """  # noqa — eski kod string ichida (ishlamaydi)
 
 
 @router.post("/stock/clear")
@@ -818,14 +828,10 @@ async def report_stock_clear(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Stock jadvalini to'liq tozalash — barcha qoldiq yozuvlarini o'chirish (faqat admin). StockMovement tarixi saqlanadi."""
-    db.query(StockMovement).filter(StockMovement.stock_id.isnot(None)).update({StockMovement.stock_id: None}, synchronize_session=False)
-    deleted = db.query(Stock).delete()
-    db.commit()
-    from urllib.parse import quote
-    return RedirectResponse(
-        url=f"/reports/stock?cleared={deleted}&msg=" + quote("Stock jadvali tozalandi. Qoldiq hisoboti endi bo'sh."),
-        status_code=303,
+    """O'CHIRILGAN: Stock jadvalini to'liq tozalash xavfli edi — endi ishlamaydi."""
+    raise HTTPException(
+        status_code=410,
+        detail="Bu funksiya o'chirildi. Stock jadvalini tozalash xavfli edi.",
     )
 
 
@@ -902,7 +908,7 @@ def _stock_report_as_of_date(db: Session, report_date, wh_id: int = None):
     products = {p.id: p for p in db.query(Product).filter(Product.id.in_(prod_ids)).all()}
     result = []
     for (wid, pid), qty in last_by_key.items():
-        if qty <= 0:
+        if qty == 0:
             continue
         wh = warehouses.get(wid)
         prod = products.get(pid)
@@ -928,7 +934,7 @@ def _stock_report_filtered(db: Session, wh_id: int = None):
         if key not in aggregated:
             aggregated[key] = {"warehouse": s.warehouse, "product": s.product, "quantity": 0}
         aggregated[key]["quantity"] += float(s.quantity or 0)
-    aggregated = {k: v for k, v in aggregated.items() if float(v.get("quantity") or 0) > 0}
+    aggregated = {k: v for k, v in aggregated.items() if float(v.get("quantity") or 0) != 0}
     return sorted(aggregated.values(), key=lambda x: ((x["warehouse"].name or "").lower(), (x["product"].name or "").lower()))
 
 
@@ -2022,4 +2028,84 @@ async def report_profit(
         # Margin
         "gross_margin": round((gross_profit / revenue * 100) if revenue else 0, 1),
         "net_margin": round((net_profit / revenue * 100) if revenue else 0, 1),
+    })
+
+
+# ==================== SOTILGAN MAHSULOTLAR HISOBOTI ====================
+
+@router.get("/sold-products", response_class=HTMLResponse)
+async def sold_products_report(
+    request: Request,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    warehouse_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotilgan mahsulotlar — sana va ombor bo'yicha."""
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%dT%H:%M") if date_from and "T" in date_from else (datetime.strptime(date_from, "%Y-%m-%d") if date_from else today_start)
+    except (ValueError, TypeError):
+        d_from = today_start
+    try:
+        d_to = datetime.strptime(date_to, "%Y-%m-%dT%H:%M") if date_to and "T" in date_to else (datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59) if date_to else today_end)
+    except (ValueError, TypeError):
+        d_to = today_end
+
+    warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
+
+    # Sotilgan mahsulotlar (OrderItem + Order)
+    q = (
+        db.query(
+            Product.id,
+            Product.name,
+            func.sum(OrderItem.quantity).label("total_qty"),
+            func.sum(OrderItem.total).label("total_sum"),
+            func.count(func.distinct(Order.id)).label("order_count"),
+        )
+        .join(OrderItem, OrderItem.product_id == Product.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            Order.type == "sale",
+            Order.status == "completed",
+            Order.created_at >= d_from,
+            Order.created_at <= d_to,
+        )
+    )
+    if warehouse_id:
+        q = q.filter(Order.warehouse_id == warehouse_id)
+
+    rows = q.group_by(Product.id, Product.name).order_by(func.sum(OrderItem.total).desc()).all()
+
+    items = []
+    grand_qty = 0
+    grand_sum = 0
+    for r in rows:
+        qty = float(r.total_qty or 0)
+        total = float(r.total_sum or 0)
+        grand_qty += qty
+        grand_sum += total
+        items.append({
+            "product_id": r.id,
+            "product_name": r.name,
+            "quantity": qty,
+            "total": total,
+            "order_count": r.order_count,
+            "avg_price": round(total / qty, 0) if qty else 0,
+        })
+
+    return templates.TemplateResponse("reports/sold_products.html", {
+        "request": request,
+        "current_user": current_user,
+        "page_title": "Sotilgan mahsulotlar",
+        "items": items,
+        "warehouses": warehouses,
+        "date_from": d_from.strftime("%Y-%m-%d"),
+        "date_to": d_to.strftime("%Y-%m-%d"),
+        "selected_warehouse_id": warehouse_id,
+        "grand_qty": grand_qty,
+        "grand_sum": grand_sum,
     })

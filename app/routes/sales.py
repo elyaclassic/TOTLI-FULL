@@ -596,14 +596,21 @@ async def sales_confirm(
             )
     
     # Barcha mahsulotlar yetarli bo'lsa, oddiy sotuv sifatida tasdiqlash
+    from app.services.stock_service import create_stock_movement
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if stock:
-            stock.quantity -= item.quantity
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=item.product_id,
+            quantity_change=-item.quantity,
+            operation_type="sale",
+            document_type="Sale",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"Sotuv: {order.number}",
+        )
     order.status = "completed"
     # Qarzdorlikni hisoblash
     order.debt = max(0.0, (order.total or 0) - (order.paid or 0))
@@ -614,7 +621,7 @@ async def sales_confirm(
             partner.balance = (partner.balance or 0) + order.debt
     db.commit()
     check_low_stock_and_notify(db)
-    # Telegram bildirish
+    # Telegram bildirish (ELYA CLASSIC — real-time)
     try:
         from app.bot.services.notifier import notify_new_sale, notify_big_sale
         partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
@@ -924,6 +931,7 @@ async def sales_pos_daily_orders(
             "partner_name": o.partner.name if o.partner else "-",
             "warehouse_name": o.warehouse.name if o.warehouse else "-",
             "total": float(o.total or 0),
+            "payment_type": o.payment_type or "naqd",
         })
     return out
 
@@ -1315,11 +1323,15 @@ async def sales_pos_receipt(
 # ---------- Savdodan qaytarish ----------
 @router.get("/returns", response_class=HTMLResponse)
 async def sales_returns_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
-    """Savdodan qaytarish — bajarilgan sotuvlar ro'yxati."""
-    orders = db.query(Order).filter(
+    """Savdodan qaytarish — bajarilgan sotuvlar ro'yxati (faqat joriy foydalanuvchi)."""
+    q = db.query(Order).filter(
         Order.type == "sale",
         Order.status == "completed"
-    ).options(
+    )
+    # Admin/manager barcha sotuvlarni ko'radi, sotuvchi faqat o'zinikini
+    if current_user.role not in ("admin", "manager"):
+        q = q.filter(Order.user_id == current_user.id)
+    orders = q.options(
         joinedload(Order.partner),
         joinedload(Order.warehouse),
     ).order_by(Order.date.desc()).limit(200).all()
@@ -1328,9 +1340,10 @@ async def sales_returns_list(request: Request, db: Session = Depends(get_db), cu
     warehouse_name = unquote(request.query_params.get("warehouse", "") or "")
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
-    return_docs = db.query(Order).filter(
-        Order.type == "return_sale"
-    ).options(
+    rq = db.query(Order).filter(Order.type == "return_sale")
+    if current_user.role not in ("admin", "manager"):
+        rq = rq.filter(Order.user_id == current_user.id)
+    return_docs = rq.options(
         joinedload(Order.partner),
         joinedload(Order.warehouse),
     ).order_by(Order.created_at.desc()).limit(100).all()

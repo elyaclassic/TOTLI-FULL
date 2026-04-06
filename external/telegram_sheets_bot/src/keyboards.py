@@ -1,14 +1,16 @@
 """Telegram tugmalari."""
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def main_menu_kb(role: str | None = None) -> ReplyKeyboardMarkup:
-    keyboard: list[list[KeyboardButton]] = [[KeyboardButton(text="Mijozlar")]]
-    if role in {"admin", "rahbar"}:
-        keyboard[0].append(KeyboardButton(text="Hisobot"))
-    if role == "admin":
-        keyboard.append([KeyboardButton(text="Yangi mijoz")])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+def main_menu_kb(role: str | None = None) -> InlineKeyboardMarkup:
+    keyboard: list[list[InlineKeyboardButton]] = [
+        [InlineKeyboardButton(text="Mijozlar", callback_data="menu:customers")]
+    ]
+    if role in {"admin", "rahbar", "xodim"}:
+        keyboard[0].append(InlineKeyboardButton(text="Hisobot", callback_data="menu:reports"))
+    if role in {"admin", "rahbar", "xodim"}:
+        keyboard.append([InlineKeyboardButton(text="Yangi mijoz", callback_data="menu:add_customer")])
+    return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
 
 def customer_list_kb(customers: list[dict], page: int = 1, page_size: int = 10) -> InlineKeyboardMarkup:

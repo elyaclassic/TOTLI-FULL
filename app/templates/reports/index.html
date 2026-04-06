@@ -25,6 +25,7 @@
 .report-card.orange { border-left-color: #f57c00; }
 .report-card.purple { border-left-color: #7b1fa2; }
 .report-card.info   { border-left-color: #0288d1; }
+.report-card.teal   { border-left-color: #00897b; }
 .report-card .icon-box {
     width: 48px; height: 48px;
     border-radius: 12px;
@@ -37,6 +38,7 @@
 .report-card.orange .icon-box { background: #fff3e0; color: #f57c00; }
 .report-card.purple .icon-box { background: #f3e5f5; color: #7b1fa2; }
 .report-card.info   .icon-box { background: #e1f5fe; color: #0288d1; }
+.report-card.teal   .icon-box { background: #e0f2f1; color: #00897b; }
 </style>
 
 <div class="page-header mb-4">
@@ -55,7 +57,8 @@
     {'type': 'partner_reconciliation', 'title': 'Kontragent svertka', 'desc': 'Akt sverki (1C uslubida)', 'icon': 'bi-arrow-left-right', 'color': 'info', 'url': '/reports/partner-reconciliation'},
     {'type': 'production', 'title': 'Ishlab chiqarish', 'desc': 'Mahsulot ishlab chiqarish hisoboti', 'icon': 'bi-gear', 'color': 'orange', 'url': '/reports/production'},
     {'type': 'employees', 'title': 'Xodimlar', 'desc': 'Oylik va avans hisoboti', 'icon': 'bi-people', 'color': 'purple', 'url': '/reports/employees'},
-    {'type': 'profit', 'title': 'Foyda hisoboti', 'desc': 'Daromad va xarajat tahlili', 'icon': 'bi-graph-up-arrow', 'color': 'green', 'url': '/reports/profit'}
+    {'type': 'profit', 'title': 'Foyda hisoboti', 'desc': 'Daromad va xarajat tahlili', 'icon': 'bi-graph-up-arrow', 'color': 'green', 'url': '/reports/profit'},
+    {'type': 'sold', 'title': 'Sotilgan mahsulotlar', 'desc': 'Mahsulot bo\'yicha sotuv tahlili', 'icon': 'bi-bag-check', 'color': 'teal', 'url': '/reports/sold-products'}
 ] %}
 
 {% if current_user.role == 'admin' %}

@@ -203,7 +203,8 @@
           {% for stock in stocks %}
           {% set _uc = (stock.product.unit.code or '')|lower if (stock.product and stock.product.unit) else '' %}
           {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
-          {% set _low = stock.quantity <= stock.product.min_stock %}
+          {% set _skip_low = stock.warehouse and stock.warehouse.name and ('aralash' in stock.warehouse.name|lower or 'vozvrat' in stock.warehouse.name|lower or 'qaytarilgan' in stock.warehouse.name|lower) %}
+          {% set _low = (not _skip_low) and stock.quantity <= stock.product.min_stock %}
           {% set _def = (stock.product.min_stock or 0) - (stock.quantity or 0) %}
           <tr class="{% if _low %}low-stock{% endif %}">
             <td class="text-muted">{{ loop.index }}</td>
