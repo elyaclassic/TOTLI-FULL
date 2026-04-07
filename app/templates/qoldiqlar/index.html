@@ -40,22 +40,22 @@
 <!-- Tabs -->
 <ul class="nav nav-tabs mb-3" id="qoldiqTabs" role="tablist">
     <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="kassa-tab" data-bs-toggle="tab" data-bs-target="#kassa" type="button" role="tab">
+        <button class="nav-link{% if not request.query_params.get('tab') and not request.query_params.get('saved') %} active{% elif request.query_params.get('tab') == 'kassa' %} active{% endif %}" id="kassa-tab" data-bs-toggle="tab" data-bs-target="#kassa" type="button" role="tab">
             <i class="bi bi-cash-coin me-1"></i>Kassa qoldiqlari
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="tovar-tab" data-bs-toggle="tab" data-bs-target="#tovar" type="button" role="tab">
+        <button class="nav-link{% if request.query_params.get('tab') == 'tovar' %} active{% endif %}" id="tovar-tab" data-bs-toggle="tab" data-bs-target="#tovar" type="button" role="tab">
             <i class="bi bi-box-seam me-1"></i>Tovar qoldiqlari
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link" id="kontragent-tab" data-bs-toggle="tab" data-bs-target="#kontragent" type="button" role="tab">
+        <button class="nav-link{% if request.query_params.get('tab') == 'kontragent' %} active{% endif %}" id="kontragent-tab" data-bs-toggle="tab" data-bs-target="#kontragent" type="button" role="tab">
             <i class="bi bi-people me-1"></i>Kontragent qoldiqlari
         </button>
     </li>
     <li class="nav-item" role="presentation">
-        <button class="nav-link{% if request.query_params.get('saved') == 'xodim' %} active{% endif %}" id="xodim-tab" data-bs-toggle="tab" data-bs-target="#xodim" type="button" role="tab">
+        <button class="nav-link{% if request.query_params.get('tab') == 'xodim' or request.query_params.get('saved') == 'xodim' %} active{% endif %}" id="xodim-tab" data-bs-toggle="tab" data-bs-target="#xodim" type="button" role="tab">
             <i class="bi bi-person-badge me-1"></i>Xodimlar qoldiqlari
         </button>
     </li>
@@ -64,7 +64,7 @@
 <div class="tab-content" id="qoldiqTabContent">
 
     <!-- ===== KASSA QOLDIQLARI ===== -->
-    <div class="tab-pane fade show active" id="kassa" role="tabpanel">
+    <div class="tab-pane fade{% if not request.query_params.get('tab') and not request.query_params.get('saved') %} show active{% elif request.query_params.get('tab') == 'kassa' %} show active{% endif %}" id="kassa" role="tabpanel">
         <div class="card data-table">
             <div class="card-header">
                 <span class="d-flex align-items-center gap-2">
@@ -143,7 +143,7 @@
     </div>
 
     <!-- ===== TOVAR QOLDIQLARI ===== -->
-    <div class="tab-pane fade" id="tovar" role="tabpanel">
+    <div class="tab-pane fade{% if request.query_params.get('tab') == 'tovar' %} show active{% endif %}" id="tovar" role="tabpanel">
         <div class="card data-table">
             <div class="card-header flex-wrap gap-2">
                 <span class="d-flex align-items-center gap-2">
@@ -200,6 +200,8 @@
                                 <td>
                                     {% if d.status == 'draft' %}
                                         <span class="badge-draft">Qoralama</span>
+                                    {% elif d.status == 'applied' %}
+                                        <span class="badge-done">Moslashtirilgan</span>
                                     {% else %}
                                         <span class="badge-done">Tasdiqlangan</span>
                                     {% endif %}
@@ -209,7 +211,7 @@
                                         <a href="/qoldiqlar/tovar/hujjat/{{ d.id }}" class="btn-act" title="Ochish">
                                             <i class="bi bi-eye"></i>
                                         </a>
-                                        {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                        {% if d.status in ('confirmed', 'applied') and current_user and current_user.role == 'admin' %}
                                         <form method="post" action="/qoldiqlar/tovar/hujjat/{{ d.id }}/revert" class="d-inline"
                                               onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz? Tasdiq o\'zidan bekor bo\'lmaydi — faqat admin shu tugmani bosganda bekor bo\'ladi.');">
                                             <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish (faqat admin)">
@@ -244,7 +246,7 @@
     </div>
 
     <!-- ===== KONTRAGENT QOLDIQLARI ===== -->
-    <div class="tab-pane fade" id="kontragent" role="tabpanel">
+    <div class="tab-pane fade{% if request.query_params.get('tab') == 'kontragent' %} show active{% endif %}" id="kontragent" role="tabpanel">
         <div class="card data-table">
             <div class="card-header flex-wrap gap-2">
                 <span class="d-flex align-items-center gap-2">
@@ -340,45 +342,81 @@
     </div>
 
     <!-- ===== XODIMLAR QOLDIQLARI ===== -->
-    <div class="tab-pane fade{% if request.query_params.get('saved') == 'xodim' %} show active{% endif %}" id="xodim" role="tabpanel">
+    <div class="tab-pane fade{% if request.query_params.get('tab') == 'xodim' or request.query_params.get('saved') == 'xodim' %} show active{% endif %}" id="xodim" role="tabpanel">
         <div class="card data-table">
             <div class="card-header">
-                <span class="fw-bold"><i class="bi bi-person-badge text-primary"></i> Xodimlar qoldiqlari</span>
+                <span class="d-flex align-items-center gap-2">
+                    <i class="bi bi-person-badge text-primary"></i> Xodim qoldiqlari hujjatlari
+                </span>
+                <a href="/qoldiqlar/xodim/hujjat/new" class="top-btn btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Yangi hujjat
+                </a>
             </div>
-            <div class="card-body">
-                <form method="post" action="/qoldiqlar/xodim-qoldiq" class="row g-2 align-items-end mb-3">
-                    <div class="col-md-3">
-                        <label class="form-label small">Xodim *</label>
-                        <select name="employee_id" class="form-select form-select-sm" required>
-                            <option value="">— Tanlang —</option>
-                            {% for e in employees|default([]) %}
-                            <option value="{{ e.id }}">{{ e.full_name }} ({{ e.code or e.id }})</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Yil *</label>
-                        <input type="number" name="year" class="form-control form-control-sm" value="2026" min="2020" max="2030" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Oy *</label>
-                        <select name="month" class="form-select form-select-sm" required>
-                            {% for m in range(1,13) %}
-                            <option value="{{ m }}" {% if m == 1 %}selected{% endif %}>{{ m }}</option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label small">Qoldiq (so'm)</label>
-                        <input type="number" name="total" class="form-control form-control-sm" step="1" value="0" required title="Musbat = xodimga to'lash kerak. Manfiy = xodim qarzda.">
-                    </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn btn-success btn-sm w-100"><i class="bi bi-plus-circle"></i> Saqlash</button>
-                    </div>
-                    <div class="col-12">
-                        <small class="text-muted">Musbat qiymat = xodimga to'lash kerak (masalan 500,000). Manfiy = xodim qarzda (masalan -300,000). Oy/yil: qaysi oy uchun qoldiq kiritilmoqda.</small>
-                    </div>
-                </form>
+            <div class="card-body p-0">
+                <table class="table table-sm table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:140px;">Hujjat №</th>
+                            <th>Sana</th>
+                            <th>Foydalanuvchi</th>
+                            <th>Holat</th>
+                            <th style="width:90px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in xodim_docs|default([]) %}
+                        <tr>
+                            <td><a href="/qoldiqlar/xodim/hujjat/{{ d.id }}" class="fw-bold">{{ d.number }}</a></td>
+                            <td>{{ d.date.strftime('%d.%m.%Y %H:%M') if d.date else '-' }}</td>
+                            <td>{{ d.user.full_name or d.user.username if d.user else '-' }}</td>
+                            <td>
+                                {% if d.status == 'draft' %}
+                                    <span class="badge-draft">Qoralama</span>
+                                {% else %}
+                                    <span class="badge-done">Tasdiqlangan</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="d-flex gap-1">
+                                    <a href="/qoldiqlar/xodim/hujjat/{{ d.id }}" class="btn-act" title="Ochish">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% if d.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+                                    <form method="post" action="/qoldiqlar/xodim/hujjat/{{ d.id }}/revert" class="d-inline"
+                                          onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz?');">
+                                        <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    </form>
+                                    {% elif d.status == 'draft' and current_user and current_user.role == 'admin' %}
+                                    <form method="post" action="/qoldiqlar/xodim/hujjat/{{ d.id }}/delete" class="d-inline"
+                                          onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                                        <button type="submit" class="btn-act danger" title="O'chirish">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center muted-cell py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                Hujjatlar yo'q.
+                                <a href="/qoldiqlar/xodim/hujjat/new">Yangi hujjat yaratish</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Xodimlar joriy qoldiqlari -->
+        <div class="card data-table mt-3">
+            <div class="card-header">
+                <span class="fw-bold"><i class="bi bi-table text-primary"></i> Xodimlar joriy qoldiqlari</span>
             </div>
             <div class="card-body p-0">
                 <table class="table table-sm table-hover mb-0">
@@ -401,8 +439,8 @@
                             <td>{{ emp.full_name }} <small class="text-muted">({{ emp.code or emp.id }})</small></td>
                             <td class="muted-cell">{{ emp.position or '—' }}</td>
                             <td class="text-center">{{ b.year }}-{{ "%02d"|format(b.month) }}</td>
-                            <td class="text-end fw-bold {% if b.total < 0 %}text-danger{% elif b.total > 0 %}text-success{% endif %}">{{ "{:,.0f}".format(b.total) }}</td>
-                            <td>{% if b.total < 0 %}<span class="badge-cancelled">Qarzda</span>{% elif b.total > 0 %}<span class="badge-waiting">To'lanmagan</span>{% else %}<span class="badge-done">Hisoblashilgan</span>{% endif %}</td>
+                            <td class="text-end fw-bold {% if b.total > 0 %}text-danger{% elif b.total < 0 %}text-success{% endif %}">{{ "{:,.0f}".format(b.total) }}</td>
+                            <td>{% if b.total > 0 %}<span class="badge-cancelled">Xodim qarzi</span>{% elif b.total < 0 %}<span class="badge-waiting">Bizning qarzimiz</span>{% else %}<span class="badge-done">Hisoblashilgan</span>{% endif %}</td>
                         </tr>
                         {% endif %}
                         {% endfor %}

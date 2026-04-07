@@ -40,11 +40,13 @@
             <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
         </form>
         {% endif %}
-        {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+        {% elif doc and doc.status in ('confirmed', 'applied') and current_user and current_user.role == 'admin' %}
+        {% if doc.status == 'confirmed' %}
         <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/apply-to-warehouse" class="d-inline" onsubmit="return confirm('Hujjatda yo\'q mahsulotlar uchun ombor qoldig\'i 0 qilinadi (savdoda ko\'rinmaydi). Davom etasizmi?');">
             <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
             <button type="submit" class="top-btn btn btn-info btn-sm" title="Hujjatda qatori yo'q mahsulotlarni omborda 0 qiladi"><i class="bi bi-arrow-repeat"></i> Omborni hujjatga moslash</button>
         </form>
+        {% endif %}
         <form method="post" action="/qoldiqlar/tovar/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i kamayadi. Faqat siz (admin) bu amalni qilasiz. Davom etasizmi?');">
             <button type="submit" class="top-btn btn btn-warning" title="Faqat admin tasdiqni bekor qiladi — tizim o'zidan bekor qilmaydi"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
         </form>
@@ -61,7 +63,7 @@
                 <p class="mb-0"><strong>Hujjat raqami:</strong> <span class="badge bg-primary">{{ doc.number }}</span> &nbsp; <strong>Sana:</strong> {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }} &nbsp; <strong>Foydalanuvchi:</strong> {{ doc.user.full_name or doc.user.username if doc.user else '-' }}</p>
             </div>
             <div class="col-md-6">
-                <p class="mb-0"><strong>Holat:</strong> {% if doc.status == 'draft' %}<span class="badge-draft">Qoralama</span>{% else %}<span class="badge-done">Tasdiqlangan</span> <small class="text-muted">(tasdiq o'zidan bekor bo'lmaydi — faqat admin bekor qiladi)</small>{% endif %}
+                <p class="mb-0"><strong>Holat:</strong> {% if doc.status == 'draft' %}<span class="badge-draft">Qoralama</span>{% elif doc.status == 'applied' %}<span class="badge-done">Omborga moslashtirilgan</span>{% else %}<span class="badge-done">Tasdiqlangan</span>{% endif %} <small class="text-muted">(tasdiq o'zidan bekor bo'lmaydi — faqat admin bekor qiladi)</small>
                 {% if show_tannarx %}&nbsp; <strong>Jami tannarx:</strong> <span class="text-success fw-bold">{{ "{:,.0f}".format(doc.total_tannarx or 0) }}</span> so'm{% endif %}
                 &nbsp; <strong>Jami sotuv:</strong> <span class="text-primary fw-bold">{{ "{:,.0f}".format(doc.total_sotuv or 0) }}</span> so'm</p>
             </div>
@@ -71,7 +73,7 @@
             <i class="bi bi-exclamation-triangle-fill"></i> <strong>Qoralama:</strong> O'zgarishlar omborga va savdo oynasiga <strong>«Tasdiqlash»</strong> bosilguncha qo'llanmaydi. Mahsulot qoldig'ini nolga tushirsangiz yoki qatorni o'chirsangiz, savdoda ko'rinmasligi uchun avval <strong>Tasdiqlash</strong> tugmasini bosing.
         </div>
         {% endif %}
-        {% if doc.status == 'confirmed' and request.query_params.get('applied') == '1' %}
+        {% if doc.status in ('confirmed', 'applied') and request.query_params.get('applied') == '1' %}
         <div class="alert alert-success py-2 mb-2 small" role="alert">
             <i class="bi bi-check-circle-fill"></i> Ombor hujjatga moslashtirildi. Hujjatda yo'q mahsulotlar uchun qoldiq 0 qilindi — savdo oynasini yangilang (F5).
         </div>

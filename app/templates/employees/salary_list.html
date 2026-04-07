@@ -78,6 +78,7 @@
                             <th class="text-end">Ushlab qolish</th>
                             <th class="text-end">Avans</th>
                             <th class="text-end" title="Oldingi oydan qolgan qarz — avtomatik o'tkaziladi">Oldingi qarz</th>
+                            <th class="text-end" title="Oldingi oydan bizning qarzimiz — qoldiq hujjatidan">Oldingi qoldiq</th>
                             <th class="text-end">Jami</th>
                             <th class="text-end">To'langan</th>
                             <th class="text-center">Holat</th>
@@ -115,6 +116,9 @@
                             </td>
                             <td class="text-end{% if row.prev_debt and row.prev_debt > 0 %} text-danger fw-bold{% endif %}" title="{% if row.prev_debt and row.prev_debt > 0 %}Oldingi oy qarzi: {{ '{:,.0f}'.format(row.prev_debt) }} so'm (avtomatik o'tkazildi){% else %}Qarz yo'q{% endif %}">
                                 <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0{% if row.prev_debt and row.prev_debt > 0 %} text-danger fw-bold{% endif %}" value="{{ '{:,.0f}'.format(row.prev_debt) if row.prev_debt else '—' }}">
+                            </td>
+                            <td class="text-end{% if row.prev_credit and row.prev_credit > 0 %} text-success fw-bold{% endif %}" title="{% if row.prev_credit and row.prev_credit > 0 %}Oldingi oydan bizning qarzimiz: {{ '{:,.0f}'.format(row.prev_credit) }} so'm{% else %}—{% endif %}">
+                                <input type="text" readonly class="form-control form-control-sm text-end border-0 bg-transparent py-0{% if row.prev_credit and row.prev_credit > 0 %} text-success fw-bold{% endif %}" value="{{ '{:,.0f}'.format(row.prev_credit) if row.prev_credit else '—' }}">
                             </td>
                             <td class="text-end fw-bold jami-cell{% if row.total is defined and row.total < 0 %} text-danger{% endif %}" data-emp-id="{{ row.employee.id }}">{{ "{:,.0f}".format(row.total) }}</td>
                             <td class="text-end{% if row.paid and row.paid != 0 %}{% if row.paid < 0 %} text-danger{% endif %}{% else %}{% if row.total is defined and row.total < 0 %} text-danger{% endif %}{% endif %}" title="Shu oyda to'langan summa">{% if row.paid and row.paid != 0 %}{{ "{:,.0f}".format(row.paid) }}{% else %}{{ "{:,.0f}".format(row.total) }}{% endif %}</td>

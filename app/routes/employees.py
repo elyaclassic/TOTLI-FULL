@@ -2057,8 +2057,16 @@ async def employee_advance_add(
     )
     db.add(adv)
     db.flush()
-    pay_count = db.query(Payment).filter(Payment.created_at >= today.replace(hour=0, minute=0, second=0)).count()
-    pay_number = f"PAY-{today.strftime('%Y%m%d')}-{pay_count + 1:04d}"
+    prefix = f"PAY-{today.strftime('%Y%m%d')}-"
+    last_pay = db.query(Payment).filter(Payment.number.like(prefix + "%")).order_by(Payment.number.desc()).first()
+    if last_pay and last_pay.number:
+        try:
+            last_seq = int(last_pay.number.split("-")[-1])
+        except (ValueError, IndexError):
+            last_seq = 0
+    else:
+        last_seq = 0
+    pay_number = f"{prefix}{last_seq + 1:04d}"
     emp_name = (emp.full_name or f"Xodim {employee_id}")[:100]
     db.add(Payment(
         number=pay_number,
@@ -2079,7 +2087,10 @@ async def employee_advance_add(
         db.commit()
     except Exception as e:
         db.rollback()
-        return RedirectResponse(url="/employees/advances?error=" + quote("Avansni saqlashda xatolik yuz berdi"), status_code=303)
+        import traceback
+        traceback.print_exc()
+        print(f"[Avans xato] {e}")
+        return RedirectResponse(url="/employees/advances?error=" + quote(f"Avansni saqlashda xatolik: {str(e)[:200]}"), status_code=303)
     # Filtrsiz qaytamiz — ro'yxat sana bo'yicha kamayishda, yangi avans birinchi qatorda
     return RedirectResponse(url="/employees/advances?added=1", status_code=303)
 
@@ -2416,14 +2427,17 @@ async def employee_salary_page(
             .all()
         )
     salaries = {s.employee_id: s for s in db.query(Salary).filter(Salary.year == year, Salary.month == month).all()}
-    # Oldingi oyning qoldiq qarzi (agar Salary.total < 0 bo'lsa) — hozirgi oyga avtomatik o'tkaziladi
+    # Oldingi oyning qoldiq qarzi va bizning qarzimiz
     prev_month = 12 if month == 1 else month - 1
     prev_year = year - 1 if month == 1 else year
-    prev_debt_by_emp = {}
+    prev_debt_by_emp = {}  # xodim qarzi (oylikdan ayiriladi)
+    prev_credit_by_emp = {}  # bizning qarzimiz (oylikka qo'shiladi)
     for s in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         prev_total = float(s.total or 0)
         if prev_total < 0:
             prev_debt_by_emp[s.employee_id] = -prev_total  # musbat qiymat (qarz)
+        elif prev_total > 0 and getattr(s, "is_balance_entry", False):
+            prev_credit_by_emp[s.employee_id] = prev_total  # bizning qarzimiz
     # Ishga qabul hujjatidagi oylik — avval tasdiqlangan, keyin har qanday oxirgi hujjat (qadoqlovchilar va b. uchun)
     emp_ids = [e.id for e in employees]
     latest_doc_salary = {}
@@ -2698,7 +2712,8 @@ async def employee_salary_page(
         if adv_ded == 0 and s and getattr(s, "advance_deduction", None) is not None:
             adv_ded = float(s.advance_deduction)
         prev_debt = float(prev_debt_by_emp.get(emp.id, 0) or 0)
-        total = amount_for_total + bonus - deduction - adv_ded - prev_debt
+        prev_credit = float(prev_credit_by_emp.get(emp.id, 0) or 0)
+        total = amount_for_total + bonus - deduction - adv_ded - prev_debt + prev_credit
         total = round(total, 2)
         paid = float(s.paid if s and s.paid is not None else 0) or 0
         if s and s.status == "paid":
@@ -2718,6 +2733,7 @@ async def employee_salary_page(
             "deduction": deduction,
             "advance_deduction": adv_ded,
             "prev_debt": prev_debt,
+            "prev_credit": prev_credit,
             "total": total,
             "paid": paid,
             "status": status,
@@ -2788,10 +2804,13 @@ async def employee_salary_save(
     prev_month = 12 if month == 1 else month - 1
     prev_year = year - 1 if month == 1 else year
     prev_debt_by_emp = {}
+    prev_credit_by_emp = {}
     for ps in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         pt = float(ps.total or 0)
         if pt < 0:
             prev_debt_by_emp[ps.employee_id] = -pt
+        elif pt > 0 and getattr(ps, "is_balance_entry", False):
+            prev_credit_by_emp[ps.employee_id] = pt
     total_payroll = 0.0
     for emp in employees:
         base = float(form.get(f"base_{emp.id}", 0) or 0)
@@ -2799,7 +2818,8 @@ async def employee_salary_save(
         deduction = float(form.get(f"deduction_{emp.id}", 0) or 0)
         advance_deduction = float(form.get(f"advance_{emp.id}", 0) or 0)
         prev_debt = float(prev_debt_by_emp.get(emp.id, 0) or 0)
-        total = base + bonus - deduction - advance_deduction - prev_debt
+        prev_credit = float(prev_credit_by_emp.get(emp.id, 0) or 0)
+        total = base + bonus - deduction - advance_deduction - prev_debt + prev_credit
         total_payroll += max(0, float(total))  # Kassadan faqat musbat to'lovlar chiqadi
         s = db.query(Salary).filter(Salary.employee_id == emp.id, Salary.year == year, Salary.month == month).first()
         if not s:

@@ -423,6 +423,7 @@ async def purchase_confirm(
             document_number=purchase.number,
             user_id=current_user.id if current_user else None,
             note=f"Xarid kirim: {purchase.number}",
+            created_at=purchase.date,
         )
     purchase.status = "confirmed"
     total_with_expenses = items_total + total_expenses
@@ -484,6 +485,7 @@ async def purchase_revert(
             document_id=purchase.id,
             document_number=f"{purchase.number}-REVERT",
             user_id=current_user.id if current_user else None,
+            created_at=purchase.date,
             note=f"Xarid bekor: {purchase.number}",
         )
     total_with_expenses = purchase.total + (purchase.total_expenses or 0)

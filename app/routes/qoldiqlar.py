@@ -30,6 +30,8 @@ from app.models.database import (
     CashBalanceDocItem,
     PartnerBalanceDoc,
     PartnerBalanceDocItem,
+    EmployeeBalanceDoc,
+    EmployeeBalanceDocItem,
     Order,
     Purchase,
     Payment,
@@ -92,6 +94,12 @@ async def qoldiqlar_page(
         s = db.query(Salary).filter(Salary.employee_id == emp.id).order_by(Salary.year.desc(), Salary.month.desc()).first()
         if s:
             emp_balances[emp.id] = {"year": s.year, "month": s.month, "total": float(s.total or 0), "status": s.status}
+    xodim_docs = (
+        db.query(EmployeeBalanceDoc)
+        .order_by(EmployeeBalanceDoc.created_at.desc())
+        .limit(200)
+        .all()
+    )
     return templates.TemplateResponse("qoldiqlar/index.html", {
         "request": request,
         "cash_registers": cash_registers,
@@ -104,6 +112,7 @@ async def qoldiqlar_page(
         "kontragent_docs": kontragent_docs,
         "employees": employees,
         "emp_balances": emp_balances,
+        "xodim_docs": xodim_docs,
         "current_user": current_user,
         "page_title": "Qoldiqlar",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
@@ -549,31 +558,236 @@ async def qoldiqlar_tovar_save(
     return RedirectResponse(url="/qoldiqlar#tovar", status_code=303)
 
 
-@router.post("/xodim-qoldiq")
-async def qoldiqlar_xodim_save(
-    employee_id: int = Form(...),
-    year: int = Form(...),
-    month: int = Form(...),
-    total: float = Form(...),
+# ==========================================
+# XODIM QOLDIQLARI HUJJAT TIZIMI
+# ==========================================
+
+@router.get("/xodim/hujjat/new", response_class=HTMLResponse)
+async def qoldiqlar_xodim_hujjat_new(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Yangi xodim balans hujjati"""
+    employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    return templates.TemplateResponse("qoldiqlar/xodim_hujjat_form.html", {
+        "request": request,
+        "doc": None,
+        "employees": employees,
+        "current_user": current_user,
+        "today_str": today_str,
+        "page_title": "Xodim qoldiqlari — yangi hujjat",
+    })
+
+
+@router.post("/xodim/hujjat")
+async def qoldiqlar_xodim_hujjat_create(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Xodim balans hujjatini yaratish (qoralama)"""
+    form = await request.form()
+    employee_ids = form.getlist("employee_id")
+    balances = form.getlist("balance")
+    doc_date_str = form.get("doc_date", "")
+    if doc_date_str:
+        try:
+            doc_date = datetime.strptime(doc_date_str, "%Y-%m-%d")
+        except ValueError:
+            doc_date = datetime.now()
+    else:
+        doc_date = datetime.now()
+
+    items_data = []
+    for i, eid in enumerate(employee_ids):
+        if not eid:
+            continue
+        try:
+            eid_int = int(eid)
+            bal_str = (balances[i] if i < len(balances) else "").strip()
+            if not bal_str:
+                continue
+            bal = float(bal_str)
+        except (TypeError, ValueError):
+            continue
+        items_data.append((eid_int, bal))
+
+    if not items_data:
+        return RedirectResponse(url="/qoldiqlar/xodim/hujjat/new", status_code=303)
+
+    count = db.query(EmployeeBalanceDoc).filter(
+        EmployeeBalanceDoc.date >= doc_date.replace(hour=0, minute=0, second=0),
+        EmployeeBalanceDoc.date < doc_date.replace(hour=23, minute=59, second=59)
+    ).count()
+    number = f"XOD-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+
+    doc = EmployeeBalanceDoc(
+        number=number,
+        date=doc_date,
+        user_id=current_user.id if current_user else None,
+        status="draft",
+    )
+    db.add(doc)
+    db.flush()
+    for eid, bal in items_data:
+        db.add(EmployeeBalanceDocItem(doc_id=doc.id, employee_id=eid, balance=bal))
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc.id}", status_code=303)
+
+
+@router.get("/xodim/hujjat/{doc_id}", response_class=HTMLResponse)
+async def qoldiqlar_xodim_hujjat_view(
+    request: Request,
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Xodim balans hujjatini ko'rish"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
+    return templates.TemplateResponse("qoldiqlar/xodim_hujjat_form.html", {
+        "request": request,
+        "doc": doc,
+        "employees": employees,
+        "current_user": current_user,
+        "page_title": f"Xodim qoldiqlari {doc.number}",
+    })
+
+
+@router.post("/xodim/hujjat/{doc_id}/tasdiqlash")
+async def qoldiqlar_xodim_hujjat_tasdiqlash(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Xodim hujjatini tasdiqlash — Salary jadvaliga yozish"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
+    if not doc.items:
+        raise HTTPException(status_code=400, detail="Kamida bitta xodim qatori bo'lishi kerak")
+    now = datetime.now()
+    year, month = doc.date.year if doc.date else now.year, doc.date.month if doc.date else now.month
+    for item in doc.items:
+        emp = db.query(Employee).filter(Employee.id == item.employee_id).first()
+        if not emp:
+            continue
+        s = db.query(Salary).filter(Salary.employee_id == item.employee_id, Salary.year == year, Salary.month == month).first()
+        old_total = float(s.total or 0) if s else 0
+        item.previous_balance = old_total
+        if not s:
+            s = Salary(employee_id=item.employee_id, year=year, month=month)
+            db.add(s)
+        # Hujjatda: musbat = xodim qarzi, manfiy = bizning qarzimiz
+        # Salary da: musbat = biz to'lashimiz kerak, manfiy = xodim qarzda
+        # Shuning uchun ishorani teskari qilamiz
+        new_total = old_total - item.balance
+        s.base_salary = max(0, abs(new_total))
+        s.total = new_total
+        if s.paid is None:
+            s.paid = 0
+        s.status = "paid" if new_total <= 0 else "pending"
+        s.is_balance_entry = True
+    doc.status = "confirmed"
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc_id}", status_code=303)
+
+
+@router.post("/xodim/hujjat/{doc_id}/revert")
+async def qoldiqlar_xodim_hujjat_revert(
+    doc_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Xodim oylik qoldig'ini kiritish (boshlang'ich qoldiq yoki tuzatish). Salary jadvaliga yoziladi."""
-    emp = db.query(Employee).filter(Employee.id == employee_id).first()
-    if not emp:
-        return RedirectResponse(url="/qoldiqlar?error=Xodim+topilmadi#xodim", status_code=303)
-    if not (1 <= month <= 12) or year < 2020 or year > 2030:
-        return RedirectResponse(url="/qoldiqlar?error=Noto'g'ri+oy+yoki+yil#xodim", status_code=303)
-    s = db.query(Salary).filter(Salary.employee_id == employee_id, Salary.year == year, Salary.month == month).first()
-    if not s:
-        s = Salary(employee_id=employee_id, year=year, month=month)
-        db.add(s)
-    s.base_salary = max(0, total)
-    s.total = total
-    s.paid = 0
-    s.status = "paid" if total <= 0 else "pending"
+    """Xodim hujjati tasdiqini bekor qilish (faqat admin)"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "confirmed":
+        raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
+    now = datetime.now()
+    year, month = doc.date.year if doc.date else now.year, doc.date.month if doc.date else now.month
+    for item in doc.items:
+        if item.previous_balance is not None:
+            s = db.query(Salary).filter(Salary.employee_id == item.employee_id, Salary.year == year, Salary.month == month).first()
+            if s:
+                s.total = item.previous_balance
+                s.base_salary = max(0, item.previous_balance)
+                s.status = "paid" if item.previous_balance <= 0 else "pending"
+    doc.status = "draft"
     db.commit()
-    return RedirectResponse(url="/qoldiqlar?saved=xodim#xodim", status_code=303)
+    return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc_id}", status_code=303)
+
+
+@router.post("/xodim/hujjat/{doc_id}/delete")
+async def qoldiqlar_xodim_hujjat_delete(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Xodim hujjatini o'chirish (faqat qoralama, faqat admin)"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralama holatidagi hujjatni o'chirish mumkin")
+    db.delete(doc)
+    db.commit()
+    return RedirectResponse(url="/qoldiqlar?tab=xodim", status_code=303)
+
+
+@router.post("/xodim/hujjat/{doc_id}/add-row")
+async def qoldiqlar_xodim_hujjat_add_row(
+    doc_id: int,
+    employee_id: int = Form(...),
+    balance: float = Form(...),
+    balance_type: int = Form(1),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft hujjatga qator qo'shish"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc or doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralamani tahrirlash mumkin")
+    bal = abs(balance) * (1 if balance_type == 1 else -1)
+    # Dublikat tekshiruv
+    existing = db.query(EmployeeBalanceDocItem).filter(
+        EmployeeBalanceDocItem.doc_id == doc_id,
+        EmployeeBalanceDocItem.employee_id == employee_id,
+    ).first()
+    if existing:
+        existing.balance = bal
+    else:
+        db.add(EmployeeBalanceDocItem(doc_id=doc_id, employee_id=employee_id, balance=bal))
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc_id}", status_code=303)
+
+
+@router.post("/xodim/hujjat/{doc_id}/delete-row/{item_id}")
+async def qoldiqlar_xodim_hujjat_delete_row(
+    doc_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft hujjatdan qatorni o'chirish"""
+    doc = db.query(EmployeeBalanceDoc).filter(EmployeeBalanceDoc.id == doc_id).first()
+    if not doc or doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralamani tahrirlash mumkin")
+    item = db.query(EmployeeBalanceDocItem).filter(
+        EmployeeBalanceDocItem.id == item_id,
+        EmployeeBalanceDocItem.doc_id == doc_id,
+    ).first()
+    if item:
+        db.delete(item)
+        db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc_id}", status_code=303)
 
 
 @router.post("/kontragent/recalculate")
@@ -982,6 +1196,23 @@ async def qoldiqlar_tovar_hujjat_add_row(
         raise HTTPException(status_code=400, detail="Faqat qoralamani tahrirlash mumkin")
     if quantity <= 0:
         return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}", status_code=303)
+    # Dublikat tekshiruv: bir xil ombor+mahsulot bo'lsa — miqdorni yangilash
+    existing_item = db.query(StockAdjustmentDocItem).filter(
+        StockAdjustmentDocItem.doc_id == doc_id,
+        StockAdjustmentDocItem.product_id == product_id,
+        StockAdjustmentDocItem.warehouse_id == warehouse_id,
+    ).first()
+    if existing_item:
+        # Eski summalarni chiqarish
+        doc.total_tannarx = (doc.total_tannarx or 0) - (existing_item.quantity * (existing_item.cost_price or 0))
+        doc.total_sotuv = (doc.total_sotuv or 0) - (existing_item.quantity * (existing_item.sale_price or 0))
+        existing_item.quantity = quantity
+        existing_item.cost_price = cost_price or 0
+        existing_item.sale_price = sale_price or 0
+        doc.total_tannarx = (doc.total_tannarx or 0) + quantity * (cost_price or 0)
+        doc.total_sotuv = (doc.total_sotuv or 0) + quantity * (sale_price or 0)
+        db.commit()
+        return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}", status_code=303)
     doc.total_tannarx = (doc.total_tannarx or 0) + quantity * (cost_price or 0)
     doc.total_sotuv = (doc.total_sotuv or 0) + quantity * (sale_price or 0)
     db.add(StockAdjustmentDocItem(
@@ -1108,7 +1339,8 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
                 document_id=doc.id,
                 document_number=doc.number,
                 user_id=current_user.id if current_user else None,
-                note=f"{'Qoldiq kiritish' if is_qld else 'Inventarizatsiya'}: {doc.number}"
+                note=f"{'Qoldiq kiritish' if is_qld else 'Inventarizatsiya'}: {doc.number}",
+                created_at=doc.date,
             )
         if (item.cost_price or 0) > 0:
             prod = db.query(Product).filter(Product.id == item.product_id).first()
@@ -1132,8 +1364,11 @@ async def qoldiqlar_tovar_hujjat_apply_to_warehouse(
     doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if doc.status != "confirmed":
+    if doc.status not in ("confirmed",):
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjat uchun")
+    # Ikki marta bosish himoyasi: allaqachon apply qilinganmi?
+    if doc.status == "applied":
+        return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}?applied=1", status_code=303)
     doc_warehouse_ids = list({item.warehouse_id for item in doc.items})
     doc_pairs = {(item.warehouse_id, item.product_id) for item in doc.items}
     for wh_id in doc_warehouse_ids:
@@ -1153,7 +1388,9 @@ async def qoldiqlar_tovar_hujjat_apply_to_warehouse(
                     document_number=doc.number,
                     user_id=current_user.id if current_user else None,
                     note=f"Omborni hujjatga moslash: {doc.number}",
+                    created_at=doc.date,
                 )
+    doc.status = "applied"
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}?applied=1", status_code=303)
 
@@ -1168,7 +1405,7 @@ async def qoldiqlar_tovar_hujjat_revert(
     doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if doc.status != "confirmed":
+    if doc.status not in ("confirmed", "applied"):
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
     movements = db.query(StockMovement).filter(
         StockMovement.document_type == "StockAdjustmentDoc",

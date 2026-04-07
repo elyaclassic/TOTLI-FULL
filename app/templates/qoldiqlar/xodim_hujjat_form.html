@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .emp-results { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: 1px solid #dee2e6; border-radius: 0.25rem; margin-top: 2px; background: white; }
+    .emp-results .list-group-item:hover { background-color: #f8f9fa; cursor: pointer; }
+</style>
+<div class="container-fluid">
+
+    <div class="page-header mb-3">
+        <h5 class="mb-0">
+            {% if doc %}
+            <i class="bi bi-person-badge"></i>
+            Xodim qoldiqlari {{ doc.number }} ({{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }})
+            {% else %}
+            <i class="bi bi-person-badge"></i> Yangi xodim balans hujjati
+            {% endif %}
+        </h5>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="/qoldiqlar?tab=xodim" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Qoldiqlar</a>
+            {% if doc and doc.status == 'draft' %}
+            <form method="post" action="/qoldiqlar/xodim/hujjat/{{ doc.id }}/tasdiqlash" class="d-inline">
+                <button type="submit" class="top-btn btn btn-success"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+            </form>
+            {% if current_user and current_user.role == 'admin' %}
+            <form method="post" action="/qoldiqlar/xodim/hujjat/{{ doc.id }}/delete" class="d-inline" onsubmit="return confirm('Ushbu hujjatni o\'chirmoqchimisiz?');">
+                <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
+            </form>
+            {% endif %}
+            {% elif doc and doc.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+            <form method="post" action="/qoldiqlar/xodim/hujjat/{{ doc.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — xodim balanslari oldingi qiymatga qaytadi. Davom etasizmi?');">
+                <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if request.query_params.get('msg') %}
+    <div class="alert alert-info py-2 small mb-3">{{ request.query_params.get('msg') }}</div>
+    {% endif %}
+
+    {% if doc %}
+    <div class="filter-card mb-3">
+        <span class="text-muted small">
+            <i class="bi bi-person"></i> Foydalanuvchi:
+            <strong>{{ doc.user.full_name or doc.user.username if doc.user else '-' }}</strong>
+        </span>
+        &nbsp;|&nbsp;
+        <span class="text-muted small">
+            <strong>Balans:</strong> musbat = xodim bizdan qarz olgan (xodim qarzi), manfiy = biz xodimga qarzmiz.
+        </span>
+        &nbsp;|&nbsp;
+        {% if doc.status == 'draft' %}
+        <span class="badge-draft">Qoralama</span>
+        {% else %}
+        <span class="badge-done">Tasdiqlangan</span>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="card data-table">
+        <div class="card-header">
+            <span><i class="bi bi-list-ul"></i> Hujjat qatorlari</span>
+        </div>
+        <div class="card-body p-0">
+            {% if doc %}
+            {% if doc.status == 'draft' %}
+            <div class="px-3 pt-3">
+                <form method="post" action="/qoldiqlar/xodim/hujjat/{{ doc.id }}/add-row" class="row g-2 align-items-end mb-3" id="addRowForm">
+                    <div class="col-md-4 position-relative">
+                        <label class="form-label small">Xodim</label>
+                        <input type="text" id="emp_search" class="form-control form-control-sm" placeholder="Ism yozing..." autocomplete="off">
+                        <input type="hidden" name="employee_id" id="emp_id_selected" value="">
+                        <div id="emp_results" class="list-group emp-results position-absolute" style="z-index:1000; max-height:220px; overflow-y:auto; display:none; left:0; right:0;"></div>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Tur</label>
+                        <select name="balance_type" id="balance_type" class="form-select form-select-sm">
+                            <option value="1">Xodim qarzi</option>
+                            <option value="-1">Bizning qarzimiz</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small">Summa (so'm)</label>
+                        <input type="number" name="balance" class="form-control form-control-sm" step="1" min="1" value="" placeholder="500000" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                    </div>
+                </form>
+                <select id="emp_list" style="display:none;">
+                    {% for e in employees|default([]) %}
+                    <option value="{{ e.id }}" data-name="{{ e.full_name }}" data-code="{{ e.code or e.id }}" data-position="{{ e.position or '' }}">{{ e.full_name }} ({{ e.code or e.id }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>N</th>
+                        <th>Xodim</th>
+                        <th>Lavozim</th>
+                        <th class="text-end">Summa (so'm)</th>
+                        <th>Tur</th>
+                        {% if doc.status == 'draft' %}<th style="width:50px;"></th>{% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in doc.items %}
+                    {% set bal = item.balance or 0 %}
+                    <tr>
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td>{{ item.employee.full_name if item.employee else '-' }} <small class="text-muted">({{ item.employee.code or item.employee.id if item.employee else '' }})</small></td>
+                        <td class="muted-cell">{{ item.employee.position or '—' if item.employee else '—' }}</td>
+                        <td class="text-end num-cell fw-bold {% if bal > 0 %}text-danger{% elif bal < 0 %}text-success{% endif %}">{{ "{:,.0f}".format(bal|abs) }}</td>
+                        <td>
+                            {% if bal > 0 %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger">Xodim qarzi</span>
+                            {% elif bal < 0 %}
+                            <span class="badge bg-success bg-opacity-10 text-success">Bizning qarzimiz</span>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
+                        {% if doc.status == 'draft' %}
+                        <td class="text-center">
+                            <form method="post" action="/qoldiqlar/xodim/hujjat/{{ doc.id }}/delete-row/{{ item.id }}" class="d-inline" onsubmit="return confirm('O\'chirmoqchimisiz?');">
+                                <button type="submit" class="btn-act danger"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="{% if doc.status == 'draft' %}6{% else %}5{% endif %}" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            {% if employees %}
+            <div class="px-3 pt-3">
+                <p class="text-muted small mb-1">
+                    Xodimni nomi bo'yicha qidiring, tanlang, qoldiqni kiriting va <strong>Qo'shish</strong> bosing.
+                </p>
+                <p class="text-muted small mb-3">
+                    <strong>Balans:</strong> turdan tanlang — <b>Xodim qarzi</b> (xodim bizdan qarz olgan) yoki <b>Bizning qarzimiz</b> (biz xodimga qarzmiz). Summani musbat son kiriting.
+                </p>
+            </div>
+            <form method="post" action="/qoldiqlar/xodim/hujjat" id="xodimDocForm">
+                <div class="filter-card mx-3 mb-3">
+                    <div class="row g-2 align-items-end mb-2">
+                        <div class="col-md-3">
+                            <label class="form-label small">Hujjat sanasi</label>
+                            <input type="date" name="doc_date" id="doc_date" class="form-control form-control-sm"
+                                   value="{{ today_str }}" required>
+                        </div>
+                    </div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label small">Xodim</label>
+                            <input type="text" id="emp_search" class="form-control form-control-sm" placeholder="Ism yozing..." autocomplete="off">
+                            <input type="hidden" id="emp_id_selected" value="">
+                            <div id="emp_results" class="list-group emp-results position-absolute" style="z-index:1000; max-height:220px; overflow-y:auto; display:none; left:0; right:0;"></div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Tur</label>
+                            <select id="balance_type" class="form-select form-select-sm">
+                                <option value="1">Xodim qarzi</option>
+                                <option value="-1">Bizning qarzimiz</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Summa (so'm)</label>
+                            <input type="number" id="emp_balance_input" class="form-control form-control-sm" step="1" min="0" value="" placeholder="500000">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" id="btn_add_row" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qo'shish</button>
+                        </div>
+                    </div>
+                </div>
+                <select id="emp_list" style="display:none;">
+                    {% for e in employees %}
+                    <option value="{{ e.id }}" data-name="{{ e.full_name }}" data-code="{{ e.code or e.id }}" data-position="{{ e.position or '' }}">{{ e.full_name }} ({{ e.code or e.id }})</option>
+                    {% endfor %}
+                </select>
+                <table class="table mb-0" id="rowsTable">
+                    <thead>
+                        <tr>
+                            <th>N</th>
+                            <th>Xodim</th>
+                            <th>Lavozim</th>
+                            <th class="text-end">Summa (so'm)</th>
+                            <th>Tur</th>
+                            <th style="width:50px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody id="rowsTableBody">
+                    </tbody>
+                </table>
+                <div class="px-3 py-3">
+                    <p class="text-muted small mb-2" id="noRowsHint">
+                        Hozircha qator qo'shilmagan. Yuqoridan xodim tanlang va Qo'shish bosing.
+                    </p>
+                    <button type="submit" class="top-btn btn btn-success" id="btnSave"><i class="bi bi-check-circle"></i> Saqlash</button>
+                </div>
+            </form>
+            {% else %}
+            <div class="p-4 text-muted">
+                Xodimlar yo'q. <a href="/employees">Xodimlar</a> bo'limida qo'shing.
+            </div>
+            {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var form = document.getElementById('xodimDocForm');
+    if (!form) return;
+    var empSearch = document.getElementById('emp_search');
+    var empIdSelected = document.getElementById('emp_id_selected');
+    var empResults = document.getElementById('emp_results');
+    var empList = document.getElementById('emp_list');
+    var balanceInput = document.getElementById('emp_balance_input');
+    var btnAdd = document.getElementById('btn_add_row');
+    var tbody = document.getElementById('rowsTableBody');
+    var noRowsHint = document.getElementById('noRowsHint');
+    var rowIndex = 0;
+
+    function showEmpList(term) {
+        term = (term || '').trim().toLowerCase();
+        empResults.innerHTML = '';
+        empIdSelected.value = '';
+        if (!term) { empResults.style.display = 'none'; return; }
+        var opts = Array.from(empList.options);
+        var addedIds = [];
+        tbody.querySelectorAll('input[name="employee_id"]').forEach(function(inp) { addedIds.push(inp.value); });
+        var matches = opts.filter(function(opt) {
+            if (addedIds.indexOf(opt.value) !== -1) return false;
+            var name = (opt.dataset.name || '').toLowerCase();
+            var code = (opt.dataset.code || '').toLowerCase();
+            return name.indexOf(term) !== -1 || code.indexOf(term) !== -1;
+        });
+        if (matches.length > 0) {
+            matches.forEach(function(opt) {
+                var a = document.createElement('a');
+                a.href = '#'; a.className = 'list-group-item list-group-item-action';
+                a.textContent = opt.dataset.name + ' (' + opt.dataset.code + ')' + (opt.dataset.position ? ' — ' + opt.dataset.position : '');
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    empSearch.value = opt.dataset.name + ' (' + opt.dataset.code + ')';
+                    empIdSelected.value = opt.value;
+                    empIdSelected.dataset.name = opt.dataset.name;
+                    empIdSelected.dataset.code = opt.dataset.code;
+                    empIdSelected.dataset.position = opt.dataset.position || '';
+                    empResults.style.display = 'none';
+                });
+                empResults.appendChild(a);
+            });
+            empResults.style.display = 'block';
+        } else {
+            empResults.innerHTML = '<div class="list-group-item text-muted">Topilmadi yoki allaqachon qo\'shilgan.</div>';
+            empResults.style.display = 'block';
+        }
+    }
+    empSearch.addEventListener('focus', function() { if (!empIdSelected.value) showEmpList(this.value); });
+    empSearch.addEventListener('input', function() { empIdSelected.value = ''; showEmpList(this.value); });
+    document.addEventListener('click', function(e) {
+        if (empResults && !empSearch.contains(e.target) && !empResults.contains(e.target)) empResults.style.display = 'none';
+    });
+
+    btnAdd.addEventListener('click', function() {
+        var eid = empIdSelected.value;
+        var name = (empIdSelected.dataset.name || empSearch.value).trim();
+        var code = empIdSelected.dataset.code || '';
+        var position = empIdSelected.dataset.position || '—';
+        var typeSelect = document.getElementById('balance_type');
+        var typeMul = typeSelect ? parseInt(typeSelect.value, 10) : 1;
+        var amount = parseFloat(balanceInput.value) || 0;
+        var bal = typeMul === -1 ? -Math.abs(amount) : Math.abs(amount);
+        if (!eid || !name) {
+            alert('Xodimni ro\'yxatdan tanlang.');
+            return;
+        }
+        if (amount <= 0) {
+            alert('Summani kiriting (0 dan katta).');
+            return;
+        }
+        rowIndex++;
+        var typeLabel = typeMul === -1
+            ? '<span class="badge bg-success bg-opacity-10 text-success">Bizning qarzimiz</span>'
+            : '<span class="badge bg-danger bg-opacity-10 text-danger">Xodim qarzi</span>';
+        var tr = document.createElement('tr');
+        tr.className = 'doc-row';
+        tr.innerHTML = '<td class="row-n muted-cell">' + rowIndex + '</td>'
+            + '<td>' + name + ' <small class="text-muted">(' + code + ')</small></td>'
+            + '<td class="muted-cell">' + position + '</td>'
+            + '<td class="text-end"><input type="hidden" name="employee_id" value="' + eid + '"><input type="number" name="balance" class="form-control form-control-sm text-end" step="1" value="' + bal + '" readonly></td>'
+            + '<td>' + typeLabel + '</td>'
+            + '<td class="text-center"><button type="button" class="btn-act danger remove-doc-row"><i class="bi bi-trash"></i></button></td>';
+        tr.querySelector('.remove-doc-row').addEventListener('click', function() {
+            tr.remove();
+            tbody.querySelectorAll('tr.doc-row').forEach(function(r, i) { var n = r.querySelector('.row-n'); if (n) n.textContent = i + 1; });
+            if (tbody.querySelectorAll('tr.doc-row').length === 0) noRowsHint.style.display = 'block';
+        });
+        tbody.appendChild(tr);
+        noRowsHint.style.display = 'none';
+        empSearch.value = ''; empIdSelected.value = ''; balanceInput.value = '';
+        empSearch.focus();
+    });
+
+    form.addEventListener('submit', function(e) {
+        if (tbody.querySelectorAll('tr.doc-row').length === 0) {
+            e.preventDefault();
+            alert('Kamida bitta xodim qo\'shing.');
+        }
+    });
+})();
+
+// Draft hujjatda qator qo'shish uchun qidiruv (addRowForm)
+(function() {
+    var form = document.getElementById('addRowForm');
+    if (!form) return;
+    var empSearch = document.getElementById('emp_search');
+    var empIdSelected = document.getElementById('emp_id_selected');
+    var empResults = document.getElementById('emp_results');
+    var empList = document.getElementById('emp_list');
+    if (!empSearch || !empList) return;
+
+    function showEmpList(term) {
+        term = (term || '').trim().toLowerCase();
+        empResults.innerHTML = '';
+        empIdSelected.value = '';
+        if (!term) { empResults.style.display = 'none'; return; }
+        var opts = Array.from(empList.options);
+        var matches = opts.filter(function(opt) {
+            var name = (opt.dataset.name || '').toLowerCase();
+            var code = (opt.dataset.code || '').toLowerCase();
+            return name.indexOf(term) !== -1 || code.indexOf(term) !== -1;
+        });
+        if (matches.length > 0) {
+            matches.forEach(function(opt) {
+                var a = document.createElement('a');
+                a.href = '#'; a.className = 'list-group-item list-group-item-action';
+                a.textContent = opt.dataset.name + ' (' + opt.dataset.code + ')' + (opt.dataset.position ? ' — ' + opt.dataset.position : '');
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    empSearch.value = opt.dataset.name;
+                    empIdSelected.value = opt.value;
+                    empResults.style.display = 'none';
+                });
+                empResults.appendChild(a);
+            });
+            empResults.style.display = 'block';
+        } else {
+            empResults.style.display = 'none';
+        }
+    }
+    empSearch.addEventListener('focus', function() { showEmpList(this.value); });
+    empSearch.addEventListener('input', function() { empIdSelected.value = ''; showEmpList(this.value); });
+    document.addEventListener('click', function(e) {
+        if (!empSearch.contains(e.target) && !empResults.contains(e.target)) empResults.style.display = 'none';
+    });
+    form.addEventListener('submit', function(e) {
+        if (!empIdSelected.value) { e.preventDefault(); alert('Xodimni ro\'yxatdan tanlang.'); }
+    });
+})();
+</script>
+{% endblock %}

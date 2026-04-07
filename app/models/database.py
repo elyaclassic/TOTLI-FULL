@@ -543,6 +543,37 @@ class PartnerBalanceDocItem(Base):
 
 
 # ==========================================
+# XODIM QOLDIQ HUJJATI
+# ==========================================
+
+class EmployeeBalanceDoc(Base):
+    """Xodim qoldiqlari (balans) hujjati"""
+    __tablename__ = "employee_balance_docs"
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, index=True)
+    date = Column(DateTime, default=datetime.now)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), default="draft")  # draft, confirmed
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
+    items = relationship("EmployeeBalanceDocItem", back_populates="doc", cascade="all, delete-orphan")
+
+
+class EmployeeBalanceDocItem(Base):
+    """Xodim balans hujjati qatori"""
+    __tablename__ = "employee_balance_doc_items"
+    id = Column(Integer, primary_key=True, index=True)
+    doc_id = Column(Integer, ForeignKey("employee_balance_docs.id"))
+    employee_id = Column(Integer, ForeignKey("employees.id"))
+    balance = Column(Float, default=0)  # musbat = xodim qarzi, manfiy = bizning qarzimiz
+    previous_balance = Column(Float, default=None)  # Tasdiqdan oldingi (revert uchun)
+
+    doc = relationship("EmployeeBalanceDoc", back_populates="items")
+    employee = relationship("Employee")
+
+
+# ==========================================
 # ISHLAB CHIQARISH
 # ==========================================
 
@@ -1027,8 +1058,9 @@ class Salary(Base):
     total = Column(Float, default=0)
     paid = Column(Float, default=0)
     status = Column(String(20), default="pending")  # pending, paid
+    is_balance_entry = Column(Boolean, default=False)  # Qoldiq hujjatidan kiritilgan
     created_at = Column(DateTime, default=datetime.now)
-    
+
     employee = relationship("Employee", back_populates="salaries")
 
 

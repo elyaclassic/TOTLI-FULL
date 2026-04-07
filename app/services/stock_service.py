@@ -15,7 +15,8 @@ def create_stock_movement(
     document_id: int,
     document_number: str = None,
     user_id: int = None,
-    note: str = None
+    note: str = None,
+    created_at=None,
 ):
     """Har bir operatsiya uchun StockMovement yozuvini yaratish.
     Chiqim (quantity_change < 0) bo'lganda avval bitta ombor+mahsulot uchun barcha Stock qatorlarini birlashtiradi."""
@@ -68,6 +69,8 @@ def create_stock_movement(
         user_id=user_id,
         note=note
     )
+    if created_at:
+        movement.created_at = created_at
     db.add(movement)
     return movement
 

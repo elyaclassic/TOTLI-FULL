@@ -610,6 +610,7 @@ async def sales_confirm(
             document_number=order.number,
             user_id=current_user.id if current_user else None,
             note=f"Sotuv: {order.number}",
+            created_at=order.date,
         )
     order.status = "completed"
     # Qarzdorlikni hisoblash
@@ -1175,7 +1176,8 @@ async def sales_pos_complete(
             document_id=order.id,
             document_number=order.number,
             user_id=current_user.id if current_user else None,
-            note=f"Sotuv (POS {payment_type}): {order.number}"
+            note=f"Sotuv (POS {payment_type}): {order.number}",
+            created_at=order.date,
         )
     order.status = "completed"
     db.commit()
@@ -1496,6 +1498,7 @@ async def sales_return_create(
             document_number=return_order.number,
             user_id=current_user.id if current_user else None,
             note=f"Savdodan qaytarish: {sale.number} -> {return_order.number}",
+            created_at=return_order.date,
         )
     return_order.subtotal = total_return
     return_order.total = total_return
@@ -1579,6 +1582,7 @@ async def sales_return_revert(
             document_number=doc.number,
             user_id=current_user.id if current_user else None,
             note=f"Qaytarish tasdiqini bekor: {doc.number}",
+            created_at=doc.date,
         )
     doc.status = "cancelled"
     db.commit()
@@ -1731,6 +1735,7 @@ async def sales_return_confirm(
             document_number=doc.number,
             user_id=current_user.id if current_user else None,
             note=f"Qaytarish qayta tasdiqlandi: {doc.number}",
+            created_at=doc.date,
         )
     doc.status = "completed"
     db.commit()

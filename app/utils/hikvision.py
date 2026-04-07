@@ -380,6 +380,8 @@ def sync_hikvision_attendance(
             try:
                 if "T" in ev_time:
                     dt = datetime.fromisoformat(ev_time.replace("Z", "+00:00"))
+                    if dt.tzinfo is not None:
+                        dt = dt.replace(tzinfo=None)
                 else:
                     dt = datetime.strptime(ev_time[:19], "%Y-%m-%d %H:%M:%S")
             except Exception:

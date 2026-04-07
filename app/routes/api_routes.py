@@ -2479,6 +2479,7 @@ async def agent_return_create(
                 document_number=return_order.number,
                 user_id=None,
                 note=f"Agent vozvrat: {sale.number} -> {return_order.number}",
+                created_at=return_order.date,
             )
         if total_return <= 0:
             db.rollback()

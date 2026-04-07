@@ -578,6 +578,7 @@ async def warehouse_transfer_confirm(
             document_number=transfer.number,
             user_id=current_user.id if current_user else None,
             note=f"O'tkazma chiqim: {transfer.number}",
+            created_at=transfer.date,
         )
         create_stock_movement(
             db=db,
@@ -590,6 +591,7 @@ async def warehouse_transfer_confirm(
             document_number=transfer.number,
             user_id=current_user.id if current_user else None,
             note=f"O'tkazma kirim: {transfer.number}",
+            created_at=transfer.date,
         )
     transfer.status = "confirmed"
     db.commit()
@@ -622,6 +624,7 @@ async def warehouse_transfer_revert(
             document_number=f"{transfer.number}-REVERT",
             user_id=current_user.id if current_user else None,
             note=f"O'tkazma bekor: {transfer.number}",
+            created_at=transfer.date,
         )
         create_stock_movement(
             db=db,
@@ -634,6 +637,7 @@ async def warehouse_transfer_revert(
             document_number=f"{transfer.number}-REVERT",
             user_id=current_user.id if current_user else None,
             note=f"O'tkazma bekor: {transfer.number}",
+            created_at=transfer.date,
         )
     transfer.status = "draft"
     db.commit()
@@ -1291,6 +1295,7 @@ async def inventory_confirm(
                 document_number=doc.number,
                 user_id=current_user.id,
                 note=f"Inventarizatsiya: {doc.number}",
+                created_at=doc.date,
             )
             # Stock.quantity = new_qty + (hujjat sanasidan keyingi harakatlar)
             stock_row = db.query(Stock).filter(
@@ -1515,6 +1520,7 @@ async def warehouse_otxod_confirm(
             document_number=doc_number,
             user_id=current_user.id if current_user else None,
             note=f"Otxod ishlab chiqarish: {product.name} {qty:.2f} → {kg:.2f} kg",
+            created_at=doc.date,
         )
 
         # Hujjat itemlari
@@ -1564,6 +1570,7 @@ async def warehouse_otxod_confirm(
         document_number=doc_number,
         user_id=current_user.id if current_user else None,
         note=f"Otxod Holva kirim: {total_kg:.2f} kg ({doc_number})",
+        created_at=doc.date,
     )
 
     db.commit()
@@ -1676,6 +1683,7 @@ async def warehouse_utilizatsiya_confirm(
             document_number=doc_number,
             user_id=current_user.id if current_user else None,
             note=f"Utilizatsiya: {product.name} {qty:.2f}",
+            created_at=doc.date,
         )
 
         db.add(StockAdjustmentDocItem(
