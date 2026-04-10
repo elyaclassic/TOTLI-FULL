@@ -85,7 +85,7 @@ async def csrf_middleware_impl(request: Request, call_next):
             pass
         response = await call_next(request)
         if not request.cookies.get("csrf_token"):
-            response.set_cookie("csrf_token", token, path="/", httponly=False, samesite="lax", max_age=86400 * 7)
+            response.set_cookie("csrf_token", token, path="/", httponly=True, samesite="lax", max_age=86400 * 7)
         return response
 
     # Himoyalanmaydigan yo'llar (API login, Android/PWA)
@@ -147,7 +147,7 @@ async def csrf_middleware_impl(request: Request, call_next):
 
     response = await call_next(request)
     if not request.cookies.get("csrf_token"):
-        response.set_cookie("csrf_token", token, path="/", httponly=False, samesite="lax", max_age=86400 * 7)
+        response.set_cookie("csrf_token", token, path="/", httponly=True, samesite="lax", max_age=86400 * 7)
     return response
 
 
