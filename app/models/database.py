@@ -338,7 +338,10 @@ class Warehouse(Base):
 class Stock(Base):
     """Ombor qoldiqlari"""
     __tablename__ = "stocks"
-    
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "product_id", name="uq_stock_wh_prod"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
     product_id = Column(Integer, ForeignKey("products.id"))
@@ -1081,6 +1084,8 @@ class Attendance(Base):
     status = Column(String(20), default="present")  # present, absent, leave, kasallik, tatil, mehnat_safari
     event_snapshot_path = Column(String(255), nullable=True)
     note = Column(String(500), nullable=True)
+    notify_checkin_sent = Column(Boolean, default=False)
+    notify_checkout_sent = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.now)
 
     employee = relationship("Employee", backref="attendances")

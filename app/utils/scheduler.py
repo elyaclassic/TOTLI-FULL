@@ -6,7 +6,7 @@ Hikvision dan kunlik davomat yuklash.
 """
 
 import os
-import shutil
+import sqlite3
 import glob
 from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -94,8 +94,23 @@ def _daily_hikvision_sync_job():
         db.close()
 
 
+def _sqlite_online_backup(src: str, dest: str):
+    """sqlite3 online backup API — WAL-safe, jonli yozish paytida xavfsiz."""
+    src_conn = sqlite3.connect(src)
+    try:
+        dest_conn = sqlite3.connect(dest)
+        try:
+            with dest_conn:
+                src_conn.backup(dest_conn, pages=0)
+        finally:
+            dest_conn.close()
+    finally:
+        src_conn.close()
+
+
 def _daily_backup_job():
-    """Kunlik avtomatik baza backup — oxirgi 14 ta saqlanadi."""
+    """Kunlik avtomatik baza backup — oxirgi 14 ta saqlanadi.
+    sqlite3.backup() API ishlatiladi (WAL-safe)."""
     try:
         if not os.path.exists(_DB_PATH):
             print(f"[Backup] Baza topilmadi: {_DB_PATH}")
@@ -103,7 +118,7 @@ def _daily_backup_job():
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         backup_name = f"totli_holva_backup_{timestamp}.db"
         backup_path = os.path.join(_BASE_DIR, backup_name)
-        shutil.copy2(_DB_PATH, backup_path)
+        _sqlite_online_backup(_DB_PATH, backup_path)
         size_mb = os.path.getsize(backup_path) / (1024 * 1024)
         print(f"[Backup] Saqlandi: {backup_name} ({size_mb:.1f} MB)")
         # Eski backuplarni tozalash
@@ -114,6 +129,22 @@ def _daily_backup_job():
             print(f"[Backup] Eski backup o'chirildi: {os.path.basename(old)}")
     except Exception as e:
         print(f"[Backup] Xato: {e}")
+
+
+def _live_backup_job():
+    """Har 5 daqiqada — jonli backup (sqlite3.backup() API + gzip).
+    scripts/backup_live.py ga delegatsiya qilinadi."""
+    try:
+        import sys
+        _scripts_dir = os.path.join(_BASE_DIR, "scripts")
+        if _scripts_dir not in sys.path:
+            sys.path.insert(0, _scripts_dir)
+        from backup_live import run_live_backup
+        r = run_live_backup(send_alert_on_fail=True)
+        if not r.get("ok"):
+            print(f"[LiveBackup] FAIL: {r.get('error')}")
+    except Exception as e:
+        print(f"[LiveBackup] Xato: {e}")
 
 
 def _create_attendance_for_date(target_date):
@@ -193,6 +224,16 @@ def _tg_daily_summary():
         print(f"[Scheduler] TG daily summary xato: {e}")
 
 
+def _tg_audit_digest():
+    """Har 30 daqiqada — audit watchdog digest (@elya_classic uchun).
+    Manfiy qoldiq, kam qoldiq, orphan to'lov, uzoq tasdiqlanmagan hujjatlar va h.k."""
+    try:
+        from app.bot.services.audit_watchdog import audit_digest
+        audit_digest()
+    except Exception as e:
+        print(f"[Scheduler] Audit digest xato: {e}")
+
+
 
 
 _scheduler = None
@@ -210,6 +251,19 @@ def start_scheduler():
     _scheduler.add_job(_daily_backup_job, "cron", hour=23, minute=0, id="daily_backup")
     # Hozir ham bir marta backup olish
     _scheduler.add_job(_daily_backup_job, "date", run_date=datetime.now() + timedelta(seconds=10), id="backup_first")
+    # Jonli backup — har 5 daqiqada (sqlite3 online backup + gzip, retention 2 soat)
+    _scheduler.add_job(
+        _live_backup_job,
+        "interval",
+        minutes=5,
+        id="live_backup",
+        replace_existing=True,
+        misfire_grace_time=120,
+        coalesce=True,
+        max_instances=1,
+    )
+    # Ishga tushganda 30 soniya keyin bir marta (birinchi snapshot uchun)
+    _scheduler.add_job(_live_backup_job, "date", run_date=datetime.now() + timedelta(seconds=30), id="live_backup_first")
     # Hikvision davomat yuklash — har kuni soat 22:00 da (ish kuni tugagach)
     _scheduler.add_job(_daily_hikvision_sync_job, "cron", hour=22, minute=0, id="hikvision_daily")
     # Har 10 daqiqada sync qilish (kun davomida yangilanib turishi uchun)
@@ -222,8 +276,12 @@ def start_scheduler():
     _scheduler.add_job(_daily_attendance_create, "date", run_date=datetime.now() + timedelta(seconds=15), id="attendance_first")
     # Telegram: kechqurun 21:00 — kunlik yakuniy hisobot (@RD2197)
     _scheduler.add_job(_tg_daily_summary, "cron", hour=21, minute=0, id="tg_daily_summary")
+    # Audit watchdog digest — har 30 daqiqada (@elya_classic)
+    _scheduler.add_job(_tg_audit_digest, "interval", minutes=30, id="tg_audit_digest")
+    # Ishga tushganda 5 daqiqa keyin bir marta digest (tizim stabillashishi uchun)
+    _scheduler.add_job(_tg_audit_digest, "date", run_date=datetime.now() + timedelta(minutes=5), id="tg_audit_digest_first")
     _scheduler.start()
-    print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + Hikvision sync + TG notify)")
+    print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + live backup (5min) + Hikvision sync + TG notify + Audit)")
 
 
 def stop_scheduler():

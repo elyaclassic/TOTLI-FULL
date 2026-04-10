@@ -206,7 +206,7 @@ async def qoldiqlar_tarix(
         }, status_code=500)
 
 
-@router.post("/kassa/{cash_id}")
+@router.post("/kassa/{cash_id:int}")
 async def qoldiqlar_kassa_save(
     cash_id: int,
     balance: float = Form(...),
@@ -321,11 +321,19 @@ async def qoldiqlar_kassa_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta kassa qatori bo'lishi kerak")
+    from app.routes.finance import _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
         if cash:
             item.previous_balance = cash.balance
-            cash.balance = item.balance
+            # Hozirgi hisoblangan balans
+            current_balance, income_sum, expense_sum = _cash_balance_formula(db, cash.id)
+            # Qo'shish: eski balansga kiritilgan qiymatni qo'shamiz
+            delta = float(item.balance or 0)
+            target = current_balance + delta
+            # opening_balance ni shunday moslaymizki: opening + income - expense = target
+            cash.opening_balance = target - income_sum + expense_sum
+            cash.balance = target
     doc.status = "confirmed"
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
@@ -343,10 +351,15 @@ async def qoldiqlar_kassa_hujjat_revert(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if doc.status != "confirmed":
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
+    from app.routes.finance import _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
         if cash and item.previous_balance is not None:
-            cash.balance = item.previous_balance
+            # Oldingi balansga qaytish uchun opening_balance ni moslash
+            current_balance, income_sum, expense_sum = _cash_balance_formula(db, cash.id)
+            target = float(item.previous_balance)
+            cash.opening_balance = target - income_sum + expense_sum
+            cash.balance = target
     doc.status = "draft"
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
@@ -1351,6 +1364,11 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
 
     doc.status = "confirmed"
     db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_stock_adjustment
+        audit_stock_adjustment(doc.id)
+    except Exception:
+        pass
     return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}", status_code=303)
 
 

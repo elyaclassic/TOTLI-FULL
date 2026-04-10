@@ -1,0 +1,15 @@
+Stock tuzatish kutmoqda
+
+✅ TUZATILGAN:
+  - wid=2 Yarim tayyor Maxsulot ombor (cutoff: 2026-04-08 23:59:59, marker: CORR-20260408)
+  - wid=3 Tayyor mahsulot ombori (cutoff: 2026-04-08 23:59:59, marker: CORR-20260408)
+  - wid=4 Do'kon 1 Ombori (cutoff: 2026-04-09 18:05:59, marker: CORR-20260409-1805)
+
+⏳ QOLGAN:
+  - wid=1 Xom ashyo ombori
+  - wid=5 Do'kon 2 Ombori
+  - wid=6 Yarim tayyor Maxsulot aralash
+  - wid=7 Vozvrat
+
+Skript: scripts/fix_stock_at_cutoff.py
+Qoida: cutoff vaqtida foydalanuvchi bergan qiymat, ManualCorrection movement bilan

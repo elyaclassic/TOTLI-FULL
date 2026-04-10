@@ -84,9 +84,22 @@
                             {% endif %}
                         </td>
                         <td>
-                            <a href="{{ row.url }}" class="btn-act" title="Ochish">
-                                {% if row.is_purchase_expense_doc %}<i class="bi bi-box-arrow-up-right"></i>{% else %}<i class="bi bi-pencil"></i>{% endif %}
-                            </a>
+                            <div class="d-flex gap-1">
+                                <a href="{{ row.url }}" class="btn-act" title="Ochish">
+                                    {% if row.is_purchase_expense_doc %}<i class="bi bi-box-arrow-up-right"></i>{% else %}<i class="bi bi-pencil"></i>{% endif %}
+                                </a>
+                                {% if not row.is_purchase_expense_doc and current_user and current_user.role == 'admin' %}
+                                    {% if row.status == 'confirmed' %}
+                                    <form method="post" action="/finance/harajat/hujjat/{{ row.doc_id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilmoqchimisiz? Kassaga pul qaytariladi.');">
+                                        <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
+                                    </form>
+                                    {% elif row.status == 'draft' %}
+                                    <form method="post" action="/finance/harajat/hujjat/{{ row.doc_id }}/delete" class="d-inline" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
+                                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
                         </td>
                     </tr>
                     {% else %}

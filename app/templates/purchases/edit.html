@@ -84,13 +84,17 @@
                 </div>
                 <div class="card-body py-2">
                     <div class="row g-2">
-                        <div class="col-sm-6">
+                        <div class="col-sm-4">
                             <span class="muted-cell small">Ta'minotchi</span>
                             <div class="fw-semibold">{{ purchase.partner.name if purchase.partner else '—' }}</div>
                         </div>
-                        <div class="col-sm-6">
+                        <div class="col-sm-4">
                             <span class="muted-cell small">Ombor</span>
                             <div class="fw-semibold">{{ purchase.warehouse.name if purchase.warehouse else '—' }}</div>
+                        </div>
+                        <div class="col-sm-4">
+                            <span class="muted-cell small">Sana</span>
+                            <div class="fw-semibold">{{ purchase.date.strftime('%d.%m.%Y %H:%M') if purchase.date else '—' }}</div>
                         </div>
                     </div>
                 </div>

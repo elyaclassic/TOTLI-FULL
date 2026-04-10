@@ -1,5 +1,5 @@
-# Bir marta Administrator sifatida ishga tushiring (o'ng tugma -> Run with PowerShell).
-# Kompyuter qayta yuklanganda bot avtomatik ishga tushadi (foydalanuvchi kirganda).
+# Run once as Administrator if possible.
+# Starts the bot automatically when the user logs in.
 
 $ErrorActionPreference = "Stop"
 $BotRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -17,13 +17,13 @@ if ($existing) {
 }
 
 $action = New-ScheduledTaskAction -Execute $PythonExe -Argument "-m src.main" -WorkingDirectory $BotRoot
-# Foydalanuvchi Windows ga kirganda
-# Hozirgi foydalanuvchi tizimga kirganda
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+# Run both at Windows startup and when the current user logs in.
+$startupTrigger = New-ScheduledTaskTrigger -AtStartup
+$logonTrigger = New-ScheduledTaskTrigger -AtLogOn
 $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
 
-Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Force | Out-Null
+Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger @($startupTrigger, $logonTrigger) -Settings $settings -Principal $principal -Force | Out-Null
 
-Write-Host "Tayyor: vazifa '$TaskName' — har safar tizimga kirganda bot ishga tushadi."
-Write-Host "Tekshirish: taskschd.msc -> $TaskName"
+Write-Host "Done: task '$TaskName' will start the bot at Windows startup and user logon."
+Write-Host "Check in Task Scheduler: $TaskName"

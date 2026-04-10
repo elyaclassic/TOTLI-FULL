@@ -442,6 +442,8 @@ def sync_hikvision_attendance(
                 else:
                     old_in = att.check_in
                     old_out = att.check_out
+                    notify_checkin_flag = getattr(att, "notify_checkin_sent", False)
+                    notify_checkout_flag = getattr(att, "notify_checkout_sent", False)
                     att.check_in = first_in
                     att.check_out = last_out
                     att.hours_worked = hours_worked
@@ -449,14 +451,20 @@ def sync_hikvision_attendance(
                     if ev_date == date.today():
                         emp = db_session.query(Employee).filter(Employee.id == emp_id).first()
                         if emp:
-                            # Kelish bildirishi — agar oldin check_in yo'q bo'lsa yoki yangi first_in ancha farq qilsa
-                            if old_in is None:
+                            # Kelish bildirishi — agar oldin check_in yo'q bo'lsa YOKI bildirishnoma hali yuborilmagan bo'lsa
+                            if old_in is None or not notify_checkin_flag:
                                 _notify_checkin(emp.full_name, first_in.strftime("%H:%M"))
-                            # Ketish bildirishi — check_out 30+ daqiqa o'zgargan bo'lsa (takroriy xabar oldini olish)
-                            if old_out and last_out and hours_worked > 0:
-                                diff_minutes = abs((last_out - old_out).total_seconds()) / 60
-                                if diff_minutes >= 30:
-                                    _notify_checkout(emp.full_name, first_in.strftime("%H:%M"), last_out.strftime("%H:%M"), hours_worked)
+                                try:
+                                    att.notify_checkin_sent = True
+                                except Exception:
+                                    pass
+                            # Ketish bildirishi — ish vaqti 1+ soat va bildirishnoma yuborilmagan
+                            if last_out and hours_worked >= 1.0 and not notify_checkout_flag:
+                                _notify_checkout(emp.full_name, first_in.strftime("%H:%M"), last_out.strftime("%H:%M"), hours_worked)
+                                try:
+                                    att.notify_checkout_sent = True
+                                except Exception:
+                                    pass
                 image_url = api.get_event_image_url(first_ev)
                 if image_url:
                     try:
@@ -468,8 +476,10 @@ def sync_hikvision_attendance(
                             with open(path, "wb") as f:
                                 f.write(img_data)
                             att.event_snapshot_path = f"attendance_snapshots/{fn}"
-                    except Exception:
-                        pass
+                        else:
+                            print(f"[Hikvision Snapshot] img_data bo'sh: emp={emp_id}", flush=True)
+                    except Exception as e:
+                        print(f"[Hikvision Snapshot] xato emp={emp_id}: {e}", flush=True)
                 db_session.commit()
             except Exception as e:
                 result["errors"].append(str(e)[:100])
@@ -563,18 +573,26 @@ def import_employees_from_hikvision(
 
 
 def _notify_checkin(name: str, time_str: str):
-    """Xodim kelganini Telegram ga bildirish"""
+    """Xodim kelganini Telegram ga bildirish — rahbar + real-time chatga"""
     try:
-        from app.bot.services.notifier import send_notify_sync
-        send_notify_sync(f"➡️ <b>{name}</b> ishga keldi — {time_str}")
-    except Exception:
-        pass
+        from app.bot.services.notifier import _send_to_chats_sync
+        from app.bot.config import NOTIFY_CHAT_IDS, REALTIME_CHAT_IDS
+        chat_ids = list(set(list(NOTIFY_CHAT_IDS) + list(REALTIME_CHAT_IDS)))
+        _send_to_chats_sync(f"➡️ <b>{name}</b> ishga keldi — {time_str}", chat_ids)
+    except Exception as e:
+        import traceback
+        print(f"[Notify checkin xato] {e}")
+        traceback.print_exc()
 
 
 def _notify_checkout(name: str, in_time: str, out_time: str, hours: float):
-    """Xodim ketganini Telegram ga bildirish"""
+    """Xodim ketganini Telegram ga bildirish — rahbar + real-time chatga"""
     try:
-        from app.bot.services.notifier import send_notify_sync
-        send_notify_sync(f"⬅️ <b>{name}</b> ketdi — {out_time} (kelgan: {in_time}, {hours:.1f} soat)")
-    except Exception:
-        pass
+        from app.bot.services.notifier import _send_to_chats_sync
+        from app.bot.config import NOTIFY_CHAT_IDS, REALTIME_CHAT_IDS
+        chat_ids = list(set(list(NOTIFY_CHAT_IDS) + list(REALTIME_CHAT_IDS)))
+        _send_to_chats_sync(f"⬅️ <b>{name}</b> ketdi — {out_time} (kelgan: {in_time}, {hours:.1f} soat)", chat_ids)
+    except Exception as e:
+        import traceback
+        print(f"[Notify checkout xato] {e}")
+        traceback.print_exc()

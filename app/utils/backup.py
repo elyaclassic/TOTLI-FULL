@@ -1,8 +1,9 @@
 """
 Baza faylini nusxalash (backup) — totli_holva.db.
+SQLite online backup API ishlatiladi (WAL-safe, jonli yozish davomida xavfsiz).
 """
 import os
-import shutil
+import sqlite3
 from datetime import datetime
 
 # Baza fayli (database.py dagi path bilan bir xil)
@@ -11,9 +12,24 @@ DB_PATH = os.path.join(_root, "totli_holva.db")
 BACKUP_DIR = os.path.join(_root, "backups")
 
 
+def _sqlite_online_backup(src: str, dest: str):
+    """sqlite3 online backup — WAL-safe, lock qo'ymasdan."""
+    src_conn = sqlite3.connect(src)
+    try:
+        dest_conn = sqlite3.connect(dest)
+        try:
+            with dest_conn:
+                src_conn.backup(dest_conn, pages=0)
+        finally:
+            dest_conn.close()
+    finally:
+        src_conn.close()
+
+
 def do_backup(subdir: str = "") -> str:
     """
     totli_holva.db ni backups/ papkaga vaqt belgisi bilan nusxalaydi.
+    sqlite3 online backup API — jonli yozish paytida ham xavfsiz.
     subdir: ixtiyoriy past papka (masalan "daily").
     Qaytadi: yaratilgan faylning to'liq yo'li.
     """
@@ -28,7 +44,7 @@ def do_backup(subdir: str = "") -> str:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     name = f"totli_holva_{stamp}.db"
     dest_path = os.path.join(dest_dir, name)
-    shutil.copy2(DB_PATH, dest_path)
+    _sqlite_online_backup(DB_PATH, dest_path)
     return dest_path
 
 

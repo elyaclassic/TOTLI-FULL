@@ -590,8 +590,11 @@ async def sales_confirm(
             )
         except Exception as e:
             db.rollback()
+            import traceback
+            traceback.print_exc()
+            print(f"[Sales production xato] {e}", flush=True)
             return RedirectResponse(
-                url=f"/sales/edit/{order_id}?error=production&detail=" + quote("Ishlab chiqarish yaratishda xatolik yuz berdi"),
+                url=f"/sales/edit/{order_id}?error=production&detail=" + quote(f"Ishlab chiqarish yaratishda xato: {str(e)[:200]}"),
                 status_code=303,
             )
     
@@ -630,6 +633,11 @@ async def sales_confirm(
         notify_new_sale(order.number, p_name, order.total or 0, order.paid or 0)
         if (order.total or 0) >= 10_000_000:
             notify_big_sale(order.number, p_name, order.total)
+    except Exception:
+        pass
+    try:
+        from app.bot.services.audit_watchdog import audit_sale
+        audit_sale(order.id)
     except Exception:
         pass
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
@@ -682,14 +690,24 @@ async def sales_revert(
             url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),
             status_code=303,
         )
+    from app.services.stock_service import create_stock_movement
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if stock:
-            stock.quantity = (stock.quantity or 0) + item.quantity
+        if not wh_id or not item.product_id:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=item.product_id,
+            quantity_change=float(item.quantity or 0),
+            operation_type="sale_revert",
+            document_type="Order",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"Sotuv tasdiqini bekor qilish: {order.number}",
+            created_at=order.date or datetime.now(),
+        )
     order.status = "draft"
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
@@ -1274,6 +1292,11 @@ async def sales_pos_complete(
                ip_address=request.client.host if request.client else "")
     db.commit()
     check_low_stock_and_notify(db)
+    try:
+        from app.bot.services.audit_watchdog import audit_sale
+        audit_sale(order.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/sales/pos?success=1&number=" + order.number, status_code=303)
 
 

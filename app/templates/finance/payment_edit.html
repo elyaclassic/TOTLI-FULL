@@ -30,7 +30,7 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Summa *</label>
-                    <input type="number" class="form-control" name="amount" required step="1000" value="{{ payment.amount or 0 }}">
+                    <input type="number" class="form-control" name="amount" required step="any" min="0" value="{{ payment.amount or 0 }}">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Kassa *</label>

@@ -6,6 +6,7 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
      python scripts/build_excel_template.py
    - Fayl: templates/mijoz_hisob_kitobi.xlsx
    - Ichida: "Operatsiyalar", "Mijozlar", "Hisobot".
+   - Endi 2 valyuta ishlaydi: `UZS` va `USD`.
 
 2) Botning saqlash joyi
    - .env da: STORAGE_BACKEND=excel
@@ -19,12 +20,17 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
 
 4) Tugmali bot oqimi
    - `Mijozlar` -> Exceldagi mijozlar ro'yxati chiqadi
+   - mijoz kartasida `Mijozni o'chirish` bor
+   - o'chirish tasdiq bilan ishlaydi va shu mijozga tegishli operatsiyalar ham o'chadi
    - Mijoz tanlang -> `Mijoz to'ladi` yoki `Biz berdik`
-   - Summa yuboring -> bot `Operatsiyalar` varag'iga yozadi
+   - keyin `Valyuta`: `So'm` yoki `Dollar`
+   - keyin `Summa`
+   - keyin `Kurs`
+   - bot `Operatsiyalar` varag'iga yozadi
    - `Hisobot` -> 2 tur: `Umumiy hisobot` va `Mijoz bo'yicha hisobot`
    - keyin `Davr`: `Bugun`, `Shu oy`, `Hammasi`
    - keyin chiqish: `Botda ko'raman` yoki `Excelda olaman`
-   - `Yangi mijoz` -> nom, telefon, boshlang'ich qoldiq so'raladi va `Mijozlar` ga yoziladi
+   - `Yangi mijoz` -> nom, telefon, boshlang'ich so'm qarz, boshlang'ich dollar qarz so'raladi va `Mijozlar` ga yoziladi
    - `Orqaga` tugmalari orqali qaytish mumkin
 
 5) Rollar
@@ -37,8 +43,13 @@ Hisob-kitob bazasi (oddiy Excel + tugmali Telegram bot)
    - `Mijozlar` dagi formulalar `Mijoz_ID` bo'yicha operatsiyalarni yig'adi
    - `kirim` = mijoz to'lovi, qarzni kamaytiradi
    - `chiqim` = biz bergan summa, qarzni oshiradi
-   - `Hisobot` varag'ida mijozlar to'lagan, biz bergan, jami qarz qoldiq va operatsiyalar soni turadi
+   - `Valyuta` va `Kurs` har operatsiyada alohida saqlanadi
+   - `Summa_uzs` va `Summa_usd` avtomatik hisoblanadi
+   - `Qarz_qoldiq_uzs` va `Qarz_qoldiq_usd` alohida yuradi
+   - `Hisobot` varag'ida mijozlar to'lagan, biz bergan, jami qarz qoldiq va operatsiyalar soni ikkala valyutada turadi
 
 7) Aniqroq hisob
+   - Tugmali oqimda valyuta va kursni aniq tanlang.
+   - Kurs har operatsiyada qo'lda kiritiladi.
    - Matnda aniq yozing: masalan "kirim 500000" yoki "chiqim 500 ming".
    - Ovozli xabar ham shu logikaga tushadi.

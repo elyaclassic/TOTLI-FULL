@@ -127,11 +127,41 @@
     {% if today_staff is defined and today_staff %}
     <div class="d-flex align-items-center gap-1">
       <span class="text-muted small me-1"><i class="bi bi-people-fill"></i> {{ today_staff|length }}</span>
+      <style>
+        .staff-avatar { position:relative; display:inline-block; }
+        .staff-avatar img, .staff-avatar .staff-initials {
+          width:56px; height:56px; border-radius:50%; border:2px solid #fff;
+          object-fit:cover; box-shadow:0 2px 6px rgba(0,0,0,0.15);
+          cursor:pointer; transition: transform 0.25s ease, box-shadow 0.25s ease;
+          flex-shrink:0;
+        }
+        .staff-avatar:hover { z-index: 100; }
+        .staff-avatar:hover img, .staff-avatar:hover .staff-initials {
+          transform: scale(3);
+          box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+          border-width: 3px;
+        }
+        .staff-avatar .staff-tooltip {
+          position:absolute; bottom:-32px; left:50%; transform:translateX(-50%);
+          background:#222; color:#fff; padding:3px 10px; border-radius:6px;
+          font-size:11px; white-space:nowrap; opacity:0; pointer-events:none;
+          transition: opacity 0.25s ease; z-index:101;
+        }
+        .staff-avatar:hover .staff-tooltip { opacity:1; }
+        .staff-initials { display:inline-flex; align-items:center; justify-content:center;
+          color:#fff; font-size:16px; font-weight:600; }
+      </style>
       {% for s in today_staff %}
-      <div class="d-inline-flex align-items-center justify-content-center rounded-circle border"
-           style="width:32px;height:32px;background:{{ ['#017449','#1a73e8','#e65100','#6a1b9a','#00838f','#c62828','#2e7d32','#ad1457','#4527a0','#00695c','#ef6c00','#1565c0'][loop.index0 % 12] }};color:#fff;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0;"
-           title="{{ s.name }}{% if s.position %} — {{ s.position }}{% endif %}{% if s.check_in %} ({{ s.check_in }}){% endif %}">
-        {{ s.name.split()[0][:1] }}{{ s.name.split()[1][:1] if s.name.split()|length > 1 else '' }}
+      <div class="staff-avatar">
+        {% if s.photo %}
+        <img src="/static/{{ s.photo }}" alt="{{ s.name }}"
+             onerror="this.onerror=null;this.outerHTML='<div class=&quot;staff-initials&quot; style=&quot;background:#6a1b9a;&quot;>{{ s.name.split()[0][:1] }}{{ s.name.split()[1][:1] if s.name.split()|length > 1 else "" }}</div>';">
+        {% else %}
+        <div class="staff-initials" style="background:{{ ['#017449','#1a73e8','#e65100','#6a1b9a','#00838f','#c62828','#2e7d32','#ad1457','#4527a0','#00695c','#ef6c00','#1565c0'][loop.index0 % 12] }};">
+          {{ s.name.split()[0][:1] }}{{ s.name.split()[1][:1] if s.name.split()|length > 1 else '' }}
+        </div>
+        {% endif %}
+        <span class="staff-tooltip">{{ s.name }}{% if s.check_in %} · {{ s.check_in }}{% endif %}</span>
       </div>
       {% endfor %}
     </div>

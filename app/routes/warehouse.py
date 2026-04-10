@@ -1012,11 +1012,17 @@ async def inventory_add_product(
         pp = db.query(ProductPrice).filter(ProductPrice.product_id == product_id).first()
         if pp:
             sale = float(pp.sale_price or 0)
+    # Ombordagi haqiqiy qoldiqni olish
+    current_stock = db.query(Stock).filter(
+        Stock.warehouse_id == doc.warehouse_id,
+        Stock.product_id == product_id,
+    ).all()
+    current_qty = sum(float(s.quantity or 0) for s in current_stock)
     db.add(StockAdjustmentDocItem(
         doc_id=doc_id,
         product_id=product_id,
         warehouse_id=doc.warehouse_id,
-        quantity=0,
+        quantity=current_qty,
         cost_price=cost,
         sale_price=sale,
     ))
@@ -1100,6 +1106,8 @@ async def inventory_save_draft(
             doc.number = _next_inventory_number(db, date_str)
         item_ids = form.getlist("item_id")
         quantities = form.getlist("actual_quantity")
+        cost_prices = form.getlist("cost_price")
+        sale_prices = form.getlist("sale_price")
         total_tannarx = 0.0
         total_sotuv = 0.0
         for i, iid in enumerate(item_ids):
@@ -1121,6 +1129,17 @@ async def inventory_save_draft(
             else:
                 qty = float(item.quantity or 0)
             item.quantity = qty
+            # Tannarx va sotuv narx (formdan, agar berilgan bo'lsa)
+            if i < len(cost_prices) and str(cost_prices[i]).strip():
+                try:
+                    item.cost_price = float(cost_prices[i])
+                except (TypeError, ValueError):
+                    pass
+            if i < len(sale_prices) and str(sale_prices[i]).strip():
+                try:
+                    item.sale_price = float(sale_prices[i])
+                except (TypeError, ValueError):
+                    pass
             total_tannarx += qty * float(item.cost_price or 0)
             total_sotuv += qty * float(item.sale_price or 0)
         doc.total_tannarx = total_tannarx
@@ -1333,6 +1352,9 @@ async def inventory_revoke(
         if return_to == "list":
             return RedirectResponse(url="/qoldiqlar/tovar/hujjat", status_code=303)
         return RedirectResponse(url=f"/inventory/{doc_id}", status_code=303)
+    # Avval shu hujjatga tegishli StockMovement larni o'chiramiz (audit trail)
+    delete_stock_movements_for_document(db, "StockAdjustmentDoc", doc_id)
+    # Stock larni previous_quantity ga qaytaramiz
     for item in doc.items:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == item.warehouse_id,
@@ -1343,7 +1365,6 @@ async def inventory_revoke(
             stock.quantity = prev
             if hasattr(stock, "updated_at"):
                 stock.updated_at = datetime.now()
-    delete_stock_movements_for_document(db, "StockAdjustmentDoc", doc_id)
     doc.status = "draft"
     db.commit()
     if return_to == "list":

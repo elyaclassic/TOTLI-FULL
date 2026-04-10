@@ -76,7 +76,11 @@ def main() -> None:
         "Mijoz_ID",
         "Mijoz_nomi",
         "Turi",
+        "Valyuta",
         "Summa",
+        "Kurs",
+        "Summa_uzs",
+        "Summa_usd",
         "Izoh",
         "Telegram_user",
         "Matn",
@@ -84,12 +88,18 @@ def main() -> None:
     ]
     op.append(headers)
     style_header_row(op, 3)
-    set_widths(op, [14, 12, 12, 28, 16, 16, 24, 18, 44, 12])
+    set_widths(op, [14, 12, 12, 28, 16, 12, 16, 14, 16, 16, 24, 18, 44, 12])
     style_data_grid(op, 3, 400, len(headers))
-    dv_type = DataValidation(type="list", formula1='"kirim,chiqim"', allow_blank=True)
-    op.add_data_validation(dv_type)
-    dv_type.add("E4:E400")
-    for cell in op["F"][3:400]:
+    dv_op_type = DataValidation(type="list", formula1='"kirim,chiqim"', allow_blank=True)
+    op.add_data_validation(dv_op_type)
+    dv_op_type.add("E4:E400")
+    dv_currency = DataValidation(type="list", formula1='"UZS,USD"', allow_blank=True)
+    op.add_data_validation(dv_currency)
+    dv_currency.add("F4:F400")
+    for col in ("G", "H", "I", "J"):
+        for cell in op[col][3:400]:
+            cell.number_format = '#,##0.00'
+    for cell in op["G"][3:400]:
         cell.number_format = '#,##0'
 
     mj = wb.create_sheet("Mijozlar")
@@ -98,18 +108,35 @@ def main() -> None:
         "Mijozlar bazasi",
         "Mijozlarni shu yerda saqlaysiz. Formulalar avtomatik hisoblaydi.",
     )
-    mj.append(["ID", "Nomi", "Telefon", "Boshlang'ich_qarz", "Mijoz_to'lagan", "Biz_bergan", "Qarz_qoldiq"])
+    mj.append(
+        [
+            "ID",
+            "Nomi",
+            "Telefon",
+            "Boshlang'ich_qarz_uzs",
+            "Boshlang'ich_qarz_usd",
+            "Mijoz_to'lagan_uzs",
+            "Mijoz_to'lagan_usd",
+            "Biz_bergan_uzs",
+            "Biz_bergan_usd",
+            "Qarz_qoldiq_uzs",
+            "Qarz_qoldiq_usd",
+        ]
+    )
     style_header_row(mj, 3)
-    set_widths(mj, [10, 28, 18, 18, 18, 18, 18])
+    set_widths(mj, [10, 28, 18, 20, 20, 20, 20, 20, 20, 20, 20])
     # Formulalarni oldindan ko'p qatorga yozib qo'yamiz, Excelda buzilib ketmasin.
     for row in range(4, 304):
-        mj[f"E{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"kirim"))'
-        mj[f"F{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"chiqim"))'
-        mj[f"G{row}"] = f'=IF(A{row}="","",D{row}+F{row}-E{row})'
-    style_data_grid(mj, 3, 303, 7)
-    for col in ("D", "E", "F", "G"):
+        mj[f"F{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$I:$I,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"kirim"))'
+        mj[f"G{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$J:$J,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"kirim"))'
+        mj[f"H{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$I:$I,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"chiqim"))'
+        mj[f"I{row}"] = f'=IF(A{row}="","",SUMIFS(Operatsiyalar!$J:$J,Operatsiyalar!$C:$C,A{row},Operatsiyalar!$E:$E,"chiqim"))'
+        mj[f"J{row}"] = f'=IF(A{row}="","",D{row}+H{row}-F{row})'
+        mj[f"K{row}"] = f'=IF(A{row}="","",E{row}+I{row}-G{row})'
+    style_data_grid(mj, 3, 303, 11)
+    for col in ("D", "E", "F", "G", "H", "I", "J", "K"):
         for cell in mj[col][3:303]:
-            cell.number_format = '#,##0'
+            cell.number_format = '#,##0.00'
 
     # Qarz mantiqi:
     # kirim = mijoz to'lovi -> qarz kamayadi
@@ -121,21 +148,25 @@ def main() -> None:
         "Hisobot",
         "Umumiy ko'rsatkichlar. Davr bo'yicha botdan ham alohida hisobot olish mumkin.",
     )
-    hs.append(["Ko'rsatkich", "Qiymat"])
+    hs.append(["Ko'rsatkich", "UZS", "USD"])
     style_header_row(hs, 3)
-    set_widths(hs, [28, 20])
+    set_widths(hs, [28, 20, 20])
     hs["A4"] = "Mijozlar to'lagan"
-    hs["B4"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"kirim")'
+    hs["B4"] = '=SUMIFS(Operatsiyalar!$I:$I,Operatsiyalar!$E:$E,"kirim")'
+    hs["C4"] = '=SUMIFS(Operatsiyalar!$J:$J,Operatsiyalar!$E:$E,"kirim")'
     hs["A5"] = "Biz bergan"
-    hs["B5"] = '=SUMIFS(Operatsiyalar!$F:$F,Operatsiyalar!$E:$E,"chiqim")'
+    hs["B5"] = '=SUMIFS(Operatsiyalar!$I:$I,Operatsiyalar!$E:$E,"chiqim")'
+    hs["C5"] = '=SUMIFS(Operatsiyalar!$J:$J,Operatsiyalar!$E:$E,"chiqim")'
     hs["A6"] = "Jami qarz qoldiq"
     hs["B6"] = "=B5-B4"
+    hs["C6"] = "=C5-C4"
     hs["A7"] = "Operatsiyalar soni"
     hs["B7"] = '=COUNTA(Operatsiyalar!$A:$A)-3'
+    hs["C7"] = ""
     hs["A9"] = "Izoh"
-    hs["B9"] = "Bot: Mijozlar -> mijoz tanlash -> Mijoz to'ladi/Biz berdik -> summa; Hisobot -> tur -> davr -> bot/excel"
-    style_data_grid(hs, 3, 9, 2)
-    money_format(hs, ["B4", "B5", "B6"])
+    hs["B9"] = "Bot: Mijozlar -> amal -> valyuta -> summa -> kurs; Hisobot ikki valyutada chiqadi"
+    style_data_grid(hs, 3, 9, 3)
+    money_format(hs, ["B4", "B5", "B6", "C4", "C5", "C6"])
     hs.conditional_formatting.add("B6", FormulaRule(formula=["B6>0"], stopIfTrue=False, fill=PatternFill("solid", fgColor="FCE4D6")))
     hs.conditional_formatting.add("B6", FormulaRule(formula=["B6<=0"], stopIfTrue=False, fill=PatternFill("solid", fgColor="E2F0D9")))
 

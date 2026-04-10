@@ -52,9 +52,29 @@ def customer_actions_kb(customer_id: int, can_report: bool = True) -> InlineKeyb
     ]
     if can_report:
         rows.append([InlineKeyboardButton(text="Hisobot", callback_data=f"report:customer:{customer_id}")])
+    rows.append([InlineKeyboardButton(text="Mijozni o'chirish", callback_data=f"customer:delete:{customer_id}")])
     rows.append([InlineKeyboardButton(text="Orqaga", callback_data="customer:list:1")])
     rows.append([InlineKeyboardButton(text="Menyu", callback_data="menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def currency_kb(customer_id: int, operation_type: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="So'm",
+                    callback_data=f"customer:currency:{customer_id}:{operation_type}:UZS",
+                ),
+                InlineKeyboardButton(
+                    text="Dollar",
+                    callback_data=f"customer:currency:{customer_id}:{operation_type}:USD",
+                ),
+            ],
+            [InlineKeyboardButton(text="Orqaga", callback_data=f"customer:pick:{customer_id}")],
+            [InlineKeyboardButton(text="Menyu", callback_data="menu:main")],
+        ]
+    )
 
 
 def after_save_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMarkup:
@@ -73,6 +93,16 @@ def after_save_kb(customer_id: int, can_report: bool = True) -> InlineKeyboardMa
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def customer_delete_confirm_kb(customer_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Ha, o'chir", callback_data=f"customer:deleteconfirm:{customer_id}")],
+            [InlineKeyboardButton(text="Bekor qilish", callback_data=f"customer:pick:{customer_id}")],
+            [InlineKeyboardButton(text="Menyu", callback_data="menu:main")],
+        ]
+    )
 
 
 def reports_kb(selected_customer_id: int | None = None) -> InlineKeyboardMarkup:

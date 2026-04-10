@@ -1025,33 +1025,43 @@
                                 <i class="bi bi-wallet2"></i> Qoldiqlar
                             </a>
                         </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if page_title == 'Moliya' %}active{% endif %}" href="/finance">
-                                <i class="bi bi-wallet2"></i> Moliya
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if page_title and 'Kassadan kassaga' in page_title %}active{% endif %}" href="/cash/transfers">
-                                <i class="bi bi-bank"></i> Kassadan kassaga
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if page_title == 'Harajatlar' or page_title == 'Harajatlar jurnali' %}active{% endif %}" href="/finance/harajatlar">
-                                <i class="bi bi-cash-stack"></i> Harajatlar
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if page_title == 'Harajat turlari' %}active{% endif %}" href="/finance/expense-types">
-                                <i class="bi bi-tags"></i> Harajat turlari
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link {% if 'Hisobot' in page_title %}active{% endif %}" href="/reports">
-                                <i class="bi bi-bar-chart-line"></i> Hisobotlar
-                            </a>
-                        </li>
                     </ul>
                 </div>
+            </li>
+
+            <!-- MOLIYA -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">MOLIYA</small>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Moliya' %}active{% endif %}" href="/finance">
+                    <i class="bi bi-wallet2"></i> Moliya
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title and 'Kassadan kassaga' in page_title %}active{% endif %}" href="/cash/transfers">
+                    <i class="bi bi-bank"></i> Kassadan kassaga
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Harajatlar' or page_title == 'Harajatlar jurnali' %}active{% endif %}" href="/finance/harajatlar">
+                    <i class="bi bi-cash-stack"></i> Harajatlar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Harajat turlari' %}active{% endif %}" href="/finance/expense-types">
+                    <i class="bi bi-tags"></i> Harajat turlari
+                </a>
+            </li>
+
+            <!-- HISOBOTLAR -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">HISOBOTLAR</small>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Hisobot' in page_title %}active{% endif %}" href="/reports">
+                    <i class="bi bi-bar-chart-line"></i> Hisobotlar
+                </a>
             </li>
 
             <!-- SalesDoc funksiyalari -->

@@ -437,6 +437,11 @@ async def purchase_confirm(
                ip_address=request.client.host if request.client else "")
     db.commit()
     check_low_stock_and_notify(db)
+    try:
+        from app.bot.services.audit_watchdog import audit_purchase
+        audit_purchase(purchase.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/purchases", status_code=303)
 
 

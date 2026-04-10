@@ -44,20 +44,28 @@ def send_notify_sync(text: str):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(send_notify(text))
-            loop.close()
+            try:
+                loop.run_until_complete(send_notify(text))
+            finally:
+                loop.close()
         except Exception as e:
-            print(f"[TG Notify] thread xato: {e}")
+            import traceback
+            print(f"[TG Notify] thread xato: {e}", flush=True)
+            traceback.print_exc()
 
+    # Tekshirish: hozirda asyncio loop ishlayaptimi
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            # FastAPI/uvicorn ichida — alohida threadda yuborish
-            t = threading.Thread(target=_send_in_thread, daemon=True)
-            t.start()
-        else:
-            loop.run_until_complete(send_notify(text))
+        running = asyncio.get_running_loop()
     except RuntimeError:
+        running = None
+
+    if running is not None:
+        # Async context (FastAPI/uvicorn) — thread orqali yuborish
+        t = threading.Thread(target=_send_in_thread, daemon=False)
+        t.start()
+        t.join(timeout=15)
+    else:
+        # Sync context — to'g'ridan-to'g'ri
         _send_in_thread()
 
 
@@ -83,18 +91,25 @@ def _send_to_chats_sync(text: str, chat_ids: list):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            loop.run_until_complete(_send_to_chats(text, chat_ids))
-            loop.close()
+            try:
+                loop.run_until_complete(_send_to_chats(text, chat_ids))
+            finally:
+                loop.close()
         except Exception as e:
-            print(f"[TG Notify] thread xato: {e}")
+            import traceback
+            print(f"[TG Notify] thread xato: {e}", flush=True)
+            traceback.print_exc()
+
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            t = threading.Thread(target=_run, daemon=True)
-            t.start()
-        else:
-            loop.run_until_complete(_send_to_chats(text, chat_ids))
+        running = asyncio.get_running_loop()
     except RuntimeError:
+        running = None
+
+    if running is not None:
+        t = threading.Thread(target=_run, daemon=False)
+        t.start()
+        t.join(timeout=15)
+    else:
         _run()
 
 

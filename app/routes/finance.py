@@ -592,6 +592,11 @@ async def finance_payment_post(
                details=f"Tur: {type}, Summa: {amount:,.0f}, Partner: {pid or 'yo`q'}",
                ip_address=request.client.host if request.client else "")
     db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_payment
+        audit_payment(payment.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/finance?success=1", status_code=303)
 
 
@@ -630,6 +635,11 @@ async def finance_payment_confirm(
     payment.status = "confirmed"
     _payment_apply_balance(db, payment, 1)
     db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_payment
+        audit_payment(payment.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/finance?success=confirmed", status_code=303)
 
 
@@ -1178,6 +1188,12 @@ async def finance_harajat_hujjat_tasdiqlash(
             notify_expense(doc.number or f"#{doc_id}", total, "")
         except Exception:
             pass
+        try:
+            from app.bot.services.audit_watchdog import audit_expense, audit_payment
+            audit_expense(doc_id)
+            audit_payment(payment.id)
+        except Exception:
+            pass
         return RedirectResponse(url="/finance/harajatlar?success=confirmed", status_code=303)
     except HTTPException:
         raise
@@ -1187,6 +1203,50 @@ async def finance_harajat_hujjat_tasdiqlash(
     except Exception:
         db.rollback()
         return RedirectResponse(url="/finance/harajatlar?error=save_error", status_code=303)
+
+
+@router.post("/harajat/hujjat/{doc_id}/revert")
+async def finance_harajat_hujjat_revert(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Harajat hujjati tasdiqini bekor qilish (faqat admin) — payment bekor, kassa qaytariladi"""
+    doc = db.query(ExpenseDoc).filter(ExpenseDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "confirmed":
+        return RedirectResponse(url="/finance/harajatlar?error=not_confirmed", status_code=303)
+    # Payment ni bekor qilish
+    if doc.payment_id:
+        payment = db.query(Payment).filter(Payment.id == doc.payment_id).first()
+        if payment:
+            payment.status = "cancelled"
+    db.execute(
+        text("UPDATE expense_docs SET status = 'draft', payment_id = NULL WHERE id = :id"),
+        {"id": doc_id}
+    )
+    if doc.cash_register_id:
+        _sync_cash_balance(db, doc.cash_register_id)
+    db.commit()
+    return RedirectResponse(url="/finance/harajatlar?success=reverted", status_code=303)
+
+
+@router.post("/harajat/hujjat/{doc_id}/delete")
+async def finance_harajat_hujjat_delete(
+    doc_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Harajat hujjatini o'chirish (faqat qoralama, faqat admin)"""
+    doc = db.query(ExpenseDoc).filter(ExpenseDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status == "confirmed":
+        return RedirectResponse(url="/finance/harajatlar?error=confirmed_cant_delete", status_code=303)
+    doc.status = "deleted"
+    db.commit()
+    return RedirectResponse(url="/finance/harajatlar?success=deleted", status_code=303)
 
 
 # ==========================================

@@ -135,14 +135,32 @@ async def cb_report_output(callback: CallbackQuery, state: FSMContext) -> None:
     if output == "bot":
         if report_type == "summary":
             report = await asyncio.to_thread(summary_report_by_period, period)
-            text = (
+            lines = [
                 "<b>Umumiy hisobot</b>\n\n"
                 f"Davr: <b>{period}</b>\n"
-                f"Mijozlar to'lagan: <b>{_fmt_money(report['jami_kirim'])}</b>\n"
-                f"Biz bergan: <b>{_fmt_money(report['jami_chiqim'])}</b>\n"
-                f"Jami qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>\n"
-                f"Operatsiyalar soni: <b>{report['operatsiyalar_soni']}</b>"
-            )
+                f"Mijozlar to'lagan (UZS): <b>{_fmt_money(report['jami_kirim_uzs'])}</b>\n"
+                f"Mijozlar to'lagan (USD): <b>{_fmt_money(report['jami_kirim_usd'])}</b>\n"
+                f"Biz bergan (UZS): <b>{_fmt_money(report['jami_chiqim_uzs'])}</b>\n"
+                f"Biz bergan (USD): <b>{_fmt_money(report['jami_chiqim_usd'])}</b>\n"
+                f"Jami qarz qoldiq (UZS): <b>{_fmt_money(report['farq_uzs'])}</b>\n"
+                f"Jami qarz qoldiq (USD): <b>{_fmt_money(report['farq_usd'])}</b>\n"
+                f"Operatsiyalar soni: <b>{report['operatsiyalar_soni']}</b>",
+                "",
+                "<b>Mijozlar:</b>",
+            ]
+            if not report["customers"]:
+                lines.append("Ma'lumot yo'q.")
+            else:
+                for item in report["customers"]:
+                    lines.append(
+                        f"{item['customer_name']} | "
+                        f"to'lagan: UZS {_fmt_money(item['kirim_uzs'])}, USD {_fmt_money(item['kirim_usd'])} | "
+                        f"berilgan: UZS {_fmt_money(item['chiqim_uzs'])}, USD {_fmt_money(item['chiqim_usd'])} | "
+                        f"qoldiq: UZS {_fmt_money(item['qoldiq_uzs'])}, USD {_fmt_money(item['qoldiq_usd'])}"
+                    )
+            text = "\n".join(lines)
+            if len(text) > 3500:
+                text = text[:3400].rstrip() + "\n\n... ro'yxat qisqartirildi."
         else:
             report = await asyncio.to_thread(customer_report_by_period, int(customer_id or 0), period)
             if not report:
@@ -152,9 +170,14 @@ async def cb_report_output(callback: CallbackQuery, state: FSMContext) -> None:
             lines = [
                 f"<b>{customer['name']}</b>",
                 f"Davr: <b>{period}</b>",
-                f"Mijoz to'lagan: <b>{_fmt_money(report['kirim'])}</b>",
-                f"Biz bergan: <b>{_fmt_money(report['chiqim'])}</b>",
-                f"Qarz qoldiq: <b>{_fmt_money(report['farq'])}</b>",
+                f"Boshlang'ich qarz (UZS): <b>{_fmt_money(customer.get('opening_uzs', 0))}</b>",
+                f"Boshlang'ich qarz (USD): <b>{_fmt_money(customer.get('opening_usd', 0))}</b>",
+                f"Mijoz to'lagan (UZS): <b>{_fmt_money(report['kirim_uzs'])}</b>",
+                f"Mijoz to'lagan (USD): <b>{_fmt_money(report['kirim_usd'])}</b>",
+                f"Biz bergan (UZS): <b>{_fmt_money(report['chiqim_uzs'])}</b>",
+                f"Biz bergan (USD): <b>{_fmt_money(report['chiqim_usd'])}</b>",
+                f"Qarz qoldiq (UZS): <b>{_fmt_money(report['farq_uzs'])}</b>",
+                f"Qarz qoldiq (USD): <b>{_fmt_money(report['farq_usd'])}</b>",
                 "",
                 "<b>Operatsiyalar:</b>",
             ]
@@ -163,7 +186,8 @@ async def cb_report_output(callback: CallbackQuery, state: FSMContext) -> None:
             else:
                 for item in report["history"]:
                     lines.append(
-                        f"{item['date']} {item['time']} | {item['type']} | {_fmt_money(item['amount'])}"
+                        f"{item['date']} {item['time']} | {item['type']} | "
+                        f"{item['currency']} {_fmt_money(item['amount'])} | kurs {_fmt_money(item['rate'])}"
                     )
             text = "\n".join(lines)
 

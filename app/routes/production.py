@@ -37,7 +37,7 @@ from app.utils.notifications import check_low_stock_and_notify
 from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.audit import log_action
-from app.services.stock_service import create_stock_movement
+from app.services.stock_service import create_stock_movement, clamp_stock_qty
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -147,7 +147,8 @@ def _do_complete_production_stock(db, production, recipe):
             Stock.product_id == product_id,
         ).first()
         available = (stock.quantity if stock else 0) or 0
-        if available < required:
+        # Float precision: 1e-6 tolerant
+        if available + 1e-6 < required:
             prod = db.query(Product).filter(Product.id == product_id).first()
             prod_name = prod.name if prod else f"#{product_id}"
             shortage_lines.append(
@@ -167,30 +168,23 @@ def _do_complete_production_stock(db, production, recipe):
             items_actual.append((product_id, 0.0))
             continue
         items_actual.append((product_id, required))
+    from app.services.stock_service import create_stock_movement
     for product_id, actual_use in items_actual:
         if actual_use <= 0:
             continue
         wh_id = _warehouse_id_for_ingredient(db, product_id, production)
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == product_id,
-        ).first()
-        if stock:
-            stock.quantity -= actual_use
-            db.flush()
-            db.add(StockMovement(
-                stock_id=stock.id,
-                warehouse_id=wh_id,
-                product_id=product_id,
-                operation_type="production_consumption",
-                document_type="Production",
-                document_id=production.id,
-                document_number=production.number,
-                quantity_change=-actual_use,
-                quantity_after=stock.quantity,
-                note=f"Ishlab chiqarish (xom ashyo): {production.number}",
-                created_at=datetime.now(),
-            ))
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=product_id,
+            quantity_change=-actual_use,
+            operation_type="production_consumption",
+            document_type="Production",
+            document_id=production.id,
+            document_number=production.number,
+            note=f"Ishlab chiqarish (xom ashyo): {production.number}",
+            created_at=production.created_at or datetime.now(),
+        )
     total_material_cost = 0.0
     for product_id, actual_use in items_actual:
         product = db.query(Product).filter(Product.id == product_id).first()
@@ -220,43 +214,32 @@ def _do_complete_production_stock(db, production, recipe):
     output_units = production_output_quantity_for_stock(db, production, recipe)
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0
     out_wh_id = production.output_warehouse_id if production.output_warehouse_id else production.warehouse_id
+    # Tayyor mahsulot kirimi — create_stock_movement orqali (atomik)
+    create_stock_movement(
+        db=db,
+        warehouse_id=out_wh_id,
+        product_id=recipe.product_id,
+        quantity_change=output_units,
+        operation_type="production_output",
+        document_type="Production",
+        document_id=production.id,
+        document_number=production.number,
+        note=f"Ishlab chiqarish (tayyor mahsulot): {production.number}",
+        created_at=production.created_at or datetime.now(),
+    )
+    db.flush()
+    # cost_price ni hisoblash (faqat tayyor mahsulot uchun)
     product_stock = db.query(Stock).filter(
         Stock.warehouse_id == out_wh_id,
         Stock.product_id == recipe.product_id,
     ).first()
-    if product_stock:
-        product_stock.quantity += output_units
+    if product_stock and hasattr(Stock, "cost_price"):
         qty_old = (product_stock.quantity or 0) - output_units
         cost_old = getattr(product_stock, "cost_price", None) or 0
         if qty_old <= 0 or cost_old <= 0:
             product_stock.cost_price = cost_per_unit
         else:
             product_stock.cost_price = (qty_old * cost_old + output_units * cost_per_unit) / (product_stock.quantity or 1)
-    else:
-        new_stock = Stock(warehouse_id=out_wh_id, product_id=recipe.product_id, quantity=output_units)
-        if hasattr(Stock, "cost_price"):
-            new_stock.cost_price = cost_per_unit
-        db.add(new_stock)
-    db.flush()
-    # Tayyor mahsulot kirimini stock_movements ga yozish
-    out_stock = db.query(Stock).filter(
-        Stock.warehouse_id == out_wh_id,
-        Stock.product_id == recipe.product_id,
-    ).first()
-    if out_stock:
-        db.add(StockMovement(
-            stock_id=out_stock.id,
-            warehouse_id=out_wh_id,
-            product_id=recipe.product_id,
-            operation_type="production_output",
-            document_type="Production",
-            document_id=production.id,
-            document_number=production.number,
-            quantity_change=output_units,
-            quantity_after=out_stock.quantity,
-            note=f"Ishlab chiqarish (tayyor mahsulot): {production.number}",
-            created_at=datetime.now(),
-        ))
     output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
     if output_product:
         product_stock = db.query(Stock).filter(
@@ -1249,14 +1232,14 @@ def _production_revert_one(db, production) -> Optional[str]:
         wh_name = (out_wh.name if out_wh else "2-ombor") or "2-ombor"
         prod_name = (out_product.name if out_product else "tayyor mahsulot") or "tayyor mahsulot"
         return f"«{wh_name}» da «{prod_name}» dan kerak: {output_units:,.1f}, mavjud: {current_qty:,.1f}"
-    product_stock.quantity = current_qty - output_units
+    product_stock.quantity = clamp_stock_qty(current_qty - output_units)
     for product_id, required in items_to_use:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == production.warehouse_id,
             Stock.product_id == product_id,
         ).first()
         if stock:
-            stock.quantity = float(stock.quantity or 0) + required
+            stock.quantity = clamp_stock_qty(float(stock.quantity or 0) + required)
         else:
             db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
     production.status = "draft"
@@ -1595,6 +1578,11 @@ async def complete_production_stage(
         notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
     except Exception:
         pass
+    try:
+        from app.bot.services.audit_watchdog import audit_production
+        audit_production(production.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/production", status_code=303)
 
 
@@ -1625,6 +1613,11 @@ async def complete_production(
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
         notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+    except Exception:
+        pass
+    try:
+        from app.bot.services.audit_watchdog import audit_production
+        audit_production(production.id)
     except Exception:
         pass
     return RedirectResponse(url="/production", status_code=303)
@@ -1672,14 +1665,14 @@ async def production_revert(
             url="/production/orders?error=revert&detail=" + quote(detail),
             status_code=303,
         )
-    product_stock.quantity = current_qty - output_units
+    product_stock.quantity = clamp_stock_qty(current_qty - output_units)
     for product_id, required in items_to_use:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == production.warehouse_id,
             Stock.product_id == product_id,
         ).first()
         if stock:
-            stock.quantity = float(stock.quantity or 0) + required
+            stock.quantity = clamp_stock_qty(float(stock.quantity or 0) + required)
         else:
             db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
     movements = db.query(StockMovement).filter(

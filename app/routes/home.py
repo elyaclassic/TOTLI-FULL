@@ -206,14 +206,27 @@ async def home(
         except Exception as e:
             print(f"[Premium] Qo'shimcha ma'lumot xatosi: {e}")
 
-    # Bugungi ishga kelgan hodimlar (davomat)
+    # Bugungi ishda turgan hodimlar (kelgan, lekin hali ketmagan)
     today_staff = []
     try:
+        now_dt = datetime.now()
         today_att = db.query(Attendance).filter(
             Attendance.date == today,
             Attendance.status == "present",
         ).all()
         for a in today_att:
+            if not a.check_in:
+                continue
+            # Ishdan ketgan deb hisoblanadi:
+            # 1. check_out bor va check_in dan kamida 5 daqiqa keyin
+            # 2. YOKI hozirgi vaqt 19:00 dan keyin (kun tugagan)
+            if a.check_out and a.check_in:
+                diff_min = (a.check_out - a.check_in).total_seconds() / 60.0
+                if diff_min >= 5:
+                    continue
+            # 19:00 dan keyin avtomatik "ketgan" deb hisoblash
+            if now_dt.hour >= 19:
+                continue
             emp = db.query(Employee).filter(Employee.id == a.employee_id).first()
             if emp and emp.is_active:
                 today_staff.append({
@@ -221,6 +234,7 @@ async def home(
                     "name": emp.full_name or emp.code or "",
                     "position": emp.position or "",
                     "check_in": a.check_in.strftime("%H:%M") if a.check_in else "",
+                    "photo": a.event_snapshot_path or "",
                 })
     except Exception:
         pass
