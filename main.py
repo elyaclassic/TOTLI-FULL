@@ -1,4 +1,8 @@
 # reload: 2026-04-10 audit watchdog
+# --- .env ni eng birinchi yuklash (boshqa importlar undan oldin env o'qiydi) ---
+from dotenv import load_dotenv
+load_dotenv()
+
 # --- Importlar ---
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles

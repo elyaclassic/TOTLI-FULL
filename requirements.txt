@@ -16,3 +16,4 @@ APScheduler>=3.10.0
 pyodbc>=4.0.39; platform_system=="Windows"
 python-docx>=1.1.0
 httpx>=0.27.0
+python-dotenv>=1.0.0

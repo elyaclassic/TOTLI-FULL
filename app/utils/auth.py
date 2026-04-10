@@ -9,10 +9,19 @@ from itsdangerous import URLSafeTimedSerializer
 import bcrypt
 import hashlib
 
-# Session management (production da SECRET_KEY ni env dan o'rnating)
-SECRET_KEY = os.getenv("SECRET_KEY", "totli-holva-secret-key-2026-change-in-production")
+# Session management — SECRET_KEY .env faylidan o'qiladi (majburiy)
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+if not SECRET_KEY:
+    raise RuntimeError(
+        "SECRET_KEY env o'zgaruvchisi o'rnatilmagan. "
+        ".env faylida SECRET_KEY ni o'rnating yoki yangi kalit yarating: "
+        "python -c \"import secrets; print(secrets.token_hex(32))\""
+    )
 if os.getenv("PRODUCTION", "").lower() in ("1", "true", "yes") and "change-in-production" in SECRET_KEY:
-    raise RuntimeError("Production rejimida SECRET_KEY ni environment o'zgaruvchisi orqali o'rnating.")
+    raise RuntimeError(
+        "Production rejimida vaqtinchalik SECRET_KEY ishlatilmoqda. "
+        ".env faylida yangi tasodifiy kalit o'rnating."
+    )
 SESSION_SERIALIZER = URLSafeTimedSerializer(SECRET_KEY)
 SESSION_MAX_AGE = 86400 * 30  # 30 kun (mobil ilova uchun)
 

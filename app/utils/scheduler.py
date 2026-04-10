@@ -57,11 +57,14 @@ def _scheduled_notifications_job():
         db.close()
 
 
-# Hikvision sozlamalari (env yoki default)
-_HIKVISION_HOST = os.environ.get("HIKVISION_HOST", "192.168.1.199")
-_HIKVISION_PORT = int(os.environ.get("HIKVISION_PORT", "443"))
-_HIKVISION_USERNAME = os.environ.get("HIKVISION_USERNAME", "admin")
-_HIKVISION_PASSWORD = os.environ.get("HIKVISION_PASSWORD", "Samsung0707")
+# Hikvision sozlamalari — .env faylidan o'qiladi
+_HIKVISION_HOST = os.environ.get("HIKVISION_HOST", "")
+_HIKVISION_PORT = int(os.environ.get("HIKVISION_PORT", "443") or "443")
+_HIKVISION_USERNAME = os.environ.get("HIKVISION_USERNAME", "")
+_HIKVISION_PASSWORD = os.environ.get("HIKVISION_PASSWORD", "")
+
+if not (_HIKVISION_HOST and _HIKVISION_USERNAME and _HIKVISION_PASSWORD):
+    print("[Scheduler] OGOHLANTIRISH: HIKVISION_* env o'zgaruvchilari to'liq emas — davomat sync ishlamaydi")
 
 
 def _daily_hikvision_sync_job():

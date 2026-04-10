@@ -51,14 +51,21 @@ def _dt_end(d: date) -> datetime:
 
 # ============= 1. DAVOMAT =============
 def _sync_hikvision_now(db: Session, start: date, end: date):
-    """Hikvision dan so'ralganda yangilash"""
+    """Hikvision dan so'ralganda yangilash. Kredentsiallar .env faylidan o'qiladi."""
+    import os
+    host = os.environ.get("HIKVISION_HOST", "")
+    port = int(os.environ.get("HIKVISION_PORT", "443") or "443")
+    username = os.environ.get("HIKVISION_USERNAME", "")
+    password = os.environ.get("HIKVISION_PASSWORD", "")
+    if not (host and username and password):
+        return  # env to'liq emas — sync o'tkazib yuboriladi
     try:
         from app.utils.hikvision import sync_hikvision_attendance
         sync_hikvision_attendance(
-            hikvision_host="192.168.1.199",
-            hikvision_port=443,
-            hikvision_username="admin",
-            hikvision_password="Samsung0707",
+            hikvision_host=host,
+            hikvision_port=port,
+            hikvision_username=username,
+            hikvision_password=password,
             start_date=start,
             end_date=end,
             db_session=db,

@@ -1,7 +1,16 @@
 """Bot konfiguratsiyasi"""
 import os
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "8714179312:AAFnrhexvBlslAWGVQewnigUogEKJPD2Y0I")
+# Hisobot bot tokeni — .env faylidan o'qiladi (TELEGRAM_BOT_TOKEN)
+# Bu majburiy: env yo'q bo'lsa hisobot bot ishlamaydi (warning bo'lib chiqadi).
+BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+
+if not BOT_TOKEN:
+    import logging
+    logging.getLogger(__name__).warning(
+        "TELEGRAM_BOT_TOKEN env o'zgaruvchisi o'rnatilmagan — hisobot bot ishga tushmaydi. "
+        ".env faylida TELEGRAM_BOT_TOKEN ni o'rnating."
+    )
 
 # Ruxsat etilgan rollar
 ALLOWED_ROLES = ("admin", "manager", "rahbar", "raxbar")
