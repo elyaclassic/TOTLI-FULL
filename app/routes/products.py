@@ -30,6 +30,71 @@ router = APIRouter(prefix="/products", tags=["products"])
 product_check_router = APIRouter(prefix="/product-check", tags=["products"])
 
 
+# ==========================================
+# Rasm yuklash validatsiyasi (xavfsizlik)
+# ==========================================
+_ALLOWED_IMAGE_EXTS = ("jpg", "jpeg", "png", "gif", "webp")
+_MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+async def _validate_and_save_product_image(image: UploadFile, product: "Product") -> Optional[str]:
+    """
+    Yuklangan rasmni tekshirib, diskka saqlaydi.
+
+    Tekshiruvlar:
+    1. Fayl nomi bo'sh emas
+    2. Kengaytma whitelist (jpg, jpeg, png, gif, webp)
+    3. Hajmi <= 5 MB
+    4. Pillow bilan ochilishi mumkin (magic bytes — .php yoki buzilgan fayl emas)
+
+    Qaytadi: saqlangan fayl nomi (masalan "P00001.jpg"), yoki None (rasm yo'q).
+    Xato bo'lsa HTTPException ko'taradi.
+    """
+    if not image or not (image.filename or "").strip():
+        return None
+
+    filename = (image.filename or "").strip()
+    if "." not in filename:
+        raise HTTPException(status_code=400, detail="Rasm fayl kengaytmasi yo'q")
+
+    ext = filename.rsplit(".", 1)[-1].lower()
+    if ext not in _ALLOWED_IMAGE_EXTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Faqat rasm fayllari qabul qilinadi: {', '.join(_ALLOWED_IMAGE_EXTS)}"
+        )
+
+    contents = await image.read()
+    if not contents:
+        raise HTTPException(status_code=400, detail="Rasm fayli bo'sh")
+    if len(contents) > _MAX_IMAGE_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Rasm hajmi {_MAX_IMAGE_SIZE_BYTES // (1024*1024)} MB dan oshmasligi kerak"
+        )
+
+    # Pillow bilan magic bytes tekshiruvi — haqiqiy rasm ekanligini tasdiqlash
+    try:
+        from PIL import Image
+        img = Image.open(io.BytesIO(contents))
+        img.verify()  # Fayl tuzilishini tekshiradi
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail="Fayl haqiqiy rasm emas yoki buzilgan"
+        )
+
+    # Diskka saqlash — product.code asosida (sanitize qilingan)
+    safe_code = (product.code or f"P{product.id:05d}").replace("/", "_").replace("\\", "_").replace("..", "_")
+    image_filename = f"{safe_code}.{ext}"
+    image_path = os.path.join("app", "static", "images", "products", image_filename)
+    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+    with open(image_path, "wb") as buffer:
+        buffer.write(contents)
+
+    return image_filename
+
+
 @router.get("/barcode/{product_id}")
 async def product_barcode(product_id: int, download: int = 0, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     product = db.query(Product).filter(Product.id == product_id).first()
@@ -350,14 +415,9 @@ async def product_add(
     db.commit()
     product.code = f"P{product.id:05d}"
     db.commit()
-    if image and (image.filename or "").strip():
-        ext = (image.filename or "").split(".")[-1] if "." in (image.filename or "") else "jpg"
-        image_filename = f"{product.code}.{ext}"
-        image_path = os.path.join("app", "static", "images", "products", image_filename)
-        os.makedirs(os.path.dirname(image_path), exist_ok=True)
-        with open(image_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        product.image = image_filename
+    saved = await _validate_and_save_product_image(image, product)
+    if saved:
+        product.image = saved
         db.commit()
     return RedirectResponse(url="/products", status_code=303)
 
@@ -387,14 +447,9 @@ async def product_edit(
     product.barcode = barcode or None
     product.sale_price = sale_price
     product.purchase_price = purchase_price
-    if image and (image.filename or "").strip():
-        ext = (image.filename or "").split(".")[-1] if "." in (image.filename or "") else "jpg"
-        image_filename = f"{product.code}.{ext}"
-        image_path = os.path.join("app", "static", "images", "products", image_filename)
-        os.makedirs(os.path.dirname(image_path), exist_ok=True)
-        with open(image_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
-        product.image = image_filename
+    saved = await _validate_and_save_product_image(image, product)
+    if saved:
+        product.image = saved
     db.commit()
     return RedirectResponse(url="/products", status_code=303)
 
@@ -504,22 +559,11 @@ async def product_upload_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    import shutil
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Mahsulot topilmadi")
-    if image and image.filename:
-        ext = image.filename.rsplit(".", 1)[-1].lower()
-        if ext not in ("jpg", "jpeg", "png", "gif", "webp"):
-            raise HTTPException(status_code=400, detail="Faqat rasm fayllari qabul qilinadi: jpg, jpeg, png, gif, webp")
-        contents = await image.read()
-        if len(contents) > 5 * 1024 * 1024:  # 5 MB
-            raise HTTPException(status_code=400, detail="Rasm hajmi 5 MB dan oshmasligi kerak")
-        image_filename = f"{product.code}.{ext}"
-        image_path = os.path.join("app", "static", "images", "products", image_filename)
-        os.makedirs(os.path.dirname(image_path), exist_ok=True)
-        with open(image_path, "wb") as buffer:
-            buffer.write(contents)
-        product.image = image_filename
+    saved = await _validate_and_save_product_image(image, product)
+    if saved:
+        product.image = saved
         db.commit()
     return RedirectResponse(url="/products", status_code=303)
