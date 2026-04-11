@@ -67,25 +67,80 @@ def _is_enabled() -> bool:
 
 
 # ============ COOLDOWN & DEDUP ============
-# Xotira asosida — jarayon qayta ishga tushganda tozalanadi (muammo emas).
-_cooldown: Dict[str, datetime] = {}
+# B5 (O5): Cooldown DB'da saqlanadi — process restart da ham tiklanadi.
+# Fallback: DB xatosi bo'lsa in-memory ishlatamiz (audit hech qachon crash qilmasligi kerak).
+_cooldown_fallback: Dict[str, datetime] = {}  # DB ishlamasa
 _last_digest_sig: Optional[str] = None
 
 
 def _cooldown_ok(key: str) -> bool:
-    """True qaytaradi — agar shu key oxirgi AUDIT_COOLDOWN_MIN daqiqada yuborilmagan bo'lsa."""
+    """True qaytaradi — agar shu key oxirgi AUDIT_COOLDOWN_MIN daqiqada yuborilmagan bo'lsa.
+    DB asosli (audit_cooldowns jadvali). DB xato bo'lsa — in-memory fallback."""
+    from sqlalchemy import text as _sqlt
     now = datetime.now()
-    last = _cooldown.get(key)
-    if last and (now - last) < timedelta(minutes=AUDIT_COOLDOWN_MIN):
-        return False
-    _cooldown[key] = now
-    # Eski yozuvlarni tozalash (100+ bo'lsa)
-    if len(_cooldown) > 200:
-        cutoff = now - timedelta(minutes=AUDIT_COOLDOWN_MIN * 2)
-        for k in list(_cooldown.keys()):
-            if _cooldown[k] < cutoff:
-                _cooldown.pop(k, None)
-    return True
+    cutoff = now - timedelta(minutes=AUDIT_COOLDOWN_MIN)
+
+    db = None
+    try:
+        db = SessionLocal()
+        # Joriy holatni tekshirish
+        row = db.execute(
+            _sqlt("SELECT last_sent_at FROM audit_cooldowns WHERE key = :k"),
+            {"k": key},
+        ).fetchone()
+        if row:
+            last_sent = row[0]
+            if isinstance(last_sent, str):
+                try:
+                    last_sent = datetime.fromisoformat(last_sent)
+                except Exception:
+                    last_sent = None
+            if last_sent and last_sent > cutoff:
+                return False
+            # Yangilash
+            db.execute(
+                _sqlt("UPDATE audit_cooldowns SET last_sent_at = :t WHERE key = :k"),
+                {"t": now, "k": key},
+            )
+        else:
+            db.execute(
+                _sqlt("INSERT INTO audit_cooldowns (key, last_sent_at) VALUES (:k, :t)"),
+                {"k": key, "t": now},
+            )
+        db.commit()
+        # Eski yozuvlarni tozalash (har 100-chaqiruvda bir marta)
+        try:
+            import random
+            if random.randint(1, 100) == 1:
+                db.execute(
+                    _sqlt("DELETE FROM audit_cooldowns WHERE last_sent_at < :t"),
+                    {"t": now - timedelta(minutes=AUDIT_COOLDOWN_MIN * 3)},
+                )
+                db.commit()
+        except Exception:
+            db.rollback()
+        return True
+    except Exception as e:
+        # DB xatosi — in-memory fallback
+        try:
+            if db:
+                db.rollback()
+        except Exception:
+            pass
+        print(f"[Audit cooldown DB fallback] {e}", flush=True)
+        last = _cooldown_fallback.get(key)
+        if last and (now - last) < timedelta(minutes=AUDIT_COOLDOWN_MIN):
+            return False
+        _cooldown_fallback[key] = now
+        if len(_cooldown_fallback) > 200:
+            _cooldown_fallback.clear()
+        return True
+    finally:
+        try:
+            if db:
+                db.close()
+        except Exception:
+            pass
 
 
 def _push(text: str, dedup_key: Optional[str] = None):

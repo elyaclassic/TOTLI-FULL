@@ -81,3 +81,18 @@ def ensure_agents_pin_set_at_column(db: Session) -> None:
             raise
     except Exception:
         db.rollback()
+
+
+def ensure_audit_cooldowns_table(db: Session) -> None:
+    """audit_cooldowns jadvali — audit watchdog dedup/cooldown saqlanadi.
+    Process restart paytida ham saqlanadi (B5 — O5 fix)."""
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS audit_cooldowns (
+                key VARCHAR(255) PRIMARY KEY,
+                last_sent_at DATETIME NOT NULL
+            )
+        """))
+        db.commit()
+    except Exception:
+        db.rollback()
