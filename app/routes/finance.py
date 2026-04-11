@@ -735,6 +735,7 @@ async def finance_payment_delete(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    """To'lovni o'chirish (faqat cancelled). Kassa balansi avtomatik qayta hisoblanadi."""
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="To'lov topilmadi")
@@ -743,8 +744,17 @@ async def finance_payment_delete(
             url="/finance?error=" + quote("Tasdiqlangan to'lovni o'chirish mumkin emas. Avval tasdiqni bekor qiling."),
             status_code=303,
         )
-    db.delete(payment)
-    db.commit()
+    cash_id = payment.cash_register_id
+    try:
+        db.delete(payment)
+        db.flush()
+        # Kassa balansini qayta hisoblash (eski cached balance buziladi aks holda)
+        if cash_id:
+            _sync_cash_balance(db, cash_id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse(url="/finance?success=deleted", status_code=303)
 
 
