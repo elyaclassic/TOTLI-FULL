@@ -20,8 +20,11 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.database import Stock, Purchase, PurchaseItem, Product, Partner, User
-from app.services.stock_service import create_stock_movement
+from app.models.database import (
+    Stock, Purchase, PurchaseItem, Product, Partner, User,
+    Order, OrderItem, Payment,
+)
+from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.utils.audit import log_action
 
 
@@ -142,6 +145,71 @@ def confirm_purchase_atomic(
     except DocumentError:
         db.rollback()
         raise
+    except Exception:
+        db.rollback()
+        raise
+
+
+def delete_sale_fully(
+    db: Session,
+    order: Order,
+) -> dict:
+    """
+    Sotuvni atomik o'chirish (Order, type='sale'):
+    1. Holat tekshirish (draft → soft cancel; cancelled/waiting → hard delete)
+    2. Hard delete'da: to'lov bog'langan bo'lsa REJECT qilinadi (orphan oldini olish)
+    3. OrderItem, StockMovement, Order — bir vaqtda o'chiriladi
+    4. Atomik commit
+
+    Qaytadi: {"mode": "soft_cancelled" | "hard_deleted"}
+
+    Bu funksiya K4 (orphan payment) bug'ini tuzatadi:
+    - Oldin: sales.py:765 Payment.order_id → None (silent orphan)
+    - Oldin: stock_movements hech qachon o'chirilmasdi (silent orphan)
+    - Endi: to'lov bor bo'lsa error, yo'q bo'lsa barchasi bir paketda o'chadi
+    """
+    if order.status not in ("draft", "cancelled", "waiting_production"):
+        raise DocumentError(
+            "Faqat qoralama yoki bekor qilingan sotuvni o'chirish mumkin. Avval tasdiqni bekor qiling."
+        )
+
+    if order.status == "draft":
+        # Soft cancel — faqat status o'zgaradi, hech narsa o'chmaydi
+        try:
+            order.status = "cancelled"
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        return {"mode": "soft_cancelled", "payments_deleted": 0, "movements_deleted": 0}
+
+    # --- Hard delete yo'li ---
+    # Oldin to'lovlar borligini tekshirish (orphan oldini olish)
+    payment_count = (
+        db.query(Payment).filter(Payment.order_id == order.id).count()
+    )
+    if payment_count > 0:
+        raise DocumentError(
+            f"Bu sotuv {payment_count} ta to'lov bilan bog'langan. "
+            "Avval Moliya sahifasidan to'lovlarni o'chiring, so'ngra sotuvni o'chiring."
+        )
+
+    try:
+        # 1. OrderItem'larni o'chirish
+        db.query(OrderItem).filter(OrderItem.order_id == order.id).delete(synchronize_session=False)
+
+        # 2. StockMovement'larni o'chirish (oldin bu qadam tushirib qoldirilgan edi)
+        movements_deleted = delete_stock_movements_for_document(db, "Order", order.id)
+
+        # 3. Order'ning o'zini o'chirish
+        db.query(Order).filter(Order.id == order.id).delete(synchronize_session=False)
+
+        db.commit()
+        return {
+            "mode": "hard_deleted",
+            "payments_deleted": 0,
+            "movements_deleted": movements_deleted,
+        }
     except Exception:
         db.rollback()
         raise

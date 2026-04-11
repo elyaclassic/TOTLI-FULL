@@ -748,23 +748,20 @@ async def sales_delete(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Sotuvni o'chirish (admin). Qoralama — bekor qilingan qiladi; bekor qilingan — bazadan o'chiradi."""
+    """Sotuvni o'chirish (admin). Qoralama — bekor qilingan qiladi; bekor qilingan — bazadan o'chiradi.
+    To'lov bog'langan bo'lsa orphan oldini olish uchun rad etiladi."""
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
-    if order.status not in ("draft", "cancelled", "waiting_production"):
+
+    from app.services.document_service import delete_sale_fully, DocumentError
+    try:
+        delete_sale_fully(db, order)
+    except DocumentError as e:
         return RedirectResponse(
-            url="/sales?error=delete&detail=" + quote("Faqat qoralama yoki bekor qilingan sotuvni o'chirish mumkin. Avval tasdiqni bekor qiling."),
+            url=f"/sales?error=delete&detail=" + quote(e.detail),
             status_code=303,
         )
-    if order.status == "draft":
-        order.status = "cancelled"
-        db.commit()
-    else:
-        db.query(OrderItem).filter(OrderItem.order_id == order_id).delete()
-        db.query(Payment).filter(Payment.order_id == order_id).update({Payment.order_id: None})
-        db.query(Order).filter(Order.id == order_id).delete()
-        db.commit()
     return RedirectResponse(url="/sales", status_code=303)
 
 
