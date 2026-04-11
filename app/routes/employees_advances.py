@@ -315,12 +315,12 @@ async def employee_advance_edit_save(
     try:
         adv_date = datetime.strptime(advance_date, "%Y-%m-%d").date()
     except ValueError:
-        return RedirectResponse(url=f"/advances/edit/{advance_id}?error=Noto'g'ri sana", status_code=303)
+        return RedirectResponse(url=f"/employees/advances/edit/{advance_id}?error=Noto'g'ri sana", status_code=303)
     if amount <= 0:
-        return RedirectResponse(url=f"/advances/edit/{advance_id}?error=Summa 0 dan katta bo'lishi kerak", status_code=303)
+        return RedirectResponse(url=f"/employees/advances/edit/{advance_id}?error=Summa 0 dan katta bo'lishi kerak", status_code=303)
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
-        return RedirectResponse(url=f"/advances/edit/{advance_id}?error=Xodim topilmadi", status_code=303)
+        return RedirectResponse(url=f"/employees/advances/edit/{advance_id}?error=Xodim topilmadi", status_code=303)
     if cash_register_id:
         cash = db.query(CashRegister).filter(CashRegister.id == cash_register_id, CashRegister.is_active == True).first()
         adv.cash_register_id = cash.id if cash else adv.cash_register_id
@@ -339,7 +339,7 @@ async def employee_advance_edit_save(
             try:
                 next_id = int(rest[0])
                 remaining = ",".join(rest[1:])
-                url = f"/advances/edit/{next_id}"
+                url = f"/employees/advances/edit/{next_id}"
                 if remaining:
                     url += "?next_ids=" + remaining
                 return RedirectResponse(url=url, status_code=303)
@@ -427,7 +427,7 @@ async def employee_advances_bulk_edit(
     first_id = unconfirmed_ids[0]
     next_ids = unconfirmed_ids[1:]
     next_param = ",".join(str(i) for i in next_ids) if next_ids else ""
-    url = f"/advances/edit/{first_id}"
+    url = f"/employees/advances/edit/{first_id}"
     if next_param:
         url += "?next_ids=" + next_param
     return RedirectResponse(url=url, status_code=303)
@@ -452,7 +452,7 @@ async def employee_advances_bulk_unconfirm(
         return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
     updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.isnot(None)).update({EmployeeAdvance.confirmed_at: None}, synchronize_session=False)
     db.commit()
-    base = "/advances?bulk_unconfirmed=" + str(updated)
+    base = "/employees/advances?bulk_unconfirmed=" + str(updated)
     extra = _advances_list_redirect_params(form)
     return RedirectResponse(url=base + ("&" + extra if extra else ""), status_code=303)
 
@@ -477,7 +477,7 @@ async def employee_advances_bulk_confirm(
     now = datetime.now()
     updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None)).update({EmployeeAdvance.confirmed_at: now}, synchronize_session=False)
     db.commit()
-    base = "/advances?bulk_confirmed=" + str(updated)
+    base = "/employees/advances?bulk_confirmed=" + str(updated)
     extra = _advances_list_redirect_params(form)
     return RedirectResponse(url=base + ("&" + extra if extra else ""), status_code=303)
 
@@ -498,14 +498,14 @@ async def employee_advances_bulk_delete(
         except (TypeError, ValueError):
             pass
     if not ids:
-        base = "/advances?error=" + quote("Hech qaysi avans tanlanmagan.")
+        base = "/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan.")
         extra = _advances_list_redirect_params(form)
         return RedirectResponse(url=base + ("&" + extra if extra else ""), status_code=303)
     deleted = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None)).delete(synchronize_session=False)
     db.commit()
     if ids and deleted == 0:
-        base = "/advances?error=" + quote("Tanlangan avanslar tasdiqlangan. O'chirish uchun avval tasdiqni bekor qiling.")
+        base = "/employees/advances?error=" + quote("Tanlangan avanslar tasdiqlangan. O'chirish uchun avval tasdiqni bekor qiling.")
     else:
-        base = "/advances?bulk_deleted=" + str(deleted)
+        base = "/employees/advances?bulk_deleted=" + str(deleted)
     extra = _advances_list_redirect_params(form)
     return RedirectResponse(url=base + ("&" + extra if extra else ""), status_code=303)
