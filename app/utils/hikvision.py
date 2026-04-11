@@ -26,6 +26,7 @@ class HikvisionAPI:
         username: str = "admin",
         password: str = "",
         use_https: bool = True,
+        verify_ssl: Optional[bool] = None,
     ):
         self.host = host.rstrip("/")
         self.port = port
@@ -33,17 +34,24 @@ class HikvisionAPI:
         self.password = password
         proto = "https" if use_https else "http"
         self.base_url = f"{proto}://{host}:{port}"
+        # SSL tekshiruvi — env orqali sozlanadi
+        # HIKVISION_SSL_VERIFY=1 bo'lsa strict SSL (self-signed cert rad etiladi)
+        # Default 0 — self-signed kameralar uchun (LAN ichida MITM xavfi past)
+        if verify_ssl is None:
+            import os as _os
+            verify_ssl = _os.environ.get("HIKVISION_SSL_VERIFY", "0").lower() in ("1", "true", "yes")
+        self.verify_ssl = verify_ssl
         self._last_status: Optional[int] = None
         self._last_error: Optional[str] = None
         self._session = None
-    
+
     def _get_session(self):
         if requests is None:
             raise RuntimeError("requests kutubxonasi o'rnatilmagan: pip install requests")
         if self._session is None:
             self._session = requests.Session()
             self._session.auth = HTTPDigestAuth(self.username, self.password)
-            self._session.verify = False
+            self._session.verify = self.verify_ssl
             # Content-Type har bir so'rovda beriladi (JSON yoki XML)
         return self._session
     
