@@ -237,20 +237,21 @@
 
 | # | Modul | Qator | Holat | Commit |
 |---|---|---|---|---|
-| **1** | `employees_dismissals.py` | ~155 | ✅ **BAJARILDI** | bu sessiya |
-| 2 | `employees_advances.py` | ~493 | ⏳ Keyingi | — |
-| 3 | `employees_attendance.py` | ~652 | ⏳ | — |
+| **1** | `employees_dismissals.py` | ~155 | ✅ **BAJARILDI** | 5f0c995 |
+| **2** | `employees_advances.py` | ~478 | ✅ **BAJARILDI** | bu sessiya |
+| 3 | `employees_attendance.py` | ~652 | ⏳ Keyingi | — |
 | 4 | `employees_salary.py` | ~539 | ⏳ | — |
 | 5 | `employees_employment.py` | ~711 | ⏳ | — |
 | 6 | `employees.py` (core tozalash) | ~550 | ⏳ | — |
 
-**1-bosqich natijalari:**
-- 5 ta funksiya + 1 constant + 1 helper → yangi modul
-- 4 ta endpoint route'ga register qilindi (GET/POST create, view, export-word)
-- `employees.py` 129 KB → 122 KB (-6.4 KB)
-- 490 route umumiy — o'zgarmas
-- Eski fayl ishlashda davom, endpoint URL'lar aynan
-- Sinov: `main.py` import OK, 4 dismissal route ko'rinadi
+**Bosqich natijalari:**
+- **1-bosqich (dismissals):** 5 ta funksiya, 4 ta endpoint, -6.4 KB
+- **2-bosqich (advances):** 14 ta funksiya, 13 ta endpoint, -19.8 KB
+- `employees.py` 129 KB → 102 KB (**-27 KB, 21% kichraygan**)
+- `employees_advances.py` 20.7 KB yangi fayl
+- 490 route umumiy — o'zgarmas (hamma URL'lar eskidek)
+- Eski fayl ishlashda davom
+- Sinov: import OK, barcha 13 advance endpoint yangi modulda, eski faylda 0
 
 ### C2. `api_routes.py` bo'lish (Nosir rejasi)
 **Audit:** Y1 | **Vaqt:** 1 kun
@@ -300,8 +301,8 @@ Pytest + fixtures (SQLite in-memory DB).
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 0.2/5 (C1 20% — 1/6 bosqich) | 5 | 4% |
-| **JAMI** | **19.2/22** | 22 | **87%** |
+| **Tier C** | 0.33/5 (C1 33% — 2/6 bosqich) | 5 | 7% |
+| **JAMI** | **19.33/22** | 22 | **88%** |
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
