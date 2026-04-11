@@ -154,14 +154,26 @@
 
 ---
 
-### ✨ B2.5. Eski orphan sale payment'larni tozalash 🟡 QOLDIQ
-**Vaqt:** 15 daq | **Xavf:** Past
+### ✨ B2.5. Eski orphan sale payment'larni tozalash ✅ BAJARILDI
+**Sana:** 2026-04-11 | **Skript:** `scripts/fix_b25_orphan_payments.py`
 
-**Muammo:** B2 fix qilishdan oldin 6 ta sale payment `order_id=NULL` bilan qolgan.
+**Qilingan:**
+- 3 ta `confirmed` orphan sale payment (jami 1,569,000 so'm) → `cancelled` ga o'tkazildi
+  - ID=24 PAY-20260311-0002 (1,230,000) — Asosiy kassa plastik
+  - ID=79 PAY-20260314-0024 (282,000) — Do'kon 1 kassa
+  - ID=80 PAY-20260314-0025 (57,000) — Do'kon 1 kassa
+- 3 ta `cancelled` orphan — o'z holiga tashlandi (zararsiz)
+- Har payment description'ga `[B2.5 CLEANUP 2026-04-11]` tagi qo'shildi
+- Kassa balanslari `_sync_cash_balance` orqali qayta hisoblandi
 
-**Yechim:** Bir martalik skript — shu 6 ta yozuvni ko'rib chiqish, kerakmi yo'q ekanligiga qarab, `status='cancelled'` yoki delete.
+**Kassa balansi o'zgarishi:**
+- Asosiy kassa plastik: 1,640,000 → 410,000 (-1,230,000)
+- Do'kon 1 kassa: 94,439,250 → 94,100,250 (-339,000)
+- **Jami: -1,569,000 so'm** (kutilgan aniq moslashdi)
 
-**Keyinroq qilinadi** — xavfli bo'lmagan clean-up.
+**Sinov:** Qolgan confirmed orphan = 0. Skript rollback-safe (flush + verify → commit yoki rollback).
+
+**Rollback:** `D:\TOTLI_BI_BACKUPS\live\2026-04-11_15-42-55.db.gz` (preoperatsion snapshot)
 
 ---
 
@@ -215,9 +227,9 @@ Pytest + factory_boy.
 |---|---|---|---|
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
-| **Tier B** | 5/5 | 5 | **100%** |
+| **Tier B** | 5/5 + B2.5 | 5 | **100%** |
 | **Tier C** | 0/5 | 5 | 0% |
-| **JAMI** | **16/22** | 22 | **73%** |
+| **JAMI** | **17/22** | 22 | **77%** |
 
 **Bugungi sessiyada bajarilgan:**
 - Infrastruktura 7/7 (jonli backup, monitoring, restore)
