@@ -23,7 +23,15 @@ if os.getenv("PRODUCTION", "").lower() in ("1", "true", "yes") and "change-in-pr
         ".env faylida yangi tasodifiy kalit o'rnating."
     )
 SESSION_SERIALIZER = URLSafeTimedSerializer(SECRET_KEY)
-SESSION_MAX_AGE = 86400 * 30  # 30 kun (mobil ilova uchun)
+# B4 (Y8): Session muddati — env orqali sozlanadi, default 7 kun.
+# Oldin 30 kun edi — mobil token leak xavfi uchun qisqartirildi.
+# Web foydalanuvchilar kunlik cookie bilan ishlaydi (routes/auth.py max_age=86400),
+# bu o'zgarish asosan mobil ilovaga ta'sir qiladi.
+try:
+    _session_days = int(os.getenv("SESSION_MAX_AGE_DAYS", "7"))
+except ValueError:
+    _session_days = 7
+SESSION_MAX_AGE = 86400 * max(1, _session_days)
 
 def _legacy_hash(password: str) -> str:
     """Eski SHA256 hash (migratsiya)"""
