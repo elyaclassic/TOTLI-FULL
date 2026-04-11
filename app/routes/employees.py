@@ -1,34 +1,31 @@
 """
-Xodimlar — ro'yxat, qo'shish, tahrir, bo'shatish, ishga qabul, davomat, avanslar, ish haqi.
+Xodimlar — core CRUD va import/export.
+
+Tier C1 bo'limi bo'yicha ajratilgan modullar:
+- employees_dismissals.py   — ishdan bo'shatish hujjatlari
+- employees_employment.py   — ishga qabul qilish va mehnat shartnomasi
+- employees_attendance.py   — davomat (kunlik tabellar)
+- employees_advances.py     — avans hujjatlari
+- employees_salary.py       — oylik hisoblash
 """
-from datetime import datetime, date, timedelta
+import io
+from datetime import datetime
 from typing import Optional, List
 from urllib.parse import quote
-import io
-import uuid
-import calendar
 
 import openpyxl
-from docx import Document
-from docx.shared import Pt
-from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-from fastapi import APIRouter, Request, Depends, Form, HTTPException, File, UploadFile, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, Response
+from fastapi import APIRouter, Request, Depends, Form, HTTPException, File, UploadFile
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, and_
+from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.core import templates
 from app.models.database import (
     get_db, User, Employee, Department, Position, PieceworkTask,
-    Attendance, AttendanceDoc, EmployeeAdvance, EmploymentDoc, DismissalDoc,
-    Salary, employee_piecework_tasks, Payment,
-    ExpenseType, ExpenseDoc, ExpenseDocItem, CashRegister,
-    Warehouse, Product, Unit, ProductionGroup, Production, production_group_members,
 )
-from app.deps import require_auth, require_admin
-from app.utils.production_order import is_qiyom_recipe, recipe_kg_per_unit
+from app.deps import require_auth
 
 router = APIRouter(prefix="/employees", tags=["employees"])
 
@@ -213,13 +210,9 @@ async def employee_delete(
         )
 
 
-# --- ISHDAN BO'SHATISH — app/routes/employees_dismissals.py ga ko'chirildi (Tier C1 1-bosqich) ---
-
-
-# --- ISHGA QABUL — app/routes/employees_employment.py ga ko'chirildi (Tier C1 5-bosqich) ---
-
-
-# --- EMPLOYEES EXCEL OPERATIONS ---
+# ==========================================
+# EMPLOYEES EXCEL OPERATIONS + HIKVISION IMPORT
+# ==========================================
 @router.get("/export")
 async def export_employees(db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     employees = db.query(Employee).all()
@@ -368,10 +361,3 @@ async def employees_import_from_hikvision(
         return RedirectResponse(url="/employees?error=" + quote("Hikvision import xatoligi"), status_code=303)
 
 
-# --- DAVOMAT — app/routes/employees_attendance.py ga ko'chirildi (Tier C1 3-bosqich) ---
-
-
-# --- AVANSLAR — app/routes/employees_advances.py ga ko'chirildi (Tier C1 2-bosqich) ---
-
-
-# --- OYLIK HISOBLASH — app/routes/employees_salary.py ga ko'chirildi (Tier C1 4-bosqich) ---
