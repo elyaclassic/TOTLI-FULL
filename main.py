@@ -45,6 +45,7 @@ from app.routes import api_routes
 from app.routes import api_system as api_system_routes
 from app.routes import api_dashboard as api_dashboard_routes
 from app.routes import api_auth as api_auth_routes
+from app.routes import api_driver_ops as api_driver_ops_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
 from app.routes import admin as admin_routes
@@ -81,6 +82,7 @@ app.include_router(api_routes.router)
 app.include_router(api_system_routes.router)
 app.include_router(api_dashboard_routes.router)
 app.include_router(api_auth_routes.router)
+app.include_router(api_driver_ops_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)
 app.include_router(admin_routes.router)
