@@ -230,17 +230,27 @@
 
 **Xavf:** YUQORI — POS eng muhim sahifa. Smoke test + feature flag majburiy.
 
-### C1. `employees.py` bo'lish (Nosir rejasi)
-**Audit:** Y1 | **Vaqt:** 1 kun
+### C1. `employees.py` bo'lish (Nosir rejasi) 🟠 BAJARILMOQDA
+**Audit:** Y1 | **Vaqt:** 1 kun | **Reja:** `TIER_C1_PLAN.md`
 
-2934 qator, 129 KB → 5 ta modul:
-- `employees.py` (core CRUD, ~350 qator) — employees_list/add/edit/delete
-- `employees_dismissals.py` (~550 qator) — ishdan bo'shatish hujjatlari
-- `employees_employment.py` (~700 qator) — ishlash shartnomasi hujjatlari
-- `employees_attendance.py` (~600 qator) — davomat, tabel
-- `employees_advances.py` (~500 qator) — avans + ish haqi
+2934 qator, 129 KB → 6 ta modul, incremental execution:
 
-**Import:** har modul alohida router, `main.py` da barchasi `include_router()`.
+| # | Modul | Qator | Holat | Commit |
+|---|---|---|---|---|
+| **1** | `employees_dismissals.py` | ~155 | ✅ **BAJARILDI** | bu sessiya |
+| 2 | `employees_advances.py` | ~493 | ⏳ Keyingi | — |
+| 3 | `employees_attendance.py` | ~652 | ⏳ | — |
+| 4 | `employees_salary.py` | ~539 | ⏳ | — |
+| 5 | `employees_employment.py` | ~711 | ⏳ | — |
+| 6 | `employees.py` (core tozalash) | ~550 | ⏳ | — |
+
+**1-bosqich natijalari:**
+- 5 ta funksiya + 1 constant + 1 helper → yangi modul
+- 4 ta endpoint route'ga register qilindi (GET/POST create, view, export-word)
+- `employees.py` 129 KB → 122 KB (-6.4 KB)
+- 490 route umumiy — o'zgarmas
+- Eski fayl ishlashda davom, endpoint URL'lar aynan
+- Sinov: `main.py` import OK, 4 dismissal route ko'rinadi
 
 ### C2. `api_routes.py` bo'lish (Nosir rejasi)
 **Audit:** Y1 | **Vaqt:** 1 kun
@@ -289,9 +299,9 @@ Pytest + fixtures (SQLite in-memory DB).
 |---|---|---|---|
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
-| **Tier B** | 5/5 + B2.5 + B2.6 | 5 | **100%** |
-| **Tier C** | 0/5 | 5 | 0% |
-| **JAMI** | **18/22** | 22 | **82%** |
+| **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
+| **Tier C** | 0.2/5 (C1 20% — 1/6 bosqich) | 5 | 4% |
+| **JAMI** | **19.2/22** | 22 | **87%** |
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
