@@ -367,75 +367,20 @@ async def purchase_confirm(
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
-    if purchase.status != "draft":
-        raise HTTPException(status_code=400, detail="Faqat qoralama holatidagi kirimlarni tasdiqlash mumkin")
-    if not purchase.items:
-        raise HTTPException(status_code=400, detail="Tasdiqlash uchun kamida bitta mahsulot qo'shing.")
-    total_expenses = purchase.total_expenses or 0
-    items_total = purchase.total or 0
-    for item in purchase.items:
-        # Avval eski qoldiqni olish (tasdiqlashdan oldin)
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == purchase.warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        
-        product = db.query(Product).filter(Product.id == item.product_id).first()
-        if product:
-            # Xarajatlar ulushini hisoblash
-            expense_share_per_unit = 0.0
-            if total_expenses > 0 and items_total > 0 and item.total and item.quantity:
-                expense_share = (item.total / items_total) * total_expenses
-                expense_share_per_unit = expense_share / item.quantity
-            
-            # Yangi narx (xarajatlar bilan)
-            new_cost_per_unit = item.price + expense_share_per_unit
-            new_total_cost = item.quantity * new_cost_per_unit
-            
-            # Eski qoldiq va narx
-            old_quantity = stock.quantity if stock else 0.0
-            old_price = product.purchase_price if product.purchase_price else 0.0
-            
-            # O'rtacha tannarxni hisoblash
-            if old_quantity > 0 and old_price > 0:
-                # O'rtacha tannarx = (Eski miqdor * Eski narx + Yangi miqdor * Yangi narx) / (Eski miqdor + Yangi miqdor)
-                old_total_cost = old_quantity * old_price
-                total_quantity = old_quantity + item.quantity
-                total_cost = old_total_cost + new_total_cost
-                average_cost = total_cost / total_quantity if total_quantity > 0 else new_cost_per_unit
-            else:
-                # Agar eski qoldiq yo'q bo'lsa, yangi narxni ishlatish
-                average_cost = new_cost_per_unit
-            
-            # Mahsulotning o'rtacha tannarxini yangilash
-            product.purchase_price = average_cost
-        
-        # Qoldiqni yangilash — create_stock_movement o'zi stock.quantity ni o'zgartiradi (double-count bo'lmasin)
-        from app.services.stock_service import create_stock_movement
-        create_stock_movement(
+
+    # --- Atomik biznes operatsiyasi (stock + price + partner balance + log) ---
+    from app.services.document_service import confirm_purchase_atomic, DocumentError
+    try:
+        confirm_purchase_atomic(
             db=db,
-            warehouse_id=purchase.warehouse_id,
-            product_id=item.product_id,
-            quantity_change=+item.quantity,
-            operation_type="purchase",
-            document_type="Purchase",
-            document_id=purchase.id,
-            document_number=purchase.number,
-            user_id=current_user.id if current_user else None,
-            note=f"Xarid kirim: {purchase.number}",
-            created_at=purchase.date,
+            purchase=purchase,
+            current_user=current_user,
+            client_host=request.client.host if request.client else "",
         )
-    purchase.status = "confirmed"
-    total_with_expenses = items_total + total_expenses
-    if purchase.partner_id:
-        partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()
-        if partner:
-            partner.balance -= total_with_expenses
-    log_action(db, user=current_user, action="confirm", entity_type="purchase",
-               entity_id=purchase.id, entity_number=purchase.number,
-               details=f"Summa: {total_with_expenses:,.0f}",
-               ip_address=request.client.host if request.client else "")
-    db.commit()
+    except DocumentError as e:
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    # --- Post-commit side-effects (commit'ga bog'liq emas) ---
     check_low_stock_and_notify(db)
     try:
         from app.bot.services.audit_watchdog import audit_purchase
@@ -454,52 +399,21 @@ async def purchase_revert(
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
-    if purchase.status != "confirmed":
+
+    # --- Atomik biznes operatsiyasi (revert stock + partner balance) ---
+    from app.services.document_service import revert_purchase_atomic, DocumentError
+    try:
+        revert_purchase_atomic(
+            db=db,
+            purchase=purchase,
+            current_user=current_user,
+        )
+    except DocumentError as e:
         return RedirectResponse(
-            url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote("Faqat tasdiqlangan kirimning tasdiqini bekor qilish mumkin."),
+            url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote(e.detail),
             status_code=303,
         )
-    # Avval qoldiq yetarliligini tekshirish
-    for item in purchase.items:
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == purchase.warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        if not stock:
-            return RedirectResponse(
-                url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote("Ombor qoldig'i topilmadi."),
-                status_code=303,
-            )
-        if (stock.quantity or 0) < item.quantity:
-            prod = db.query(Product).filter(Product.id == item.product_id).first()
-            name = prod.name if prod else f"#{item.product_id}"
-            return RedirectResponse(
-                url=f"/purchases/edit/{purchase_id}?error=revert&detail=" + quote(f"Ombor qoldig'i yetarli emas: {name}"),
-                status_code=303,
-            )
-    # Stock movement orqali qaytarish (audit trail saqlanadi)
-    from app.services.stock_service import create_stock_movement
-    for item in purchase.items:
-        create_stock_movement(
-            db=db,
-            warehouse_id=purchase.warehouse_id,
-            product_id=item.product_id,
-            quantity_change=-item.quantity,
-            operation_type="purchase_revert",
-            document_type="Purchase",
-            document_id=purchase.id,
-            document_number=f"{purchase.number}-REVERT",
-            user_id=current_user.id if current_user else None,
-            created_at=purchase.date,
-            note=f"Xarid bekor: {purchase.number}",
-        )
-    total_with_expenses = purchase.total + (purchase.total_expenses or 0)
-    if purchase.partner_id:
-        partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()
-        if partner:
-            partner.balance += total_with_expenses
-    purchase.status = "draft"
-    db.commit()
+
     return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
 
 
