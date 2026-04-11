@@ -154,6 +154,36 @@
 
 ---
 
+### 🎯 B2.6. Senior audit topilmalarini tuzatish ✅ BAJARILDI
+**Sana:** 2026-04-11 | **Audit:** 5 ekspert parallel
+
+**Qilingan:**
+
+1. **X3 — `agent_set_pin` kritik zaifligi (Sherzod audit):**
+   - `current_password` endi MAJBURIY (Form(...) required)
+   - Bo'sh qiymatni REJECT (oldingi `if current_password and` bypass tuzatildi)
+   - IP rate limit (`is_blocked`) qo'shildi
+   - Per-agent rate limit (`is_agent_blocked(f"setpin:{agent.id}")`)
+   - Birinchi marta o'rnatishda aniq ikki yo'l: phone (legacy) yoki User bcrypt
+   - Xato urinishlar `record_failure` + `record_agent_failure`
+   - Muvaffaqiyatli urinish `record_success` + `record_agent_success`
+
+2. **X5 — `purchase_delete` silent orphan (Nosir audit):**
+   - `delete_purchase_fully(db, purchase)` service yaratildi
+   - Purchase modelida cascade yo'q + SQLite FK=OFF → eski kod orphan qoldirardi
+   - Yangi: PurchaseExpense + PurchaseItem + Purchase atomik o'chadi
+   - `app/routes/purchases.py:purchase_delete` service wrapper ga o'tkazildi
+
+**False alarm'lar (audit adashgan):**
+- **X1** — `delete_sale_fully` allaqachon try/except/rollback bor (document_service.py:197-215)
+- **X2** — `purchases/edit.html` `revert_error` va `revert_detail` ko'rsatadi (28-qator), route uzatadi (214-215)
+- **DB anomaliya (Anvar)** — 11 cancelled / 101 NULL order_id — normal holat (non-sale payment kategoriyalar)
+
+**Hali tuzatilmagan (Tier C paytida yoki alohida):**
+- **X4** — Bot polling conflict (DEV_MODE auto-reload zombies) — clean restart kerak, kod muammo emas
+- **X6** — production.py va finance.py delete'lari service'ga ko'chirilmagan
+- **X7** — `document_service.py` uchun unit test yo'q (Tier C4 ichida)
+
 ### ✨ B2.5. Eski orphan sale payment'larni tozalash ✅ BAJARILDI
 **Sana:** 2026-04-11 | **Skript:** `scripts/fix_b25_orphan_payments.py`
 
@@ -177,47 +207,79 @@
 
 ---
 
-## 🔴 TIER C — Katta refactor, yakshanba kechasi (5 task)
+## 🔴 TIER C — Katta refactor (5 task, ROI bo'yicha saralandi)
 
 **Xususiyati:** Fayllar bo'linadi, UI refactor. Xavfli.
 **Vaqti:** **Yakshanba 01:00 – 06:00**, feature flag bilan parallel eski+yangi.
 **Rollback:** Feature flag'ni o'chirish (0 downtime).
+**Ustuvorlik:** PM Bekzod tavsiyasi bo'yicha — C5 birinchi (kassir UX ga ta'sir).
 
-### C1. `employees.py` bo'lish
+### ⭐ C5. POS template refactor (🔴 BIRINCHI — eng yuqori ROI)
+**Audit:** O8 | **Vaqt:** 3 kun | **ROI:** KASSIR tezligi +30%
+
+**Hozirgi holat:** `templates/sales/pos.html` 2310 qator monolit, 600+ qator inline JS.
+
+**Modul bo'linish (Diyor taklifi):**
+- `sales/pos.html` (asosiy layout, ~300 qator)
+- `sales/_pos_header.html` (warehouse select + user info)
+- `sales/_pos_catalog.html` (mahsulot tanlash, search, qo'shish)
+- `sales/_pos_cart.html` (savatcha, discount, total)
+- `sales/_pos_payment.html` (to'lov formasi, kirim/chiqim/avans)
+- `sales/_pos_modals.html` (barcha 9 ta modal bir joyda)
+- `static/js/pos/core.js` (common), `cart.js`, `payment.js`, `search.js`
+
+**Xavf:** YUQORI — POS eng muhim sahifa. Smoke test + feature flag majburiy.
+
+### C1. `employees.py` bo'lish (Nosir rejasi)
 **Audit:** Y1 | **Vaqt:** 1 kun
 
-2934 qator, 129 KB → `attendance.py` + `salary.py` + `piecework.py` + `employees.py` (asosiy CRUD).
-Feature flag: `FEATURES["new_employees_routes"]`.
+2934 qator, 129 KB → 5 ta modul:
+- `employees.py` (core CRUD, ~350 qator) — employees_list/add/edit/delete
+- `employees_dismissals.py` (~550 qator) — ishdan bo'shatish hujjatlari
+- `employees_employment.py` (~700 qator) — ishlash shartnomasi hujjatlari
+- `employees_attendance.py` (~600 qator) — davomat, tabel
+- `employees_advances.py` (~500 qator) — avans + ish haqi
 
-### C2. `api_routes.py` bo'lish
+**Import:** har modul alohida router, `main.py` da barchasi `include_router()`.
+
+### C2. `api_routes.py` bo'lish (Nosir rejasi)
 **Audit:** Y1 | **Vaqt:** 1 kun
 
-2574 qator, 103 KB → `agents_api.py` + `driver_api.py` + `stats_api.py` + `pwa_api.py`.
+2690 qator, 106 KB → 6 ta modul:
+- `api_system.py` (~150) — PWA config, app version/download
+- `api_dashboard.py` (~200) — stats, dashboard, notifications
+- `api_auth.py` (~450) — login, PIN, token, phone normalize
+- `api_agent_ops.py` (~800) — agent orders, visits, partners, locations
+- `api_driver_ops.py` (~600) — driver deliveries, stats
+- `api_agent_advanced.py` (~500) — reports, KPI, reconciliation
 
-### C3. Service layer kuchaytirish
+### C3. Service layer kengaytirish
 **Audit:** Y2 | **Vaqt:** 2 kun
 
-`services/` ga: `document_service.py`, `payment_service.py`, `finance_service.py`, `stock_repo.py`, `partner_repo.py`.
-Business logic routelardan service/repo ga ko'chadi.
+Hozir: `document_service.py` (4 funksiya), `stock_service.py`, `pos_helpers.py`.
+
+Qo'shiladi:
+- `services/payment_service.py` — `create_payment_atomic`, `delete_payment_atomic`
+- `services/finance_service.py` — cash transfer, balance sync, carry-over
+- `services/production_service.py` — `production_confirm_atomic`, `production_revert_atomic`
+- `services/stock_repo.py` — StockRepo (strict contracts)
+- `services/partner_repo.py` — PartnerRepo
+
+**Natija:** Routes 50-70% kamayadi, testable biznes logika.
 
 ### C4. Unit test asoslari
 **Audit:** O3 | **Vaqt:** 2 kun
 
 `tests/unit/`:
-- `test_stock_service.py`
+- `test_document_service.py` — purchase confirm/revert/delete + sale delete
+- `test_stock_service.py` — create_movement, clamp, edge cases
 - `test_payment_service.py`
-- `test_carryover.py`
-- `test_auth.py`
+- `test_carryover.py` — oylik manfiy balans
+- `test_auth.py` — hash_pin, verify_pin, SECRET_KEY
 
-Pytest + factory_boy.
+Pytest + fixtures (SQLite in-memory DB).
 
-### C5. POS template refactor
-**Audit:** O8 | **Vaqt:** 3 kun
-
-`templates/sales/pos.html` 2310 qator monolit → Alpine.js komponentlar:
-- `pos_product_picker.html`
-- `pos_cart.html`
-- `pos_payment.html`
+**Minimal smoke (Tier C ga kirish sharti):** 5 ta asosiy service funksiya uchun happy path.
 
 ---
 
@@ -227,9 +289,16 @@ Pytest + factory_boy.
 |---|---|---|---|
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
-| **Tier B** | 5/5 + B2.5 | 5 | **100%** |
+| **Tier B** | 5/5 + B2.5 + B2.6 | 5 | **100%** |
 | **Tier C** | 0/5 | 5 | 0% |
-| **JAMI** | **17/22** | 22 | **77%** |
+| **JAMI** | **18/22** | 22 | **82%** |
+
+**Senior audit (11 ekspert jamoasi) — 2026-04-11:**
+- 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
+- 3 ta **haqiqiy xato** topildi (X3 set-pin zaifligi, X5 purchase_delete orphan, X4 bot conflict)
+- 2 ta **false alarm** (X1, X2 — kod allaqachon to'g'ri edi)
+- 1 ta **operational muammo** (X4 — clean restart kerak)
+- Tuzatilgan: X3 + X5 (B2.6 commit)
 
 **Bugungi sessiyada bajarilgan:**
 - Infrastruktura 7/7 (jonli backup, monitoring, restore)
@@ -305,7 +374,26 @@ git reset --hard pre-refactor-2026-04-10
 3. **Tier B bugun ish vaqtida** bajarildi — tungi oyna shart bo'lmadi (DEV_MODE reload = xavfsiz)
 4. **Live backup** ishonchli — 2 manbali (Task Scheduler + app scheduler), 2 soat retention
 5. **B3 mobil**: Flutter jamoasi PIN ekranini qo'shmaguncha backend o'zgarmaydi (backward compat)
-6. **16 commit bugun** — har biri mustaqil rollback nuqtasi
+6. **18+ commit bugun** — har biri mustaqil rollback nuqtasi
+
+### 🤖 Bot polling conflict (X4 — operational)
+
+**Holat:** `server.log`'da `TelegramConflictError: terminated by other getUpdates request` (tryings=64+).
+
+**Sabab:** DEV_MODE ON → auto-reload har fayl tahririda eski process'ni o'ldiradi, lekin eski bot polling task Telegram serverga hali connected. Yangi process yangi polling boshlaganda, **Telegram 2 ta connection ko'radi va bittasini rad etadi**.
+
+**Ta'sir:** 
+- 🟢 Web foydalanuvchilar — 0 ta'sir (web bilan bog'liq emas)
+- 🟢 Database, scheduler, backup — ishlayapti
+- 🟡 Telegram notifications, audit watchdog — ba'zi xabarlar yetmasligi mumkin
+
+**Yechim:** **Clean restart** (DEV_MODE avtomatik reload emas):
+1. Server launcher'dan `T` (to'xtatish) bosing
+2. 10 sekund kuting (eski polling Telegram'dan timeout qilinadi)
+3. Server launcher'dan `Q` yoki yangi start bilan boshlang
+4. Log'da `TelegramConflictError` yo'qolishi kerak
+
+**Tier C oldidan:** Ideal holatda DEV_MODE OFF qilish va manual restartga o'tish. Bu katta refactor paytida chalkashlik oldini oladi.
 
 ---
 

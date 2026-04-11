@@ -445,14 +445,17 @@ async def purchase_delete(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    """Tovar kirimini o'chirish (faqat draft). Atomik: items, expenses, purchase birga."""
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
-    if purchase.status != "draft":
+
+    from app.services.document_service import delete_purchase_fully, DocumentError
+    try:
+        delete_purchase_fully(db, purchase)
+    except DocumentError as e:
         return RedirectResponse(
-            url=f"/purchases?error=delete&detail=" + quote("Faqat qoralama holatidagi kirimni o'chirish mumkin."),
+            url=f"/purchases?error=delete&detail=" + quote(e.detail),
             status_code=303,
         )
-    db.delete(purchase)
-    db.commit()
     return RedirectResponse(url="/purchases", status_code=303)

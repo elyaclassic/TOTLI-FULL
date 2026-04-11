@@ -21,7 +21,7 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.models.database import (
-    Stock, Purchase, PurchaseItem, Product, Partner, User,
+    Stock, Purchase, PurchaseItem, PurchaseExpense, Product, Partner, User,
     Order, OrderItem, Payment,
 )
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
@@ -210,6 +210,48 @@ def delete_sale_fully(
             "payments_deleted": 0,
             "movements_deleted": movements_deleted,
         }
+    except Exception:
+        db.rollback()
+        raise
+
+
+def delete_purchase_fully(
+    db: Session,
+    purchase: Purchase,
+) -> dict:
+    """
+    Tovar kirimini atomik o'chirish (hard delete).
+
+    Faqat 'draft' holatdagi purchase o'chirilishi mumkin. 'confirmed' bo'lsa —
+    avval revert_purchase_atomic() chaqirilishi shart.
+
+    Bolalar: PurchaseExpense va PurchaseItem. Purchase modelida cascade yo'q va
+    SQLite'da FK=OFF — shuning uchun explicit o'chirish kerak, aks holda
+    silent orphan yozuvlar qoladi.
+
+    Atomik: barchasi bitta transaction, xato bo'lsa rollback.
+    """
+    if purchase.status != "draft":
+        raise DocumentError(
+            "Faqat qoralama holatidagi kirimni o'chirish mumkin. Avval tasdiqni bekor qiling."
+        )
+
+    try:
+        # 1. PurchaseExpense'larni o'chirish
+        db.query(PurchaseExpense).filter(
+            PurchaseExpense.purchase_id == purchase.id
+        ).delete(synchronize_session=False)
+
+        # 2. PurchaseItem'larni o'chirish
+        db.query(PurchaseItem).filter(
+            PurchaseItem.purchase_id == purchase.id
+        ).delete(synchronize_session=False)
+
+        # 3. Purchase'ni o'chirish
+        db.query(Purchase).filter(Purchase.id == purchase.id).delete(synchronize_session=False)
+
+        db.commit()
+        return {"mode": "hard_deleted", "items_deleted": True, "expenses_deleted": True}
     except Exception:
         db.rollback()
         raise
