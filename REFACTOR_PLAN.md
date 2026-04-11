@@ -261,16 +261,25 @@
 - Eski fayl ishlashda davom
 - Sinov: import OK, barcha 13 advance endpoint yangi modulda, eski faylda 0
 
-### C2. `api_routes.py` bo'lish (Nosir rejasi)
-**Audit:** Y1 | **Vaqt:** 1 kun
+### C2. `api_routes.py` bo'lish ✅ TO'LIQ TUGADI
+**Audit:** Y1 | **Sana:** 2026-04-11
 
-2690 qator, 106 KB → 6 ta modul:
-- `api_system.py` (~150) — PWA config, app version/download
-- `api_dashboard.py` (~200) — stats, dashboard, notifications
-- `api_auth.py` (~450) — login, PIN, token, phone normalize
-- `api_agent_ops.py` (~800) — agent orders, visits, partners, locations
-- `api_driver_ops.py` (~600) — driver deliveries, stats
-- `api_agent_advanced.py` (~500) — reports, KPI, reconciliation
+2725 qator, 102 KB → 6 ta modul (6 bosqichda):
+
+| # | Modul | Qator | Hajm | Commit |
+|---|---|---|---|---|
+| 1 | `api_system.py` | 45 | 1.3 KB | f300a95 |
+| 2 | `api_dashboard.py` | 170 | 6.5 KB | dd16937 |
+| 3 | `api_auth.py` | 540 | 22.6 KB | 4538a47 |
+| 4 | `api_driver_ops.py` | 270 | 11.7 KB | 62c44b5 |
+| 5 | `api_agent_ops.py` | 900 | 36.8 KB | 3885a12 |
+| 6 | `api_agent_advanced.py` | 890 | 32.8 KB | bu sessiya |
+
+**Yakuniy natija:**
+- api_routes.py: 102 KB → 1.9 KB (faqat import va marker qolgan)
+- 30 endpoint 6 modulga taqsimlandi
+- 490 route saqlandi
+- Backward compat 100% (URL prefix /api)
 
 ### C3. Service layer kengaytirish
 **Audit:** Y2 | **Vaqt:** 2 kun
@@ -309,8 +318,8 @@ Pytest + fixtures (SQLite in-memory DB).
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 1/5 (C1 TUGADI) | 5 | 20% |
-| **JAMI** | **20/22** | 22 | **91%** |
+| **Tier C** | 2/5 (C1+C2 TUGADI) | 5 | 40% |
+| **JAMI** | **21/22** | 22 | **95%** |
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
