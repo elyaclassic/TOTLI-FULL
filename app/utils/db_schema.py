@@ -54,3 +54,30 @@ def ensure_cash_opening_balance_column(db: Session) -> None:
             raise
     except Exception:
         db.rollback()
+
+
+def ensure_agents_pin_hash_column(db: Session) -> None:
+    """Agar agents jadvalida pin_hash ustuni bo'lmasa, qo'shadi.
+    Agent login PIN (B3) uchun — null default (backward compat: legacy phone-as-password)."""
+    try:
+        db.execute(text("ALTER TABLE agents ADD COLUMN pin_hash VARCHAR(255) DEFAULT NULL"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
+def ensure_agents_pin_set_at_column(db: Session) -> None:
+    """agents.pin_set_at — PIN qachon o'rnatilgan (audit uchun)."""
+    try:
+        db.execute(text("ALTER TABLE agents ADD COLUMN pin_set_at DATETIME DEFAULT NULL"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()

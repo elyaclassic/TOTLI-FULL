@@ -46,6 +46,42 @@ def is_legacy_hash(hashed_password: str) -> bool:
     return True
 
 
+def hash_pin(pin: str) -> str:
+    """Agent PIN'ini bcrypt bilan hashlash (B3).
+    PIN 4-8 raqamli bo'lishi kerak — validatsiya chaqiruvchida.
+    """
+    pin_bytes = pin.encode("utf-8")[:72]
+    salt = bcrypt.gensalt(rounds=12)
+    return bcrypt.hashpw(pin_bytes, salt).decode("utf-8")
+
+
+def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
+    """Agent PIN'ini tekshirish."""
+    if not hashed_pin or not plain_pin:
+        return False
+    if not (hashed_pin.startswith("$2") or hashed_pin.startswith("$2a") or hashed_pin.startswith("$2b")):
+        return False
+    try:
+        return bcrypt.checkpw(plain_pin.encode("utf-8")[:72], hashed_pin.encode("utf-8"))
+    except Exception:
+        return False
+
+
+def validate_pin_format(pin: str) -> Optional[str]:
+    """PIN format tekshiruvi. Xato bo'lsa xabar qaytaradi, OK bo'lsa None."""
+    if not pin:
+        return "PIN bo'sh bo'lmasligi kerak"
+    if not pin.isdigit():
+        return "PIN faqat raqamlardan iborat bo'lishi kerak"
+    if len(pin) < 4 or len(pin) > 8:
+        return "PIN 4 dan 8 ta raqamgacha bo'lishi kerak"
+    # Juda oddiy PIN'lar rad etiladi
+    if pin in ("0000", "1111", "2222", "3333", "4444", "5555", "6666", "7777", "8888", "9999",
+               "1234", "4321", "12345", "54321", "123456", "654321"):
+        return "Juda oddiy PIN. Boshqa kombinatsiya tanlang."
+    return None
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Parolni tekshirish (bcrypt yoki eski SHA256 — migratsiya uchun).
     Plaintext parollar qabul qilinmaydi: migrations/migrate_plaintext_passwords.py ni ishlatib migrasiya qiling.

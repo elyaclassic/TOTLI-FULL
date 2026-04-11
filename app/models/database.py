@@ -1227,7 +1227,7 @@ class DismissalDoc(Base):
 class Agent(Base):
     """Savdo agentlari"""
     __tablename__ = "agents"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     code = Column(String(50), unique=True, index=True)
     full_name = Column(String(200), index=True)
@@ -1239,6 +1239,10 @@ class Agent(Base):
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.now)
+    # B3 — Agent login PIN (K5): null bo'lsa legacy phone-as-password,
+    # set bo'lsa faqat PIN qabul qilinadi (bcrypt hash)
+    pin_hash = Column(String(255), nullable=True)
+    pin_set_at = Column(DateTime, nullable=True)
 
     locations = relationship("AgentLocation", back_populates="agent", order_by="AgentLocation.recorded_at.desc()")
     routes = relationship("Route", back_populates="agent")

@@ -14,7 +14,12 @@ from datetime import datetime
 from app.constants import HTML_404, HTML_500
 from app.middleware import global_safe_middleware_impl, csrf_middleware_impl, auth_middleware_impl
 from app.models.database import init_db, SessionLocal
-from app.utils.db_schema import ensure_cash_opening_balance_column, ensure_payments_status_column
+from app.utils.db_schema import (
+    ensure_cash_opening_balance_column,
+    ensure_payments_status_column,
+    ensure_agents_pin_hash_column,
+    ensure_agents_pin_set_at_column,
+)
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
 from app.routes import home as home_routes
@@ -209,10 +214,12 @@ async def startup():
         try:
             ensure_cash_opening_balance_column(db)
             ensure_payments_status_column(db)
+            ensure_agents_pin_hash_column(db)
+            ensure_agents_pin_set_at_column(db)
         finally:
             db.close()
     except Exception as e:
-        print("[Startup] ensure_cash_opening_balance_column / ensure_payments_status_column:", e)
+        print("[Startup] ensure_xxx_column:", e)
     try:
         from app.utils.scheduler import start_scheduler
         start_scheduler()

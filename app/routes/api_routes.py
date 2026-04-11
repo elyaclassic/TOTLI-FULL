@@ -34,8 +34,14 @@ from app.models.database import (
 from sqlalchemy import func as sa_func
 from app.deps import require_auth, get_current_user
 from app.utils.notifications import get_unread_count, get_user_notifications, mark_as_read
-from app.utils.auth import create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash
-from app.utils.rate_limit import is_blocked, record_failure, record_success, check_api_rate_limit
+from app.utils.auth import (
+    create_session_token, get_user_from_token, verify_password, hash_password, is_legacy_hash,
+    hash_pin, verify_pin, validate_pin_format,
+)
+from app.utils.rate_limit import (
+    is_blocked, record_failure, record_success, check_api_rate_limit,
+    is_agent_blocked, record_agent_failure, record_agent_success,
+)
 from fastapi.responses import JSONResponse as _JSONResponse
 from app.services.stock_service import create_stock_movement
 from app.logging_config import get_logger
@@ -433,29 +439,44 @@ async def agent_login(
     password: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Agent login — User (username+parol) yoki Agent (telefon) orqali"""
+    """Agent login — User (username+parol) yoki Agent (telefon + PIN/legacy) orqali.
+
+    3 rejim (B3 — K5 fix):
+    1. User-based (bcrypt): username = User.username, password = User parol
+    2. Agent + PIN (yangi xavfsiz usul): username = Agent.phone, password = PIN
+    3. Agent + phone-as-password (LEGACY): pin_hash = NULL bo'lsa, backward compat
+
+    Himoyalar:
+    - IP bo'yicha rate limit (is_blocked)
+    - Agent identifikator bo'yicha per-account rate limit (is_agent_blocked)
+    - Legacy login har safar audit log'ga yoziladi
+    """
+    identifier = (username or "").strip()
     try:
+        # 1) IP bo'yicha blok (umumiy brute-force)
         blocked, remaining = is_blocked(request)
         if blocked:
             minutes = remaining // 60
             seconds = remaining % 60
             return {"success": False, "error": f"Juda ko'p muvaffaqiyatsiz urinish. {minutes} daqiqa {seconds} soniyadan so'ng qayta urinib ko'ring."}
 
-        # 1) User jadvalidan qidirish (username + parol)
+        # 2) Per-account blok (agent_identifier bo'yicha)
+        agent_blocked, agent_remaining = is_agent_blocked(identifier)
+        if agent_blocked:
+            minutes = agent_remaining // 60
+            return {"success": False, "error": f"Bu akkaunt vaqtinchalik bloklangan. {minutes} daqiqadan so'ng qayta urinib ko'ring."}
+
+        # ========== YO'L 1: User-based login (bcrypt) ==========
         user = db.query(User).filter(
-            User.username == username.strip(),
+            User.username == identifier,
             User.is_active == True,
             User.role.in_(["agent", "admin", "manager"]),
         ).first()
         if user and verify_password(password, user.password_hash):
-            # User ga bog'langan agent bormi?
             agent = db.query(Agent).filter(Agent.employee_id == user.id, Agent.is_active == True).first()
+            if not agent and user.phone:
+                agent = db.query(Agent).filter(Agent.phone == user.phone, Agent.is_active == True).first()
             if not agent:
-                # Agent jadvalida telefon bo'yicha
-                if user.phone:
-                    agent = db.query(Agent).filter(Agent.phone == user.phone, Agent.is_active == True).first()
-            if not agent:
-                # Agent avtomatik yaratish (agent roli uchun)
                 if user.role == "agent":
                     last_agent = db.query(Agent).order_by(Agent.id.desc()).first()
                     seq = (last_agent.id + 1) if last_agent else 1
@@ -471,30 +492,125 @@ async def agent_login(
                     db.refresh(agent)
                 else:
                     record_failure(request)
+                    record_agent_failure(identifier)
                     return {"success": False, "error": "Agent profili topilmadi"}
             record_success(request)
+            record_agent_success(identifier)
             token = create_session_token(agent.id, "agent")
             return {
                 "success": True,
                 "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone or ""},
                 "token": token,
+                "pin_set": bool(agent.pin_hash),
             }
 
-        # 2) Agent jadvalidan telefon bilan qidirish (eski usul)
-        agent = db.query(Agent).filter(Agent.phone == username.strip()).first()
-        if agent and agent.is_active and password == agent.phone:
-            record_success(request)
-            token = create_session_token(agent.id, "agent")
-            return {
-                "success": True,
-                "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone},
-                "token": token,
-            }
+        # ========== YO'L 2 va 3: Agent jadvalidan telefon bo'yicha ==========
+        agent = db.query(Agent).filter(Agent.phone == identifier, Agent.is_active == True).first()
+        if agent:
+            # YO'L 2: PIN o'rnatilgan — faqat PIN qabul qilinadi
+            if agent.pin_hash:
+                if verify_pin(password, agent.pin_hash):
+                    record_success(request)
+                    record_agent_success(identifier)
+                    token = create_session_token(agent.id, "agent")
+                    return {
+                        "success": True,
+                        "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone},
+                        "token": token,
+                        "pin_set": True,
+                    }
+                # PIN noto'g'ri — phone-as-password ga tushmaydi (downgrade yo'q)
+                record_failure(request)
+                record_agent_failure(identifier)
+                logger.warning(f"[AGENT_LOGIN] Xato PIN agent={agent.code} phone={identifier[:4]}***")
+                return {"success": False, "error": "PIN noto'g'ri"}
 
+            # YO'L 3: LEGACY — pin_hash NULL, phone-as-password qabul qilinadi
+            if password == agent.phone:
+                record_success(request)
+                record_agent_success(identifier)
+                token = create_session_token(agent.id, "agent")
+                logger.warning(
+                    f"[AGENT_LOGIN_LEGACY] agent={agent.code} phone={identifier[:4]}*** "
+                    f"— PIN hali o'rnatilmagan, pin_set=False qaytarildi"
+                )
+                return {
+                    "success": True,
+                    "agent": {"id": agent.id, "code": agent.code, "full_name": agent.full_name, "phone": agent.phone},
+                    "token": token,
+                    "pin_set": False,
+                    "message": "Iltimos, xavfsizlik uchun PIN kod o'rnating",
+                }
+
+        # Hech qaysi yo'l mos kelmadi
         record_failure(request)
+        record_agent_failure(identifier)
         return {"success": False, "error": "Login yoki parol noto'g'ri"}
     except Exception as e:
         logger.error(f"Agent login error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/set-pin")
+async def agent_set_pin(
+    request: Request,
+    token: str = Form(...),
+    current_password: str = Form(""),
+    new_pin: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Agent PIN o'rnatish yoki almashtirish (B3).
+
+    3 holat:
+    1. Birinchi marta PIN o'rnatish: pin_hash NULL, current_password = phone (legacy tasdiq)
+    2. Mavjud PIN'ni almashtirish: pin_hash bor, current_password = eski PIN
+    3. User-based auth orqali kirganlar: current_password bo'sh bo'lsa, token'dan tasdiqlash
+
+    Token — login qaytargan session token.
+    new_pin — 4-8 raqam, oddiy kombinatsiyalar (1234 va h.k.) rad etiladi.
+    """
+    # Token tekshirish
+    data = get_user_from_token(token)
+    if not data or data.get("user_type") != "agent":
+        return {"success": False, "error": "Token noto'g'ri"}
+
+    agent_id = data.get("user_id")
+    agent = db.query(Agent).filter(Agent.id == agent_id, Agent.is_active == True).first()
+    if not agent:
+        return {"success": False, "error": "Agent topilmadi"}
+
+    # PIN format tekshiruvi
+    pin_error = validate_pin_format(new_pin)
+    if pin_error:
+        return {"success": False, "error": pin_error}
+
+    # Joriy tasdiq — ikki holat
+    if agent.pin_hash:
+        # Mavjud PIN ni almashtirish — eski PIN majburiy
+        if not verify_pin(current_password, agent.pin_hash):
+            logger.warning(f"[AGENT_PIN_CHANGE] Xato eski PIN agent={agent.code}")
+            return {"success": False, "error": "Joriy PIN noto'g'ri"}
+    else:
+        # Birinchi marta PIN o'rnatish — phone yoki bo'sh qabul
+        # (token allaqachon tasdiqlangan bo'lsa, current_password bo'sh bo'lishi mumkin)
+        if current_password and current_password != (agent.phone or ""):
+            # Agar ham emas, User paroli bo'lishi mumkin
+            if agent.employee_id:
+                user = db.query(User).filter(User.id == agent.employee_id).first()
+                if not (user and verify_password(current_password, user.password_hash)):
+                    return {"success": False, "error": "Joriy parol noto'g'ri"}
+            else:
+                return {"success": False, "error": "Joriy parol noto'g'ri"}
+
+    try:
+        agent.pin_hash = hash_pin(new_pin)
+        agent.pin_set_at = datetime.now()
+        db.commit()
+        logger.info(f"[AGENT_PIN_SET] agent={agent.code} first={agent.pin_set_at is not None}")
+        return {"success": True, "message": "PIN muvaffaqiyatli o'rnatildi"}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Agent set-pin error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 

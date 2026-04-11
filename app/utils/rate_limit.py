@@ -110,3 +110,63 @@ def check_api_rate_limit(request) -> bool:
             return False
         data["count"] += 1
         return data["count"] > API_RATE_LIMIT
+
+
+# --- Agent login: per-account brute-force himoyasi (B3) ---
+# IP emas, agent_identifier (phone yoki username) bo'yicha kuzatiladi.
+# Bu tarmoqdan chiqib har xil IP'lardan urinishga qarshi himoya.
+AGENT_MAX_ATTEMPTS = 5
+AGENT_LOCKOUT_MINUTES = 30
+_agent_lock = threading.Lock()
+# { identifier: {"count": int, "locked_until": datetime | None} }
+_agent_attempts: dict = {}
+
+
+def _agent_cleanup():
+    """Muddati o'tgan yozuvlarni tozalash."""
+    now = datetime.now()
+    to_delete = [
+        k for k, data in _agent_attempts.items()
+        if data["locked_until"] is not None and data["locked_until"] < now
+    ]
+    for k in to_delete:
+        del _agent_attempts[k]
+
+
+def is_agent_blocked(identifier: str) -> tuple[bool, int]:
+    """Agent identifikator (telefon yoki username) bloklangan bo'lsa qaytadi.
+    Qaytadi: (blocked, remaining_seconds)
+    """
+    if not identifier:
+        return False, 0
+    with _agent_lock:
+        _agent_cleanup()
+        data = _agent_attempts.get(identifier)
+        if not data:
+            return False, 0
+        if data["locked_until"] and datetime.now() < data["locked_until"]:
+            remaining = int((data["locked_until"] - datetime.now()).total_seconds())
+            return True, remaining
+        return False, 0
+
+
+def record_agent_failure(identifier: str):
+    """Agent login urinishi muvaffaqiyatsiz — qayd etish va kerak bo'lsa bloklash."""
+    if not identifier:
+        return
+    with _agent_lock:
+        data = _agent_attempts.setdefault(identifier, {"count": 0, "locked_until": None})
+        if data["locked_until"] and datetime.now() >= data["locked_until"]:
+            data["count"] = 0
+            data["locked_until"] = None
+        data["count"] += 1
+        if data["count"] >= AGENT_MAX_ATTEMPTS:
+            data["locked_until"] = datetime.now() + timedelta(minutes=AGENT_LOCKOUT_MINUTES)
+
+
+def record_agent_success(identifier: str):
+    """Agent muvaffaqiyatli login — hisoblagichni sifirla."""
+    if not identifier:
+        return
+    with _agent_lock:
+        _agent_attempts.pop(identifier, None)
