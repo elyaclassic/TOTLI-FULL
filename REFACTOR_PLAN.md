@@ -240,9 +240,9 @@
 | **1** | `employees_dismissals.py` | ~155 | ✅ **BAJARILDI** | 5f0c995 |
 | **2** | `employees_advances.py` | ~478 | ✅ **BAJARILDI** | 07665c8 + 211df7a (url fix) |
 | **3** | `employees_attendance.py` | ~654 | ✅ **BAJARILDI** | c596514 |
-| **4** | `employees_salary.py` | ~545 | ✅ **BAJARILDI** | bu sessiya |
-| 5 | `employees_employment.py` | ~711 | ⏳ Keyingi | — |
-| 6 | `employees.py` (core tozalash) | ~550 | ⏳ | — |
+| **4** | `employees_salary.py` | ~545 | ✅ **BAJARILDI** | 933b19b |
+| **5** | `employees_employment.py` | ~712 | ✅ **BAJARILDI** | bu sessiya |
+| 6 | `employees.py` (core tozalash) | ~350 | ⏳ Keyingi (oxirgi) | — |
 
 **3-bosqich (attendance) natijalari:**
 - 17 ta endpoint + 1 helper (_parse_time) yangi modulda
@@ -309,8 +309,8 @@ Pytest + fixtures (SQLite in-memory DB).
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 0.67/5 (C1 67% — 4/6 bosqich) | 5 | 13% |
-| **JAMI** | **19.67/22** | 22 | **89%** |
+| **Tier C** | 0.83/5 (C1 83% — 5/6 bosqich) | 5 | 17% |
+| **JAMI** | **19.83/22** | 22 | **90%** |
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
