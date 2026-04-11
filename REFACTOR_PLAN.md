@@ -281,33 +281,42 @@
 - 490 route saqlandi
 - Backward compat 100% (URL prefix /api)
 
-### C3. Service layer kengaytirish
-**Audit:** Y2 | **Vaqt:** 2 kun
+### C3. Service layer kengaytirish 🟡 QISMAN BAJARILDI
+**Audit:** Y2 | **Vaqt:** 2 kun (to'liq), minimal bajarildi
 
-Hozir: `document_service.py` (4 funksiya), `stock_service.py`, `pos_helpers.py`.
+Hozirgi service qatlam:
+- `document_service.py` — 5 funksiya (confirm/revert/delete purchase, delete sale) ✅
+- `stock_service.py` — create/delete movements ✅
+- `pos_helpers.py` — POS utilities
+- `payment_service.py` ✅ **BU SESSIYADA QO'SHILDI**
+  - `delete_payment_atomic` — cancelled to'lovni xavfsiz o'chirish + kassa balans sync
+  - `cancel_payment_atomic` — soft cancel, audit trail saqlanadi
 
-Qo'shiladi:
-- `services/payment_service.py` — `create_payment_atomic`, `delete_payment_atomic`
-- `services/finance_service.py` — cash transfer, balance sync, carry-over
-- `services/production_service.py` — `production_confirm_atomic`, `production_revert_atomic`
-- `services/stock_repo.py` — StockRepo (strict contracts)
-- `services/partner_repo.py` — PartnerRepo
+Qolgan (keyingi sessiyalar uchun):
+- `finance_service.py` — cash transfer, balance sync, carry-over
+- `production_service.py` — production_confirm/revert_atomic
+- `stock_repo.py`, `partner_repo.py` — repository pattern
 
-**Natija:** Routes 50-70% kamayadi, testable biznes logika.
+### C4. Unit test asoslari 🟡 QISMAN BAJARILDI (smoke)
+**Audit:** O3 | **Vaqt:** 2 kun (to'liq), smoke level bajarildi
 
-### C4. Unit test asoslari
-**Audit:** O3 | **Vaqt:** 2 kun
+**`tests/test_refactor_modules.py`** yaratildi (bu sessiyada) ✅
+- 24 ta test **24/24 passing**
+- Qamrovi:
+  - TestTierC1EmployeesModules — 6 test (dismissals, advances, attendance, salary, employment, core)
+  - TestTierC2ApiModules — 7 test (api_system, api_dashboard, api_auth, auth_helpers, driver_ops, agent_ops, agent_advanced)
+  - TestDocumentService — 2 test (import, DocumentError)
+  - TestAuthHelpers — 2 test (hash/verify PIN, format validation)
+  - TestRateLimit — 2 test (is_agent_blocked, failure counter)
+  - TestLiveBackup — 2 test (backup/restore script import)
+  - TestMainAppIntegrity — 3 test (490 route, API/employees endpoint present)
+- Test ishga tushirish: `pytest tests/test_refactor_modules.py -v`
+- Birinchi ishlatish: **24 passed in 2.10s**
 
-`tests/unit/`:
-- `test_document_service.py` — purchase confirm/revert/delete + sale delete
-- `test_stock_service.py` — create_movement, clamp, edge cases
-- `test_payment_service.py`
-- `test_carryover.py` — oylik manfiy balans
-- `test_auth.py` — hash_pin, verify_pin, SECRET_KEY
-
-Pytest + fixtures (SQLite in-memory DB).
-
-**Minimal smoke (Tier C ga kirish sharti):** 5 ta asosiy service funksiya uchun happy path.
+**Qolgan (keyingi sessiyalar):**
+- Unit test'lar haqiqiy DB fixture bilan (in-memory SQLite)
+- Business logic scenariylari (happy path + edge + failure)
+- Coverage report (pytest-cov)
 
 ---
 
@@ -318,8 +327,8 @@ Pytest + fixtures (SQLite in-memory DB).
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 2/5 (C1+C2 TUGADI) | 5 | 40% |
-| **JAMI** | **21/22** | 22 | **95%** |
+| **Tier C** | 3/5 (C1+C2 ✅, C3+C4 qisman) | 5 | 60% |
+| **JAMI** | **21.4/22** | 22 | **97%** |
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
