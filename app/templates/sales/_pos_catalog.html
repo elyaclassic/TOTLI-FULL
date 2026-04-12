@@ -1,0 +1,75 @@
+            <div class="col-lg-8">
+                <div class="card pos-card pos-card-products">
+                    <div class="pos-products-header-premium">
+                        <div class="pos-products-header-top">
+                            <div class="pos-products-header-title"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Tovarlar <span class="pos-products-count">{{ products|length }}</span></div>
+                            <div class="pos-products-header-controls">
+                                <div class="pos-search-premium">
+                                    <i class="bi bi-search"></i>
+                                    <input type="text" id="posSearch" placeholder="Qidirish..." autocomplete="off">
+                                </div>
+                                <div class="pos-barcode-premium">
+                                    <i class="bi bi-upc-scan"></i>
+                                    <input type="text" id="posBarcode" placeholder="Barkod" autocomplete="off">
+                                </div>
+                                <select class="pos-category-select-premium" id="posCategoryFilter">
+                                    <option value="">Barchasi</option>
+                                    {% for cat in (pos_all_categories or []) %}
+                                    <option value="{{ cat.id }}">{{ cat.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        {% if pos_categories %}
+                        <div class="pos-category-pills-premium">
+                            <button type="button" class="pos-cat-pill active" data-category="">Barchasi</button>
+                            {% for cat in pos_categories %}
+                            <button type="button" class="pos-cat-pill" data-category="{{ cat.id }}">{{ cat.name }}</button>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div class="card-body pos-card-body">
+                        {% if products %}
+                        <div class="pos-product-grid" id="posProductGrid">
+                            {% for product in products %}
+                            {% set sale_price_val = (product_prices.get(product.id) if product_prices else none) or product.sale_price or 0 %}
+                            {% set has_sale_price = (sale_price_val or 0)|float > 0 %}
+                            {% set display_price = (sale_price_val if has_sale_price else (product.purchase_price if show_tannarx else 0) or 0) %}
+                            {% set stock_qty = stock_by_product.get(product.id) if stock_by_product is defined else None %}
+                            <div class="pos-product-item" data-product-id="{{ product.id }}" data-name="{{ (product.name or '')|lower }}" data-barcode="{{ (product.barcode or '')|lower }}" data-category-id="{{ product.category_id or '' }}">
+                                <div class="pos-product-card-premium" data-product-id="{{ product.id }}" data-name="{{ product.name|e }}" data-price="{{ display_price }}" data-barcode="{{ product.barcode or '' }}" data-stock="{{ stock_qty if stock_qty is not none else 0 }}">
+                                    <div class="pos-product-img-wrap">
+                                        {% if product.image %}
+                                        <img src="/static/images/products/{{ product.image }}" alt="{{ product.name }}" class="pos-product-img">
+                                        {% else %}
+                                        <div class="pos-product-placeholder"><i class="bi bi-box-seam"></i></div>
+                                        {% endif %}
+                                        {% if stock_by_product is defined and stock_qty is not none %}
+                                        {% set _uc = (product.unit.code or '')|lower if product.unit else '' %}
+                                        {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta'] %}
+                                        <div class="pos-product-stock-badge">{{ "{:,.0f}".format((stock_qty or 0)|round(0)|int) if _is_dona else "{:,.1f}".format(stock_qty) }}</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="pos-product-info">
+                                        <div class="pos-product-name-premium" title="{{ product.name }}">{{ product.name }}</div>
+                                        <div class="pos-product-price-premium">
+                                            {% if has_sale_price %}
+                                            {{ "{:,.0f}".format(sale_price_val) }} <small>so'm</small>
+                                            {% else %}
+                                            <span class="pos-no-price">Narx yo'q</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div class="text-center text-muted py-5">
+                            <i class="bi bi-box-seam fs-1 d-block mb-2"></i>
+                            Bu omborda qoldiqdagi tovarlar yo'q.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>

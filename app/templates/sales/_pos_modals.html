@@ -1,0 +1,282 @@
+    <div class="modal fade" id="posTodaySalesModal" tabindex="-1" aria-labelledby="posTodaySalesModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="posTodaySalesModalLabel"><i class="bi bi-list-ul me-2"></i>Kunlik sotuvlar</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Yopish"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="p-3 border-bottom bg-light">
+                        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                            <button type="button" class="btn btn-sm pos-daily-tab active" data-type="sale" id="posDailyTabSales"><i class="bi bi-cart-check me-1"></i>Sotuvlar</button>
+                            <button type="button" class="btn btn-sm pos-daily-tab" data-type="return_sale" id="posDailyTabReturns"><i class="bi bi-arrow-return-left me-1"></i>Qaytarishlar</button>
+                        </div>
+                        <div class="d-flex flex-wrap align-items-end gap-2">
+                            <label class="d-flex align-items-center gap-1 small mb-0">
+                                <span>Dan:</span>
+                                <input type="date" class="form-control form-control-sm" id="posDailyDateFrom" style="width: 140px;">
+                            </label>
+                            <label class="d-flex align-items-center gap-1 small mb-0">
+                                <span>Gacha:</span>
+                                <input type="date" class="form-control form-control-sm" id="posDailyDateTo" style="width: 140px;">
+                            </label>
+                            <button type="button" class="btn btn-sm btn-success" id="posDailyBtnShow"><i class="bi bi-search me-1"></i>Ko'rsatish</button>
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>№</th>
+                                    <th>Hujjat №</th>
+                                    <th>Vaqt</th>
+                                    <th>Mijoz</th>
+                                    <th>Ombor</th>
+                                    <th>To'lov</th>
+                                    <th class="text-end">Jami</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="posDailyOrdersBody">
+                                <tr><td colspan="8" class="text-muted text-center py-4">Sana tanlang va «Ko'rsatish» bosing.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <a href="/sales" class="btn btn-outline-secondary">Barcha sotuvlar</a>
+                    <a href="/sales/returns" class="btn btn-outline-success">Savdodan qaytarish</a>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Yopish</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Saqlangan cheklar (Chekni yuklash) modali -->
+    <div class="modal fade" id="posLoadDraftModal" tabindex="-1" aria-labelledby="posLoadDraftModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="posLoadDraftModalLabel"><i class="bi bi-download me-2"></i>Chekni yuklash</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Yopish"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <p class="p-3 mb-0 small text-muted border-bottom">Saqlangan cheklar ro'yxati. Biror chekni tanlang — savatga yuklanadi.</p>
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Vaqt</th>
+                                    <th>Nomi</th>
+                                    <th>Mahsulotlar</th>
+                                    <th class="text-end">Jami</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="posDraftsListBody">
+                                <tr><td colspan="5" class="text-muted text-center py-4">Yuklanmoqda...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="posDraftsEmpty" class="text-center text-muted py-4" style="display:none;">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        Saqlangan chek yo'q. Avval «Chekni saqlash» bilan savatni saqlang.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Yopish</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- To'lov turi modali — Premium -->
+    <div class="modal fade pos-payment-modal" id="posPaymentModal" tabindex="-1" aria-labelledby="posPaymentModalLabel">
+        <div class="modal-dialog modal-dialog-centered" style="max-width:400px;">
+            <div class="modal-content" style="border-radius:24px;border:none;box-shadow:0 24px 80px rgba(0,0,0,0.25);overflow:hidden;">
+                <div style="background:linear-gradient(135deg,#0d6b4b,#0a5540);padding:1.5rem 1.75rem;color:#fff;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+                                <i class="bi bi-wallet2"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:1.1rem;font-weight:700;" id="posPaymentModalLabel">To'lov turi</div>
+                                <div style="font-size:0.75rem;opacity:0.75;">Tanlang yoki raqam bosing</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div style="padding:1.25rem 1.75rem;background:#fafbfc;">
+                    <div class="d-flex justify-content-center gap-2 mb-3">
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">1</kbd><span style="font-size:0.75rem;color:#8b95a1;">Naqd</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">2</kbd><span style="font-size:0.75rem;color:#8b95a1;">Plastik</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">3</kbd><span style="font-size:0.75rem;color:#8b95a1;">Click</span>
+                        <kbd style="background:#e8ecf1;color:#4a5568;border-radius:6px;padding:3px 8px;font-size:0.75rem;">4</kbd><span style="font-size:0.75rem;color:#8b95a1;">Terminal</span>
+                    </div>
+                    <div id="posSplitPanel" class="pos-split-panel">
+                        <div style="background:#f0faf5;border-radius:12px;padding:0.75rem 1rem;margin-bottom:1rem;">
+                            <div class="d-flex justify-content-between" style="font-size:0.8rem;color:#6c757d;">
+                                <span>Jami: <strong style="color:#0d6b4b;"><span id="posSplitTotal">0</span></strong></span>
+                                <span>Kiritildi: <strong style="color:#1565c0;"><span id="posSplitSum">0</span></strong></span>
+                                <span>Qoldiq: <strong style="color:#e53935;"><span id="posSplitRemain">0</span></strong></span>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-column gap-2">
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Naqd</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitNaqd" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitNaqd" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Plastik</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitPlastik" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitPlastik" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Click</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitClick" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitClick" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;font-weight:600;color:#8b95a1;text-transform:uppercase;letter-spacing:0.05em;">Terminal</label>
+                                <div class="input-group input-group-sm">
+                                    <button type="button" class="btn btn-outline-secondary pos-split-fill" data-target="posSplitTerminal" style="border-radius:10px 0 0 10px;"><i class="bi bi-arrow-right-circle-fill"></i></button>
+                                    <input type="number" class="form-control pos-split-amt" id="posSplitTerminal" min="0" step="1" value="0" inputmode="numeric" style="border-radius:0 10px 10px 0;text-align:right;font-weight:600;">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn w-100 mt-3" id="posSplitConfirm" disabled style="background:linear-gradient(135deg,#0d6b4b,#0a5540);color:#fff;border:none;border-radius:14px;padding:0.75rem;font-weight:700;font-size:0.95rem;box-shadow:0 4px 16px rgba(13,107,75,0.3);">
+                            <i class="bi bi-check2-circle me-1"></i>Tasdiqlash
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ta'minotchiga to'lov modali -->
+    <div class="modal fade" id="posPaySupplierModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:var(--pos-radius);">
+                <form method="post" action="/sales/pos/pay-supplier">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <div class="modal-header" style="background:linear-gradient(135deg,#1565c0,#1976d2);color:#fff;border-radius:var(--pos-radius) var(--pos-radius) 0 0;">
+                        <h6 class="modal-title"><i class="bi bi-cash-coin me-2"></i>Ta'minotchiga to'lov</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Ta'minotchi *</label>
+                            <select name="partner_id" class="form-select" required>
+                                <option value="">Tanlang...</option>
+                                {% for p in pos_partners %}
+                                <option value="{{ p.id }}">{{ p.name }}{% if p.balance and p.balance < 0 %} (qarz: {{ "{:,.0f}".format(p.balance|abs) }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Summa (so'm) *</label>
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Izoh</label>
+                            <input type="text" name="note" class="form-control" placeholder="masalan: un uchun to'lov">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+                        <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>To'lov qilish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Harajat yozish modali -->
+    <div class="modal fade" id="posExpenseModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="border-radius:var(--pos-radius);">
+                <form method="post" action="/sales/pos/expense">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <div class="modal-header" style="background:linear-gradient(135deg,#e65100,#f57c00);color:#fff;border-radius:var(--pos-radius) var(--pos-radius) 0 0;">
+                        <h6 class="modal-title"><i class="bi bi-wallet2 me-2"></i>Harajat yozish</h6>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Harajat turi *</label>
+                            <select name="expense_type" class="form-select" required>
+                                <option value="">Tanlang...</option>
+                                {% for et in (pos_expense_types or []) %}
+                                <option value="{{ et.id }}">{{ et.name }}</option>
+                                {% endfor %}
+                                <option value="other">Boshqa</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Summa (so'm) *</label>
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Izoh</label>
+                            <input type="text" name="note" class="form-control" placeholder="masalan: yuk tashish, benzin">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+                        <button type="submit" class="btn" style="background:#e65100;color:#fff;"><i class="bi bi-check-lg me-1"></i>Harajat yozish</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inkasatsiya modali -->
+    <div class="modal fade" id="posInkasatsiyaModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content" style="border-radius:24px;border:none;box-shadow:0 24px 80px rgba(0,0,0,0.25);overflow:hidden;">
+                <div style="background:linear-gradient(135deg,#0d6b4b,#0a5540);padding:1.25rem 1.75rem;color:#fff;">
+                    <div class="d-flex align-items-center justify-content-between">
+                        <div class="d-flex align-items-center gap-3">
+                            <div style="width:44px;height:44px;border-radius:14px;background:rgba(255,255,255,0.18);display:flex;align-items:center;justify-content:center;font-size:1.3rem;">
+                                <i class="bi bi-safe"></i>
+                            </div>
+                            <div>
+                                <div style="font-size:1.1rem;font-weight:700;">Inkasatsiya</div>
+                                <div style="font-size:0.75rem;opacity:0.75;">Kutilayotgan pul o'tkazmalar</div>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                </div>
+                <div style="padding:1rem 1.75rem;background:#fff;border-bottom:1px solid #f0f2f5;">
+                    <label style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#8b95a1;">Inkasator</label>
+                    <select id="posInkasatorSelect" class="form-select form-select-sm" style="border-radius:10px;max-width:300px;">
+                        <option value="">— Tanlang —</option>
+                        {% for p in pos_partners %}
+                        <option value="{{ p.id }}">{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="padding:0;background:#fafbfc;">
+                    <table class="table mb-0" style="font-size:0.85rem;">
+                        <thead><tr style="background:#f0f2f5;"><th>Hujjat</th><th>Yo'nalish</th><th class="text-end">Summa</th><th>Izoh</th><th></th></tr></thead>
+                        <tbody id="posInkasatsiyaBody">
+                            <tr><td colspan="5" class="text-center py-4 text-muted">Yuklanmoqda...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div style="padding:0.75rem 1.75rem;background:#fff;border-top:1px solid #f0f2f5;text-align:right;">
+                    <a href="/cash/transfers" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">Barcha hujjatlar</a>
+                </div>
+            </div>
+        </div>
+    </div>

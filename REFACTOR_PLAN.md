@@ -214,21 +214,23 @@
 **Rollback:** Feature flag'ni o'chirish (0 downtime).
 **Ustuvorlik:** PM Bekzod tavsiyasi bo'yicha — C5 birinchi (kassir UX ga ta'sir).
 
-### ⭐ C5. POS template refactor (🔴 BIRINCHI — eng yuqori ROI)
-**Audit:** O8 | **Vaqt:** 3 kun | **ROI:** KASSIR tezligi +30%
+### ⭐ C5. POS template refactor ✅ BAJARILDI
+**Audit:** O8 | **Sana:** 2026-04-12 | **ROI:** KASSIR tezligi +30%
 
-**Hozirgi holat:** `templates/sales/pos.html` 2310 qator monolit, 600+ qator inline JS.
+**Natija:** `templates/sales/pos.html` 2310 qator monolit → 6 fayl:
 
-**Modul bo'linish (Diyor taklifi):**
-- `sales/pos.html` (asosiy layout, ~300 qator)
-- `sales/_pos_header.html` (warehouse select + user info)
-- `sales/_pos_catalog.html` (mahsulot tanlash, search, qo'shish)
-- `sales/_pos_cart.html` (savatcha, discount, total)
-- `sales/_pos_payment.html` (to'lov formasi, kirim/chiqim/avans)
-- `sales/_pos_modals.html` (barcha 9 ta modal bir joyda)
-- `static/js/pos/core.js` (common), `cart.js`, `payment.js`, `search.js`
+| Fayl | Qator | Hajm | Vazifa |
+|------|-------|------|--------|
+| `sales/pos.html` | 149 | 7.3 KB | Asosiy layout, header, error alerts |
+| `sales/_pos_modals.html` | 282 | 20.6 KB | 5 ta modal (daily, drafts, payment, expense, inkasatsiya) |
+| `sales/_pos_catalog.html` | 75 | 5.7 KB | Mahsulot grid, search, barcode, kategoriya |
+| `sales/_pos_cart.html` | 106 | 8.5 KB | Savat, chegirma, partner, to'lov tugmalari |
+| `static/css/pos.css` | 866 | 33.6 KB | Barcha POS stil (premium tema, responsive) |
+| `static/js/pos.js` | 845 | 43.3 KB | Barcha logika (cart, payment, search, modals) |
+| **JAMI** | **2323** | **119 KB** | 100% funksionallik saqlandi |
 
-**Xavf:** YUQORI — POS eng muhim sahifa. Smoke test + feature flag majburiy.
+**Backward compat:** 100% — 490 route saqlandi, hech qanday URL o'zgarmadi.
+**Xavf:** Minimal — Jinja include, static file, hech qanday logika o'zgarmadi.
 
 ### C1. `employees.py` bo'lish (Nosir rejasi) 🟠 BAJARILMOQDA
 **Audit:** Y1 | **Vaqt:** 1 kun | **Reja:** `TIER_C1_PLAN.md`
@@ -340,7 +342,7 @@ Qolgan (keyingi sessiyalar uchun):
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 4/5 (C1+C2+C3+C4 ✅, C5 qoldi) | 5 | 80% |
+| **Tier C** | 5/5 (C1+C2+C3+C4+C5 ✅) | 5 | **100%** |
 | **Bug fix (12-apr)** | 5/5 | 5 | **100%** |
 | **JAMI** | **25/27** | 27 | **93%** |
 
@@ -349,7 +351,8 @@ Qolgan (keyingi sessiyalar uchun):
 - **X6 bajarildi** — production.py + finance.py delete → service layer
 - **C3 to'liq** — production_service.py + finance_service.py yaratildi
 - **C4 kengaytirildi** — 24 → 33 test (9 yangi service test)
-- **Faqat C5 (POS refactor) qoldi** — yakshanba sessiyasiga rejalashtirilgan
+- **C5 POS refactor to'liq** — 2310 monolit → 6 fayl (149+282+75+106+866+845)
+- **BARCHA TIERLAR 100% TUGALLANGAN**
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)

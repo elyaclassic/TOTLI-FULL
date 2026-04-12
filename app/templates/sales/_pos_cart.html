@@ -1,0 +1,106 @@
+            <div class="col-lg-4">
+                <div class="card pos-card pos-card-cart sticky-top">
+                    <div class="pos-cart-header-premium">
+                        <div class="pos-cart-header-icon"><i class="bi bi-basket3-fill"></i></div>
+                        <div>
+                            <div class="pos-cart-header-title">Savat</div>
+                            {% if current_user %}
+                            <div class="pos-cart-header-kassir"><i class="bi bi-person-fill me-1"></i>{{ current_user.full_name or current_user.username or 'Kassir' }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="pos-cart-header-badge" id="posCartCountBadge" style="display:none;">0</div>
+                    </div>
+                    <div class="card-body pos-cart-body">
+                        <div class="pos-cart-items-wrap mb-3">
+                            <table class="table table-sm mb-0 pos-cart-table">
+                                <thead><tr><th>Mahsulot</th><th class="text-center">Miqdor</th><th class="text-end">Narx</th><th class="text-end">Summa</th><th></th></tr></thead>
+                                <tbody id="posCartBody"></tbody>
+                            </table>
+                        </div>
+                        <div class="pos-cart-empty-state" id="posCartEmpty">
+                            <div class="pos-cart-empty-icon"><i class="bi bi-cart3"></i></div>
+                            <div class="pos-cart-empty-text">Savat bo'sh</div>
+                            <div class="pos-cart-empty-hint">Tovarga bosing yoki barkod skanerlang</div>
+                        </div>
+
+                        <div class="pos-cart-section pos-cart-section-partner">
+                            <div class="pos-cart-section-label"><i class="bi bi-person me-1"></i>Kontragent</div>
+                            <select name="partner_id" id="posPartnerSelect" class="form-select form-select-sm pos-select-premium">
+                                {% for p in pos_partners %}
+                                <option value="{{ p.id }}" {% if default_partner_id and p.id == default_partner_id %}selected{% endif %}>{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="pos-cart-section pos-cart-section-discount">
+                            <div class="pos-cart-section-label"><i class="bi bi-percent me-1"></i>Skidka</div>
+                            <div class="d-flex gap-2">
+                                <input type="number" id="posDiscountInput" class="form-control form-control-sm pos-select-premium" value="" min="0" step="1" placeholder="0" style="flex:1;">
+                                <select id="posDiscountType" class="form-select form-select-sm pos-select-premium" style="width:80px;flex:none;">
+                                    <option value="amount">so'm</option>
+                                    <option value="percent">%</option>
+                                </select>
+                            </div>
+                            <input type="hidden" name="discount_percent" id="posDiscountPercent" value="0">
+                            <input type="hidden" name="discount_amount" id="posDiscountAmount" value="0">
+                        </div>
+
+                        <div class="pos-cart-section" id="posPaymentDueDateWrap" style="display:none;" data-default-partner-id="{{ default_partner_id or '' }}">
+                            <div class="pos-cart-section-label"><i class="bi bi-calendar-event me-1"></i>To'lov muddati</div>
+                            <input type="date" name="payment_due_date" id="posPaymentDueDate" class="form-control form-control-sm pos-select-premium">
+                        </div>
+
+                        <div class="pos-summary-premium" id="posSummaryBlock">
+                            <div class="pos-summary-row">
+                                <span class="pos-summary-label">Jami</span>
+                                <span class="pos-summary-value"><span id="posCartTotal">0</span> so'm</span>
+                            </div>
+                            <div class="pos-summary-row pos-summary-discount" id="posDiscountRow" style="display:none;">
+                                <span class="pos-summary-label">Skidka</span>
+                                <span class="pos-summary-value pos-summary-discount-val">−<span id="posDiscountDisplay">0</span> so'm</span>
+                            </div>
+                            <div class="pos-summary-divider"></div>
+                            <div class="pos-summary-row pos-summary-total">
+                                <span class="pos-summary-label">To'lov</span>
+                                <span class="pos-summary-value"><span id="posCartTotalFinal">0</span> so'm</span>
+                            </div>
+                        </div>
+
+                        <div class="pos-cart-buttons">
+                            <button type="button" class="pos-btn-clear-premium" id="posBtnClearCart" style="display:none;"><i class="bi bi-trash3 me-1"></i>Tozalash</button>
+                            <button type="button" class="pos-btn-sotuv-premium" id="posBtnSotuv" disabled>
+                                <i class="bi bi-cash-coin me-2"></i>Sotuv
+                                <span class="pos-btn-shortcut">F2</span>
+                            </button>
+                        </div>
+
+                        <button type="button" class="btn btn-outline-secondary btn-sm w-100 mt-2 pos-more-actions-btn" id="posMoreActionsBtn" style="display:none;">
+                            <i class="bi bi-grid-3x3-gap me-1"></i>Qo'shimcha
+                        </button>
+
+                        <div class="pos-extra-actions mt-3">
+                            <div class="pos-actions-group">
+                                <div class="pos-actions-group-label">Moliya</div>
+                                <div class="pos-actions-grid">
+                                    <button type="button" class="pos-action-btn-premium pos-action-blue" data-bs-toggle="modal" data-bs-target="#posPaySupplierModal"><i class="bi bi-cash-coin"></i><span>To'lov</span></button>
+                                    <button type="button" class="pos-action-btn-premium pos-action-orange" data-bs-toggle="modal" data-bs-target="#posExpenseModal"><i class="bi bi-wallet2"></i><span>Harajat</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnKassaniTasdiqlash"><i class="bi bi-safe"></i><span>Kassa</span></button>
+                                </div>
+                            </div>
+                            <div class="pos-actions-group">
+                                <div class="pos-actions-group-label">Amallar</div>
+                                <div class="pos-actions-grid">
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnKunlikSotuv"><i class="bi bi-calendar-day"></i><span>Kunlik</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnChekniSaqlash"><i class="bi bi-receipt"></i><span>Saqlash</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnChekniYuklash"><i class="bi bi-download"></i><span>Yuklash</span></button>
+                                    <a href="/purchases?from=pos" class="pos-action-btn-premium text-decoration-none"><i class="bi bi-box-arrow-in-down"></i><span>Kirimi</span></a>
+                                    <a href="/sales/returns" class="pos-action-btn-premium text-decoration-none"><i class="bi bi-arrow-return-left"></i><span>Qaytarish</span></a>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnXHisobot"><i class="bi bi-file-earmark-text"></i><span>X hisobot</span></button>
+                                    <button type="button" class="pos-action-btn-premium" id="posBtnOmborniTasdiqlash"><i class="bi bi-box-seam"></i><span>Ombor</span></button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
