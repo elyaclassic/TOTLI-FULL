@@ -194,7 +194,7 @@
             </div>
             <div class="col-md-1">
                 <label class="form-label small">Soni *</label>
-                <input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0.01" required placeholder="0">
+                <input type="number" name="quantity" class="form-control form-control-sm" step="any" min="0.01" required placeholder="0">
             </div>
             {% if show_tannarx %}
             <div class="col-md-1">
@@ -257,7 +257,7 @@
                                     {% endfor %}
                                 </select>
                             </td>
-                            <td><input type="number" name="quantity" class="form-control form-control-sm" step="0.01" min="0" placeholder="0"></td>
+                            <td><input type="number" name="quantity" class="form-control form-control-sm" step="any" min="0" placeholder="0"></td>
                             {% if show_tannarx %}<td><input type="number" name="cost_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>{% else %}<td style="display:none"><input type="hidden" name="cost_price" value="0"></td>{% endif %}
                             <td><input type="number" name="sale_price" class="form-control form-control-sm" step="0.001" min="0" value="" placeholder="0"></td>
                             <td><button type="button" class="btn-act danger remove-row"><i class="bi bi-trash"></i></button></td>
