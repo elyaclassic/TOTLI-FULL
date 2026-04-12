@@ -1224,7 +1224,10 @@ async def inventory_confirm(
         parsed = _parse_doc_date(doc_date_str)
         if parsed:
             doc.date = parsed
-    if doc.number and doc.number.startswith("INV-PENDING") and doc.date:
+    # INV-PENDING = tovar qoldiqlari hujjati (miqdor QO'SHILADI)
+    # Oddiy inventarizatsiya = qoldiq YANGILANADI (SET)
+    is_stock_entry = bool(doc.number and doc.number.startswith("INV-PENDING"))
+    if is_stock_entry and doc.date:
         date_str = doc.date.strftime("%Y%m%d")
         doc.number = _next_inventory_number(db, date_str)
     item_ids = form.getlist("item_id")
@@ -1301,7 +1304,12 @@ async def inventory_confirm(
         new_qty = snap["quantity"]
         if hasattr(snap["item"], "previous_quantity"):
             snap["item"].previous_quantity = old_qty
-        quantity_change = new_qty - old_qty
+        if is_stock_entry:
+            # Tovar qoldiqlari — miqdor QO'SHILADI
+            quantity_change = new_qty
+        else:
+            # Inventarizatsiya — qoldiq YANGILANADI (SET)
+            quantity_change = new_qty - old_qty
         if abs(quantity_change) > 1e-9:
             create_stock_movement(
                 db=db,
@@ -1313,7 +1321,7 @@ async def inventory_confirm(
                 document_id=doc.id,
                 document_number=doc.number,
                 user_id=current_user.id,
-                note=f"Inventarizatsiya: {doc.number}",
+                note=f"{'Tovar qoldiqlari' if is_stock_entry else 'Inventarizatsiya'}: {doc.number}",
                 created_at=doc.date,
             )
             # Stock.quantity = new_qty + (hujjat sanasidan keyingi harakatlar)
@@ -1332,7 +1340,12 @@ async def inventory_confirm(
                     StockMovement.created_at > doc_date,
                     StockMovement.operation_type != "adjustment",
                 ).scalar() or 0
-                stock_row.quantity = new_qty + float(after_changes)
+                if is_stock_entry:
+                    # Tovar qoldiqlari — eski qoldiq + yangi miqdor + keyingi harakatlar
+                    stock_row.quantity = old_qty + new_qty + float(after_changes)
+                else:
+                    # Inventarizatsiya — yangi qoldiq + keyingi harakatlar
+                    stock_row.quantity = new_qty + float(after_changes)
     doc.status = "confirmed"
     db.commit()
     return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)
