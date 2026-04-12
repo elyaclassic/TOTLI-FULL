@@ -46,11 +46,9 @@ def _cash_balance_formula(db: Session, cash_id: int) -> tuple:
 
 
 def _sync_cash_balance(db: Session, cash_id: int) -> None:
-    cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
-    if not cash:
-        return
-    computed, _, _ = _cash_balance_formula(db, cash_id)
-    cash.balance = computed
+    """Wrapper — haqiqiy logika finance_service.sync_cash_balance da."""
+    from app.services.finance_service import sync_cash_balance
+    sync_cash_balance(db, cash_id)
 
 
 def _next_expense_doc_number(db: Session) -> str:
@@ -736,25 +734,17 @@ async def finance_payment_delete(
     current_user: User = Depends(require_admin),
 ):
     """To'lovni o'chirish (faqat cancelled). Kassa balansi avtomatik qayta hisoblanadi."""
+    from app.services.payment_service import delete_payment_atomic
+    from app.services.document_service import DocumentError
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="To'lov topilmadi")
-    if getattr(payment, "status", "confirmed") == "confirmed":
-        return RedirectResponse(
-            url="/finance?error=" + quote("Tasdiqlangan to'lovni o'chirish mumkin emas. Avval tasdiqni bekor qiling."),
-            status_code=303,
-        )
-    cash_id = payment.cash_register_id
     try:
-        db.delete(payment)
-        db.flush()
-        # Kassa balansini qayta hisoblash (eski cached balance buziladi aks holda)
-        if cash_id:
-            _sync_cash_balance(db, cash_id)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+        delete_payment_atomic(db, payment)
+    except DocumentError as e:
+        return RedirectResponse(
+            url="/finance?error=" + quote(str(e)), status_code=303,
+        )
     return RedirectResponse(url="/finance?success=deleted", status_code=303)
 
 
@@ -1592,29 +1582,15 @@ async def cash_transfer_revert(
     current_user: User = Depends(require_admin),
 ):
     """Tasdiqni bekor qilish (faqat admin)"""
+    from app.services.finance_service import revert_cash_transfer_atomic
+    from app.services.document_service import DocumentError
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         return RedirectResponse(url="/cash/transfers?error=" + quote("Hujjat topilmadi."), status_code=303)
-    amount = t.amount or 0
-    if t.status == "completed":
-        # completed -> in_transit: qabul kassasidan qaytarish
-        to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
-        if to_cash:
-            to_cash.balance = max(0, (to_cash.balance or 0) - amount)
-        t.status = "in_transit"
-        t.approved_by_user_id = None
-        t.approved_at = None
-    elif t.status == "in_transit":
-        # in_transit -> pending: jo'natuvchi kassaga qaytarish
-        from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).first()
-        if from_cash:
-            from_cash.balance = (from_cash.balance or 0) + amount
-        t.status = "pending"
-        t.sent_by_user_id = None
-        t.sent_at = None
-    else:
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Bu statusda bekor qilib bolmaydi."), status_code=303)
-    db.commit()
+    try:
+        revert_cash_transfer_atomic(db, t)
+    except DocumentError as e:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote(str(e)), status_code=303)
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?reverted=1", status_code=303)
 
 
@@ -1624,11 +1600,13 @@ async def cash_transfer_delete(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    from app.services.finance_service import delete_cash_transfer_atomic
+    from app.services.document_service import DocumentError
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if t.status not in ("pending", "draft"):
-        return RedirectResponse(url="/cash/transfers?error=" + quote("Faqat kutilayotgan hujjatni o'chirish mumkin."), status_code=303)
-    db.delete(t)
-    db.commit()
+    try:
+        delete_cash_transfer_atomic(db, t)
+    except DocumentError as e:
+        return RedirectResponse(url="/cash/transfers?error=" + quote(str(e)), status_code=303)
     return RedirectResponse(url="/cash/transfers?deleted=1", status_code=303)

@@ -270,6 +270,118 @@ class TestLiveBackup:
         assert hasattr(restore_from_backup, "list_backups")
 
 
+class TestProductionService:
+    """Tier C3 — production_service.py atomik operatsiyalar."""
+
+    def test_production_service_imports(self):
+        from app.services.production_service import (
+            delete_production_atomic,
+            delete_recipe_atomic,
+        )
+        assert callable(delete_production_atomic)
+        assert callable(delete_recipe_atomic)
+
+    def test_delete_production_rejects_completed(self):
+        """Tasdiqlangan buyurtmani o'chirish rad etilishi kerak."""
+        from app.services.production_service import delete_production_atomic
+        from app.services.document_service import DocumentError
+
+        class FakeProduction:
+            id = 999
+            status = "completed"
+            number = "PR-TEST"
+
+        with pytest.raises(DocumentError, match="Tasdiqni bekor qilish"):
+            delete_production_atomic(None, FakeProduction())
+
+
+class TestFinanceService:
+    """Tier C3 — finance_service.py atomik operatsiyalar."""
+
+    def test_finance_service_imports(self):
+        from app.services.finance_service import (
+            cash_balance_formula,
+            sync_cash_balance,
+            delete_cash_transfer_atomic,
+            revert_cash_transfer_atomic,
+        )
+        assert callable(cash_balance_formula)
+        assert callable(sync_cash_balance)
+        assert callable(delete_cash_transfer_atomic)
+        assert callable(revert_cash_transfer_atomic)
+
+    def test_delete_transfer_rejects_completed(self):
+        """Tasdiqlangan o'tkazmani o'chirish rad etilishi kerak."""
+        from app.services.finance_service import delete_cash_transfer_atomic
+        from app.services.document_service import DocumentError
+
+        class FakeTransfer:
+            id = 999
+            status = "completed"
+
+        with pytest.raises(DocumentError, match="kutilayotgan"):
+            delete_cash_transfer_atomic(None, FakeTransfer())
+
+    def test_revert_transfer_rejects_invalid_status(self):
+        """Draft statusdagi o'tkazmani revert qilish rad etilishi kerak."""
+        from app.services.finance_service import revert_cash_transfer_atomic
+        from app.services.document_service import DocumentError
+
+        class FakeTransfer:
+            id = 999
+            status = "draft"
+            amount = 0
+
+        with pytest.raises(DocumentError, match="statusda bekor"):
+            revert_cash_transfer_atomic(None, FakeTransfer())
+
+
+class TestPaymentService:
+    """Tier C3 — payment_service.py atomik operatsiyalar."""
+
+    def test_payment_service_imports(self):
+        from app.services.payment_service import (
+            delete_payment_atomic,
+            cancel_payment_atomic,
+        )
+        assert callable(delete_payment_atomic)
+        assert callable(cancel_payment_atomic)
+
+    def test_delete_payment_rejects_confirmed(self):
+        """Tasdiqlangan to'lovni o'chirish rad etilishi kerak."""
+        from app.services.payment_service import delete_payment_atomic
+        from app.services.document_service import DocumentError
+
+        class FakePayment:
+            id = 999
+            status = "confirmed"
+            cash_register_id = 1
+
+        with pytest.raises(DocumentError, match="Tasdiqlangan"):
+            delete_payment_atomic(None, FakePayment())
+
+
+class TestStockService:
+    """stock_service.py — clamp va helper testlari."""
+
+    def test_clamp_stock_qty(self):
+        from app.services.stock_service import clamp_stock_qty
+        assert clamp_stock_qty(0) == 0.0
+        assert clamp_stock_qty(-5) == 0.0
+        assert clamp_stock_qty(-1e-15) == 0.0
+        assert clamp_stock_qty(3.14) == 3.14
+        assert clamp_stock_qty(None) == 0.0
+
+    def test_stock_service_imports(self):
+        from app.services.stock_service import (
+            create_stock_movement,
+            delete_stock_movements_for_document,
+            clamp_stock_qty,
+        )
+        assert callable(create_stock_movement)
+        assert callable(delete_stock_movements_for_document)
+
+
 class TestMainAppIntegrity:
     """main.py hamma routerlarni to'g'ri ro'yxatga olganini tekshirish."""
 

@@ -750,21 +750,13 @@ async def delete_recipe(
     current_user: User = Depends(require_admin),
 ):
     """Retseptni o'chirish (faqat admin). Ishlab chiqarishda ishlatilgan bo'lsa — faolsizlantirish."""
+    from app.services.production_service import delete_recipe_atomic
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
-    # Ishlab chiqarishda ishlatilganmi?
-    used = db.query(Production).filter(Production.recipe_id == recipe_id).first()
-    if used:
-        # O'chirish emas, faolsizlantirish
-        recipe.is_active = False
-        db.commit()
+    result = delete_recipe_atomic(db, recipe)
+    if result["action"] == "deactivated":
         return RedirectResponse(url="/production/recipes?deactivated=1", status_code=303)
-    # Avval tarkib va bosqichlarni o'chirish
-    db.query(RecipeItem).filter(RecipeItem.recipe_id == recipe_id).delete()
-    db.query(RecipeStage).filter(RecipeStage.recipe_id == recipe_id).delete()
-    db.delete(recipe)
-    db.commit()
     return RedirectResponse(url="/production/recipes?deleted=1", status_code=303)
 
 
@@ -1334,23 +1326,23 @@ async def production_orders_bulk_delete(
     form = await request.form()
     prod_ids = form.getlist("prod_ids")
     prod_ids = [int(x) for x in prod_ids if str(x).strip().isdigit()]
+    from app.services.production_service import delete_production_atomic
+    from app.services.document_service import DocumentError
     deleted = 0
     skipped = 0
-    deleted_numbers = []
     for pid in prod_ids:
         production = db.query(Production).filter(Production.id == pid).first()
-        if production and production.status in ("draft", "cancelled", "pending"):
-            deleted_numbers.append(f"{production.number}(status={production.status})")
+        if not production:
+            continue
+        try:
+            delete_production_atomic(db, production)
             log_action(db, user=current_user, action="delete", entity_type="production",
                        entity_id=pid, entity_number=production.number,
                        details=f"Bulk delete. Status: {production.status}",
                        ip_address=request.client.host if request.client else "")
-            db.delete(production)
             deleted += 1
-        elif production:
+        except DocumentError:
             skipped += 1
-    if deleted:
-        db.commit()
     msg = f"bulk_deleted={deleted}"
     if skipped:
         msg += f"&bulk_skip={skipped}"
@@ -1702,30 +1694,16 @@ async def delete_production(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
+    from app.services.production_service import delete_production_atomic
+    from app.services.document_service import DocumentError
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
-    # Tasdiqlangan buyurtmani avval revert qilish kerak
-    if production.status == "completed":
-        from urllib.parse import quote
+    try:
+        delete_production_atomic(db, production)
+    except DocumentError as e:
         return RedirectResponse(
-            url=f"/production/orders?error=delete_completed&detail={quote('Tasdiqlangan buyurtmani o`chirish uchun avval «Tasdiqni bekor qilish» bosing.')}",
+            url=f"/production/orders?error=delete_completed&detail={quote(str(e))}",
             status_code=303,
         )
-    # Qoralama/bekor qilingan buyurtma uchun — stock movementlarni tozalash va o'chirish
-    movements = db.query(StockMovement).filter(
-        StockMovement.document_type == "Production",
-        StockMovement.document_id == prod_id,
-    ).all()
-    for m in movements:
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == m.warehouse_id,
-            Stock.product_id == m.product_id,
-        ).first()
-        if stock:
-            new_qty = (stock.quantity or 0) - (m.quantity_change or 0)
-            stock.quantity = max(0.0, new_qty)
-        db.delete(m)
-    db.delete(production)
-    db.commit()
     return RedirectResponse(url="/production/orders", status_code=303)

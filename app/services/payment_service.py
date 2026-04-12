@@ -32,8 +32,8 @@ def delete_payment_atomic(db: Session, payment: Payment) -> dict:
         db.flush()
         # Kassa balansini qayta hisoblash
         if cash_id:
-            from app.routes.finance import _sync_cash_balance
-            _sync_cash_balance(db, cash_id)
+            from app.services.finance_service import sync_cash_balance
+            sync_cash_balance(db, cash_id)
         db.commit()
         return {"ok": True, "cash_register_id": cash_id}
     except Exception:
@@ -46,15 +46,15 @@ def cancel_payment_atomic(db: Session, payment: Payment) -> dict:
     To'lovni atomik bekor qilish (status='cancelled').
 
     O'chirmaydi — audit trail saqlanadi. Kassa balansi avtomatik yangilanadi
-    chunki _cash_balance_formula() faqat confirmed to'lovlarni hisoblaydi.
+    chunki cash_balance_formula() faqat confirmed to'lovlarni hisoblaydi.
     """
     cash_id = payment.cash_register_id
     try:
         payment.status = "cancelled"
         db.flush()
         if cash_id:
-            from app.routes.finance import _sync_cash_balance
-            _sync_cash_balance(db, cash_id)
+            from app.services.finance_service import sync_cash_balance
+            sync_cash_balance(db, cash_id)
         db.commit()
         return {"ok": True, "status": "cancelled", "cash_register_id": cash_id}
     except Exception:

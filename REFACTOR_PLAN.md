@@ -281,37 +281,50 @@
 - 490 route saqlandi
 - Backward compat 100% (URL prefix /api)
 
-### C3. Service layer kengaytirish 🟡 QISMAN BAJARILDI
-**Audit:** Y2 | **Vaqt:** 2 kun (to'liq), minimal bajarildi
+### C3. Service layer kengaytirish ✅ BAJARILDI
+**Audit:** Y2 | **Sana:** 2026-04-11 + 2026-04-12
 
-Hozirgi service qatlam:
+Hozirgi service qatlam (6 fayl):
 - `document_service.py` — 5 funksiya (confirm/revert/delete purchase, delete sale) ✅
-- `stock_service.py` — create/delete movements ✅
-- `pos_helpers.py` — POS utilities
-- `payment_service.py` ✅ **BU SESSIYADA QO'SHILDI**
+- `stock_service.py` — create/delete movements, clamp_stock_qty ✅
+- `pos_helpers.py` — POS utilities ✅
+- `payment_service.py` ✅
   - `delete_payment_atomic` — cancelled to'lovni xavfsiz o'chirish + kassa balans sync
   - `cancel_payment_atomic` — soft cancel, audit trail saqlanadi
+- `production_service.py` ✅ **2026-04-12 QO'SHILDI**
+  - `delete_production_atomic` — stock reversal + atomik o'chirish
+  - `delete_recipe_atomic` — cascade o'chirish yoki faolsizlantirish
+- `finance_service.py` ✅ **2026-04-12 QO'SHILDI**
+  - `cash_balance_formula` — kassa balans hisoblash (route'dan ko'chirildi)
+  - `sync_cash_balance` — kassa balansini qayta hisoblash
+  - `delete_cash_transfer_atomic` — pending/draft o'tkazmani o'chirish
+  - `revert_cash_transfer_atomic` — tasdiqlangan o'tkazmani qaytarish
+
+**Route'lar thin wrapper ga aylantirildi:**
+- `production.py` — delete_production, delete_recipe, bulk_delete → service
+- `finance.py` — finance_payment_delete → payment_service, cash_transfer_delete/revert → finance_service
+- `_sync_cash_balance` route'dan service ga ko'chirildi (payment_service endi route'dan import qilmaydi)
 
 Qolgan (keyingi sessiyalar uchun):
-- `finance_service.py` — cash transfer, balance sync, carry-over
-- `production_service.py` — production_confirm/revert_atomic
-- `stock_repo.py`, `partner_repo.py` — repository pattern
+- `stock_repo.py`, `partner_repo.py` — repository pattern (ixtiyoriy)
 
-### C4. Unit test asoslari 🟡 QISMAN BAJARILDI (smoke)
-**Audit:** O3 | **Vaqt:** 2 kun (to'liq), smoke level bajarildi
+### C4. Unit test asoslari ✅ BAJARILDI
+**Audit:** O3 | **Sana:** 2026-04-11 + 2026-04-12
 
-**`tests/test_refactor_modules.py`** yaratildi (bu sessiyada) ✅
-- 24 ta test **24/24 passing**
+**`tests/test_refactor_modules.py`** — **33 test, 33/33 passing**
 - Qamrovi:
   - TestTierC1EmployeesModules — 6 test (dismissals, advances, attendance, salary, employment, core)
   - TestTierC2ApiModules — 7 test (api_system, api_dashboard, api_auth, auth_helpers, driver_ops, agent_ops, agent_advanced)
   - TestDocumentService — 2 test (import, DocumentError)
+  - TestProductionService — 2 test (import, completed reject) **YANGI**
+  - TestFinanceService — 3 test (import, delete reject, revert reject) **YANGI**
+  - TestPaymentService — 2 test (import, confirmed reject) **YANGI**
+  - TestStockService — 2 test (clamp_stock_qty, import) **YANGI**
   - TestAuthHelpers — 2 test (hash/verify PIN, format validation)
   - TestRateLimit — 2 test (is_agent_blocked, failure counter)
   - TestLiveBackup — 2 test (backup/restore script import)
   - TestMainAppIntegrity — 3 test (490 route, API/employees endpoint present)
 - Test ishga tushirish: `pytest tests/test_refactor_modules.py -v`
-- Birinchi ishlatish: **24 passed in 2.10s**
 
 **Qolgan (keyingi sessiyalar):**
 - Unit test'lar haqiqiy DB fixture bilan (in-memory SQLite)
@@ -320,15 +333,23 @@ Qolgan (keyingi sessiyalar uchun):
 
 ---
 
-## 📊 Hozirgi status (2026-04-11, kech)
+## 📊 Hozirgi status (2026-04-12)
 
 | Bosqich | Tugallangan | Jami | Foiz |
 |---|---|---|---|
 | **Infrastruktura** | 7/7 | 7 | 100% |
 | **Tier A** | 4/4 (A5 o'tkazildi) | 5 | 80% |
 | **Tier B** | 5/5 + B2.5 + B2.6 + B2.7 | 5 | **100%** |
-| **Tier C** | 3/5 (C1+C2 ✅, C3+C4 qisman) | 5 | 60% |
-| **JAMI** | **21.4/22** | 22 | **97%** |
+| **Tier C** | 4/5 (C1+C2+C3+C4 ✅, C5 qoldi) | 5 | 80% |
+| **Bug fix (12-apr)** | 5/5 | 5 | **100%** |
+| **JAMI** | **25/27** | 27 | **93%** |
+
+### 2026-04-12 sessiyasi
+- **5 ta brauzer bug tuzatildi** (purchases 500, attendance 500, login case, toast CSS)
+- **X6 bajarildi** — production.py + finance.py delete → service layer
+- **C3 to'liq** — production_service.py + finance_service.py yaratildi
+- **C4 kengaytirildi** — 24 → 33 test (9 yangi service test)
+- **Faqat C5 (POS refactor) qoldi** — yakshanba sessiyasiga rejalashtirilgan
 
 **Senior audit (11 ekspert jamoasi) — 2026-04-11:**
 - 5 ekspert parallel (Arxitektor, DB, Security, Bot/DevOps, Frontend/PM)
@@ -346,15 +367,17 @@ Qolgan (keyingi sessiyalar uchun):
 
 ## 📅 Keyingi qadamlar
 
-### Ertasi kun (2026-04-12)
-1. **Manual smoke test** Tier B'dagi oqimlar:
-   - B1: yangi purchase yaratib tasdiqlash va bekor qilish
-   - B2: sotuv o'chirishda to'lov mavjud bo'lsa xato chiqishi
-   - B3: hozirgi mobil ilovada agent login ishlashi
-2. **Token rotation** (siz qilasiz):
+### 2026-04-12 — BAJARILDI ✅
+1. **Manual smoke test** — brauzerdan 18 oqim tekshirildi, 5 ta bug topildi va tuzatildi
+2. **X6** — production.py + finance.py delete operatsiyalari service layer ga ko'chirildi
+3. **C3** — production_service.py + finance_service.py yaratildi
+4. **C4** — 24 → 33 test (yangi servicelar uchun 9 test qo'shildi)
+
+### Hali qilish kerak (foydalanuvchi):
+1. **Token rotation** (siz qilasiz):
    - `@BotFather` → eski bot tokenni `/revoke`, yangisini `.env` ga
    - Hikvision panel → parol almashtirish, yangisini `.env` ga
-3. **B2.5** (ixtiyoriy): 6 ta eski orphan payment'ni tozalash skripti
+2. **Clean restart** (start.bat → T → 10sek → qayta start)
 
 ### Bu hafta
 - **Mobil ilova** (Flutter jamoasi):
