@@ -118,12 +118,8 @@
         <input type="hidden" name="warehouse_id" value="{{ warehouse.id if warehouse else '' }}" id="posWarehouseId">
         <div id="posCartHidden"></div>
         <div class="row">
-            <div class="col-lg-8">
                 {% include "sales/_pos_catalog.html" %}
-            </div>
-            <div class="col-lg-4">
                 {% include "sales/_pos_cart.html" %}
-            </div>
         </div>
     </form>
 
