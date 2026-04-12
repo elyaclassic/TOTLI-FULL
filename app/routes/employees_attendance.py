@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core import templates
 from app.models.database import (
@@ -355,7 +355,7 @@ async def attendance_doc_view(
     doc = db.query(AttendanceDoc).filter(AttendanceDoc.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    rows = db.query(Attendance).filter(Attendance.date == doc.date).order_by(Attendance.employee_id).all()
+    rows = db.query(Attendance).options(joinedload(Attendance.employee)).filter(Attendance.date == doc.date).order_by(Attendance.employee_id).all()
     return templates.TemplateResponse("employees/attendance_doc.html", {
         "request": request,
         "doc": doc,
@@ -379,6 +379,7 @@ async def attendance_records(
     end_date = end_date or today.strftime("%Y-%m-%d")
     records = (
         db.query(Attendance)
+        .options(joinedload(Attendance.employee))
         .filter(Attendance.date >= start_date, Attendance.date <= end_date)
         .order_by(Attendance.date.desc(), Attendance.employee_id)
         .all()

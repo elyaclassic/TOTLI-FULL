@@ -131,7 +131,7 @@ async def unified_login(
 
         # 1. User jadvalidan qidirish (admin, manager, production)
         user_filters = [
-            (User.username == username),
+            (User.username.ilike(username)),
             (User.phone == username)
         ]
         if normalized_phone and normalized_phone != username:
@@ -326,7 +326,7 @@ async def agent_login(
 
         # ========== YO'L 1: User-based login (bcrypt) ==========
         user = db.query(User).filter(
-            User.username == identifier,
+            User.username.ilike(identifier),
             User.is_active == True,
             User.role.in_(["agent", "admin", "manager"]),
         ).first()

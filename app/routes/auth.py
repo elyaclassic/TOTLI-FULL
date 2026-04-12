@@ -70,7 +70,7 @@ async def login(
                 "request": request,
                 "error": "Login va parolni kiriting!",
             })
-        user = db.query(User).filter(User.username == username).first()
+        user = db.query(User).filter(User.username.ilike(username)).first()
         if not user or not verify_password(password, user.password_hash):
             record_failure(request)
             return templates.TemplateResponse("login.html", {
