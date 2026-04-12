@@ -148,14 +148,18 @@ async def purchase_create(
                 today = datetime.now()
     else:
         today = datetime.now()
+    date_prefix = f"P-{today.strftime('%Y%m%d')}-"
     last_purchase = db.query(Purchase).filter(
-        Purchase.date >= today.replace(hour=0, minute=0, second=0)
-    ).order_by(Purchase.id.desc()).first()
-    if last_purchase and last_purchase.number.startswith(f"P-{today.strftime('%Y%m%d')}-"):
-        last_seq = int(last_purchase.number.split("-")[-1])
+        Purchase.number.like(f"{date_prefix}%")
+    ).order_by(Purchase.number.desc()).first()
+    if last_purchase:
+        try:
+            last_seq = int(last_purchase.number.split("-")[-1])
+        except (ValueError, IndexError):
+            last_seq = 0
     else:
         last_seq = 0
-    number = f"P-{today.strftime('%Y%m%d')}-{str(last_seq + 1).zfill(4)}"
+    number = f"{date_prefix}{str(last_seq + 1).zfill(4)}"
     total = sum(qty * pr for _, qty, pr in items_data)
     total_expenses = 0
     for j, name in enumerate(expense_names):
