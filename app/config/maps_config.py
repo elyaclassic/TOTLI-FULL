@@ -2,17 +2,18 @@
 Xarita konfiguratsiyasi
 Map configuration for switching between providers
 """
+import os
 
 # Xarita provayderi: 'yandex' yoki 'google'
 # Map provider: 'yandex' or 'google'
-MAP_PROVIDER = 'yandex'
+MAP_PROVIDER = os.getenv('MAP_PROVIDER', 'yandex')
 
 # Yandex Maps API Key (https://developer.tech.yandex.ru/ — bepul kalit olish mumkin)
-YANDEX_MAPS_API_KEY = '096da66c-342b-4bab-80cd-3b44b851429c'
+YANDEX_MAPS_API_KEY = os.getenv('YANDEX_MAPS_API_KEY', '')
 
 # Google Maps API Key (faqat MAP_PROVIDER='google' bo'lganda kerak)
 # Google Maps API Key (only needed when MAP_PROVIDER='google')
-GOOGLE_MAPS_API_KEY = ''  # Bu yerga API key kiriting / Enter your API key here
+GOOGLE_MAPS_API_KEY = os.getenv('GOOGLE_MAPS_API_KEY', '')
 
 # Default xarita markazi (Toshkent)
 # Default map center (Tashkent)

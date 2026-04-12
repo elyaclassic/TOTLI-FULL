@@ -37,6 +37,10 @@ async def global_safe_middleware_impl(request: Request, call_next):
         response = await call_next(request)
         try:
             response.headers["X-Server-Source"] = "pwp"
+            response.headers["X-Content-Type-Options"] = "nosniff"
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+            response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         except Exception:
             pass
         return response

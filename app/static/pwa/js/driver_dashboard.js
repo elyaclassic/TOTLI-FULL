@@ -16,7 +16,7 @@ const token = Session.getToken();
 
 // Ensure we have driver data
 if (!user || (!user.full_name && !user.driver)) {
-    console.warn('Driver ma\'lumotlari topilmadi, session tekshirilsin');
+    // Driver ma'lumotlari topilmadi
 }
 
 const driverName = user?.full_name || user?.driver?.full_name || 'Haydovchi';
@@ -70,7 +70,7 @@ async function doSync() {
         await loadDriverData();
         if (btn) btn.classList.remove('spin');
     } catch (e) {
-        console.error('Sinxronlash xatosi:', e);
+        // Sinxronlash xatosi
     }
 }
 
@@ -96,7 +96,7 @@ async function loadDriverData() {
         document.getElementById('totalDeliveries').textContent = completed;
         document.getElementById('totalAmount').textContent = formatSum(visitsData.totalAmount || 0);
     } catch (e) {
-        console.error('Ma\'lumot yuklash xatosi:', e);
+        // Ma'lumot yuklash xatosi
     }
 }
 
@@ -266,7 +266,7 @@ async function sendLocation() {
         formData.append('token', token);
         await fetch('/api/driver/location', { method: 'POST', body: formData });
     } catch (e) {
-        console.warn('GPS yuborish:', e.message);
+        // GPS yuborish xatosi
     }
 }
 

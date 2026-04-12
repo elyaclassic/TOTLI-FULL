@@ -7,6 +7,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.database import (
@@ -65,26 +66,34 @@ async def get_agents_locations(request: Request, db: Session = Depends(get_db), 
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return JSONResponse(status_code=429, content={"error": "Too Many Requests"})
-    agents = db.query(Agent).filter(Agent.is_active == True).all()
-    result = []
-    for agent in agents:
-        last_loc = (
-            db.query(AgentLocation)
-            .filter(AgentLocation.agent_id == agent.id)
-            .order_by(AgentLocation.recorded_at.desc())
-            .first()
+    # Subquery: har bir agent uchun oxirgi location ID
+    latest_loc_sq = (
+        db.query(
+            AgentLocation.agent_id,
+            func.max(AgentLocation.id).label("max_id"),
         )
-        if last_loc:
-            result.append({
-                "id": agent.id,
-                "name": agent.full_name,
-                "code": agent.code,
-                "lat": last_loc.latitude,
-                "lng": last_loc.longitude,
-                "time": last_loc.recorded_at.isoformat(),
-                "battery": getattr(last_loc, "battery", None),
-            })
-    return result
+        .group_by(AgentLocation.agent_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Agent, AgentLocation)
+        .join(latest_loc_sq, Agent.id == latest_loc_sq.c.agent_id)
+        .join(AgentLocation, AgentLocation.id == latest_loc_sq.c.max_id)
+        .filter(Agent.is_active == True)
+        .all()
+    )
+    return [
+        {
+            "id": agent.id,
+            "name": agent.full_name,
+            "code": agent.code,
+            "lat": loc.latitude,
+            "lng": loc.longitude,
+            "time": loc.recorded_at.isoformat(),
+            "battery": getattr(loc, "battery", None),
+        }
+        for agent, loc in rows
+    ]
 
 
 @router.get("/drivers/locations")
@@ -93,27 +102,35 @@ async def get_drivers_locations(request: Request, db: Session = Depends(get_db),
         return JSONResponse(status_code=401, content={"error": "Unauthorized"})
     if check_api_rate_limit(request):
         return JSONResponse(status_code=429, content={"error": "Too Many Requests"})
-    drivers = db.query(Driver).filter(Driver.is_active == True).all()
-    result = []
-    for driver in drivers:
-        last_loc = (
-            db.query(DriverLocation)
-            .filter(DriverLocation.driver_id == driver.id)
-            .order_by(DriverLocation.recorded_at.desc())
-            .first()
+    # Subquery: har bir driver uchun oxirgi location ID
+    latest_loc_sq = (
+        db.query(
+            DriverLocation.driver_id,
+            func.max(DriverLocation.id).label("max_id"),
         )
-        if last_loc:
-            result.append({
-                "id": driver.id,
-                "name": driver.full_name,
-                "code": driver.code,
-                "vehicle": driver.vehicle_number,
-                "lat": last_loc.latitude,
-                "lng": last_loc.longitude,
-                "time": last_loc.recorded_at.isoformat(),
-                "speed": getattr(last_loc, "speed", None),
-            })
-    return result
+        .group_by(DriverLocation.driver_id)
+        .subquery()
+    )
+    rows = (
+        db.query(Driver, DriverLocation)
+        .join(latest_loc_sq, Driver.id == latest_loc_sq.c.driver_id)
+        .join(DriverLocation, DriverLocation.id == latest_loc_sq.c.max_id)
+        .filter(Driver.is_active == True)
+        .all()
+    )
+    return [
+        {
+            "id": driver.id,
+            "name": driver.full_name,
+            "code": driver.code,
+            "vehicle": driver.vehicle_number,
+            "lat": loc.latitude,
+            "lng": loc.longitude,
+            "time": loc.recorded_at.isoformat(),
+            "speed": getattr(loc, "speed", None),
+        }
+        for driver, loc in rows
+    ]
 
 
 @router.get("/notifications/unread")

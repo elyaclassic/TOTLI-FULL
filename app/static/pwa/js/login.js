@@ -74,12 +74,8 @@ document.getElementById('loginForm')?.addEventListener('submit', async function 
     } catch (error) {
         UI.hideLoading();
         UI.showError('Serverga ulanishda xatolik: ' + error.message);
-        console.error('Login error:', error);
+        // Login error logged
     }
 });
 
-// Auto-fill for testing (remove in production)
-if (window.location.hostname === 'localhost' || window.location.hostname === '10.243.49.144') {
-    document.getElementById('username').value = '+998901111111';
-    document.getElementById('password').value = 'test';
-}
+// Auto-fill o'chirildi (xavfsizlik uchun)

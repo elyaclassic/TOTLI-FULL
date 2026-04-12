@@ -54,6 +54,20 @@ from app.routes import admin as admin_routes
 from app.routes import audit_routes
 
 app = FastAPI(title="TOTLI HOLVA", description="Biznes boshqaruv tizimi", version="1.0")
+
+# --- CORS middleware ---
+from fastapi.middleware.cors import CORSMiddleware
+_cors_origins = os.getenv("CORS_ORIGINS", "").split(",") if os.getenv("CORS_ORIGINS") else []
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "X-CSRF-Token", "Authorization"],
+        max_age=3600,
+    )
+
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 # Routerlar (auth, dashboard, home, reports, info, sales, qoldiqlar, finance, products)

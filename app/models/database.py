@@ -35,6 +35,7 @@ def _set_sqlite_pragma(conn, _):
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA cache_size=-64000")
     cursor.execute("PRAGMA temp_store=MEMORY")
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 
@@ -48,6 +49,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -86,8 +90,8 @@ class PurchaseItem(Base):
     """Kirim qatorlari"""
     __tablename__ = "purchase_items"
     id = Column(Integer, primary_key=True, index=True)
-    purchase_id = Column(Integer, ForeignKey("purchases.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
+    purchase_id = Column(Integer, ForeignKey("purchases.id"), index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)
     quantity = Column(Float)
     price = Column(Float)
     total = Column(Float)
@@ -359,9 +363,9 @@ class StockMovement(Base):
     __tablename__ = "stock_movements"
     
     id = Column(Integer, primary_key=True, index=True)
-    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=True)  # null bo'lishi mumkin (yangi qoldiq)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=True, index=True)  # null bo'lishi mumkin (yangi qoldiq)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     
     # Operatsiya turi va hujjat
     operation_type = Column(String(50), nullable=False)  # purchase, production, transfer_in, transfer_out, sale, adjustment, other
@@ -374,7 +378,7 @@ class StockMovement(Base):
     quantity_after = Column(Float, nullable=False)  # O'zgarishdan keyingi qoldiq
     
     # Qo'shimcha ma'lumotlar
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Operatsiyani bajargan foydalanuvchi
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)  # Operatsiyani bajargan foydalanuvchi
     note = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
     
@@ -411,8 +415,8 @@ class WarehouseTransferItem(Base):
     """Ombordan omborga o'tkazish hujjati qatori"""
     __tablename__ = "warehouse_transfer_items"
     id = Column(Integer, primary_key=True, index=True)
-    transfer_id = Column(Integer, ForeignKey("warehouse_transfers.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    transfer_id = Column(Integer, ForeignKey("warehouse_transfers.id"), nullable=False, index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=False, index=True)
     quantity = Column(Float, default=0)
 
     transfer = relationship("WarehouseTransfer", back_populates="items")
@@ -786,7 +790,7 @@ class Partner(Base):
     # Other
     notes = Column(Text, nullable=True)  # Izoh
     photo = Column(String(255), nullable=True)  # Rasm fayli nomi
-    agent_id = Column(Integer, nullable=True)  # Qaysi agent qo'shgan
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # Qaysi agent qo'shgan
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
     
@@ -806,10 +810,10 @@ class Order(Base):
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
     type = Column(String(20))  # sale, purchase, return_sale, return_purchase
-    partner_id = Column(Integer, ForeignKey("partners.id"))
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
-    price_type_id = Column(Integer, ForeignKey("price_types.id"), nullable=True)  # Sotuvda qaysi narx turi ishlatiladi
-    user_id = Column(Integer, ForeignKey("users.id"))
+    partner_id = Column(Integer, ForeignKey("partners.id"), index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), index=True)
+    price_type_id = Column(Integer, ForeignKey("price_types.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
     subtotal = Column(Float, default=0)  # Jami (chegirmasiz)
     discount_percent = Column(Float, default=0)
     discount_amount = Column(Float, default=0)
@@ -837,9 +841,9 @@ class OrderItem(Base):
     __tablename__ = "order_items"
     
     id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id"))
-    product_id = Column(Integer, ForeignKey("products.id"))
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)  # Qator uchun ombor (barcha omborlardan sotuvda)
+    order_id = Column(Integer, ForeignKey("orders.id"), index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True, index=True)  # Qator uchun ombor (barcha omborlardan sotuvda)
     quantity = Column(Float)
     price = Column(Float)
     discount_percent = Column(Float, default=0)

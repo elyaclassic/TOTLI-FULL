@@ -19,14 +19,6 @@ const API = {
 
     // Send Location
     async sendLocation(userType, latitude, longitude, accuracy, battery, token) {
-        console.log('=== SENDING LOCATION ===');
-        console.log('User Type:', userType);
-        console.log('Latitude:', latitude);
-        console.log('Longitude:', longitude);
-        console.log('Accuracy:', accuracy);
-        console.log('Battery:', battery);
-        console.log('Token:', token ? token.substring(0, 20) + '...' : 'NO TOKEN');
-
         const formData = new FormData();
         formData.append('latitude', latitude);
         formData.append('longitude', longitude);
@@ -34,19 +26,12 @@ const API = {
         formData.append('battery', battery || 100);
         formData.append('token', token);
 
-        const url = `${API_BASE_URL}/api/${userType}/location`;
-        console.log('URL:', url);
-
-        const response = await fetch(url, {
+        const response = await fetch(`${API_BASE_URL}/api/${userType}/location`, {
             method: 'POST',
             body: formData
         });
 
-        const result = await response.json();
-        console.log('Response Status:', response.status);
-        console.log('Response:', result);
-
-        return result;
+        return await response.json();
     },
 
     // Get Orders (Agent only)
@@ -165,7 +150,6 @@ const GPS = {
 
     startTracking(callback) {
         if (!navigator.geolocation) {
-            console.error('GPS qo\'llab-quvvatlanmaydi');
             return;
         }
 
@@ -174,7 +158,7 @@ const GPS = {
                 this.lastPosition = position;
                 if (callback) callback(position);
             },
-            error => console.error('GPS xatosi:', error),
+            error => { /* GPS xatosi */ },
             {
                 enableHighAccuracy: true,
                 timeout: 10000,
