@@ -97,6 +97,16 @@ API_RATE_WINDOW = 60         # Soniya
 _api_requests: dict = {}
 
 
+def _api_cleanup(now: datetime):
+    """Muddati o'tgan API oynalarni tozalash (memory leak oldini olish)."""
+    expired = [
+        ip for ip, data in _api_requests.items()
+        if (now - data["window_start"]).total_seconds() >= API_RATE_WINDOW * 10
+    ]
+    for ip in expired:
+        del _api_requests[ip]
+
+
 def check_api_rate_limit(request) -> bool:
     """Public API uchun rate limit.
     True qaytarsa — limit oshib ketgan (429 qaytarish kerak).
@@ -104,6 +114,7 @@ def check_api_rate_limit(request) -> bool:
     ip = _get_ip(request)
     now = datetime.now()
     with _api_lock:
+        _api_cleanup(now)
         data = _api_requests.get(ip)
         if not data or (now - data["window_start"]).total_seconds() >= API_RATE_WINDOW:
             _api_requests[ip] = {"count": 1, "window_start": now}

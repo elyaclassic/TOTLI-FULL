@@ -5,6 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 
 from app.core import templates
 from app.models.database import (
@@ -26,16 +27,30 @@ router = APIRouter(tags=["agents"])
 async def agents_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     agents = db.query(Agent).all()
     today = datetime.now().date()
+    agent_ids = [a.id for a in agents]
+
+    # Oxirgi lokatsiya — har agent uchun bitta query (N+1 o'rniga)
+    latest_loc_ids = (
+        db.query(func.max(AgentLocation.id))
+        .filter(AgentLocation.agent_id.in_(agent_ids))
+        .group_by(AgentLocation.agent_id)
+        .subquery()
+    )
+    locations = db.query(AgentLocation).filter(AgentLocation.id.in_(latest_loc_ids)).all()
+    loc_map = {loc.agent_id: loc for loc in locations}
+
+    # Bugungi vizitlar soni — bitta GROUP BY query
+    visits_counts = (
+        db.query(Visit.agent_id, func.count(Visit.id).label("cnt"))
+        .filter(Visit.agent_id.in_(agent_ids), Visit.visit_date >= today)
+        .group_by(Visit.agent_id)
+        .all()
+    )
+    visits_map = {row.agent_id: row.cnt for row in visits_counts}
+
     for agent in agents:
-        agent.last_location = (
-            db.query(AgentLocation)
-            .filter(AgentLocation.agent_id == agent.id)
-            .order_by(AgentLocation.recorded_at.desc())
-            .first()
-        )
-        agent.today_visits = (
-            db.query(Visit).filter(Visit.agent_id == agent.id, Visit.visit_date >= today).count()
-        )
+        agent.last_location = loc_map.get(agent.id)
+        agent.today_visits = visits_map.get(agent.id, 0)
     return templates.TemplateResponse("agents/list.html", {
         "request": request,
         "agents": agents,

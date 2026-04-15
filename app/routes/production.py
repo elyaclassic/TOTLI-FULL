@@ -48,43 +48,60 @@ def _recipe_max_stage(recipe) -> int:
     return max(s.stage_number for s in recipe.stages)
 
 
-def _calculate_recipe_cost_per_kg(db, recipe_id):
-    """Retsept bo'yicha 1 kg uchun tannarxni hisoblash (rekursiv - yarim tayyor mahsulotlar uchun ham)."""
+def _calculate_recipe_cost_per_kg(db, recipe_id, _cache=None):
+    """Retsept bo'yicha 1 kg uchun tannarxni hisoblash (rekursiv - yarim tayyor mahsulotlar uchun ham).
+    _cache: recipe_id -> cost_per_kg memoization, rekursiv chaqiruvlarda bir xil retsept qayta hisoblanmaydi."""
+    if _cache is None:
+        _cache = {}
+    if recipe_id in _cache:
+        return _cache[recipe_id]
+    _cache[recipe_id] = 0.0  # cycle guard
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe or not recipe.items:
         return 0.0
-    
+
+    product_ids = [item.product_id for item in recipe.items]
+    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(product_ids)).all()}
+    stocks_map = {s.product_id: s for s in db.query(Stock).filter(Stock.product_id.in_(product_ids)).all()}
+    semi_product_ids = [pid for pid, p in products_map.items() if getattr(p, 'type', None) == 'yarim_tayyor']
+    semi_recipes_map = {}
+    if semi_product_ids:
+        semi_recipes_map = {
+            r.product_id: r
+            for r in db.query(Recipe).filter(
+                Recipe.product_id.in_(semi_product_ids),
+                Recipe.is_active == True,
+            ).all()
+        }
+
     total_cost = 0.0
     for item in recipe.items:
-        product = db.query(Product).filter(Product.id == item.product_id).first()
+        product = products_map.get(item.product_id)
         if not product:
             continue
-        
-        # Agar yarim tayyor mahsulot bo'lsa, uning retsept tannarxini olamiz
+
         if getattr(product, 'type', None) == 'yarim_tayyor':
-            # Yarim tayyor mahsulotning retseptini topamiz
-            semi_recipe = db.query(Recipe).filter(Recipe.product_id == product.id, Recipe.is_active == True).first()
+            semi_recipe = semi_recipes_map.get(product.id)
             if semi_recipe:
-                semi_cost_per_kg = _calculate_recipe_cost_per_kg(db, semi_recipe.id)
+                semi_cost_per_kg = _calculate_recipe_cost_per_kg(db, semi_recipe.id, _cache)
                 total_cost += (item.quantity or 0) * semi_cost_per_kg
             else:
-                # Retsept topilmasa, purchase_price yoki Stock.cost_price ishlatamiz
                 cost = product.purchase_price or 0
-                stock = db.query(Stock).filter(Stock.product_id == product.id).first()
+                stock = stocks_map.get(product.id)
                 if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
                     cost = stock.cost_price
                 total_cost += (item.quantity or 0) * cost
         else:
-            # Oddiy xom ashyo uchun purchase_price yoki Stock.cost_price
             cost = product.purchase_price or 0
-            stock = db.query(Stock).filter(Stock.product_id == product.id).first()
+            stock = stocks_map.get(product.id)
             if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
                 cost = stock.cost_price
             total_cost += (item.quantity or 0) * cost
-    
-    # 1 kg uchun tannarx (birlik og'irligi: 400gr -> 0.4, 1kg -> 1)
+
     output_qty = recipe_kg_per_unit(recipe)
-    return total_cost / output_qty if output_qty > 0 else 0.0
+    result = total_cost / output_qty if output_qty > 0 else 0.0
+    _cache[recipe_id] = result
+    return result
 
 
 def calculate_production_tannarx(db, production, recipe):
@@ -93,28 +110,49 @@ def calculate_production_tannarx(db, production, recipe):
         items_to_use = [(pi.product_id, float(pi.quantity or 0)) for pi in production.production_items]
     else:
         items_to_use = [(item.product_id, float(item.quantity or 0) * float(production.quantity or 0)) for item in recipe.items]
+
+    nonzero_ids = [pid for pid, qty in items_to_use if qty > 0]
+    wh_id = production.warehouse_id
+    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(nonzero_ids)).all()}
+    stocks_map = {
+        s.product_id: s
+        for s in db.query(Stock).filter(
+            Stock.warehouse_id == wh_id, Stock.product_id.in_(nonzero_ids)
+        ).all()
+    }
+    _semi_ids = [pid for pid, p in products_map.items() if getattr(p, "type", None) == "yarim_tayyor"]
+    semi_recipes_map = {}
+    if _semi_ids:
+        semi_recipes_map = {
+            r.product_id: r
+            for r in db.query(Recipe).filter(
+                Recipe.product_id.in_(_semi_ids),
+                Recipe.is_active == True,
+            ).all()
+        }
+    _recipe_cache = {}
+
     total_material_cost = 0.0
     for product_id, qty in items_to_use:
         if qty <= 0:
             continue
-        product = db.query(Product).filter(Product.id == product_id).first()
+        product = products_map.get(product_id)
         if not product:
             continue
-        wh_id = _warehouse_id_for_ingredient(db, product_id, production)
         if getattr(product, "type", None) == "yarim_tayyor":
-            semi_recipe = db.query(Recipe).filter(Recipe.product_id == product.id, Recipe.is_active == True).first()
+            semi_recipe = semi_recipes_map.get(product_id)
             if semi_recipe:
-                cost_per_kg = _calculate_recipe_cost_per_kg(db, semi_recipe.id)
+                cost_per_kg = _calculate_recipe_cost_per_kg(db, semi_recipe.id, _recipe_cache)
                 total_material_cost += qty * cost_per_kg
             else:
                 cost = product.purchase_price or 0
-                st = db.query(Stock).filter(Stock.warehouse_id == wh_id, Stock.product_id == product_id).first()
+                st = stocks_map.get(product_id)
                 if st and getattr(st, "cost_price", None) and st.cost_price > 0:
                     cost = st.cost_price
                 total_material_cost += qty * cost
         else:
             cost = product.purchase_price or 0
-            st = db.query(Stock).filter(Stock.warehouse_id == wh_id, Stock.product_id == product_id).first()
+            st = stocks_map.get(product_id)
             if st and getattr(st, "cost_price", None) and st.cost_price > 0:
                 cost = st.cost_price
             total_material_cost += qty * cost
@@ -1224,23 +1262,30 @@ def _production_revert_one(db, production) -> Optional[str]:
         wh_name = (out_wh.name if out_wh else "2-ombor") or "2-ombor"
         prod_name = (out_product.name if out_product else "tayyor mahsulot") or "tayyor mahsulot"
         return f"«{wh_name}» da «{prod_name}» dan kerak: {output_units:,.1f}, mavjud: {current_qty:,.1f}"
-    product_stock.quantity = current_qty - output_units
+    create_stock_movement(
+        db=db,
+        warehouse_id=out_wh_id,
+        product_id=recipe.product_id,
+        quantity_change=-output_units,
+        operation_type="production_revert",
+        document_type="Production",
+        document_id=production.id,
+        document_number=production.number,
+        note="Tasdiqni bekor qilish: tayyor mahsulot qaytarildi",
+    )
     for product_id, required in items_to_use:
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == production.warehouse_id,
-            Stock.product_id == product_id,
-        ).first()
-        if stock:
-            stock.quantity = float(stock.quantity or 0) + required
-        else:
-            db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
+        create_stock_movement(
+            db=db,
+            warehouse_id=production.warehouse_id,
+            product_id=product_id,
+            quantity_change=float(required),
+            operation_type="production_revert",
+            document_type="Production",
+            document_id=production.id,
+            document_number=production.number,
+            note="Tasdiqni bekor qilish: xom ashyo qaytarildi",
+        )
     production.status = "draft"
-    movements = db.query(StockMovement).filter(
-        StockMovement.document_type == "Production",
-        StockMovement.document_id == production.id,
-    ).all()
-    for m in movements:
-        db.delete(m)
     return None
 
 
@@ -1587,6 +1632,8 @@ async def complete_production(
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Topilmadi")
+    if production.status == "completed":
+        return RedirectResponse(url="/production/orders", status_code=303)
     recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
@@ -1657,29 +1704,36 @@ async def production_revert(
             url="/production/orders?error=revert&detail=" + quote(detail),
             status_code=303,
         )
-    product_stock.quantity = current_qty - output_units
+    create_stock_movement(
+        db=db,
+        warehouse_id=out_wh_id,
+        product_id=recipe.product_id,
+        quantity_change=-output_units,
+        operation_type="production_revert",
+        document_type="Production",
+        document_id=production.id,
+        document_number=production.number,
+        note="Tasdiqni bekor qilish: tayyor mahsulot qaytarildi",
+    )
     for product_id, required in items_to_use:
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == production.warehouse_id,
-            Stock.product_id == product_id,
-        ).first()
-        if stock:
-            stock.quantity = float(stock.quantity or 0) + required
-        else:
-            db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
-    movements = db.query(StockMovement).filter(
-        StockMovement.document_type == "Production",
-        StockMovement.document_id == production.id,
-    ).all()
-    for m in movements:
-        db.delete(m)
+        create_stock_movement(
+            db=db,
+            warehouse_id=production.warehouse_id,
+            product_id=product_id,
+            quantity_change=float(required),
+            operation_type="production_revert",
+            document_type="Production",
+            document_id=production.id,
+            document_number=production.number,
+            note="Tasdiqni bekor qilish: xom ashyo qaytarildi",
+        )
     production.status = "draft"
     db.commit()
     return RedirectResponse(url="/production/orders", status_code=303)
 
 
 @router.post("/{prod_id}/cancel")
-async def cancel_production(prod_id: int, db: Session = Depends(get_db)):
+async def cancel_production(prod_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Topilmadi")

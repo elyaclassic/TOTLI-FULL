@@ -54,8 +54,11 @@ def get_current_user(
     return user
 
 
-def require_auth(current_user: Optional[User] = Depends(get_current_user)) -> Optional[User]:
+def require_auth(current_user: Optional[User] = Depends(get_current_user)) -> User:
     """Login talab qilish"""
+    if not current_user:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=401, detail="Login talab qilindi")
     return current_user
 
 

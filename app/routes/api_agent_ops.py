@@ -614,7 +614,9 @@ async def agent_location_update(
             return {"success": False, "error": "Invalid token"}
         # user_id dan agents jadvalidagi agent_id ni topish
         agent = db.query(Agent).filter(Agent.user_id == user_id).first()
-        agent_id = agent.id if agent else user_id
+        if not agent:
+            return {"success": False, "error": "Agent topilmadi"}
+        agent_id = agent.id
         location = AgentLocation(
             agent_id=agent_id,
             latitude=latitude,
@@ -884,10 +886,10 @@ async def agent_products(request: Request, token: str = None, search: str = None
             q = q.filter(Product.name.ilike(f"%{search}%"))
         products = q.order_by(Product.name).all()
         # Tayyor mahsulot ombori ID ni bir marta topish
-        tayyor_wh = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+        tayyor_wh = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
         if not tayyor_wh:
             tayyor_wh = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
-        tayyor_wh_id = tayyor_wh.id if tayyor_wh else 3
+        tayyor_wh_id = tayyor_wh.id if tayyor_wh else None
         result = []
         for prod in products:
             unit_name = prod.unit.name if prod.unit else ""
@@ -933,7 +935,7 @@ async def agent_create_order(
         if not items:
             return {"success": False, "error": "Mahsulot tanlang"}
         # Ombor — Tayyor mahsulot ombori
-        warehouse = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+        warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
         if not warehouse:
             warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
         if not warehouse:
@@ -957,10 +959,16 @@ async def agent_create_order(
         subtotal = 0.0
         order_items = []
         for it in items:
-            prod = db.query(Product).filter(Product.id == int(it["product_id"]), Product.is_active == True).first()
+            try:
+                _pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 1)) or 0)
+            except (ValueError, TypeError):
+                continue
+            if _pid <= 0 or qty <= 0:
+                continue
+            prod = db.query(Product).filter(Product.id == _pid, Product.is_active == True).first()
             if not prod:
                 continue
-            qty = float(it.get("qty", it.get("quantity", 1)))
             # ProductPrice dan narx olish, fallback: Product.sale_price
             pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
             price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
@@ -1207,7 +1215,7 @@ async def agent_create_order_batch(
                     continue
 
                 # Ombor
-                warehouse = db.query(Warehouse).filter(Warehouse.id == 3, Warehouse.is_active == True).first()
+                warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
                 if not warehouse:
                     warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
                 if not warehouse:
@@ -1223,7 +1231,7 @@ async def agent_create_order_batch(
                 if last and last.number:
                     try:
                         seq = int(last.number.split("-")[-1]) + 1
-                    except Exception:
+                    except ValueError:
                         seq = 1
                 else:
                     seq = 1
@@ -1233,10 +1241,16 @@ async def agent_create_order_batch(
                 subtotal = 0.0
                 order_items = []
                 for it in items:
-                    prod = db.query(Product).filter(Product.id == int(it["product_id"]), Product.is_active == True).first()
+                    try:
+                        _pid = int(it.get("product_id") or 0)
+                        qty = float(it.get("qty", it.get("quantity", 1)) or 0)
+                    except (ValueError, TypeError):
+                        continue
+                    if _pid <= 0 or qty <= 0:
+                        continue
+                    prod = db.query(Product).filter(Product.id == _pid, Product.is_active == True).first()
                     if not prod:
                         continue
-                    qty = float(it.get("qty", it.get("quantity", 1)))
                     pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
                     price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
                     total_line = qty * price

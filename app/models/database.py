@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Date, UniqueConstraint, Table, text
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, Boolean, ForeignKey, Text, Date, UniqueConstraint, Table, text, Index
 from sqlalchemy.orm import sessionmaker, relationship, declarative_base
 from datetime import datetime
 import os
@@ -361,7 +361,11 @@ class Stock(Base):
 class StockMovement(Base):
     """Ombor harakati - har bir operatsiya uchun hujjat"""
     __tablename__ = "stock_movements"
-    
+    __table_args__ = (
+        Index("idx_sm_wh_prod_date", "warehouse_id", "product_id", "created_at"),
+        Index("idx_sm_doc_type_id", "document_type", "document_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     stock_id = Column(Integer, ForeignKey("stocks.id"), nullable=True, index=True)  # null bo'lishi mumkin (yangi qoldiq)
     warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=False, index=True)
@@ -631,7 +635,11 @@ class RecipeItem(Base):
 class Production(Base):
     """Ishlab chiqarish"""
     __tablename__ = "productions"
-    
+    __table_args__ = (
+        Index("idx_productions_status_date", "status", "date"),
+        Index("idx_productions_operator_id", "operator_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
@@ -805,7 +813,11 @@ class Partner(Base):
 class Order(Base):
     """Buyurtmalar va sotuvlar"""
     __tablename__ = "orders"
-    
+    __table_args__ = (
+        Index("idx_orders_date", "date"),
+        Index("idx_orders_type_status_date", "type", "status", "date"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
@@ -826,6 +838,7 @@ class Order(Base):
     note = Column(Text)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
     source = Column(String(20), default="web")  # "web" | "agent"
+    previous_partner_balance = Column(Float, nullable=True)  # Tasdiqdan oldingi partner balansi (revert uchun)
     created_at = Column(DateTime, default=datetime.now)
 
     partner = relationship("Partner", back_populates="orders")
@@ -919,7 +932,10 @@ user_partners = Table(
 class Payment(Base):
     """To'lovlar"""
     __tablename__ = "payments"
-    
+    __table_args__ = (
+        Index("idx_payment_cash_type_status", "cash_register_id", "type", "status"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
@@ -1053,7 +1069,10 @@ class Employee(Base):
 class Salary(Base):
     """Ish haqi (oylik)"""
     __tablename__ = "salaries"
-    
+    __table_args__ = (
+        Index("idx_salary_emp_year_month", "employee_id", "year", "month"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     employee_id = Column(Integer, ForeignKey("employees.id"))
     year = Column(Integer)

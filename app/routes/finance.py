@@ -31,7 +31,7 @@ def _cash_balance_formula(db: Session, cash_id: int) -> tuple:
     if not cash:
         return (0.0, 0.0, 0.0)
     opening = float(getattr(cash, "opening_balance", None) or 0)
-    confirmed = or_(Payment.status == "confirmed", Payment.status == None)
+    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
     income_sum = float(
         db.query(func.coalesce(func.sum(Payment.amount), 0))
         .filter(Payment.cash_register_id == cash_id, Payment.type == "income", confirmed)
@@ -159,7 +159,7 @@ async def finance(
                             used_ids.add(a.id)
                             break
     today = datetime.now().date()
-    _status_ok = or_(Payment.status == "confirmed", Payment.status == None)
+    _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
 
     # Stat kartochkalar — sana filtri bo'lsa shu oraliq, bo'lmasa bugungi
     if has_date_filter:
@@ -188,25 +188,34 @@ async def finance(
         "label": stats_label,
     }
 
-    # Kassalar — sana filtri bo'lsa shu oraliq bo'yicha kirim/chiqim
+    # Kassalar — sana filtri bo'lsa shu oraliq bo'yicha kirim/chiqim (bitta GROUP BY query)
     cash_data = []
-    for cash in cash_registers:
-        if has_date_filter:
-            cq_base = db.query(Payment).filter(Payment.cash_register_id == cash.id, _status_ok)
-            if df_parsed:
-                cq_base = cq_base.filter(Payment.date >= df_parsed)
-            if dt_parsed:
-                cq_base = cq_base.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
-            c_income = sum(float(p.amount or 0) for p in cq_base.filter(Payment.type == "income").all())
-            c_expense = sum(float(p.amount or 0) for p in cq_base.filter(Payment.type == "expense").all())
+    if has_date_filter:
+        cq = db.query(
+            Payment.cash_register_id,
+            Payment.type,
+            func.coalesce(func.sum(Payment.amount), 0).label("total"),
+        ).filter(_status_ok)
+        if df_parsed:
+            cq = cq.filter(Payment.date >= df_parsed)
+        if dt_parsed:
+            cq = cq.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
+        cq = cq.group_by(Payment.cash_register_id, Payment.type).all()
+        stats_map: dict = {}
+        for row in cq:
+            stats_map.setdefault(row.cash_register_id, {"income": 0.0, "expense": 0.0})
+            stats_map[row.cash_register_id][row.type] = float(row.total or 0)
+        for cash in cash_registers:
+            s = stats_map.get(cash.id, {"income": 0.0, "expense": 0.0})
             cash_data.append({
                 "cash": cash,
-                "balance": c_income - c_expense,
-                "income": c_income,
-                "expense": c_expense,
+                "balance": s["income"] - s["expense"],
+                "income": s["income"],
+                "expense": s["expense"],
                 "is_filtered": True,
             })
-        else:
+    else:
+        for cash in cash_registers:
             cash_data.append({
                 "cash": cash,
                 "balance": float(cash.balance or 0),
@@ -424,7 +433,7 @@ async def finance_harajatlar(
     all_outflows = all_outflows[:200]
     today = datetime.now().date()
     try:
-        _status_ok = or_(Payment.status == "confirmed", Payment.status == None)
+        _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
         today_expense = db.query(Payment).filter(
             Payment.type == "expense",
             Payment.date >= today,
@@ -547,6 +556,7 @@ async def finance_payment_post(
     cash_register_id: int = Form(...),
     partner_id: Optional[int] = Form(None),
     description: str = Form(""),
+    payment_date: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -578,23 +588,35 @@ async def finance_payment_post(
         p = db.query(Partner).filter(Partner.id == int(partner_id)).first()
         if p:
             pid = p.id
+    # Sana: foydalanuvchi tanlagan sana yoki bugun
+    pay_dt = datetime.now()
+    if payment_date:
+        try:
+            pay_dt = datetime.strptime(payment_date, "%Y-%m-%d")
+        except ValueError:
+            pass
+    pay_date_str = pay_dt.strftime('%Y%m%d')
+    pay_date_start = pay_dt.replace(hour=0, minute=0, second=0, microsecond=0)
+    pay_date_end = pay_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
     today_str = datetime.now().strftime('%Y%m%d')
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     last_pay = db.query(Payment).filter(
-        Payment.number.like(f"PAY-{today_str}-%"),
-        Payment.created_at >= today_start,
+        Payment.number.like(f"PAY-{pay_date_str}-%"),
+        Payment.date >= pay_date_start,
+        Payment.date <= pay_date_end,
     ).order_by(Payment.id.desc()).first()
     if last_pay and last_pay.number:
         try:
             seq = int(last_pay.number.split("-")[-1]) + 1
         except (ValueError, IndexError):
-            seq = db.query(Payment).filter(Payment.created_at >= today_start).count() + 1
+            seq = db.query(Payment).filter(Payment.date >= pay_date_start).count() + 1
     else:
         seq = 1
-    pay_number = f"PAY-{today_str}-{seq:04d}"
+    pay_number = f"PAY-{pay_date_str}-{seq:04d}"
     desc = (description or "").strip() or ("Kirim" if type == "income" else "Chiqim")
     payment = Payment(
         number=pay_number,
+        date=pay_dt,
         type=type,
         cash_register_id=cash_register_id,
         partner_id=pid,
@@ -1478,11 +1500,11 @@ async def cash_transfer_sotuvchi_confirm(
         if inkasator:
             ink_note = f"Inkasator: {inkasator.name}"
             t.note = (t.note + " | " + ink_note) if t.note else ink_note
-    # Mablag' kassadan ayriladi
-    from_cash.balance = (from_cash.balance or 0) - amount
     t.status = "in_transit"
     t.sent_by_user_id = current_user.id
     t.sent_at = datetime.now()
+    db.flush()
+    _sync_cash_balance(db, t.from_cash_id)
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?sent=1", status_code=303)
 
@@ -1572,11 +1594,11 @@ async def cash_transfer_admin_confirm(
     to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
     if not to_cash:
         return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qabul kassasi topilmadi."), status_code=303)
-    # Mablag' qabul kassasiga qo'shiladi
-    to_cash.balance = (to_cash.balance or 0) + (t.amount or 0)
     t.status = "completed"
     t.approved_by_user_id = current_user.id
     t.approved_at = datetime.now()
+    db.flush()
+    _sync_cash_balance(db, t.to_cash_id)
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?confirmed=1", status_code=303)
 

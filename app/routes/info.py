@@ -41,6 +41,7 @@ from app.models.database import (
     PasswordChangeLog,
 )
 from app.deps import require_auth, require_admin
+from app.services.finance_service import sync_cash_balance, cash_balance_formula as _fs_cash_balance_formula
 from app.utils.auth import hash_password
 from app.utils.db_schema import ensure_cash_opening_balance_column
 
@@ -144,7 +145,7 @@ async def info_warehouses_edit(
 
 
 @router.post("/warehouses/delete/{warehouse_id}")
-async def info_warehouses_delete(warehouse_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+async def info_warehouses_delete(warehouse_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if not warehouse:
         raise HTTPException(status_code=404, detail="Ombor topilmadi")
@@ -763,24 +764,6 @@ async def info_prices_history(
 
 
 # ---------- Cash ----------
-def _cash_balance_formula(db: Session, cash_id: int) -> float:
-    """Kassa balansi = qoldiq (opening_balance) + kirim - chiqim (faqat tasdiqlangan)."""
-    cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
-    if not cash:
-        return 0.0
-    opening = float(getattr(cash, "opening_balance", None) or 0)
-    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
-    income_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "income", confirmed)
-        .scalar()
-    ) or 0
-    expense_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "expense", confirmed)
-        .scalar()
-    ) or 0
-    return opening + income_sum - expense_sum
 
 
 @router.get("/cash", response_class=HTMLResponse)
@@ -790,7 +773,7 @@ async def info_cash(request: Request, db: Session = Depends(get_db), current_use
     departments = db.query(Department).filter(Department.is_active == True).all()
     cash_computed_balance = {}
     for c in cash_registers:
-        cash_computed_balance[c.id] = _cash_balance_formula(db, c.id)
+        cash_computed_balance[c.id] = _fs_cash_balance_formula(db, c.id)[0]
     jami_balans = sum(cash_computed_balance.values())
     return templates.TemplateResponse("info/cash.html", {
         "request": request,
@@ -828,7 +811,7 @@ async def info_cash_add(
     db.add(cash)
     db.commit()
     db.refresh(cash)
-    cash.balance = _cash_balance_formula(db, cash.id)
+    sync_cash_balance(db, cash.id)
     db.commit()
     return RedirectResponse(url="/info/cash", status_code=303)
 
@@ -852,7 +835,7 @@ async def info_cash_edit(
     cash.department_id = department_id if department_id else None
     pt = (payment_type or "").strip() or None
     cash.payment_type = pt if pt in ("naqd", "plastik", "click", "terminal") else None
-    cash.balance = _cash_balance_formula(db, cash_id)
+    sync_cash_balance(db, cash_id)
     db.commit()
     return RedirectResponse(url="/info/cash", status_code=303)
 
@@ -878,7 +861,7 @@ async def info_cash_recalculate(
     if not cash:
         raise HTTPException(status_code=404, detail="Kassa topilmadi")
     ensure_cash_opening_balance_column(db)
-    cash.balance = _cash_balance_formula(db, cash_id)
+    sync_cash_balance(db, cash_id)
     db.commit()
     return RedirectResponse(
         url="/info/cash?recalculated=1&balance=" + quote(str(cash.balance)),

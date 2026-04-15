@@ -698,17 +698,36 @@ async def warehouse_transfer(
             url="/warehouse/movement?error=1&detail=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {quantity}, mavjud: {avail_display})"),
             status_code=303,
         )
-    source.quantity -= quantity
-    if source.quantity <= 0:
-        source.quantity = 0
-    dest = db.query(Stock).filter(
-        Stock.warehouse_id == to_warehouse_id,
-        Stock.product_id == product_id,
-    ).first()
-    if dest:
-        dest.quantity += quantity
-    else:
-        db.add(Stock(warehouse_id=to_warehouse_id, product_id=product_id, quantity=quantity))
+    from app.services.stock_service import create_stock_movement
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    _doc_number = f"TR-LEGACY-{int(_now.timestamp())}"
+    create_stock_movement(
+        db=db,
+        warehouse_id=from_warehouse_id,
+        product_id=product_id,
+        quantity_change=-float(quantity),
+        operation_type="transfer_out",
+        document_type="WarehouseTransferLegacy",
+        document_id=0,
+        document_number=_doc_number,
+        user_id=current_user.id if current_user else None,
+        note="Legacy transfer (direct)",
+        created_at=_now,
+    )
+    create_stock_movement(
+        db=db,
+        warehouse_id=to_warehouse_id,
+        product_id=product_id,
+        quantity_change=+float(quantity),
+        operation_type="transfer_in",
+        document_type="WarehouseTransferLegacy",
+        document_id=0,
+        document_number=_doc_number,
+        user_id=current_user.id if current_user else None,
+        note="Legacy transfer (direct)",
+        created_at=_now,
+    )
     db.commit()
     return RedirectResponse(url="/warehouse/movement?success=1", status_code=303)
 

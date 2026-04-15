@@ -95,8 +95,8 @@ def _get_phone_variants(phone: str) -> list:
         if len(digits_only) == 9:
             variants.append(f"+998{digits_only}")
 
-    # Takrorlanishlarni olib tashlash
-    return list(set(variants))
+    # Takrorlanishlarni olib tashlash (tartib saqlansin)
+    return list(dict.fromkeys(variants))
 
 
 # ==========================================
@@ -120,14 +120,16 @@ async def unified_login(
         username = username.strip()
         password = password.strip()
         _safe_username = username.replace("\n", "").replace("\r", "")
-        logger.info(f"Login attempt: username='{_safe_username}', password_length={len(password)}")
+        # Masked username: faqat birinchi 3 belgi + "***"
+        _masked = (_safe_username[:3] + "***") if len(_safe_username) > 3 else "***"
+        logger.info(f"Login attempt: username_mask='{_masked}'")
 
         # Telefon raqami bo'lishi mumkin - normalize qilamiz
         is_phone = username.replace("+", "").replace("-", "").replace(" ", "").isdigit()
         phone_variants = _get_phone_variants(username) if is_phone else []
         normalized_phone = _normalize_phone(username) if is_phone else None
 
-        logger.info(f"Phone detection: is_phone={is_phone}, variants={phone_variants}")
+        logger.info(f"Phone detection: is_phone={is_phone}, variants_count={len(phone_variants)}")
 
         # 1. User jadvalidan qidirish (admin, manager, production)
         user_filters = [
@@ -215,7 +217,7 @@ async def unified_login(
 
             if password_match:
                 record_success(request)
-                logger.info(f"Agent login successful: id={agent.id}, phone={agent.phone}")
+                logger.info(f"Agent login successful: id={agent.id}, phone={(agent.phone or '')[:4]}***")
                 token = create_session_token(agent.id, "agent")
                 return {
                     "success": True,

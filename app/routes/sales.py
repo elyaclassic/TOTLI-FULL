@@ -55,6 +55,7 @@ from app.utils.production_order import (
 )
 from app.utils.db_schema import ensure_orders_payment_due_date_column, ensure_order_item_warehouse_id_column
 from app.services.stock_service import create_stock_movement
+from app.services.finance_service import sync_cash_balance as _sync_cash_balance
 from app.services.pos_helpers import (
     get_pos_price_type as _get_pos_price_type,
     get_pos_warehouses_for_user as _get_pos_warehouses_for_user,
@@ -120,6 +121,17 @@ async def sales_list(
     orders = q.limit(500).all()
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
+    # split/mixed to'lovlarni bitta batch query bilan olish (N+1 oldini olish)
+    split_order_ids = [o.id for o in confirmed_orders if (o.payment_type or '').strip().lower() in ('split', 'mixed', '')]
+    pays_map: dict = {}
+    if split_order_ids:
+        batch_pays = db.query(Payment.order_id, Payment.payment_type, Payment.amount).filter(
+            Payment.order_id.in_(split_order_ids),
+            Payment.type == "income",
+            Payment.status == "confirmed",
+        ).all()
+        for p_oid, p_type, p_amt in batch_pays:
+            pays_map.setdefault(p_oid, []).append((p_type, p_amt))
     # To'lov turlari: total = naqd + plastik + terminal + click + qarz
     naqd_sum = 0
     plastik_sum = 0
@@ -134,9 +146,7 @@ async def sales_list(
         if debt > 0:
             qarz_sum += debt
         if pt in ('split', 'mixed', ''):
-            pays = db.query(Payment.payment_type, Payment.amount).filter(
-                Payment.order_id == o.id, Payment.type == "income", Payment.status == "confirmed"
-            ).all()
+            pays = pays_map.get(o.id, [])
             if pays:
                 for ppt, pamt in pays:
                     ppt_l = (ppt or '').strip().lower()
@@ -622,6 +632,7 @@ async def sales_confirm(
     if order.partner_id and order.debt > 0:
         partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
         if partner:
+            order.previous_partner_balance = partner.balance
             partner.balance = (partner.balance or 0) + order.debt
     db.commit()
     check_low_stock_and_notify(db)
@@ -701,13 +712,21 @@ async def sales_revert(
             product_id=item.product_id,
             quantity_change=float(item.quantity or 0),
             operation_type="sale_revert",
-            document_type="Order",
+            document_type="Sale",
             document_id=order.id,
             document_number=order.number,
             user_id=current_user.id if current_user else None,
             note=f"Sotuv tasdiqini bekor qilish: {order.number}",
             created_at=order.date or datetime.now(),
         )
+    if order.partner_id and (order.debt or 0) > 0:
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+        if partner:
+            if order.previous_partner_balance is not None:
+                partner.balance = order.previous_partner_balance
+            else:
+                partner.balance = (partner.balance or 0) - order.debt
+    order.previous_partner_balance = None
     order.status = "draft"
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
@@ -1291,7 +1310,8 @@ async def sales_pos_complete(
                     user_id=current_user.id if current_user else None,
                 ))
                 if getattr(cash_register, "balance", None) is not None:
-                    cash_register.balance = (cash_register.balance or 0) + amt
+                    db.flush()
+                    _sync_cash_balance(db, cash_register.id)
             db.commit()
     else:
         partner.balance = (partner.balance or 0) + (order.total or 0)
@@ -1813,7 +1833,8 @@ async def pos_pay_supplier(
     ))
     # Kassa balansini kamaytirish
     if getattr(cash_register, "balance", None) is not None:
-        cash_register.balance = (cash_register.balance or 0) - amount
+        db.flush()
+        _sync_cash_balance(db, cash_register.id)
     # Partner balansini yangilash (qarzni kamaytirish)
     if partner.balance is not None:
         partner.balance = (partner.balance or 0) + amount  # balance < 0 — biz qarz, + qo'shsak kamayadi
@@ -1864,6 +1885,7 @@ async def pos_expense(
     ))
     # Kassa balansini kamaytirish
     if getattr(cash_register, "balance", None) is not None:
-        cash_register.balance = (cash_register.balance or 0) - amount
+        db.flush()
+        _sync_cash_balance(db, cash_register.id)
     db.commit()
     return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"Harajat: {expense_type_name} — {amount:,.0f} so'm"), status_code=303)

@@ -578,16 +578,18 @@ async def agent_partner_orders(
             .limit(50)
             .all()
         )
+        agent_ids = {o.agent_id for o in orders if o.agent_id}
+        user_ids = {o.user_id for o in orders if o.user_id and not o.agent_id}
+        agents_map = {a.id: a.full_name for a in db.query(Agent).filter(Agent.id.in_(agent_ids)).all()} if agent_ids else {}
+        users_map = {u.id: u.full_name for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
         result = []
         for o in orders:
-            # Kim yaratgan
-            created_by = ""
             if o.agent_id:
-                ag = db.query(Agent).filter(Agent.id == o.agent_id).first()
-                created_by = ag.full_name if ag else "Agent"
+                created_by = agents_map.get(o.agent_id, "Agent")
             elif o.user_id:
-                u = db.query(User).filter(User.id == o.user_id).first()
-                created_by = u.full_name if u else "Admin"
+                created_by = users_map.get(o.user_id, "Admin")
+            else:
+                created_by = ""
 
             items = []
             for it in o.items:

@@ -87,13 +87,22 @@ async def qoldiqlar_page(
         .limit(200)
         .all()
     )
-    # Xodimlar qoldiqlari — har xodimning oxirgi Salary.total qiymati
+    # Xodimlar qoldiqlari — har xodimning oxirgi Salary.total qiymati (bitta query)
     employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
+    emp_ids = [e.id for e in employees]
     emp_balances = {}
-    for emp in employees:
-        s = db.query(Salary).filter(Salary.employee_id == emp.id).order_by(Salary.year.desc(), Salary.month.desc()).first()
-        if s:
-            emp_balances[emp.id] = {"year": s.year, "month": s.month, "total": float(s.total or 0), "status": s.status}
+    if emp_ids:
+        latest_sal_ids = (
+            db.query(func.max(Salary.id))
+            .filter(Salary.employee_id.in_(emp_ids))
+            .group_by(Salary.employee_id)
+            .subquery()
+        )
+        latest_salaries = db.query(Salary).filter(Salary.id.in_(latest_sal_ids)).all()
+        emp_balances = {
+            s.employee_id: {"year": s.year, "month": s.month, "total": float(s.total or 0), "status": s.status}
+            for s in latest_salaries
+        }
     xodim_docs = (
         db.query(EmployeeBalanceDoc)
         .order_by(EmployeeBalanceDoc.created_at.desc())
@@ -153,11 +162,11 @@ async def qoldiqlar_tarix(
         product_ids = [m.product_id for m in movements if m.product_id is not None]
         wh_by_id = {}
         if warehouse_ids:
-            for w in db.query(Warehouse).filter(Warehouse.id.in_(list(set(warehouse_ids)))).all():
+            for w in db.query(Warehouse).filter(Warehouse.id.in_(set(warehouse_ids))).all():
                 wh_by_id[w.id] = w
         prod_by_id = {}
         if product_ids:
-            for p in db.query(Product).filter(Product.id.in_(list(set(product_ids)))).all():
+            for p in db.query(Product).filter(Product.id.in_(set(product_ids))).all():
                 prod_by_id[p.id] = p
         for m in movements:
             wh = wh_by_id.get(m.warehouse_id) if m.warehouse_id is not None else None
@@ -211,13 +220,16 @@ async def qoldiqlar_kassa_save(
     cash_id: int,
     balance: float = Form(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
-    """Kassa qoldig'ini yangilash (eski tezkor forma uchun qolgan)"""
+    """Kassa opening_balance ni to'g'ridan-to'g'ri o'rnatish (faqat admin, faqat boshlang'ich qoldiq uchun)"""
     cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
     if not cash:
         raise HTTPException(status_code=404, detail="Kassa topilmadi")
-    cash.balance = balance
+    from app.services.finance_service import sync_cash_balance
+    cash.opening_balance = balance
+    db.flush()
+    sync_cash_balance(db, cash_id)
     db.commit()
     return RedirectResponse(url="/qoldiqlar#kassa", status_code=303)
 
@@ -321,7 +333,7 @@ async def qoldiqlar_kassa_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta kassa qatori bo'lishi kerak")
-    from app.routes.finance import _cash_balance_formula
+    from app.services.finance_service import cash_balance_formula as _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
         if cash:
@@ -351,7 +363,7 @@ async def qoldiqlar_kassa_hujjat_revert(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if doc.status != "confirmed":
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
-    from app.routes.finance import _cash_balance_formula
+    from app.services.finance_service import cash_balance_formula as _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
         if cash and item.previous_balance is not None:
@@ -853,7 +865,7 @@ async def qoldiqlar_kontragent_recalculate(
         income_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
             Payment.partner_id == partner.id,
             Payment.type == "income",
-            or_(Payment.status == "confirmed", Payment.status == None),
+            or_(Payment.status == "confirmed", Payment.status.is_(None)),
             or_(Payment.order_id == None, ~Payment.order_id.in_(pos_paid_order_ids)),
         ).scalar()
         bal -= float(income_total or 0)
@@ -861,7 +873,7 @@ async def qoldiqlar_kontragent_recalculate(
         expense_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
             Payment.partner_id == partner.id,
             Payment.type == "expense",
-            or_(Payment.status == "confirmed", Payment.status == None),
+            or_(Payment.status == "confirmed", Payment.status.is_(None)),
         ).scalar()
         bal += float(expense_total or 0)
 
@@ -1430,21 +1442,19 @@ async def qoldiqlar_tovar_hujjat_revert(
         StockMovement.document_id == doc_id,
     ).all()
     for m in movements:
-        stock = None
-        if m.stock_id:
-            stock = db.query(Stock).filter(Stock.id == m.stock_id).first()
-        if not stock and m.warehouse_id and m.product_id:
-            stock = db.query(Stock).filter(
-                Stock.warehouse_id == m.warehouse_id,
-                Stock.product_id == m.product_id,
-            ).first()
-        if stock:
-            # max(0, ...) clamp OLIB TASHLANDI: hujjat tasdiqlangandan keyin
-            # sodir bo'lgan sotuv/ishlab chiqarish hisobga olinmay qolmasligi uchun.
-            # Vaqtinchalik manfiy qoldiq qayta tasdiqlashda tuzatiladi.
-            stock.quantity = float(stock.quantity or 0) - float(m.quantity_change or 0)
-            stock.updated_at = datetime.now()
-    delete_stock_movements_for_document(db, "StockAdjustmentDoc", doc_id)
+        if not m.warehouse_id or not m.product_id:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=m.warehouse_id,
+            product_id=m.product_id,
+            quantity_change=-float(m.quantity_change or 0),
+            operation_type="adjustment_revert",
+            document_type="StockAdjustmentDoc",
+            document_id=doc_id,
+            document_number=doc.number,
+            note=f"Hujjat tasdiqini bekor qilish: {doc.number}",
+        )
     doc.status = "draft"
     db.commit()
     return RedirectResponse(url="/qoldiqlar/tovar/hujjat?reverted=1", status_code=303)

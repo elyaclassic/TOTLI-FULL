@@ -130,8 +130,15 @@ async def csrf_middleware(request: Request, call_next):
     except (KeyboardInterrupt, SystemExit):
         raise
     except Exception:
+        tb = traceback.format_exc()
         traceback.print_exc()
-        return await call_next(request)
+        try:
+            from app.middleware import _write_error_log
+            _write_error_log(tb, "csrf_middleware")
+        except Exception:
+            pass
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=500, content={"detail": "CSRF middleware error"})
 
 
 @app.middleware("http")

@@ -33,12 +33,8 @@ def delete_production_atomic(db: Session, production: Production) -> dict:
             StockMovement.document_id == production.id,
         ).all()
         for m in movements:
-            stock = db.query(Stock).filter(
-                Stock.warehouse_id == m.warehouse_id,
-                Stock.product_id == m.product_id,
-            ).first()
-            if stock:
-                stock.quantity = (stock.quantity or 0) - (m.quantity_change or 0)
+            # Draft/cancelled buyurtma uchun orphan movements bo'lsa — faqat o'chirish.
+            # stock.quantity to'g'ridan-to'g'ri o'zgartirish TAQIQLANADI.
             db.delete(m)
 
         db.delete(production)

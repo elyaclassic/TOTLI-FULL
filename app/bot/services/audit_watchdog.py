@@ -372,7 +372,7 @@ def audit_expense(doc_id: int):
         # Kassa balansi manfiyga tushdimi?
         if doc.cash_register_id:
             try:
-                from app.routes.finance import _cash_balance_formula
+                from app.services.finance_service import cash_balance_formula as _cash_balance_formula
                 bal, _, _ = _cash_balance_formula(db, doc.cash_register_id)
                 if bal < 0:
                     cr = db.query(CashRegister).filter(CashRegister.id == doc.cash_register_id).first()
@@ -428,7 +428,7 @@ def audit_payment(payment_id: int):
         # Kassa balans manfiyligi
         if pay.cash_register_id:
             try:
-                from app.routes.finance import _cash_balance_formula
+                from app.services.finance_service import cash_balance_formula as _cash_balance_formula
                 bal, _, _ = _cash_balance_formula(db, pay.cash_register_id)
                 if bal < 0:
                     cr = db.query(CashRegister).filter(CashRegister.id == pay.cash_register_id).first()

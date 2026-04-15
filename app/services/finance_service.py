@@ -12,12 +12,12 @@ from app.services.document_service import DocumentError
 
 
 def cash_balance_formula(db: Session, cash_id: int) -> tuple:
-    """Kassa balansini formuladan hisoblash: opening + income - expense."""
+    """Kassa balansini formuladan hisoblash: opening + income - expense + transfers_in - transfers_out."""
     cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
     if not cash:
         return (0.0, 0.0, 0.0)
     opening = float(getattr(cash, "opening_balance", None) or 0)
-    confirmed = or_(Payment.status == "confirmed", Payment.status == None)
+    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
     income_sum = float(
         db.query(func.coalesce(func.sum(Payment.amount), 0))
         .filter(Payment.cash_register_id == cash_id, Payment.type == "income", confirmed)
@@ -28,7 +28,19 @@ def cash_balance_formula(db: Session, cash_id: int) -> tuple:
         .filter(Payment.cash_register_id == cash_id, Payment.type == "expense", confirmed)
         .scalar()
     ) or 0
-    return (opening + income_sum - expense_sum, income_sum, expense_sum)
+    # CashTransfer: pul chiqdi (in_transit yoki completed bo'lsa)
+    transfer_out = float(
+        db.query(func.coalesce(func.sum(CashTransfer.amount), 0))
+        .filter(CashTransfer.from_cash_id == cash_id, CashTransfer.status.in_(("in_transit", "completed")))
+        .scalar()
+    ) or 0
+    # CashTransfer: pul kirdi (faqat completed bo'lsa)
+    transfer_in = float(
+        db.query(func.coalesce(func.sum(CashTransfer.amount), 0))
+        .filter(CashTransfer.to_cash_id == cash_id, CashTransfer.status == "completed")
+        .scalar()
+    ) or 0
+    return (opening + income_sum - expense_sum + transfer_in - transfer_out, income_sum, expense_sum)
 
 
 def sync_cash_balance(db: Session, cash_id: int) -> None:
@@ -68,19 +80,17 @@ def revert_cash_transfer_atomic(db: Session, transfer: CashTransfer) -> dict:
 
     try:
         if transfer.status == "completed":
-            to_cash = db.query(CashRegister).filter(CashRegister.id == transfer.to_cash_id).first()
-            if to_cash:
-                to_cash.balance = (to_cash.balance or 0) - amount
             transfer.status = "in_transit"
             transfer.approved_by_user_id = None
             transfer.approved_at = None
+            db.flush()
+            sync_cash_balance(db, transfer.to_cash_id)
         elif transfer.status == "in_transit":
-            from_cash = db.query(CashRegister).filter(CashRegister.id == transfer.from_cash_id).first()
-            if from_cash:
-                from_cash.balance = (from_cash.balance or 0) + amount
             transfer.status = "pending"
             transfer.sent_by_user_id = None
             transfer.sent_at = None
+            db.flush()
+            sync_cash_balance(db, transfer.from_cash_id)
         else:
             raise DocumentError("Bu statusda bekor qilib bo'lmaydi.")
 

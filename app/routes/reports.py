@@ -1304,7 +1304,7 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
     # To'lovlar: income = credit (ular bizga to'ladı), expense = debit (biz ularga to'ladık) — faqat tasdiqlangan
     q_payments = db.query(Payment).filter(Payment.partner_id == partner_id)
     if hasattr(Payment, "status"):
-        q_payments = q_payments.filter(or_(Payment.status == "confirmed", Payment.status == None))
+        q_payments = q_payments.filter(or_(Payment.status == "confirmed", Payment.status.is_(None)))
     if period_only:
         q_payments = q_payments.filter(Payment.date >= date_from_start, Payment.date <= date_to_end)
     for p in q_payments.order_by(Payment.date):

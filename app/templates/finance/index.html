@@ -232,6 +232,10 @@ document.addEventListener('DOMContentLoaded', function() {
               </div>
             </div>
             <div class="col-12">
+              <label class="form-label fw-semibold">Sana</label>
+              <input type="date" class="form-control" name="payment_date" id="paymentDateInput" style="border-radius:10px;">
+            </div>
+            <div class="col-12">
               <label class="form-label fw-semibold">Summa *</label>
               <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" style="border-radius:10px;">
             </div>
@@ -275,6 +279,17 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% block extra_js %}
 <script>
+// Modal ochilganda sana maydonini bugungi sana bilan to'ldirish
+document.getElementById('addPaymentModal').addEventListener('show.bs.modal', function() {
+  var dateInput = document.getElementById('paymentDateInput');
+  if (dateInput && !dateInput.value) {
+    var today = new Date();
+    var y = today.getFullYear();
+    var m = String(today.getMonth() + 1).padStart(2, '0');
+    var d = String(today.getDate()).padStart(2, '0');
+    dateInput.value = y + '-' + m + '-' + d;
+  }
+});
 (function(){
   var input = document.getElementById('finPartnerSearch');
   var dropdown = document.getElementById('finPartnerDropdown');
