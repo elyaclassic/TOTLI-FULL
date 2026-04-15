@@ -37,7 +37,7 @@ from app.utils.notifications import check_low_stock_and_notify
 from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.audit import log_action
-from app.services.stock_service import create_stock_movement, clamp_stock_qty
+from app.services.stock_service import create_stock_movement
 
 router = APIRouter(prefix="/production", tags=["production"])
 
@@ -1224,14 +1224,14 @@ def _production_revert_one(db, production) -> Optional[str]:
         wh_name = (out_wh.name if out_wh else "2-ombor") or "2-ombor"
         prod_name = (out_product.name if out_product else "tayyor mahsulot") or "tayyor mahsulot"
         return f"«{wh_name}» da «{prod_name}» dan kerak: {output_units:,.1f}, mavjud: {current_qty:,.1f}"
-    product_stock.quantity = clamp_stock_qty(current_qty - output_units)
+    product_stock.quantity = current_qty - output_units
     for product_id, required in items_to_use:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == production.warehouse_id,
             Stock.product_id == product_id,
         ).first()
         if stock:
-            stock.quantity = clamp_stock_qty(float(stock.quantity or 0) + required)
+            stock.quantity = float(stock.quantity or 0) + required
         else:
             db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
     production.status = "draft"
@@ -1657,14 +1657,14 @@ async def production_revert(
             url="/production/orders?error=revert&detail=" + quote(detail),
             status_code=303,
         )
-    product_stock.quantity = clamp_stock_qty(current_qty - output_units)
+    product_stock.quantity = current_qty - output_units
     for product_id, required in items_to_use:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == production.warehouse_id,
             Stock.product_id == product_id,
         ).first()
         if stock:
-            stock.quantity = clamp_stock_qty(float(stock.quantity or 0) + required)
+            stock.quantity = float(stock.quantity or 0) + required
         else:
             db.add(Stock(warehouse_id=production.warehouse_id, product_id=product_id, quantity=required))
     movements = db.query(StockMovement).filter(

@@ -1439,8 +1439,10 @@ async def qoldiqlar_tovar_hujjat_revert(
                 Stock.product_id == m.product_id,
             ).first()
         if stock:
-            q = float(stock.quantity or 0) - float(m.quantity_change or 0)
-            stock.quantity = max(0, q)
+            # max(0, ...) clamp OLIB TASHLANDI: hujjat tasdiqlangandan keyin
+            # sodir bo'lgan sotuv/ishlab chiqarish hisobga olinmay qolmasligi uchun.
+            # Vaqtinchalik manfiy qoldiq qayta tasdiqlashda tuzatiladi.
+            stock.quantity = float(stock.quantity or 0) - float(m.quantity_change or 0)
             stock.updated_at = datetime.now()
     delete_stock_movements_for_document(db, "StockAdjustmentDoc", doc_id)
     doc.status = "draft"

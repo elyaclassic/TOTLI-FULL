@@ -10,7 +10,6 @@ from app.models.database import (
     Stock, StockMovement,
 )
 from app.services.document_service import DocumentError
-from app.services.stock_service import clamp_stock_qty
 
 
 def delete_production_atomic(db: Session, production: Production) -> dict:
@@ -39,8 +38,7 @@ def delete_production_atomic(db: Session, production: Production) -> dict:
                 Stock.product_id == m.product_id,
             ).first()
             if stock:
-                new_qty = (stock.quantity or 0) - (m.quantity_change or 0)
-                stock.quantity = clamp_stock_qty(new_qty)
+                stock.quantity = (stock.quantity or 0) - (m.quantity_change or 0)
             db.delete(m)
 
         db.delete(production)

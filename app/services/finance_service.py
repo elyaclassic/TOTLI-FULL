@@ -70,7 +70,7 @@ def revert_cash_transfer_atomic(db: Session, transfer: CashTransfer) -> dict:
         if transfer.status == "completed":
             to_cash = db.query(CashRegister).filter(CashRegister.id == transfer.to_cash_id).first()
             if to_cash:
-                to_cash.balance = max(0, (to_cash.balance or 0) - amount)
+                to_cash.balance = (to_cash.balance or 0) - amount
             transfer.status = "in_transit"
             transfer.approved_by_user_id = None
             transfer.approved_at = None

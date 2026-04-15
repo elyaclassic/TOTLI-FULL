@@ -89,3 +89,7 @@ app/static/attendance_snapshots/
 
 # Claude skills source (kerak emas, .claude/commands/ ga ko'chirilgan)
 claude-skills-main/
+
+# Claude Code local state (har bir kompyuterga xos)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

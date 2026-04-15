@@ -60,8 +60,7 @@ async def bulk_delete_post(
                 Stock.product_id == m.product_id,
             ).first()
             if stock:
-                new_qty = (stock.quantity or 0) - (m.quantity_change or 0)
-                stock.quantity = max(0.0, new_qty)
+                stock.quantity = (stock.quantity or 0) - (m.quantity_change or 0)
             db.delete(m)
         db.delete(production)
         deleted += 1

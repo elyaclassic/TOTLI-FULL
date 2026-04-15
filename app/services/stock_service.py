@@ -10,10 +10,21 @@ _STOCK_EPSILON = 1e-6
 
 def clamp_stock_qty(value) -> float:
     """Float arifmetikasi residuini 0 ga yaxlitlash, manfiyni 0 ga clamp.
-    Misol: -1.4e-14 → 0, -0.5 → 0, 3.14159 → 3.14159."""
+    Misol: -1.4e-14 → 0, -0.5 → 0, 3.14159 → 3.14159.
+    ESLATMA: Yangi kod epsilon_clean_qty dan foydalanishi kerak — bu funksiya
+    faqat legacy chaqiruvlar uchun qoldirilgan."""
     v = float(value or 0)
     if v < 0:
         return 0.0
+    if abs(v) < _STOCK_EPSILON:
+        return 0.0
+    return v
+
+
+def epsilon_clean_qty(value) -> float:
+    """Float noise tozalash — manfiy qiymatlarni saqlaydi.
+    -1.4e-14 → 0, 3.14e-10 → 0, -0.5 → -0.5, 3.14 → 3.14"""
+    v = float(value or 0)
     if abs(v) < _STOCK_EPSILON:
         return 0.0
     return v
@@ -61,15 +72,17 @@ def create_stock_movement(
 
     if stock:
         new_qty = (stock.quantity or 0) + quantity_change
-        # Manfiy bo'lsa loglash (audit trail uchun)
+        # Manfiy bo'lsa loglash (audit trail uchun), lekin clamp QILINMAYDI —
+        # manfiy qoldiq ma'lumot buzilishini yashirmasligi va revert+reconfirm
+        # oqimi to'g'ri ishlashi uchun saqlanadi.
         if new_qty < -0.001:
             try:
                 print(f"[Stock NEGATIVE] wh={warehouse_id} prod={product_id} "
                       f"hozir={stock.quantity} change={quantity_change} -> {new_qty} "
-                      f"({operation_type}/{document_number}) — 0 ga clamp qilinadi", flush=True)
+                      f"({operation_type}/{document_number})", flush=True)
             except Exception:
                 pass
-        new_qty = clamp_stock_qty(new_qty)
+        new_qty = epsilon_clean_qty(new_qty)
         stock.quantity = new_qty
         stock.updated_at = datetime.now()
         stock_id = stock.id
