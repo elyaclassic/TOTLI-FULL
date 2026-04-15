@@ -7,6 +7,10 @@ import '../services/session_service.dart';
 import '../services/offline_db_service.dart';
 import '../services/sync_service.dart';
 import '../services/location_service.dart';
+import 'visit_feedback_screen.dart';
+import 'visit_photo_screen.dart';
+import 'call_log_dialog.dart';
+import 'sms_compose_screen.dart';
 
 class VisitsScreen extends StatefulWidget {
   const VisitsScreen({super.key});
@@ -602,6 +606,26 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
   }
 
   Future<void> _endVisit() async {
+    // Online vizit uchun — feedback ekrani ochiladi (saqlash + checkout bir joyda)
+    if (!_isOfflineVisit) {
+      final visitId = widget.visit['id'];
+      if (visitId is int) {
+        final result = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => VisitFeedbackScreen(
+              visitId: visitId,
+              partnerName: _partnerName,
+            ),
+          ),
+        );
+        if (result == true && mounted) {
+          Navigator.pop(context);
+        }
+        return;
+      }
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1007,7 +1031,93 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _actionButton(
+                icon: Icons.photo_camera,
+                label: 'Rasm\nolish',
+                color: Colors.purple.shade700,
+                onTap: _openPhotos,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                icon: Icons.phone,
+                label: 'Qo\'ng\'iroq',
+                color: Colors.green.shade700,
+                onTap: _openCall,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                icon: Icons.sms,
+                label: 'SMS\nyuborish',
+                color: Colors.teal.shade700,
+                onTap: _openSms,
+              ),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  void _openPhotos() {
+    final visitId = widget.visit['id'];
+    if (visitId is! int) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Offline vizit — rasm yuklash online keyin')),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VisitPhotoScreen(
+          visitId: visitId,
+          partnerName: _partnerName,
+        ),
+      ),
+    );
+  }
+
+  void _openCall() {
+    final phone = (_partnerDetail?['phone'] ?? widget.visit['partner_phone'] ?? '').toString();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telefon raqami yo\'q'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    CallLogFlow.startCallAndLog(
+      context: context,
+      phone: phone,
+      partnerName: _partnerName,
+      partnerId: _partnerId,
+    );
+  }
+
+  void _openSms() {
+    final phone = (_partnerDetail?['phone'] ?? widget.visit['partner_phone'] ?? '').toString();
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Telefon raqami yo\'q'), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SmsComposeScreen(
+          partnerId: _partnerId,
+          partnerName: _partnerName,
+          phone: phone,
+        ),
+      ),
     );
   }
 

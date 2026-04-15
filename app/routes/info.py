@@ -38,6 +38,7 @@ from app.models.database import (
     ProductionGroup,
     ProductionGroupDoc,
     production_group_members,
+    PasswordChangeLog,
 )
 from app.deps import require_auth, require_admin
 from app.utils.auth import hash_password
@@ -1294,6 +1295,7 @@ async def info_users_edit(
 
 @router.post("/users/change-password/{user_id}")
 async def info_users_change_password(
+    request: Request,
     user_id: int,
     new_password: str = Form(...),
     db: Session = Depends(get_db),
@@ -1303,8 +1305,46 @@ async def info_users_change_password(
     if not user:
         raise HTTPException(status_code=404, detail="Foydalanuvchi topilmadi")
     user.password_hash = hash_password(new_password)
+
+    # Audit log
+    client_ip = request.client.host if request.client else None
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        client_ip = forwarded.split(",")[0].strip()
+    user_agent = (request.headers.get("User-Agent") or "")[:255]
+
+    log = PasswordChangeLog(
+        target_user_id=user.id,
+        target_username=user.username,
+        changed_by_id=current_user.id,
+        changed_by_username=current_user.username,
+        ip_address=client_ip,
+        user_agent=user_agent,
+    )
+    db.add(log)
     db.commit()
     return RedirectResponse(url="/info/users", status_code=303)
+
+
+@router.get("/users/password-logs", response_class=HTMLResponse)
+async def info_users_password_logs(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Parol o'zgartirish audit jurnali (faqat admin)."""
+    logs = (
+        db.query(PasswordChangeLog)
+        .order_by(PasswordChangeLog.changed_at.desc())
+        .limit(500)
+        .all()
+    )
+    return templates.TemplateResponse("info/password_logs.html", {
+        "request": request,
+        "current_user": current_user,
+        "logs": logs,
+        "page_title": "Parol o'zgartirishlar jurnali",
+    })
 
 
 @router.post("/users/delete/{user_id}")

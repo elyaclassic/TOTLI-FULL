@@ -109,7 +109,7 @@ def reports_kb(selected_customer_id: int | None = None) -> InlineKeyboardMarkup:
     rows: list[list[InlineKeyboardButton]] = []
     if selected_customer_id:
         rows.append(
-            [InlineKeyboardButton(text="Tanlangan mijoz", callback_data=f"report:customer:{selected_customer_id}")]
+            [InlineKeyboardButton(text="Tanlangan mijozni ochish", callback_data=f"customer:pick:{selected_customer_id}")]
         )
     rows.append([InlineKeyboardButton(text="Umumiy hisobot", callback_data="report:summary")])
     rows.append([InlineKeyboardButton(text="Orqaga", callback_data="menu:main")])
@@ -124,7 +124,7 @@ def report_type_kb(selected_customer_id: int | None = None) -> InlineKeyboardMar
     ]
     if selected_customer_id:
         rows.append(
-            [InlineKeyboardButton(text="Tanlangan mijozni ochish", callback_data=f"report:customer:{selected_customer_id}")]
+            [InlineKeyboardButton(text="Tanlangan mijozni ochish", callback_data=f"customer:pick:{selected_customer_id}")]
         )
     rows.append([InlineKeyboardButton(text="Orqaga", callback_data="menu:main")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

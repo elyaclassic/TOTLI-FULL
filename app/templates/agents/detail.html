@@ -225,9 +225,32 @@
                     </thead>
                     <tbody>
                         {% for visit in visits %}
-                        <tr>
+                        <tr {% if visit.has_problem %}style="background:#fff3e0;"{% endif %}>
                             <td class="muted-cell">{{ visit.visit_date.strftime('%d.%m.%Y %H:%M') }}</td>
-                            <td>Mijoz #{{ visit.partner_id }}</td>
+                            <td>
+                                {{ visit.partner.name if visit.partner else 'Mijoz #%d'|format(visit.partner_id) }}
+                                {% if visit.has_problem %}<span class="badge bg-danger ms-1" title="Muammo bor">!</span>{% endif %}
+                                {% if visit.photos %}
+                                <br>
+                                <small>
+                                  {% for photo in visit.photos %}
+                                  <a href="/static/{{ photo.filename }}" target="_blank" title="{{ photo.photo_type }}{% if photo.notes %}: {{ photo.notes }}{% endif %}">
+                                    <img src="/static/{{ photo.filename }}" style="width:28px;height:28px;object-fit:cover;border-radius:4px;margin-right:2px;border:1px solid #ddd;" alt="rasm">
+                                  </a>
+                                  {% endfor %}
+                                  <span class="text-muted" style="font-size:11px;">({{ visit.photos|length }} rasm)</span>
+                                </small>
+                                {% endif %}
+                                {% if visit.customer_feedback %}
+                                <br><small class="text-muted"><strong>Mijoz:</strong> {{ visit.customer_feedback[:80] }}{% if visit.customer_feedback|length > 80 %}...{% endif %}</small>
+                                {% endif %}
+                                {% if visit.agent_notes %}
+                                <br><small class="text-muted"><strong>Agent:</strong> {{ visit.agent_notes[:80] }}{% if visit.agent_notes|length > 80 %}...{% endif %}</small>
+                                {% endif %}
+                                {% if visit.problem_description %}
+                                <br><small class="text-danger"><strong>⚠ Muammo:</strong> {{ visit.problem_description[:80] }}{% if visit.problem_description|length > 80 %}...{% endif %}</small>
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if visit.status == 'visited' %}
                                 <span class="badge-done">Tashrif</span>
@@ -242,6 +265,87 @@
                         <tr>
                             <td colspan="3" class="text-center text-muted py-3">Tashriflar yo'q</td>
                         </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Qo'ng'iroqlar va SMS lar -->
+<div class="row g-3 mt-2">
+    <div class="col-md-6">
+        <div class="data-table">
+            <div class="card-header">
+                <i class="bi bi-telephone"></i> Qo'ng'iroqlar ({{ calls|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Vaqt</th>
+                            <th>Mijoz/Tel</th>
+                            <th>Davomiyligi</th>
+                            <th>Natija</th>
+                            <th>Izoh</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in calls %}
+                        <tr>
+                            <td class="muted-cell">{{ c.called_at.strftime('%d.%m %H:%M') if c.called_at else '—' }}</td>
+                            <td>
+                                {% set partner = c.partner_id %}
+                                {{ c.phone or '—' }}
+                                {% if c.partner_id %}<br><small class="text-muted">#{{ c.partner_id }}</small>{% endif %}
+                            </td>
+                            <td>{{ (c.duration_sec or 0) }}s</td>
+                            <td>
+                                {% if c.result == 'answered' %}<span class="badge bg-success">Javob berdi</span>
+                                {% elif c.result == 'order' %}<span class="badge bg-primary">Buyurtma</span>
+                                {% elif c.result == 'no_answer' %}<span class="badge bg-warning">Ko'tarmadi</span>
+                                {% elif c.result == 'rejected' %}<span class="badge bg-danger">Rad qildi</span>
+                                {% elif c.result == 'later' %}<span class="badge bg-info">Keyinroq</span>
+                                {% else %}<span class="badge bg-secondary">{{ c.result or 'other' }}</span>
+                                {% endif %}
+                            </td>
+                            <td><small>{{ (c.notes or '')[:60] }}{% if c.notes and c.notes|length > 60 %}...{% endif %}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-3">Qo'ng'iroqlar yo'q</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="data-table">
+            <div class="card-header">
+                <i class="bi bi-chat-dots"></i> SMS lar ({{ sms_list|length }})
+            </div>
+            <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Vaqt</th>
+                            <th>Telefon</th>
+                            <th>Shablon</th>
+                            <th>Matn</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in sms_list %}
+                        <tr>
+                            <td class="muted-cell">{{ s.sent_at.strftime('%d.%m %H:%M') if s.sent_at else '—' }}</td>
+                            <td>{{ s.phone or '—' }}</td>
+                            <td><small>{{ s.template or 'custom' }}</small></td>
+                            <td><small>{{ (s.message or '')[:80] }}{% if s.message and s.message|length > 80 %}...{% endif %}</small></td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="4" class="text-center text-muted py-3">SMS lar yo'q</td></tr>
                         {% endfor %}
                     </tbody>
                 </table>

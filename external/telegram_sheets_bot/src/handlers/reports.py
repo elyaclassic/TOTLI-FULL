@@ -23,7 +23,10 @@ router.callback_query.filter(AllowedUserFilter())
 
 
 def _fmt_money(value: float) -> str:
-    return f"{float(value):,.0f}".replace(",", " ")
+    number = float(value)
+    if number.is_integer():
+        return f"{number:,.0f}".replace(",", " ")
+    return f"{number:,.2f}".rstrip("0").rstrip(".").replace(",", " ")
 
 
 @router.message(RoleFilter("admin", "rahbar", "xodim"), F.text == "Hisobot")
@@ -110,13 +113,17 @@ async def cb_report_customer_open(callback: CallbackQuery, state: FSMContext) ->
     if not customer:
         await callback.answer("Mijoz topilmadi", show_alert=True)
         return
-    await state.update_data(selected_customer_id=customer_id, selected_customer_name=customer["name"])
-    await state.set_state(ReportState.choosing_type)
+    await state.update_data(
+        selected_customer_id=customer_id,
+        selected_customer_name=customer["name"],
+        report_type="customer",
+    )
+    await state.set_state(ReportState.choosing_period)
     if callback.message:
         await callback.message.edit_text(
-            f"<b>{customer['name']}</b> tanlandi. Hisobot turini tanlang:",
+            f"<b>{customer['name']}</b> uchun hisobot davrini tanlang:",
             parse_mode="HTML",
-            reply_markup=report_type_kb(customer_id),
+            reply_markup=report_period_kb(),
         )
     await callback.answer()
 

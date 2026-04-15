@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../services/offline_db_service.dart';
 import '../services/sync_service.dart';
+import 'visit_photo_screen.dart';
+import 'call_log_dialog.dart';
+import 'sms_compose_screen.dart';
 
 class PartnersScreen extends StatefulWidget {
   const PartnersScreen({super.key});
@@ -255,6 +259,116 @@ class _PartnersScreenState extends State<PartnersScreen> {
                     _startVisit(p);
                   },
                 ),
+              // Yo'nalish (agar lat/lng bor bo'lsa)
+              if (p['lat'] != null && p['lng'] != null) ...[
+                const SizedBox(height: 8),
+                _actionTile(
+                  icon: Icons.navigation,
+                  label: 'Yo\'nalish ochish',
+                  color: Colors.orange,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _openNavSheet(
+                      (p['lat'] as num).toDouble(),
+                      (p['lng'] as num).toDouble(),
+                      p['name'] ?? '',
+                    );
+                  },
+                ),
+              ],
+              // Qo'ng'iroq
+              if ((p['phone'] ?? '').toString().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _actionTile(
+                  icon: Icons.phone,
+                  label: 'Qo\'ng\'iroq qilish',
+                  color: Colors.green,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    CallLogFlow.startCallAndLog(
+                      context: context,
+                      phone: (p['phone'] ?? '').toString(),
+                      partnerName: p['name'] ?? '',
+                      partnerId: p['id'] as int?,
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                _actionTile(
+                  icon: Icons.sms,
+                  label: 'SMS yuborish',
+                  color: Colors.teal,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => SmsComposeScreen(
+                          partnerId: p['id'] as int?,
+                          partnerName: p['name'] ?? '',
+                          phone: (p['phone'] ?? '').toString(),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _openNavSheet(double lat, double lng, String name) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 12),
+              Text('Yo\'nalish: $name', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              _navItem(ctx, 'Yandex Maps', Icons.map, Colors.red,
+                  'https://yandex.com/maps/?rtext=~$lat,$lng&rtt=auto'),
+              const SizedBox(height: 8),
+              _navItem(ctx, 'Google Maps', Icons.navigation, Colors.blue,
+                  'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving'),
+              const SizedBox(height: 8),
+              _navItem(ctx, '2GIS', Icons.location_on, Colors.green,
+                  'https://2gis.uz/geo/$lng,$lat'),
+              const SizedBox(height: 12),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(BuildContext ctx, String label, IconData icon, Color color, String url) {
+    return Material(
+      color: color.withOpacity(0.08),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () async {
+          Navigator.pop(ctx);
+          await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+        },
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Icon(icon, color: color, size: 24),
+              const SizedBox(width: 14),
+              Text(label, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: color)),
+              const Spacer(),
+              Icon(Icons.chevron_right, color: color, size: 20),
             ],
           ),
         ),
@@ -296,12 +410,83 @@ class _PartnersScreenState extends State<PartnersScreen> {
       if (result['success'] == true) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${partner['name']} ga kirish belgilandi'), backgroundColor: Colors.green));
         _loadData();
+        // Vizit rasm ekranini ochish
+        final visitId = result['visit_id'];
+        if (visitId is int) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => VisitPhotoScreen(
+                visitId: visitId,
+                partnerName: partner['name'] ?? '',
+              ),
+            ),
+          );
+        }
+      } else if (result['error_code'] == 'OPEN_VISIT') {
+        _showOpenVisitDialog(result['open_visit'] ?? {});
       } else {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result['error'] ?? 'Xato'), backgroundColor: Colors.red));
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('GPS xato: $e'), backgroundColor: Colors.red));
     }
+  }
+
+  void _showOpenVisitDialog(Map<String, dynamic> openVisit) {
+    final partnerName = (openVisit['partner_name'] ?? 'Mijoz').toString();
+    final checkInRaw = (openVisit['check_in_time'] ?? '').toString();
+    String checkInStr = '';
+    if (checkInRaw.isNotEmpty) {
+      try {
+        final dt = DateTime.parse(checkInRaw).toLocal();
+        checkInStr = '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+      } catch (_) {}
+    }
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(children: [
+          Icon(Icons.warning_amber, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Ochiq vizit bor', style: TextStyle(fontSize: 17)),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Siz hali oldingi vizitni tugatmagansiz. Yangi tashrif boshlash uchun avval uni yakunlang.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.orange.shade50, borderRadius: BorderRadius.circular(8)),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(partnerName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  if (checkInStr.isNotEmpty)
+                    Text('Kirish vaqti: $checkInStr', style: TextStyle(fontSize: 12, color: Colors.grey[700])),
+                ],
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Vizitlar tabiga o\'tib, faol vizitni oching va "Chiqish" tugmasini bosing.',
+              style: TextStyle(fontSize: 12, color: Colors.black54),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Yopish'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _openPartnerOrders(Map<String, dynamic> partner) async {

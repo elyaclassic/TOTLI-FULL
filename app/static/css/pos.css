@@ -713,8 +713,8 @@
     .sidebar { display: none !important; }
     .main-content { margin-left: 0 !important; }
     .main-content { height: 100vh; overflow: hidden; padding: 4px !important; }
-    /* Kichik ekranda yuqoridagi fullscreen banner joy yemasin */
-    .pos-fullscreen-prompt { display: none !important; }
+    /* Kichik ekranda fullscreen banner doim ko'rinsin — aynan shunda kerak */
+    .pos-fullscreen-prompt { padding: 4px 8px !important; font-size: 12px !important; }
     .pos-premium .pos-container { max-width: 100%; padding: 0.4rem 0.4rem 0.3rem; }
     .pos-premium .pos-header { margin-bottom: 0.4rem; padding-bottom: 0.3rem; }
     .pos-premium .pos-title { font-size: 1rem; }

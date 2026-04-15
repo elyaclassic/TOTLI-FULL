@@ -33,20 +33,46 @@ logger = logging.getLogger(__name__)
 
 
 def _fmt_money(value: float) -> str:
-    return f"{float(value):,.0f}".replace(",", " ")
+    number = float(value)
+    if number.is_integer():
+        return f"{number:,.0f}".replace(",", " ")
+    return f"{number:,.2f}".rstrip("0").rstrip(".").replace(",", " ")
 
 
 def _parse_number(text: str) -> float | None:
-    raw = (text or "").strip().replace(" ", "").replace(",", "").replace(".", "")
+    raw = (text or "").strip().replace(" ", "")
     if not raw:
         return None
     sign = 1
     if raw.startswith("-"):
         sign = -1
         raw = raw[1:]
-    if not raw.isdigit():
+    if not raw:
         return None
-    return sign * float(raw)
+
+    if "," in raw and "." in raw:
+        if raw.rfind(".") > raw.rfind(","):
+            raw = raw.replace(",", "")
+        else:
+            raw = raw.replace(".", "").replace(",", ".")
+    elif "," in raw:
+        left, right = raw.split(",", 1) if raw.count(",") == 1 else (raw.replace(",", ""), "")
+        if right:
+            if left.isdigit() and right.isdigit() and len(right) == 3:
+                raw = left + right
+            else:
+                raw = f"{left}.{right}"
+        else:
+            raw = left
+    elif "." in raw and raw.count(".") == 1:
+        left, right = raw.split(".", 1)
+        if left.isdigit() and right.isdigit() and len(right) == 3:
+            raw = left + right
+
+    try:
+        return sign * float(raw)
+    except ValueError:
+        return None
 
 
 async def _show_customers_menu(target: Message | CallbackQuery) -> None:
@@ -272,7 +298,7 @@ async def on_rate_entered(message: Message, state: FSMContext) -> None:
         await message.answer("Kursni son bilan yuboring. Masalan: <code>12700</code>", parse_mode="HTML")
         return
 
-    text = f"{operation_type} {currency} {amount:,.0f} {customer_name}".replace(",", " ")
+    text = f"{operation_type} {currency} {_fmt_money(amount)} {customer_name}"
     try:
         await asyncio.to_thread(
             append_operation_row,

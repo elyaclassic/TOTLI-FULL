@@ -3,13 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/consent_screen.dart';
 import 'services/session_service.dart';
 import 'services/api_service.dart';
 import 'services/sync_service.dart';
 
 // Joriy ilova versiyasi
-const String appVersion = '1.8.3';
-const int appBuild = 43;
+const String appVersion = '2.0.2';
+const int appBuild = 49;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -106,8 +107,23 @@ class _SplashScreenState extends State<SplashScreen> {
     await SyncService().init();
     if (!mounted) return;
     setState(() => _statusText = '');
+
+    // Rozilik ekrani — birinchi ochilishda
+    final hasConsent = await session.hasConsent();
     final isLoggedIn = await session.isLoggedIn();
     if (!mounted) return;
+
+    if (!hasConsent) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => ConsentScreen(
+            nextScreenBuilder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
+          ),
+        ),
+      );
+      return;
+    }
+
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),

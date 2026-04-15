@@ -10,6 +10,8 @@ import 'orders_screen.dart';
 import 'visits_screen.dart';
 import 'kassa_screen.dart';
 import 'deliveries_screen.dart';
+import 'map_screen.dart';
+import 'driver_map_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -508,6 +510,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _buildActionTile('Vizit boshlash', Icons.pin_drop, Colors.blue, () {
             setState(() => _currentTab = 4);
           }),
+          _buildActionTile('Xarita — barcha mijozlar', Icons.map, Colors.orange, () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const MapScreen()));
+          }),
           _buildActionTile('Yangi mijoz qo\'shish', Icons.person_add, Colors.purple, () {
             setState(() => _currentTab = 1);
           }),
@@ -539,6 +544,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 20),
           _buildActionTile('Yetkazishlarni ko\'rish', Icons.list_alt, Colors.blue, () {
             setState(() => _currentTab = 1);
+          }),
+          _buildActionTile('Xarita — yetkazishlar', Icons.map, Colors.orange, () {
+            Navigator.push(context, MaterialPageRoute(builder: (_) => const DriverMapScreen()));
           }),
         ],
       ),

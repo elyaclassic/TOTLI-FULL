@@ -116,6 +116,33 @@ body{font-family:'Segoe UI','Roboto',sans-serif;background:var(--bg);color:var(-
 .btn-call:active{background:#F57C00;}
 #mapBox{height:200px;background:#e0e0e0;margin:0;}
 
+/* ── BIG MAP PAGE ── */
+#bigMap{flex:1;width:100%;min-height:300px;}
+.map-modes{display:flex;background:var(--white);border-bottom:1px solid var(--border);padding:8px 8px 0;gap:6px;flex-shrink:0;}
+.map-mode-btn{flex:1;padding:10px 8px;border:1px solid var(--border);border-radius:8px 8px 0 0;background:var(--white);color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;border-bottom:none;}
+.map-mode-btn.active{background:var(--green);color:#fff;border-color:var(--green);}
+.map-mode-btn i{font-size:15px;}
+.map-info-bar{background:var(--white);padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.map-info-bar .mi-count{color:var(--green);font-weight:700;}
+.near-list{background:var(--white);max-height:40vh;overflow-y:auto;border-top:2px solid var(--green);}
+.near-item{display:flex;align-items:center;padding:10px 14px;border-bottom:1px solid #f0f0f0;cursor:pointer;}
+.near-item:active{background:#f0f0f0;}
+.near-item .ni-info{flex:1;min-width:0;}
+.near-item .ni-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.near-item .ni-sub{font-size:12px;color:var(--text2);margin-top:2px;}
+.near-item .ni-dist{font-size:13px;color:var(--green);font-weight:700;white-space:nowrap;margin-left:8px;}
+.navigate-menu{position:fixed;left:0;right:0;bottom:0;background:var(--white);border-radius:16px 16px 0 0;padding:16px;z-index:2500;box-shadow:0 -4px 16px rgba(0,0,0,0.2);transform:translateY(100%);transition:transform 0.25s;}
+.navigate-menu.open{transform:translateY(0);}
+.navigate-menu .nm-title{font-size:15px;font-weight:700;text-align:center;margin-bottom:12px;color:var(--text);}
+.navigate-menu .nm-item{display:flex;align-items:center;padding:14px;border-radius:10px;background:var(--bg);margin-bottom:8px;text-decoration:none;color:var(--text);font-weight:600;}
+.navigate-menu .nm-item i{font-size:22px;margin-right:12px;color:var(--green);}
+.navigate-menu .nm-cancel{text-align:center;padding:12px;color:var(--text2);cursor:pointer;}
+.btn-nav{background:#FF9800;color:#fff;}
+.btn-nav:active{background:#F57C00;}
+.leaflet-popup-content{margin:8px 10px;font-size:13px;}
+.leaflet-popup-content b{display:block;margin-bottom:4px;}
+.leaflet-popup-content .pop-link{color:var(--green);font-weight:600;cursor:pointer;text-decoration:none;}
+
 /* ── ORDER PAGE ── */
 .product-item{display:flex;align-items:center;padding:12px 16px;background:var(--white);border-bottom:1px solid #f0f0f0;}
 .product-item .pi-info{flex:1;min-width:0;}
@@ -336,6 +363,7 @@ select.ap-input{color:var(--text);}
   <div class="drawer-menu">
     <button class="drawer-item" onclick="closeDrawer();openPage('addPartnerPage')"><i class="bi bi-building-add"></i> Savdo nuqtasi qo'shish</button>
     <button class="drawer-item" onclick="closeDrawer();openPage('clientsPage')"><i class="bi bi-buildings"></i> Savdo nuqtalari</button>
+    <button class="drawer-item" onclick="closeDrawer();openMapPage('all')"><i class="bi bi-map"></i> Xarita</button>
     <button class="drawer-item" onclick="closeDrawer();openPage('tasksPage')"><i class="bi bi-check2-square"></i> Vazifalar <span class="drawer-badge" id="tasksBadge"></span></button>
     <div class="drawer-divider"></div>
     <button class="drawer-item" onclick="closeDrawer();openPage('ordersPage')"><i class="bi bi-bag-check"></i> Buyurtmalarim</button>
@@ -720,6 +748,39 @@ select.ap-input{color:var(--text);}
       </button>
     </div>
   </div>
+</div>
+
+<!-- MAP PAGE -->
+<div class="sub-page" id="mapPage">
+  <div class="sub-toolbar">
+    <button class="back-btn" onclick="closeMapPage()"><i class="bi bi-arrow-left"></i></button>
+    <div class="sub-title">Xarita</div>
+    <div class="actions" style="margin-left:auto;">
+      <button onclick="centerMapOnAgent()" title="Mening o'rnim"><i class="bi bi-crosshair"></i></button>
+    </div>
+  </div>
+  <div class="map-modes">
+    <button class="map-mode-btn active" id="mmAll" onclick="setMapMode('all')"><i class="bi bi-geo-alt"></i> Barchasi</button>
+    <button class="map-mode-btn" id="mmRoute" onclick="setMapMode('route')"><i class="bi bi-signpost-split"></i> Marshrut</button>
+    <button class="map-mode-btn" id="mmNear" onclick="setMapMode('near')"><i class="bi bi-compass"></i> Yaqin</button>
+  </div>
+  <div class="map-info-bar" id="mapInfoBar">
+    <span id="mapInfoText">Yuklanmoqda...</span>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+    <div id="bigMap"></div>
+    <div class="near-list" id="nearList" style="display:none;"></div>
+  </div>
+</div>
+
+<!-- NAVIGATE BOTTOM SHEET -->
+<div class="drawer-overlay" id="navOverlay" onclick="closeNavMenu()"></div>
+<div class="navigate-menu" id="navMenu">
+  <div class="nm-title" id="navTitle">Yo'nalish ochish</div>
+  <a class="nm-item" id="navYandex" href="#" target="_blank" rel="noopener"><i class="bi bi-geo-alt-fill"></i> Yandex Maps</a>
+  <a class="nm-item" id="navGoogle" href="#" target="_blank" rel="noopener"><i class="bi bi-google"></i> Google Maps</a>
+  <a class="nm-item" id="nav2gis" href="#" target="_blank" rel="noopener"><i class="bi bi-map"></i> 2GIS</a>
+  <div class="nm-cancel" onclick="closeNavMenu()">Bekor qilish</div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -1124,6 +1185,7 @@ function openClient(id){
         '<button class="btn-checkin" onclick="openReconciliation('+id+',\''+escHtml(p.name||'')+'\')" style="background:#7B1FA2;">' +
           '<i class="bi bi-file-text"></i> Sverka' +
         '</button>' +
+        (hasLoc?'<button class="btn-nav" onclick="openNavMenu('+lat+','+lng+',\''+escHtml(p.name||'')+'\')"><i class="bi bi-signpost-2"></i></button>':'') +
         (p.phone?'<a class="btn-call" href="tel:'+p.phone+'" style="text-decoration:none;"><i class="bi bi-telephone"></i></a>':'') +
       '</div>' +
       (hasLoc?'<div id="mapBox"></div>':'') +
@@ -1160,6 +1222,184 @@ function openClientMap(id){
   openClient(id);
 }
 window.openClientMap=openClientMap;
+
+// ═══ BIG MAP ═══
+var bigMap=null, bigMapLayer=null, bigMapAgentMarker=null, mapMode='all', mapInited=false;
+
+function haversineKm(lat1,lng1,lat2,lng2){
+  var R=6371, toRad=Math.PI/180;
+  var dLat=(lat2-lat1)*toRad, dLng=(lng2-lng1)*toRad;
+  var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*toRad)*Math.cos(lat2*toRad)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function fmtDist(km){
+  if(km<1) return Math.round(km*1000)+' m';
+  return km.toFixed(km<10?1:0)+' km';
+}
+
+function getClientDay(c){
+  var d=c.visit_day;
+  if(d===null||d===undefined||d==='') return null;
+  if(typeof d==='number') return [d];
+  var s=String(d);
+  return s.split(/[,\s]+/).map(function(x){var n=parseInt(x,10);return isNaN(n)?null:n;}).filter(function(x){return x!==null;});
+}
+
+function openMapPage(mode){
+  mapMode=mode||'all';
+  var pg=document.getElementById('mapPage');
+  pg.classList.add('open');
+  document.body.style.overflow='hidden';
+  setTimeout(function(){initBigMap();refreshMapMode();},120);
+}
+window.openMapPage=openMapPage;
+
+function closeMapPage(){
+  var pg=document.getElementById('mapPage');
+  pg.classList.remove('open');
+  document.body.style.overflow='';
+}
+window.closeMapPage=closeMapPage;
+
+function initBigMap(){
+  if(mapInited&&bigMap){bigMap.invalidateSize();return;}
+  var center=[41.311081,69.240562]; // Tashkent default
+  if(lastGpsPos) center=[lastGpsPos.lat,lastGpsPos.lng];
+  bigMap=L.map('bigMap',{zoomControl:true}).setView(center,13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'OSM',maxZoom:19}).addTo(bigMap);
+  bigMapLayer=L.layerGroup().addTo(bigMap);
+  mapInited=true;
+  setTimeout(function(){bigMap.invalidateSize();},50);
+}
+
+function drawAgentMarker(){
+  if(!bigMap||!lastGpsPos) return;
+  if(bigMapAgentMarker){try{bigMap.removeLayer(bigMapAgentMarker);}catch(e){}}
+  var icn=L.divIcon({
+    className:'agent-marker',
+    html:'<div style="width:22px;height:22px;border-radius:50%;background:#1976D2;border:3px solid #fff;box-shadow:0 0 0 2px #1976D2;"></div>',
+    iconSize:[22,22],iconAnchor:[11,11]
+  });
+  bigMapAgentMarker=L.marker([lastGpsPos.lat,lastGpsPos.lng],{icon:icn,zIndexOffset:1000}).addTo(bigMap).bindPopup('Mening joylashuvim');
+}
+
+function centerMapOnAgent(){
+  if(!lastGpsPos){alert('GPS ma\'lumoti yo\'q. Lokatsiyani yoqing.');return;}
+  if(bigMap) bigMap.setView([lastGpsPos.lat,lastGpsPos.lng],15);
+}
+window.centerMapOnAgent=centerMapOnAgent;
+
+function setMapMode(mode){
+  mapMode=mode;
+  ['mmAll','mmRoute','mmNear'].forEach(function(id){document.getElementById(id).classList.remove('active');});
+  document.getElementById({all:'mmAll',route:'mmRoute',near:'mmNear'}[mode]).classList.add('active');
+  refreshMapMode();
+}
+window.setMapMode=setMapMode;
+
+function makeClientMarker(c,idx,color){
+  color=color||'#4CAF50';
+  var label=idx?('<div style="position:absolute;top:-2px;left:-2px;width:18px;height:18px;border-radius:50%;background:#fff;border:2px solid '+color+';color:'+color+';font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;">'+idx+'</div>'):'';
+  var icn=L.divIcon({
+    className:'client-marker',
+    html:'<div style="position:relative;width:26px;height:32px;"><i class="bi bi-geo-alt-fill" style="font-size:32px;color:'+color+';text-shadow:0 1px 2px rgba(0,0,0,0.4);"></i>'+label+'</div>',
+    iconSize:[26,32],iconAnchor:[13,30],popupAnchor:[0,-28]
+  });
+  var m=L.marker([c.lat,c.lng],{icon:icn});
+  var popupHtml='<b>'+(c.name||'Mijoz')+'</b>'+
+    (c.address?'<div style="color:#757575;">'+c.address+'</div>':'')+
+    '<div style="margin-top:6px;display:flex;gap:8px;">'+
+      '<a class="pop-link" href="javascript:void(0)" onclick="closeMapPage();openClient('+c.id+')">Ochish</a>'+
+      '<a class="pop-link" href="javascript:void(0)" onclick="openNavMenu('+c.lat+','+c.lng+',\''+(c.name||'').replace(/'/g,"\\'")+'\')">Yo\'nalish</a>'+
+    '</div>';
+  m.bindPopup(popupHtml);
+  return m;
+}
+
+function refreshMapMode(){
+  if(!bigMap) return;
+  bigMapLayer.clearLayers();
+  drawAgentMarker();
+  document.getElementById('nearList').style.display='none';
+  var info=document.getElementById('mapInfoText');
+
+  var withLoc=(allClients||[]).filter(function(c){return c.lat&&c.lng;});
+
+  if(mapMode==='all'){
+    withLoc.forEach(function(c){makeClientMarker(c).addTo(bigMapLayer);});
+    info.innerHTML='Barcha mijozlar: <span class="mi-count">'+withLoc.length+'</span>'+(withLoc.length<(allClients||[]).length?' / '+(allClients||[]).length+' (ba\'zilari GPS-siz)':'');
+    if(withLoc.length){
+      var b=L.latLngBounds(withLoc.map(function(c){return [c.lat,c.lng];}));
+      if(lastGpsPos) b.extend([lastGpsPos.lat,lastGpsPos.lng]);
+      bigMap.fitBounds(b,{padding:[30,30],maxZoom:15});
+    }
+  }
+  else if(mapMode==='route'){
+    var today=new Date().getDay(); // 0=Ya...6=Sh
+    var todays=withLoc.filter(function(c){var dd=getClientDay(c);return dd&&dd.indexOf(today)>=0;});
+    if(lastGpsPos){
+      todays.sort(function(a,b){return haversineKm(lastGpsPos.lat,lastGpsPos.lng,a.lat,a.lng)-haversineKm(lastGpsPos.lat,lastGpsPos.lng,b.lat,b.lng);});
+    }
+    todays.forEach(function(c,i){makeClientMarker(c,i+1,'#FF9800').addTo(bigMapLayer);});
+    if(todays.length>1){
+      var pts=todays.map(function(c){return [c.lat,c.lng];});
+      if(lastGpsPos) pts.unshift([lastGpsPos.lat,lastGpsPos.lng]);
+      L.polyline(pts,{color:'#FF9800',weight:4,opacity:0.7,dashArray:'6,8'}).addTo(bigMapLayer);
+    }
+    info.innerHTML='Bugungi marshrut: <span class="mi-count">'+todays.length+'</span> ta mijoz';
+    if(todays.length){
+      var b2=L.latLngBounds(todays.map(function(c){return [c.lat,c.lng];}));
+      if(lastGpsPos) b2.extend([lastGpsPos.lat,lastGpsPos.lng]);
+      bigMap.fitBounds(b2,{padding:[40,40],maxZoom:15});
+    }
+  }
+  else if(mapMode==='near'){
+    if(!lastGpsPos){info.textContent='GPS yo\'q — yaqin mijozlar hisoblanmaydi';return;}
+    var near=withLoc.map(function(c){
+      return {c:c,dist:haversineKm(lastGpsPos.lat,lastGpsPos.lng,c.lat,c.lng)};
+    }).sort(function(a,b){return a.dist-b.dist;}).slice(0,20);
+    near.forEach(function(x,i){makeClientMarker(x.c,i+1,'#2E7D32').addTo(bigMapLayer);});
+    info.innerHTML='Eng yaqin: <span class="mi-count">'+near.length+'</span> ta mijoz';
+    var list=document.getElementById('nearList');
+    list.innerHTML=near.map(function(x){
+      var c=x.c;
+      return '<div class="near-item" onclick="focusClientOnMap('+c.lat+','+c.lng+','+c.id+')">'+
+        '<div class="ni-info"><div class="ni-name">'+(c.name||'Mijoz')+'</div><div class="ni-sub">'+(c.address||c.phone||'')+'</div></div>'+
+        '<div class="ni-dist">'+fmtDist(x.dist)+'</div>'+
+      '</div>';
+    }).join('')||'<div class="empty-state"><i class="bi bi-geo"></i>Yaqin mijoz yo\'q</div>';
+    list.style.display='block';
+    if(near.length){
+      var b3=L.latLngBounds(near.map(function(x){return [x.c.lat,x.c.lng];}));
+      b3.extend([lastGpsPos.lat,lastGpsPos.lng]);
+      bigMap.fitBounds(b3,{padding:[30,30],maxZoom:16});
+      setTimeout(function(){bigMap.invalidateSize();},200);
+    }
+  }
+}
+
+function focusClientOnMap(lat,lng,id){
+  if(bigMap){bigMap.setView([lat,lng],17);}
+}
+window.focusClientOnMap=focusClientOnMap;
+
+// ═══ NAVIGATE MENU ═══
+function openNavMenu(lat,lng,name){
+  document.getElementById('navTitle').textContent=name||'Yo\'nalish ochish';
+  document.getElementById('navYandex').href='https://yandex.com/maps/?rtext=~'+lat+','+lng+'&rtt=auto';
+  document.getElementById('navGoogle').href='https://www.google.com/maps/dir/?api=1&destination='+lat+','+lng+'&travelmode=driving';
+  document.getElementById('nav2gis').href='https://2gis.uz/geo/'+lng+','+lat;
+  document.getElementById('navOverlay').classList.add('open');
+  document.getElementById('navMenu').classList.add('open');
+}
+window.openNavMenu=openNavMenu;
+
+function closeNavMenu(){
+  document.getElementById('navOverlay').classList.remove('open');
+  document.getElementById('navMenu').classList.remove('open');
+}
+window.closeNavMenu=closeNavMenu;
 
 // ═══ CHECK-IN ═══
 function doCheckin(partnerId){

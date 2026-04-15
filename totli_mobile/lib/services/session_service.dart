@@ -7,6 +7,7 @@ class SessionService {
   static const _keyFullName = 'session_full_name';
   static const _keyPhone = 'session_phone';
   static const _keyApiUrl = 'api_base_url';
+  static const _keyConsent = 'privacy_consent_accepted';
 
   Future<void> saveSession({
     required String token,
@@ -61,6 +62,16 @@ class SessionService {
   Future<bool> isLoggedIn() async {
     final token = await getToken();
     return token != null && token.isNotEmpty;
+  }
+
+  Future<bool> hasConsent() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyConsent) ?? false;
+  }
+
+  Future<void> setConsent(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyConsent, value);
   }
 
   Future<void> logout() async {

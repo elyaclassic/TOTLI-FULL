@@ -141,8 +141,14 @@ def get_pos_partner(db: Session):
     return db.query(Partner).filter(Partner.is_active == True).order_by(Partner.id).first()
 
 
-def get_pos_cash_register(db: Session, payment_type: str, department_id: Optional[int] = None):
-    """POS to'lov: savdo qaysi bo'limdan bo'lsa o'sha bo'lim kassasiga."""
+def get_pos_cash_register(
+    db: Session,
+    payment_type: str,
+    department_id: Optional[int] = None,
+    current_user: Optional[User] = None,
+):
+    """POS to'lov: savdo qaysi bo'limdan bo'lsa o'sha bo'lim kassasiga.
+    Sotuvchi uchun — faqat unga biriktirilgan kassalar ichidan tanlanadi."""
     payment_type = (payment_type or "").strip().lower()
     key = payment_type if payment_type in ("naqd", "plastik", "click", "terminal") else "plastik"
     q = db.query(CashRegister).filter(CashRegister.is_active == True)
@@ -153,6 +159,18 @@ def get_pos_cash_register(db: Session, payment_type: str, department_id: Optiona
         active = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.id).all()
     if not active:
         return None
+
+    # Sotuvchi uchun cheklov — faqat biriktirilgan kassalar
+    role = ((current_user.role if current_user else "") or "").strip()
+    if role == "sotuvchi" and current_user is not None:
+        user = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
+        assigned_ids = {c.id for c in (getattr(user, "cash_registers_list", None) or []) if c}
+        if assigned_ids:
+            filtered = [c for c in active if c.id in assigned_ids]
+            if filtered:
+                active = filtered
+            # else: bo'sh natija — pastdagi mantiq active dan tanlaydi (fallback)
+
     for c in active:
         if getattr(c, "payment_type", None) and (c.payment_type or "").strip().lower() == key:
             return c

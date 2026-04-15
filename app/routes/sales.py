@@ -13,7 +13,7 @@ from barcode.writer import ImageWriter
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app.core import templates
 from app.models.database import (
@@ -864,14 +864,27 @@ async def sales_pos(
     error_detail = unquote(request.query_params.get("detail", "") or "")
     number = request.query_params.get("number", "")
     user_with_partners = db.query(User).options(joinedload(User.partners_list)).filter(User.id == current_user.id).first()
+    user_role = (current_user.role or "").strip()
+    assigned_partners = []
     if user_with_partners and getattr(user_with_partners, "partners_list", None):
-        assigned = [p for p in user_with_partners.partners_list if getattr(p, "is_active", True)]
-        if assigned:
-            pos_partners = sorted(assigned, key=lambda p: (p.name or ""))
+        assigned_partners = [p for p in user_with_partners.partners_list if getattr(p, "is_active", True)]
+    if user_role == "sotuvchi":
+        # Sotuvchi uchun cheklov SHART — biriktirilgan mijozlar bilan cheklash
+        # Bo'sh bo'lsa, default chakana xaridor qo'shiladi (POS ishlashi uchun)
+        if assigned_partners:
+            pos_partners = sorted(assigned_partners, key=lambda p: (p.name or ""))
+        else:
+            chakana = db.query(Partner).filter(
+                Partner.is_active == True,
+                or_(Partner.code == "chakana", Partner.code == "pos"),
+            ).first()
+            pos_partners = [chakana] if chakana else []
+    else:
+        # Admin/manager — agar biriktirilgan bo'lsa shu, aks holda barchasi
+        if assigned_partners:
+            pos_partners = sorted(assigned_partners, key=lambda p: (p.name or ""))
         else:
             pos_partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
-    else:
-        pos_partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     default_partner = _get_pos_partner(db)
     default_partner_id = default_partner.id if default_partner else None
     if pos_partners and default_partner_id is not None:
@@ -1260,7 +1273,7 @@ async def sales_pos_complete(
             for part in parts:
                 pt = part["type"]
                 amt = float(part["amount"] or 0)
-                cash_register = _get_pos_cash_register(db, pt, department_id)
+                cash_register = _get_pos_cash_register(db, pt, department_id, current_user=current_user)
                 if not cash_register:
                     return RedirectResponse(url="/sales/pos?error=payment", status_code=303)
                 pay_number = f"PAY-{today_str}-{seq:04d}"
@@ -1780,7 +1793,7 @@ async def pos_pay_supplier(
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kontragent+topilmadi", status_code=303)
     # Sotuvchining kassasini topish
     department_id = getattr(current_user, "department_id", None)
-    cash_register = _get_pos_cash_register(db, "naqd", department_id)
+    cash_register = _get_pos_cash_register(db, "naqd", department_id, current_user=current_user)
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim)
@@ -1829,7 +1842,7 @@ async def pos_expense(
             expense_type_name = et.name
     # Sotuvchining kassasini topish
     department_id = getattr(current_user, "department_id", None)
-    cash_register = _get_pos_cash_register(db, "naqd", department_id)
+    cash_register = _get_pos_cash_register(db, "naqd", department_id, current_user=current_user)
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim — harajat)

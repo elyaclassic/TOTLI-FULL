@@ -74,13 +74,37 @@ async def finance(
 ):
     """Moliya - kassa. So'nggi to'lovlar sana bo'yicha filtrlanishi mumkin."""
     ensure_payments_status_column(db)
-    cash_registers = db.query(CashRegister).all()
-    partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
+    role = (current_user.role or "").strip()
+    # Sotuvchi uchun cheklov: faqat biriktirilgan kassalar va mijozlar
+    user_scope = db.query(User).options(
+        joinedload(User.cash_registers_list),
+        joinedload(User.partners_list),
+    ).filter(User.id == current_user.id).first()
+    allowed_cash_ids = None
+    allowed_partner_ids = None
+    if role == "sotuvchi":
+        allowed_cash_ids = [c.id for c in (getattr(user_scope, "cash_registers_list", None) or []) if c]
+        allowed_partner_ids = [p.id for p in (getattr(user_scope, "partners_list", None) or []) if p]
+        cash_registers = db.query(CashRegister).filter(
+            CashRegister.id.in_(allowed_cash_ids or [-1])
+        ).order_by(CashRegister.name).all()
+        if allowed_partner_ids:
+            partners = db.query(Partner).filter(
+                Partner.is_active == True,
+                Partner.id.in_(allowed_partner_ids),
+            ).order_by(Partner.name).all()
+        else:
+            partners = []
+    else:
+        cash_registers = db.query(CashRegister).all()
+        partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     q = (
         db.query(Payment)
         .options(joinedload(Payment.cash_register), joinedload(Payment.partner))
         .order_by(Payment.date.desc())
     )
+    if role == "sotuvchi":
+        q = q.filter(Payment.cash_register_id.in_(allowed_cash_ids or [-1]))
     # Sana filtrlari
     filter_date_from = str(date_from or "").strip()[:10] if date_from else ""
     filter_date_to = str(date_to or "").strip()[:10] if date_to else ""

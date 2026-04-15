@@ -5,16 +5,20 @@ Tier C2 5-bosqich: api_routes.py dan ajratib olindi.
 16 endpoint + 2 helper (_agent_from_token, _extract_token), ~870 qator.
 """
 import json
+import os
+import secrets
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from sqlalchemy.orm import Session
 from sqlalchemy import func as sa_func, func, or_
 
 from app.models.database import (
     get_db,
     Agent,
+    AgentCall,
     AgentLocation,
+    AgentSms,
     Order,
     OrderItem,
     Partner,
@@ -22,8 +26,15 @@ from app.models.database import (
     ProductPrice,
     Stock,
     Visit,
+    VisitPhoto,
     Warehouse,
 )
+
+# Ruxsat etilgan rasm turlari
+ALLOWED_PHOTO_TYPES = {"shelf", "warehouse", "storefront", "other"}
+MAX_PHOTO_SIZE_BYTES = 5 * 1024 * 1024  # 5 MB
+ALLOWED_MIME_PREFIXES = ("image/jpeg", "image/jpg", "image/png", "image/webp")
+VISIT_PHOTOS_DIR = os.path.join("app", "static", "visit_photos")
 from app.utils.auth import get_user_from_token
 from app.logging_config import get_logger
 
@@ -135,14 +146,24 @@ async def agent_visit_checkin(
         if recent_dup:
             return {"success": True, "visit_id": recent_dup.id}  # Mavjud vizitni qaytarish
 
-        # Yakunlanmagan vizit bormi tekshirish
+        # Yakunlanmagan vizit bormi — rad etish (shu mijozning o'ziga ham kirishga ruxsat yo'q)
         existing = db.query(Visit).filter(
             Visit.agent_id == agent.id,
             Visit.check_out_time == None,
-        ).first()
+        ).order_by(Visit.check_in_time.desc()).first()
         if existing:
-            existing.check_out_time = datetime.now()
-            db.flush()
+            open_partner = db.query(Partner).filter(Partner.id == existing.partner_id).first()
+            return {
+                "success": False,
+                "error_code": "OPEN_VISIT",
+                "error": "Oldingi vizitni yakunlamaguningizcha yangi tashrif boshlab bo'lmaydi",
+                "open_visit": {
+                    "visit_id": existing.id,
+                    "partner_id": existing.partner_id,
+                    "partner_name": open_partner.name if open_partner else f"Mijoz #{existing.partner_id}",
+                    "check_in_time": existing.check_in_time.isoformat() if existing.check_in_time else None,
+                },
+            }
 
         visit = Visit(
             agent_id=agent.id,
@@ -191,6 +212,385 @@ async def agent_visit_checkout(
     except Exception as e:
         db.rollback()
         logger.error(f"Agent checkout error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# VIZIT RASMLARI (Bosqich 1)
+# ==========================================
+
+@router.post("/agent/visit/photo/upload")
+async def agent_visit_photo_upload(
+    request: Request,
+    visit_id: int = Form(...),
+    photo_type: str = Form("other"),
+    notes: str = Form(""),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    file: UploadFile = File(...),
+    token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Vizit davomida ilova kamerasidan olingan rasmni yuklash."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+
+        visit = db.query(Visit).filter(Visit.id == int(visit_id), Visit.agent_id == agent.id).first()
+        if not visit:
+            return {"success": False, "error": "Tashrif topilmadi"}
+
+        # Tur validatsiyasi
+        pt = (photo_type or "other").strip().lower()
+        if pt not in ALLOWED_PHOTO_TYPES:
+            pt = "other"
+
+        # MIME tekshirish
+        ct = (file.content_type or "").lower()
+        if not any(ct.startswith(p) for p in ALLOWED_MIME_PREFIXES):
+            return {"success": False, "error": "Faqat JPEG/PNG/WEBP qabul qilinadi"}
+
+        # Faylni o'qish va hajm tekshirish
+        content = await file.read()
+        if len(content) == 0:
+            return {"success": False, "error": "Bo'sh fayl"}
+        if len(content) > MAX_PHOTO_SIZE_BYTES:
+            return {"success": False, "error": f"Fayl {MAX_PHOTO_SIZE_BYTES // (1024 * 1024)} MB dan katta"}
+
+        # Papka: visit_photos/YYYY-MM/agent_{id}/visit_{id}/
+        now = datetime.now()
+        sub = os.path.join(
+            VISIT_PHOTOS_DIR,
+            now.strftime("%Y-%m"),
+            f"agent_{agent.id}",
+            f"visit_{visit.id}",
+        )
+        os.makedirs(sub, exist_ok=True)
+
+        # Xavfsiz unikal fayl nomi
+        ext = ".jpg"
+        if ct.endswith("png"):
+            ext = ".png"
+        elif ct.endswith("webp"):
+            ext = ".webp"
+        token_hex = secrets.token_hex(6)
+        fname = f"{pt}_{now.strftime('%H%M%S')}_{token_hex}{ext}"
+        full_path = os.path.join(sub, fname)
+        # Traversalga qarshi — yakuniy yo'l VISIT_PHOTOS_DIR ichida bo'lishi shart
+        if not os.path.abspath(full_path).startswith(os.path.abspath(VISIT_PHOTOS_DIR)):
+            return {"success": False, "error": "Yo'l xavfsizlik xatosi"}
+
+        with open(full_path, "wb") as f:
+            f.write(content)
+
+        rel_path = os.path.relpath(full_path, start=os.path.join("app", "static")).replace("\\", "/")
+        url = "/static/" + rel_path
+
+        photo = VisitPhoto(
+            visit_id=visit.id,
+            agent_id=agent.id,
+            partner_id=visit.partner_id,
+            photo_type=pt,
+            filename=rel_path,
+            notes=notes or None,
+            taken_at=now,
+            latitude=latitude,
+            longitude=longitude,
+            file_size=len(content),
+        )
+        db.add(photo)
+        db.commit()
+        db.refresh(photo)
+        return {
+            "success": True,
+            "photo": {
+                "id": photo.id,
+                "url": url,
+                "type": pt,
+                "taken_at": photo.taken_at.isoformat() if photo.taken_at else None,
+            },
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Visit photo upload error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/visit/{visit_id}/photos")
+async def agent_visit_photos_list(
+    request: Request,
+    visit_id: int,
+    token: str = None,
+    db: Session = Depends(get_db),
+):
+    """Vizit rasmlarini ro'yxat bilan qaytarish."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+        visit = db.query(Visit).filter(Visit.id == int(visit_id), Visit.agent_id == agent.id).first()
+        if not visit:
+            return {"success": False, "error": "Tashrif topilmadi"}
+        photos = db.query(VisitPhoto).filter(VisitPhoto.visit_id == visit.id).order_by(VisitPhoto.taken_at).all()
+        return {
+            "success": True,
+            "photos": [
+                {
+                    "id": p.id,
+                    "url": "/static/" + (p.filename or "").replace("\\", "/"),
+                    "type": p.photo_type,
+                    "notes": p.notes or "",
+                    "taken_at": p.taken_at.isoformat() if p.taken_at else None,
+                    "size": p.file_size,
+                }
+                for p in photos
+            ],
+        }
+    except Exception as e:
+        logger.error(f"Visit photos list error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# QO'NG'IROQLAR JURNALI (Bosqich 2)
+# ==========================================
+
+CALL_RESULTS = {"answered", "no_answer", "rejected", "order", "refused", "later", "other"}
+SMS_TEMPLATES = {"greeting", "order_confirm", "debt", "followup", "custom"}
+
+
+@router.post("/agent/call/log")
+async def agent_call_log(
+    request: Request,
+    partner_id: int = Form(None),
+    phone: str = Form(""),
+    duration_sec: int = Form(0),
+    result: str = Form("other"),
+    notes: str = Form(""),
+    latitude: float = Form(None),
+    longitude: float = Form(None),
+    token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Ilovadan qilingan qo'ng'iroqni jurnalga yozish."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+
+        rs = (result or "other").strip().lower()
+        if rs not in CALL_RESULTS:
+            rs = "other"
+
+        try:
+            dur = max(0, int(duration_sec))
+        except (ValueError, TypeError):
+            dur = 0
+
+        call = AgentCall(
+            agent_id=agent.id,
+            partner_id=int(partner_id) if partner_id else None,
+            phone=(phone or "").strip()[:20],
+            called_at=datetime.now(),
+            duration_sec=dur,
+            result=rs,
+            notes=notes or None,
+            latitude=latitude,
+            longitude=longitude,
+        )
+        db.add(call)
+        db.commit()
+        db.refresh(call)
+        return {"success": True, "call_id": call.id}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Call log error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/calls")
+async def agent_calls_list(
+    request: Request,
+    date: str = None,
+    token: str = None,
+    db: Session = Depends(get_db),
+):
+    """Agentning qo'ng'iroqlari ro'yxati (ixtiyoriy sana)."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+        q = db.query(AgentCall).filter(AgentCall.agent_id == agent.id)
+        if date:
+            try:
+                d = datetime.strptime(date, "%Y-%m-%d").date()
+                q = q.filter(
+                    AgentCall.called_at >= datetime.combine(d, datetime.min.time()),
+                    AgentCall.called_at < datetime.combine(d, datetime.max.time()),
+                )
+            except ValueError:
+                pass
+        calls = q.order_by(AgentCall.called_at.desc()).limit(200).all()
+        result_list = []
+        for c in calls:
+            partner_name = None
+            if c.partner_id:
+                p = db.query(Partner).filter(Partner.id == c.partner_id).first()
+                partner_name = p.name if p else None
+            result_list.append({
+                "id": c.id,
+                "partner_id": c.partner_id,
+                "partner_name": partner_name,
+                "phone": c.phone,
+                "called_at": c.called_at.isoformat() if c.called_at else None,
+                "duration_sec": c.duration_sec or 0,
+                "result": c.result,
+                "notes": c.notes or "",
+            })
+        return {"success": True, "calls": result_list}
+    except Exception as e:
+        logger.error(f"Calls list error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# SMS JURNALI (Bosqich 3)
+# ==========================================
+
+@router.post("/agent/sms/log")
+async def agent_sms_log(
+    request: Request,
+    partner_id: int = Form(None),
+    phone: str = Form(""),
+    template: str = Form("custom"),
+    message: str = Form(...),
+    notes: str = Form(""),
+    token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Ilovadan yuborilgan SMS ni jurnalga yozish."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+
+        tmpl = (template or "custom").strip().lower()
+        if tmpl not in SMS_TEMPLATES:
+            tmpl = "custom"
+
+        msg = (message or "").strip()
+        if not msg:
+            return {"success": False, "error": "Bo'sh xabar"}
+        if len(msg) > 1000:
+            msg = msg[:1000]
+
+        sms = AgentSms(
+            agent_id=agent.id,
+            partner_id=int(partner_id) if partner_id else None,
+            phone=(phone or "").strip()[:20],
+            sent_at=datetime.now(),
+            template=tmpl,
+            message=msg,
+            notes=notes or None,
+        )
+        db.add(sms)
+        db.commit()
+        db.refresh(sms)
+        return {"success": True, "sms_id": sms.id}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"SMS log error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.get("/agent/sms")
+async def agent_sms_list(
+    request: Request,
+    date: str = None,
+    token: str = None,
+    db: Session = Depends(get_db),
+):
+    """Agent SMS jurnali."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+        q = db.query(AgentSms).filter(AgentSms.agent_id == agent.id)
+        if date:
+            try:
+                d = datetime.strptime(date, "%Y-%m-%d").date()
+                q = q.filter(
+                    AgentSms.sent_at >= datetime.combine(d, datetime.min.time()),
+                    AgentSms.sent_at < datetime.combine(d, datetime.max.time()),
+                )
+            except ValueError:
+                pass
+        items = q.order_by(AgentSms.sent_at.desc()).limit(200).all()
+        result_list = []
+        for s in items:
+            partner_name = None
+            if s.partner_id:
+                p = db.query(Partner).filter(Partner.id == s.partner_id).first()
+                partner_name = p.name if p else None
+            result_list.append({
+                "id": s.id,
+                "partner_id": s.partner_id,
+                "partner_name": partner_name,
+                "phone": s.phone,
+                "sent_at": s.sent_at.isoformat() if s.sent_at else None,
+                "template": s.template,
+                "message": s.message,
+                "notes": s.notes or "",
+            })
+        return {"success": True, "sms": result_list}
+    except Exception as e:
+        logger.error(f"SMS list error: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# VIZIT FEEDBACK (Bosqich 3)
+# ==========================================
+
+@router.post("/agent/visit/feedback")
+async def agent_visit_feedback(
+    request: Request,
+    visit_id: int = Form(...),
+    customer_feedback: str = Form(""),
+    agent_notes: str = Form(""),
+    problem_description: str = Form(""),
+    has_problem: bool = Form(False),
+    token: str = Form(""),
+    db: Session = Depends(get_db),
+):
+    """Vizit yakunida mijoz/agent fikri va muammolar."""
+    try:
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
+            return {"success": False, "error": "Invalid token"}
+        visit = db.query(Visit).filter(Visit.id == int(visit_id), Visit.agent_id == agent.id).first()
+        if not visit:
+            return {"success": False, "error": "Tashrif topilmadi"}
+        if customer_feedback is not None:
+            visit.customer_feedback = customer_feedback or None
+        if agent_notes is not None:
+            visit.agent_notes = agent_notes or None
+        if problem_description is not None:
+            visit.problem_description = problem_description or None
+        visit.has_problem = bool(has_problem)
+        db.commit()
+        return {"success": True}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Visit feedback error: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 

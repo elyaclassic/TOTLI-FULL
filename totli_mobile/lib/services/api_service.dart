@@ -139,6 +139,102 @@ class ApiService {
     }, token: token);
   }
 
+  // ===== AGENT: VISIT PHOTOS =====
+  static Future<Map<String, dynamic>> uploadVisitPhoto(String token, {
+    required int visitId,
+    required String filePath,
+    required String photoType,
+    String? notes,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/api/agent/visit/photo/upload');
+      final req = http.MultipartRequest('POST', uri);
+      req.fields['token'] = token;
+      req.fields['visit_id'] = visitId.toString();
+      req.fields['photo_type'] = photoType;
+      if (notes != null && notes.isNotEmpty) req.fields['notes'] = notes;
+      if (latitude != null) req.fields['latitude'] = latitude.toString();
+      if (longitude != null) req.fields['longitude'] = longitude.toString();
+      req.files.add(await http.MultipartFile.fromPath('file', filePath));
+      final streamed = await req.send().timeout(const Duration(seconds: 60));
+      final body = await streamed.stream.bytesToString();
+      return jsonDecode(body) as Map<String, dynamic>;
+    } catch (e) {
+      return {'success': false, 'error': 'Rasm yuklash xatosi: $e'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> getVisitPhotos(String token, int visitId) async {
+    return _get('/api/agent/visit/$visitId/photos', token);
+  }
+
+  // ===== AGENT: CALL LOG =====
+  static Future<Map<String, dynamic>> logCall(String token, {
+    int? partnerId,
+    required String phone,
+    required int durationSec,
+    required String result,
+    String? notes,
+    double? latitude,
+    double? longitude,
+  }) async {
+    return _post('/api/agent/call/log', {
+      if (partnerId != null) 'partner_id': partnerId.toString(),
+      'phone': phone,
+      'duration_sec': durationSec.toString(),
+      'result': result,
+      if (notes != null) 'notes': notes,
+      if (latitude != null) 'latitude': latitude.toString(),
+      if (longitude != null) 'longitude': longitude.toString(),
+    }, token: token);
+  }
+
+  static Future<Map<String, dynamic>> getCalls(String token, {String? date}) async {
+    final query = date != null ? '?date=$date' : '';
+    return _get('/api/agent/calls$query', token);
+  }
+
+  // ===== AGENT: SMS LOG =====
+  static Future<Map<String, dynamic>> logSms(String token, {
+    int? partnerId,
+    required String phone,
+    required String message,
+    String template = 'custom',
+    String? notes,
+  }) async {
+    return _post('/api/agent/sms/log', {
+      if (partnerId != null) 'partner_id': partnerId.toString(),
+      'phone': phone,
+      'template': template,
+      'message': message,
+      if (notes != null) 'notes': notes,
+    }, token: token);
+  }
+
+  static Future<Map<String, dynamic>> getSmsLog(String token, {String? date}) async {
+    final query = date != null ? '?date=$date' : '';
+    return _get('/api/agent/sms$query', token);
+  }
+
+  // ===== AGENT: VISIT FEEDBACK =====
+  static Future<Map<String, dynamic>> saveVisitFeedback(String token, {
+    required int visitId,
+    String? customerFeedback,
+    String? agentNotes,
+    String? problemDescription,
+    bool hasProblem = false,
+  }) async {
+    return _post('/api/agent/visit/feedback', {
+      'visit_id': visitId.toString(),
+      if (customerFeedback != null) 'customer_feedback': customerFeedback,
+      if (agentNotes != null) 'agent_notes': agentNotes,
+      if (problemDescription != null) 'problem_description': problemDescription,
+      'has_problem': hasProblem.toString(),
+    }, token: token);
+  }
+
   // ===== AGENT: PARTNER DETAIL & DEBTS =====
   static Future<Map<String, dynamic>> getPartnerDetail(String token, int partnerId) async {
     return _get('/api/agent/partner/$partnerId', token);

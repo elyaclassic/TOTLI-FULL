@@ -22,11 +22,11 @@ async def pwa_config():
 async def app_version():
     """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
     return {
-        "version": "1.8.3",
-        "build": 43,
-        "force_update": True,
+        "version": "2.0.2",
+        "build": 49,
+        "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Vizitlar va yetkazishlar sana filtri, kunlar bo'yicha ko'rish",
+        "changelog": "Vizit ekranida Rasm/Qo'ng'iroq/SMS tugmalari qo'shildi",
     }
 
 

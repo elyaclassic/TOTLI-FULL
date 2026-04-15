@@ -4,10 +4,19 @@ Agentlar — ro'yxat, qo'shish, tafsilot.
 from datetime import datetime
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core import templates
-from app.models.database import get_db, Agent, AgentLocation, Visit, User, Order
+from app.models.database import (
+    get_db,
+    Agent,
+    AgentCall,
+    AgentLocation,
+    AgentSms,
+    Order,
+    User,
+    Visit,
+)
 from app.deps import require_auth, require_admin
 
 router = APIRouter(tags=["agents"])
@@ -88,6 +97,7 @@ async def agent_detail(
     )
     visits = (
         db.query(Visit)
+        .options(joinedload(Visit.partner), joinedload(Visit.photos))
         .filter(Visit.agent_id == agent_id)
         .order_by(Visit.visit_date.desc())
         .limit(30)
@@ -100,12 +110,28 @@ async def agent_detail(
         .limit(50)
         .all()
     )
+    calls = (
+        db.query(AgentCall)
+        .filter(AgentCall.agent_id == agent_id)
+        .order_by(AgentCall.called_at.desc())
+        .limit(50)
+        .all()
+    )
+    sms_list = (
+        db.query(AgentSms)
+        .filter(AgentSms.agent_id == agent_id)
+        .order_by(AgentSms.sent_at.desc())
+        .limit(50)
+        .all()
+    )
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
         "agent": agent,
         "locations": locations,
         "visits": visits,
         "orders": orders,
+        "calls": calls,
+        "sms_list": sms_list,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
     })

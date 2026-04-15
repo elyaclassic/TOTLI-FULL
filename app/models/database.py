@@ -1308,7 +1308,7 @@ class RoutePoint(Base):
 class Visit(Base):
     """Agent tashriflari"""
     __tablename__ = "visits"
-    
+
     id = Column(Integer, primary_key=True, index=True)
     agent_id = Column(Integer, ForeignKey("agents.id"))
     partner_id = Column(Integer, ForeignKey("partners.id"))
@@ -1322,9 +1322,79 @@ class Visit(Base):
     notes = Column(Text)
     photo = Column(String(255))
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
-    
+    # Bosqich 3: mijoz/agent fikri va muammolar
+    customer_feedback = Column(Text, nullable=True)  # mijoz nima dedi / istadi
+    agent_notes = Column(Text, nullable=True)         # agent kuzatuvi/tavsiyasi
+    problem_description = Column(Text, nullable=True) # muammo bo'lsa tavsif
+    has_problem = Column(Boolean, default=False)
+
     agent = relationship("Agent", back_populates="visits")
     partner = relationship("Partner", lazy="select")
+    photos = relationship("VisitPhoto", back_populates="visit", cascade="all, delete-orphan")
+
+
+class VisitPhoto(Base):
+    """Vizit davomida olingan rasmlar (ilova kamerasidan)"""
+    __tablename__ = "visit_photos"
+
+    id = Column(Integer, primary_key=True, index=True)
+    visit_id = Column(Integer, ForeignKey("visits.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True, index=True)
+    photo_type = Column(String(30))  # shelf | warehouse | storefront | other
+    filename = Column(String(255), nullable=False)  # app/static/visit_photos/... ga nisbatan yo'l
+    notes = Column(Text, nullable=True)             # rasm uchun agent izohi
+    taken_at = Column(DateTime, default=datetime.now)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+    file_size = Column(Integer, nullable=True)      # bayt
+
+    visit = relationship("Visit", back_populates="photos")
+
+
+class AgentCall(Base):
+    """Ilova ichidan amalga oshirilgan qo'ng'iroqlar jurnali"""
+    __tablename__ = "agent_calls"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True, index=True)
+    phone = Column(String(20), nullable=True)
+    called_at = Column(DateTime, default=datetime.now, index=True)
+    duration_sec = Column(Integer, default=0)       # taxminiy davomiyligi
+    result = Column(String(30))                      # answered|no_answer|rejected|order|refused|later
+    notes = Column(Text, nullable=True)
+    latitude = Column(Float, nullable=True)
+    longitude = Column(Float, nullable=True)
+
+
+class AgentSms(Base):
+    """Ilova orqali yuborilgan SMS lar jurnali"""
+    __tablename__ = "agent_sms"
+
+    id = Column(Integer, primary_key=True, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True, index=True)
+    phone = Column(String(20), nullable=True)
+    sent_at = Column(DateTime, default=datetime.now, index=True)
+    template = Column(String(50), nullable=True)    # "greeting"|"order_confirm"|"debt"|"custom"
+    message = Column(Text, nullable=False)
+    notes = Column(Text, nullable=True)
+
+
+class PasswordChangeLog(Base):
+    """Parol o'zgartirish audit jurnali — xavfsizlik uchun."""
+    __tablename__ = "password_change_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    target_user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    target_username = Column(String(100), nullable=True)  # audit uchun — user o'chirilsa ham saqlanadi
+    changed_by_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    changed_by_username = Column(String(100), nullable=True)
+    changed_at = Column(DateTime, default=datetime.now, index=True)
+    ip_address = Column(String(45), nullable=True)        # IPv4 yoki IPv6
+    user_agent = Column(String(255), nullable=True)
+    reason = Column(String(255), nullable=True)           # ixtiyoriy izoh
 
 
 # ==========================================
@@ -1695,6 +1765,24 @@ def ensure_agent_tasks():
         logger.error(f"ensure_agent_tasks: {e}")
 
 
+def ensure_visit_feedback_columns():
+    """Visit jadvaliga fikr/muammo ustunlarini qo'shadi (Bosqich 3)."""
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(visits)"))
+            cols = [row[1] for row in r]
+            if "customer_feedback" not in cols:
+                conn.execute(text("ALTER TABLE visits ADD COLUMN customer_feedback TEXT"))
+            if "agent_notes" not in cols:
+                conn.execute(text("ALTER TABLE visits ADD COLUMN agent_notes TEXT"))
+            if "problem_description" not in cols:
+                conn.execute(text("ALTER TABLE visits ADD COLUMN problem_description TEXT"))
+            if "has_problem" not in cols:
+                conn.execute(text("ALTER TABLE visits ADD COLUMN has_problem BOOLEAN DEFAULT 0"))
+    except Exception as e:
+        logger.error(f"ensure_visit_feedback_columns: {e}")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_agent_tasks()
@@ -1710,6 +1798,7 @@ def init_db():
     ensure_production_groups_tables()
     ensure_production_group_docs_table()
     ensure_attendance_improvements()
+    ensure_visit_feedback_columns()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
