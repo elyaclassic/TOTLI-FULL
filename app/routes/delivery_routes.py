@@ -22,8 +22,12 @@ from app.models.database import (
     AgentPayment,
     Payment,
     CashRegister,
+    Product,
+    Stock,
 )
 from app.deps import require_admin, require_admin_or_manager
+from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from urllib.parse import quote
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
 
@@ -419,6 +423,50 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     if order.status not in ("draft",):
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+    # Ombor qoldig'ini tekshirish
+    shortage = []
+    for it in order.items:
+        if not it.product_id or not (it.quantity or 0) > 0:
+            continue
+        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+        if not wh_id:
+            continue
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id,
+            Stock.product_id == it.product_id,
+        ).first()
+        have = float(stock.quantity or 0) if stock else 0
+        need = float(it.quantity or 0)
+        if have + 1e-6 < need:
+            prod = db.query(Product).filter(Product.id == it.product_id).first()
+            name = prod.name if prod else f"#{it.product_id}"
+            shortage.append(f"{name} (kerak: {need}, bor: {have})")
+    if shortage:
+        detail = ", ".join(shortage)
+        return RedirectResponse(
+            url="/supervisor/agent-orders?error=stock&detail=" + quote(f"Ombor yetmaydi: {detail}"),
+            status_code=303,
+        )
+    # Stock chiqarish
+    for it in order.items:
+        if not it.product_id or not (it.quantity or 0) > 0:
+            continue
+        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+        if not wh_id:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=it.product_id,
+            quantity_change=-float(it.quantity or 0),
+            operation_type="sale",
+            document_type="Sale",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"Agent sotuv (supervisor tasdiq): {order.number}",
+            created_at=order.date or datetime.now(),
+        )
     # Buyurtmani tasdiqlash
     order.status = "confirmed"
     order.user_id = current_user.id
@@ -469,8 +517,27 @@ async def supervisor_reject_agent_order(
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
-    # Agar tasdiqlangan bo'lsa — yetkazishni ham bekor qilish
+    # Agar tasdiqlangan bo'lsa — stock qaytarish + yetkazishni ham bekor qilish
     if order.status == "confirmed":
+        for it in order.items:
+            if not it.product_id or not (it.quantity or 0) > 0:
+                continue
+            wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+            if not wh_id:
+                continue
+            create_stock_movement(
+                db=db,
+                warehouse_id=wh_id,
+                product_id=it.product_id,
+                quantity_change=+float(it.quantity or 0),
+                operation_type="sale_revert",
+                document_type="Sale",
+                document_id=order.id,
+                document_number=order.number,
+                user_id=current_user.id if current_user else None,
+                note=f"Agent buyurtma bekor (reject): {order.number}",
+                created_at=datetime.now(),
+            )
         from app.models.database import Delivery as DeliveryModel
         delivery = db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id, DeliveryModel.status == "pending").first()
         if delivery:
@@ -493,6 +560,11 @@ async def supervisor_delete_agent_order(
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    if order.status == "confirmed":
+        return RedirectResponse(
+            url="/supervisor/agent-orders?error=confirmed_delete&detail=" + quote("Tasdiqlangan buyurtmani to'g'ridan-to'g'ri o'chirib bo'lmaydi. Avval bekor qiling."),
+            status_code=303,
+        )
     # Bog'liq yetkazishlarni o'chirish
     db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id).delete()
     # Order itemlarni o'chirish
