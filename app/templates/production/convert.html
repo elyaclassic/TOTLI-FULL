@@ -252,7 +252,7 @@
               <td>{{ c.source_product.name if c.source_product else '—' }}</td>
               <td>{{ c.target_product.name if c.target_product else '—' }}</td>
               <td class="text-end">{{ "%.3f"|format(c.quantity or 0) }}</td>
-              <td class="text-end">{{ "{:,.0f}"|format(c.source_cost_price or 0) }}</td>
+              <td class="text-end">{{ "%.0f"|format(c.source_cost_price or 0) }}</td>
               <td>{{ c.note or '' }}</td>
               <td>
                 {% if c.status == 'confirmed' %}
