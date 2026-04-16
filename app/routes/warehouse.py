@@ -1289,7 +1289,22 @@ async def inventory_confirm(
     doc.total_sotuv = total_sotuv
     db.commit()
     db.refresh(doc)
-    pairs = set((item.warehouse_id, item.product_id) for item in doc.items)
+    _merge_duplicate_stock_rows(db, doc.items)
+    db.commit()
+    db.refresh(doc)
+    items_count = _apply_inventory_stock_changes(db, doc, is_stock_entry, current_user)
+    doc.status = "confirmed"
+    db.commit()
+    logger.info(
+        "inventory_confirm: #%s doc_id=%s items=%s user=%s stock_entry=%s",
+        doc.number, doc.id, items_count, current_user.id if current_user else None, is_stock_entry,
+    )
+    return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)
+
+
+def _merge_duplicate_stock_rows(db: Session, items) -> None:
+    """Bitta (warehouse, product) uchun bir nechta Stock row bo'lsa — birinchisiga yig'adi."""
+    pairs = set((item.warehouse_id, item.product_id) for item in items)
     for wh_id, prod_id in pairs:
         rows = db.query(Stock).filter(Stock.warehouse_id == wh_id, Stock.product_id == prod_id).all()
         if len(rows) > 1:
@@ -1300,8 +1315,13 @@ async def inventory_confirm(
                 keep.updated_at = datetime.now()
             for r in rows[1:]:
                 db.delete(r)
-    db.commit()
-    # Items ni oldindan list ga olish (commit dan keyin lazy-load muammosi uchun)
+
+
+def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, current_user) -> int:
+    """Inventarizatsiya/tovar qoldiqlari hujjati uchun stock movementlarni yaratadi
+    va Stock.quantity ni hujjat sanasidan keyingi harakatlar bilan birga yangilaydi.
+    Returns: ishlangan itemlar soni."""
+    from sqlalchemy import func as sqla_func
     items_snapshot = [
         {
             "item": item,
@@ -1312,7 +1332,6 @@ async def inventory_confirm(
         for item in doc.items
     ]
     for snap in items_snapshot:
-        # Hujjat sanasidagi qoldiqni aniqlash (shu sanadan oldingi oxirgi movement)
         doc_date = doc.date or datetime.now()
         last_mv = (
             db.query(StockMovement)
@@ -1327,7 +1346,6 @@ async def inventory_confirm(
         if last_mv:
             old_qty = float(last_mv.quantity_after or 0)
         else:
-            # Movement yo'q — Stock jadvalidan olish
             stocks = db.query(Stock).filter(
                 Stock.warehouse_id == snap["warehouse_id"],
                 Stock.product_id == snap["product_id"],
@@ -1336,55 +1354,41 @@ async def inventory_confirm(
         new_qty = snap["quantity"]
         if hasattr(snap["item"], "previous_quantity"):
             snap["item"].previous_quantity = old_qty
-        if is_stock_entry:
-            # Tovar qoldiqlari — miqdor QO'SHILADI
-            quantity_change = new_qty
-        else:
-            # Inventarizatsiya — qoldiq YANGILANADI (SET)
-            quantity_change = new_qty - old_qty
-        if abs(quantity_change) > 1e-9:
-            create_stock_movement(
-                db=db,
-                warehouse_id=snap["warehouse_id"],
-                product_id=snap["product_id"],
-                quantity_change=quantity_change,
-                operation_type="adjustment",
-                document_type="StockAdjustmentDoc",
-                document_id=doc.id,
-                document_number=doc.number,
-                user_id=current_user.id,
-                note=f"{'Tovar qoldiqlari' if is_stock_entry else 'Inventarizatsiya'}: {doc.number}",
-                created_at=doc.date,
-            )
-            # Stock.quantity = new_qty + (hujjat sanasidan keyingi harakatlar)
-            stock_row = db.query(Stock).filter(
-                Stock.warehouse_id == snap["warehouse_id"],
-                Stock.product_id == snap["product_id"],
-            ).first()
-            if stock_row:
-                # Hujjat sanasidan keyingi harakatlar yig'indisi
-                from sqlalchemy import func as sqla_func
-                after_changes = db.query(
-                    sqla_func.coalesce(sqla_func.sum(StockMovement.quantity_change), 0)
-                ).filter(
-                    StockMovement.warehouse_id == snap["warehouse_id"],
-                    StockMovement.product_id == snap["product_id"],
-                    StockMovement.created_at > doc_date,
-                    StockMovement.operation_type != "adjustment",
-                ).scalar() or 0
-                if is_stock_entry:
-                    # Tovar qoldiqlari — eski qoldiq + yangi miqdor + keyingi harakatlar
-                    stock_row.quantity = old_qty + new_qty + float(after_changes)
-                else:
-                    # Inventarizatsiya — yangi qoldiq + keyingi harakatlar
-                    stock_row.quantity = new_qty + float(after_changes)
-    doc.status = "confirmed"
-    db.commit()
-    logger.info(
-        "inventory_confirm: #%s doc_id=%s items=%s user=%s",
-        doc.number, doc.id, len(items), current_user.id if current_user else None,
-    )
-    return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)
+        # is_stock_entry=True: QO'SHADI, aks holda SET (farq)
+        quantity_change = new_qty if is_stock_entry else (new_qty - old_qty)
+        if abs(quantity_change) <= 1e-9:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=snap["warehouse_id"],
+            product_id=snap["product_id"],
+            quantity_change=quantity_change,
+            operation_type="adjustment",
+            document_type="StockAdjustmentDoc",
+            document_id=doc.id,
+            document_number=doc.number,
+            user_id=current_user.id if current_user else None,
+            note=f"{'Tovar qoldiqlari' if is_stock_entry else 'Inventarizatsiya'}: {doc.number}",
+            created_at=doc.date,
+        )
+        stock_row = db.query(Stock).filter(
+            Stock.warehouse_id == snap["warehouse_id"],
+            Stock.product_id == snap["product_id"],
+        ).first()
+        if stock_row:
+            after_changes = db.query(
+                sqla_func.coalesce(sqla_func.sum(StockMovement.quantity_change), 0)
+            ).filter(
+                StockMovement.warehouse_id == snap["warehouse_id"],
+                StockMovement.product_id == snap["product_id"],
+                StockMovement.created_at > doc_date,
+                StockMovement.operation_type != "adjustment",
+            ).scalar() or 0
+            if is_stock_entry:
+                stock_row.quantity = old_qty + new_qty + float(after_changes)
+            else:
+                stock_row.quantity = new_qty + float(after_changes)
+    return len(items_snapshot)
 
 
 @inventory_router.post("/{doc_id}/revoke")
