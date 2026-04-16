@@ -683,23 +683,35 @@
                     var escapedFrom = (t.from_cash || '').replace(/'/g, "\\'");
                     var escapedTo = (t.to_cash || '').replace(/'/g, "\\'");
                     var isReceiver = (t.role === 'receiver');
+                    var isDone = (t.role === 'done');
                     var isPending = (t.status === 'pending');
-                    var canAct = isReceiver ? !isPending : true;  // receiver faqat in_transit da action
-                    var statusBadge = !canAct
-                        ? '<span class="badge bg-info text-dark">Kutilmoqda — sender tasdiqlashi kerak</span>'
-                        : (isReceiver
-                            ? '<span class="badge bg-warning text-dark">Yolda — qabul kutilmoqda</span>'
-                            : '<span class="badge bg-secondary">Yuborish kerak</span>');
+                    var canAct = !isDone && (isReceiver ? !isPending : true);
+                    var statusBadge;
+                    if (isDone) {
+                        statusBadge = '<span class="badge bg-success">Tasdiqlangan</span>';
+                    } else if (!canAct) {
+                        statusBadge = '<span class="badge bg-info text-dark">Sender tasdiqlashi kerak</span>';
+                    } else if (isReceiver) {
+                        statusBadge = '<span class="badge bg-warning text-dark">Yolda — qabul kutilmoqda</span>';
+                    } else {
+                        statusBadge = '<span class="badge bg-secondary">Yuborish kerak</span>';
+                    }
                     var btnText = isReceiver ? 'Qabul qilish' : 'Yuborish';
                     var btnColor = isReceiver ? '#1565c0' : '#0d6b4b';
                     var btnIcon = isReceiver ? 'bi-box-arrow-in-down' : 'bi-send';
                     var action = isReceiver ? 'receiveInkasatsiya' : 'confirmInkasatsiya';
-                    var btnDisabledAttr = canAct ? '' : ' disabled title="Sender yuborishini kuting" style="opacity:0.5;cursor:not-allowed;"';
+                    var btnDisabledAttr = canAct ? '' : ' disabled style="opacity:0.5;cursor:not-allowed;"';
+                    var inkPart = t.inkasator ? '<div class="small"><i class="bi bi-person"></i> ' + t.inkasator + '</div>' : '';
+                    var sentPart = t.sent_at ? '<div class="small text-muted">Yuborildi: ' + t.sent_at + (t.sent_by ? ' ('+t.sent_by+')' : '') + '</div>' : '';
+                    var apprPart = t.approved_at ? '<div class="small text-success">Tasdiq: ' + t.approved_at + (t.approved_by ? ' ('+t.approved_by+')' : '') + '</div>' : '';
+                    var infoHtml = inkPart + sentPart + apprPart;
                     tr.innerHTML = '<td><strong>' + t.number + '</strong><br><small class="text-muted">' + t.date + '</small><br>' + statusBadge + '</td>' +
                         '<td>' + t.from_cash + ' <i class="bi bi-arrow-right text-muted"></i> ' + t.to_cash + '</td>' +
                         '<td class="text-end fw-bold" style="color:' + btnColor + ';">' + (t.amount || 0).toLocaleString('ru-RU') + '</td>' +
-                        '<td class="text-muted small">' + (t.note || '') + '</td>' +
-                        '<td><button class="btn btn-sm"' + btnDisabledAttr + ' style="background:' + btnColor + ';color:#fff;border-radius:10px;font-weight:600;font-size:0.8rem;" onclick="if(!this.disabled){' + action + '(' + t.id + ', this, ' + (t.amount||0) + ', \'' + escapedFrom + '\', \'' + escapedTo + '\', \'' + escapedNum + '\')}"><i class="bi ' + btnIcon + ' me-1"></i>' + btnText + '</button></td>';
+                        '<td class="text-muted" style="font-size:0.8rem;">' + infoHtml + '</td>' +
+                        (isDone
+                            ? '<td class="text-center"><i class="bi bi-check2-circle text-success" style="font-size:1.4rem;"></i></td>'
+                            : '<td><button class="btn btn-sm"' + btnDisabledAttr + ' style="background:' + btnColor + ';color:#fff;border-radius:10px;font-weight:600;font-size:0.8rem;" onclick="if(!this.disabled){' + action + '(' + t.id + ', this, ' + (t.amount||0) + ', \'' + escapedFrom + '\', \'' + escapedTo + '\', \'' + escapedNum + '\')}"><i class="bi ' + btnIcon + ' me-1"></i>' + btnText + '</button></td>');
                     tbody.appendChild(tr);
                 });
             })
