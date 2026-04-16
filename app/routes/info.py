@@ -44,6 +44,7 @@ from app.deps import require_auth, require_admin
 from app.services.finance_service import sync_cash_balance, cash_balance_formula as _fs_cash_balance_formula
 from app.utils.auth import hash_password
 from app.utils.db_schema import ensure_cash_opening_balance_column
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 router = APIRouter(prefix="/info", tags=["info"])
 
@@ -749,7 +750,7 @@ async def info_prices_history(
         q = q.filter(ProductPriceHistory.product_id == pid)
     if ptid is not None:
         q = q.filter(ProductPriceHistory.price_type_id == ptid)
-    history = q.limit(500).all()
+    history = q.limit(QUERY_LIMIT_HISTORY).all()
     price_types = db.query(PriceType).filter(PriceType.is_active == True).order_by(PriceType.name).all()
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
     return templates.TemplateResponse("info/price_history.html", {
@@ -1319,7 +1320,7 @@ async def info_users_password_logs(
     logs = (
         db.query(PasswordChangeLog)
         .order_by(PasswordChangeLog.changed_at.desc())
-        .limit(500)
+        .limit(QUERY_LIMIT_HISTORY)
         .all()
     )
     return templates.TemplateResponse("info/password_logs.html", {

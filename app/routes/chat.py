@@ -11,6 +11,7 @@ from app.core import templates
 from app.deps import get_current_user, require_auth
 from app.models.database import get_db, User, ChatThread, ChatParticipant, ChatMessage, ChatTelegramLink
 from app.utils.auth import get_user_from_token
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -246,7 +247,7 @@ async def chat_thread_page(
         db.query(ChatMessage)
         .filter(ChatMessage.thread_id == thread_id)
         .order_by(ChatMessage.created_at.asc())
-        .limit(200)
+        .limit(QUERY_LIMIT_DEFAULT)
         .all()
     )
     _mark_thread_read(db, thread_id, me.id)

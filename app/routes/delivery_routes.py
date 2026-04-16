@@ -27,6 +27,7 @@ from app.models.database import (
 )
 from app.deps import require_admin, require_admin_or_manager
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 from urllib.parse import quote
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
@@ -610,7 +611,7 @@ async def supervisor_agent_payments(
         q = q.filter(AgentPayment.status == "confirmed")
     elif status == "cancelled":
         q = q.filter(AgentPayment.status == "cancelled")
-    payments = q.limit(200).all()
+    payments = q.limit(QUERY_LIMIT_DEFAULT).all()
     # Agent va partner ma'lumotlarini biriktirish
     for p in payments:
         p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()

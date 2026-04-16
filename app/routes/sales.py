@@ -63,6 +63,7 @@ from app.services.pos_helpers import (
     get_pos_partner as _get_pos_partner,
     get_pos_cash_register as _get_pos_cash_register,
 )
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 router = APIRouter(prefix="/sales", tags=["sales"])
 
@@ -118,7 +119,7 @@ async def sales_list(
         q = q.order_by(Order.status.asc() if sort_order == "asc" else Order.status.desc())
     else:
         q = q.order_by(Order.date.desc())
-    orders = q.limit(500).all()
+    orders = q.limit(QUERY_LIMIT_HISTORY).all()
     confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
     total_sum = sum(float(o.total or 0) for o in confirmed_orders)
     # split/mixed to'lovlarni bitta batch query bilan olish (N+1 oldini olish)
@@ -967,7 +968,7 @@ async def sales_pos_daily_orders(
         Order.status == "completed",
         func.date(Order.created_at) >= d_from,
         func.date(Order.created_at) <= d_to,
-    ).order_by(Order.created_at.desc()).limit(200).all()
+    ).order_by(Order.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
     out = []
     for o in orders:
         out.append({
@@ -1389,7 +1390,7 @@ async def sales_returns_list(request: Request, db: Session = Depends(get_db), cu
     orders = q.options(
         joinedload(Order.partner),
         joinedload(Order.warehouse),
-    ).order_by(Order.date.desc()).limit(200).all()
+    ).order_by(Order.date.desc()).limit(QUERY_LIMIT_DEFAULT).all()
     success = request.query_params.get("success")
     number = request.query_params.get("number", "")
     warehouse_name = unquote(request.query_params.get("warehouse", "") or "")

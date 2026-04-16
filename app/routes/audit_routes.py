@@ -8,6 +8,7 @@ from datetime import datetime
 from app.core import templates
 from app.models.database import get_db, User, AuditLog
 from app.deps import require_admin
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -55,7 +56,7 @@ async def audit_log_page(
             AuditLog.entity_number.ilike(f"%{q}%") |
             AuditLog.user_name.ilike(f"%{q}%")
         )
-    logs = query.order_by(AuditLog.timestamp.desc()).limit(500).all()
+    logs = query.order_by(AuditLog.timestamp.desc()).limit(QUERY_LIMIT_HISTORY).all()
     users = db.query(User).filter(User.is_active == True).order_by(User.full_name).all()
 
     return templates.TemplateResponse("audit/index.html", {

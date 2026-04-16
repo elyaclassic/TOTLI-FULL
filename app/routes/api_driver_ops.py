@@ -16,6 +16,7 @@ from app.models.database import (
 )
 from app.utils.auth import get_user_from_token
 from app.logging_config import get_logger
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 logger = get_logger("api_driver_ops")
 
@@ -54,7 +55,7 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 q = q.filter(sa_func.date(Delivery.created_at) == d)
             except ValueError:
                 pass
-        deliveries = q.order_by(Delivery.created_at.desc()).limit(200).all()
+        deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result = []
         for d in deliveries:
             order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None

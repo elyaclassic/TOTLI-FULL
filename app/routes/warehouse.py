@@ -38,6 +38,7 @@ from app.models.database import (
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.deps import require_auth, require_admin
 from app.utils.user_scope import get_warehouses_for_user
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 router = APIRouter(prefix="/warehouse", tags=["warehouse"])
 inventory_router = APIRouter(prefix="/inventory", tags=["inventory"])
@@ -372,7 +373,7 @@ async def warehouse_transfers_list(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    transfers = db.query(WarehouseTransfer).order_by(WarehouseTransfer.date.desc()).limit(200).all()
+    transfers = db.query(WarehouseTransfer).order_by(WarehouseTransfer.date.desc()).limit(QUERY_LIMIT_DEFAULT).all()
     role = (getattr(current_user, "role", None) or "").strip().lower()
     if role in ("manager", "menejer", "sotuvchi"):
         wh_ids = [w.id for w in _warehouses_for_user(db, current_user)]
@@ -831,7 +832,7 @@ async def inventory_list_page(
             db.query(StockAdjustmentDoc)
             .filter(StockAdjustmentDoc.warehouse_id.isnot(None))
             .order_by(StockAdjustmentDoc.created_at.desc())
-            .limit(200)
+            .limit(QUERY_LIMIT_DEFAULT)
             .all()
         )
     except Exception:
@@ -841,7 +842,7 @@ async def inventory_list_page(
                 db.query(StockAdjustmentDoc)
                 .filter(StockAdjustmentDoc.warehouse_id.isnot(None))
                 .order_by(StockAdjustmentDoc.created_at.desc())
-                .limit(200)
+                .limit(QUERY_LIMIT_DEFAULT)
                 .all()
             )
         except Exception:

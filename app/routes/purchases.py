@@ -30,6 +30,7 @@ from app.utils.notifications import check_low_stock_and_notify
 from app.utils.audit import log_action
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.product_price import get_suggested_price
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 from fastapi.responses import JSONResponse
 from fastapi import Query
 
@@ -64,7 +65,7 @@ async def purchases_list(
             pass
     if wh_id and wh_id.isdigit():
         query = query.filter(Purchase.warehouse_id == int(wh_id))
-    purchases = query.limit(200).all()
+    purchases = query.limit(QUERY_LIMIT_DEFAULT).all()
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")

@@ -37,6 +37,7 @@ ALLOWED_MIME_PREFIXES = ("image/jpeg", "image/jpg", "image/png", "image/webp")
 VISIT_PHOTOS_DIR = os.path.join("app", "static", "visit_photos")
 from app.utils.auth import get_user_from_token
 from app.logging_config import get_logger
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
 logger = get_logger("api_agent_ops")
 
@@ -96,7 +97,7 @@ async def agent_visits(request: Request, token: str = None, date: str = None, db
                 q = q.filter(sqla_func.date(Visit.visit_date) == d)
             except ValueError:
                 pass
-        visits = q.order_by(Visit.visit_date.desc()).limit(200).all()
+        visits = q.order_by(Visit.visit_date.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result = []
         for v in visits:
             partner = db.query(Partner).filter(Partner.id == v.partner_id).first() if v.partner_id else None
@@ -435,7 +436,7 @@ async def agent_calls_list(
                 )
             except ValueError:
                 pass
-        calls = q.order_by(AgentCall.called_at.desc()).limit(200).all()
+        calls = q.order_by(AgentCall.called_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result_list = []
         for c in calls:
             partner_name = None
@@ -532,7 +533,7 @@ async def agent_sms_list(
                 )
             except ValueError:
                 pass
-        items = q.order_by(AgentSms.sent_at.desc()).limit(200).all()
+        items = q.order_by(AgentSms.sent_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result_list = []
         for s in items:
             partner_name = None
@@ -1073,7 +1074,7 @@ async def agent_my_orders(request: Request, token: str = None, date: str = None,
                 q = q.filter(sqla_func.date(Order.created_at) == d)
             except ValueError:
                 pass
-        orders = q.order_by(Order.id.desc()).limit(200).all()
+        orders = q.order_by(Order.id.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result = []
         for o in orders:
             items = []
