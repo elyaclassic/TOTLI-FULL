@@ -1410,17 +1410,26 @@ async def cash_transfers_my_pending(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Sotuvchining kassasiga tegishli kutilayotgan inkasatsiya hujjatlari (JSON)"""
+    """Sotuvchining kassasiga tegishli inkasatsiya hujjatlari (JSON).
+
+    Ikki rol:
+    - sender: from_cash sotuvchiniki AND status=pending → "Yuborish" tugmasi
+    - receiver: to_cash sotuvchiniki AND status=in_transit → "Qabul qilish" tugmasi
+    Admin/manager — barcha pending + in_transit hujjatlarni ko'radi (to'liq huquq)."""
     role = (getattr(current_user, "role", None) or "").strip().lower()
-    # Admin/manager barcha pending hujjatlarni ko'radi
-    if role in ("admin", "manager", "menejer", "rahbar", "raxbar"):
+    is_admin = role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+
+    if is_admin:
         transfers = (
             db.query(CashTransfer)
             .options(joinedload(CashTransfer.from_cash), joinedload(CashTransfer.to_cash))
-            .filter(CashTransfer.status == "pending")
+            .filter(CashTransfer.status.in_(("pending", "in_transit")))
             .order_by(CashTransfer.created_at.desc())
             .all()
         )
+
+        def _role_for(t):
+            return "sender" if t.status == "pending" else "receiver"
     else:
         user_cash_ids = []
         if getattr(current_user, "cash_register_id", None):
@@ -1429,13 +1438,25 @@ async def cash_transfers_my_pending(
             user_cash_ids.append(cr.id)
         if not user_cash_ids:
             return JSONResponse([])
+        # Sender: from_cash=mening + pending. Receiver: to_cash=mening + in_transit.
+        from sqlalchemy import and_, or_
         transfers = (
             db.query(CashTransfer)
             .options(joinedload(CashTransfer.from_cash), joinedload(CashTransfer.to_cash))
-            .filter(CashTransfer.from_cash_id.in_(user_cash_ids), CashTransfer.status == "pending")
+            .filter(
+                or_(
+                    and_(CashTransfer.from_cash_id.in_(user_cash_ids), CashTransfer.status == "pending"),
+                    and_(CashTransfer.to_cash_id.in_(user_cash_ids), CashTransfer.status == "in_transit"),
+                )
+            )
             .order_by(CashTransfer.created_at.desc())
             .all()
         )
+
+        def _role_for(t):
+            if t.status == "pending" and t.from_cash_id in user_cash_ids:
+                return "sender"
+            return "receiver"
     result = []
     for t in transfers:
         result.append({
@@ -1446,6 +1467,8 @@ async def cash_transfers_my_pending(
             "to_cash": t.to_cash.name if t.to_cash else "?",
             "note": t.note or "",
             "date": t.created_at.strftime("%d.%m.%Y %H:%M") if t.created_at else "",
+            "status": t.status,
+            "role": _role_for(t),
         })
     return JSONResponse(result)
 

@@ -682,11 +682,19 @@
                     var escapedNum = (t.number || '').replace(/'/g, "\\'");
                     var escapedFrom = (t.from_cash || '').replace(/'/g, "\\'");
                     var escapedTo = (t.to_cash || '').replace(/'/g, "\\'");
-                    tr.innerHTML = '<td><strong>' + t.number + '</strong><br><small class="text-muted">' + t.date + '</small></td>' +
+                    var isReceiver = (t.role === 'receiver');
+                    var statusBadge = isReceiver
+                        ? '<span class="badge bg-warning text-dark">Yolda</span>'
+                        : '<span class="badge bg-secondary">Yuborish kerak</span>';
+                    var btnText = isReceiver ? 'Qabul qilish' : 'Yuborish';
+                    var btnColor = isReceiver ? '#1565c0' : '#0d6b4b';
+                    var btnIcon = isReceiver ? 'bi-box-arrow-in-down' : 'bi-send';
+                    var action = isReceiver ? 'receiveInkasatsiya' : 'confirmInkasatsiya';
+                    tr.innerHTML = '<td><strong>' + t.number + '</strong><br><small class="text-muted">' + t.date + '</small><br>' + statusBadge + '</td>' +
                         '<td>' + t.from_cash + ' <i class="bi bi-arrow-right text-muted"></i> ' + t.to_cash + '</td>' +
-                        '<td class="text-end fw-bold" style="color:#0d6b4b;">' + (t.amount || 0).toLocaleString('ru-RU') + '</td>' +
+                        '<td class="text-end fw-bold" style="color:' + btnColor + ';">' + (t.amount || 0).toLocaleString('ru-RU') + '</td>' +
                         '<td class="text-muted small">' + (t.note || '') + '</td>' +
-                        '<td><button class="btn btn-sm" style="background:#0d6b4b;color:#fff;border-radius:10px;font-weight:600;font-size:0.8rem;" onclick="confirmInkasatsiya(' + t.id + ', this, ' + (t.amount||0) + ', \'' + escapedFrom + '\', \'' + escapedTo + '\', \'' + escapedNum + '\')"><i class="bi bi-check-lg me-1"></i>Tasdiqlash</button></td>';
+                        '<td><button class="btn btn-sm" style="background:' + btnColor + ';color:#fff;border-radius:10px;font-weight:600;font-size:0.8rem;" onclick="' + action + '(' + t.id + ', this, ' + (t.amount||0) + ', \'' + escapedFrom + '\', \'' + escapedTo + '\', \'' + escapedNum + '\')"><i class="bi ' + btnIcon + ' me-1"></i>' + btnText + '</button></td>';
                     tbody.appendChild(tr);
                 });
             })
@@ -728,6 +736,31 @@
                 alert('Tarmoq xatosi');
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Tasdiqlash';
+            });
+    };
+    /* Receiver: in_transit -> completed (qabul qilish) */
+    window.receiveInkasatsiya = function(id, btn, amount, fromCash, toCash, number) {
+        if (!confirm('Pulni qabul qildingizmi? ' + (amount||0).toLocaleString('ru-RU') + " so'm " + toCash + ' ga kiradi.')) return;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i>';
+        var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content ||
+            (document.querySelector('input[name="csrf_token"]') || {}).value || '';
+        var fd = new FormData();
+        fd.append('csrf_token', csrfToken);
+        fetch('/cash/transfers/' + id + '/admin-confirm', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function(r) {
+                if (r.ok || r.status === 303) {
+                    loadInkasatsiya();
+                } else {
+                    alert('Xatolik (qabul qilish faqat admin/manager uchun — o\'z ombor huquqingiz bor bo\'lsa ham)');
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="bi bi-box-arrow-in-down me-1"></i>Qabul qilish';
+                }
+            })
+            .catch(function() {
+                alert('Tarmoq xatosi');
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-box-arrow-in-down me-1"></i>Qabul qilish';
             });
     };
     /* Omborni tasdiqlash — ombordan omborga o'tkazish ro'yxati */
