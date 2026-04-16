@@ -684,17 +684,18 @@
                     var escapedTo = (t.to_cash || '').replace(/'/g, "\\'");
                     var isReceiver = (t.role === 'receiver');
                     var isPending = (t.status === 'pending');
-                    var canAct = isReceiver ? !isPending : true;  // receiver faqat in_transit da action
-                    var statusBadge = !canAct
-                        ? '<span class="badge bg-info text-dark">Kutilmoqda — sender tasdiqlashi kerak</span>'
+                    // Receiver pending — "Majburiy qabul" (admin-confirm pending ni ham qabul qiladi)
+                    var receiverPending = isReceiver && isPending;
+                    var statusBadge = receiverPending
+                        ? '<span class="badge bg-danger">Pending — majburiy qabul</span>'
                         : (isReceiver
                             ? '<span class="badge bg-warning text-dark">Yolda — qabul kutilmoqda</span>'
                             : '<span class="badge bg-secondary">Yuborish kerak</span>');
-                    var btnText = isReceiver ? 'Qabul qilish' : 'Yuborish';
-                    var btnColor = isReceiver ? '#1565c0' : '#0d6b4b';
+                    var btnText = receiverPending ? 'Majburiy qabul' : (isReceiver ? 'Qabul qilish' : 'Yuborish');
+                    var btnColor = receiverPending ? '#c62828' : (isReceiver ? '#1565c0' : '#0d6b4b');
                     var btnIcon = isReceiver ? 'bi-box-arrow-in-down' : 'bi-send';
                     var action = isReceiver ? 'receiveInkasatsiya' : 'confirmInkasatsiya';
-                    var btnDisabledAttr = canAct ? '' : ' disabled title="Sender yuborishini kuting" style="opacity:0.5;cursor:not-allowed;"';
+                    var btnDisabledAttr = '';  // endi har doim aktiv
                     tr.innerHTML = '<td><strong>' + t.number + '</strong><br><small class="text-muted">' + t.date + '</small><br>' + statusBadge + '</td>' +
                         '<td>' + t.from_cash + ' <i class="bi bi-arrow-right text-muted"></i> ' + t.to_cash + '</td>' +
                         '<td class="text-end fw-bold" style="color:' + btnColor + ';">' + (t.amount || 0).toLocaleString('ru-RU') + '</td>' +
