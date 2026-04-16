@@ -424,22 +424,34 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     if order.status not in ("draft",):
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+    # Race condition oldini olish — orderga lock olamiz
+    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").with_for_update().first()
+    if not order or order.status != "draft":
+        return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+
+    # Order itemlari uchun batch load (Stock + Product) — N+1 oldini olish
+    valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
+    pairs = [(it.warehouse_id if it.warehouse_id else order.warehouse_id, it.product_id) for it in valid_items]
+    pairs = [(w, p) for w, p in pairs if w]
+    pids = list({p for _, p in pairs})
+    whs = list({w for w, _ in pairs})
+    stocks_map = {}
+    if pids and whs:
+        for s in db.query(Stock).filter(Stock.warehouse_id.in_(whs), Stock.product_id.in_(pids)).all():
+            stocks_map[(s.warehouse_id, s.product_id)] = s
+    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(pids)).all()} if pids else {}
+
     # Ombor qoldig'ini tekshirish
     shortage = []
-    for it in order.items:
-        if not it.product_id or not (it.quantity or 0) > 0:
-            continue
+    for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
         if not wh_id:
             continue
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == it.product_id,
-        ).first()
+        stock = stocks_map.get((wh_id, it.product_id))
         have = float(stock.quantity or 0) if stock else 0
         need = float(it.quantity or 0)
         if have + 1e-6 < need:
-            prod = db.query(Product).filter(Product.id == it.product_id).first()
+            prod = products_map.get(it.product_id)
             name = prod.name if prod else f"#{it.product_id}"
             shortage.append(f"{name} (kerak: {need}, bor: {have})")
     if shortage:
@@ -449,9 +461,7 @@ async def supervisor_confirm_agent_order(
             status_code=303,
         )
     # Stock chiqarish
-    for it in order.items:
-        if not it.product_id or not (it.quantity or 0) > 0:
-            continue
+    for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
         if not wh_id:
             continue
@@ -515,7 +525,8 @@ async def supervisor_reject_agent_order(
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent buyurtmasini bekor qilish."""
-    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
+    # Race condition oldini olish
+    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").with_for_update().first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     # Agar tasdiqlangan bo'lsa — stock qaytarish + yetkazishni ham bekor qilish
@@ -540,7 +551,11 @@ async def supervisor_reject_agent_order(
                 created_at=datetime.now(),
             )
         from app.models.database import Delivery as DeliveryModel
-        delivery = db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id, DeliveryModel.status == "pending").first()
+        # Confirm `in_progress` qo'yadi, lekin pending ham bo'lishi mumkin (oldingi flow)
+        delivery = db.query(DeliveryModel).filter(
+            DeliveryModel.order_id == order.id,
+            DeliveryModel.status.in_(["pending", "in_progress"]),
+        ).first()
         if delivery:
             delivery.status = "cancelled"
     order.status = "cancelled"
@@ -566,6 +581,9 @@ async def supervisor_delete_agent_order(
             url="/supervisor/agent-orders?error=confirmed_delete&detail=" + quote("Tasdiqlangan buyurtmani to'g'ridan-to'g'ri o'chirib bo'lmaydi. Avval bekor qiling."),
             status_code=303,
         )
+    # Cancelled bo'lsa StockMovement orphan bo'lib qolmasligi uchun tozalash
+    if order.status == "cancelled":
+        delete_stock_movements_for_document(db, "Sale", order.id)
     # Bog'liq yetkazishlarni o'chirish
     db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id).delete()
     # Order itemlarni o'chirish

@@ -206,6 +206,9 @@ async def driver_delivery_status(
             if order and total_paid > 0:
                 order.paid = float(order.paid or 0) + total_paid
                 order.debt = max(float(order.total or 0) - float(order.paid or 0), 0)
+            # Order yetkazildi → "completed" statusga o'tkazish
+            if order and order.status not in ("completed", "cancelled"):
+                order.status = "completed"
 
         db.commit()
         return {"success": True, "status": delivery.status}
