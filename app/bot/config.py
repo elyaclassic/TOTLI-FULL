@@ -1,4 +1,4 @@
-"""Bot konfiguratsiyasi"""
+"""Bot konfiguratsiyasi — env reload 2026-04-16 (BOT_ADMIN_PIN)"""
 import os
 
 # Hisobot bot tokeni — .env faylidan o'qiladi (TELEGRAM_BOT_TOKEN)
