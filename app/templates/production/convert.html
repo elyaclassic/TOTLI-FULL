@@ -26,7 +26,7 @@
         <div class="row g-3">
           <div class="col-md-3">
             <label class="form-label">Ombor</label>
-            <select name="warehouse_id" class="form-select" required>
+            <select name="warehouse_id" id="warehouse_id" class="form-select" required>
               {% for w in warehouses %}
               <option value="{{ w.id }}">{{ w.name }}</option>
               {% endfor %}
@@ -42,6 +42,10 @@
               {% endfor %}
             </datalist>
             <small class="text-muted" id="source_hint"></small>
+            <div id="source_stock_box" class="mt-1 small" style="display:none;">
+              <span class="badge bg-info text-dark me-1" id="stock_badge"></span>
+              <span class="text-muted" id="kg_per_unit_info"></span>
+            </div>
           </div>
           <div class="col-md-3">
             <label class="form-label">Qabul qiluvchi (yarim_tayyor)</label>
@@ -56,7 +60,8 @@
           </div>
           <div class="col-md-2">
             <label class="form-label">Miqdor (kg)</label>
-            <input type="number" step="any" min="0.001" name="quantity" class="form-control" required>
+            <input type="number" step="any" min="0.001" name="quantity" id="quantity_input" class="form-control" required>
+            <small class="text-primary fw-bold" id="pieces_calc"></small>
           </div>
           <div class="col-12">
             <label class="form-label">Izoh (sabab)</label>
@@ -116,12 +121,97 @@
     yarimMap
   );
 
+  // Stock info + dona hisoblash
+  let currentStockInfo = null;
+  const stockBox = document.getElementById('source_stock_box');
+  const stockBadge = document.getElementById('stock_badge');
+  const kgInfo = document.getElementById('kg_per_unit_info');
+  const piecesCalc = document.getElementById('pieces_calc');
+  const qtyInput = document.getElementById('quantity_input');
+
+  async function refreshStock() {
+    const wh = document.getElementById('warehouse_id').value;
+    const src = document.getElementById('source_product_id').value;
+    if (!wh || !src) {
+      stockBox.style.display = 'none';
+      currentStockInfo = null;
+      updatePiecesCalc();
+      return;
+    }
+    try {
+      const resp = await fetch(`/production/convert/api/stock?warehouse_id=${wh}&product_id=${src}`);
+      if (!resp.ok) throw new Error('fetch');
+      const data = await resp.json();
+      currentStockInfo = data;
+      const qtyStr = Number(data.quantity).toLocaleString('ru-RU', {maximumFractionDigits: 3});
+      const unitStr = data.unit || (data.is_piece ? 'dona' : 'kg');
+      let badgeText = `Qoldiq: ${qtyStr} ${unitStr}`;
+      if (data.is_piece) {
+        const totalKg = Number(data.quantity_kg).toLocaleString('ru-RU', {maximumFractionDigits: 3});
+        badgeText += ` (≈ ${totalKg} kg)`;
+      }
+      stockBadge.textContent = badgeText;
+      if (data.is_piece) {
+        kgInfo.textContent = `1 ${unitStr} = ${data.kg_per_unit} kg`;
+      } else {
+        kgInfo.textContent = '';
+      }
+      stockBox.style.display = '';
+    } catch (e) {
+      stockBox.style.display = 'none';
+      currentStockInfo = null;
+    }
+    updatePiecesCalc();
+  }
+
+  function updatePiecesCalc() {
+    const kg = parseFloat(qtyInput.value || '0');
+    if (!currentStockInfo || !kg || kg <= 0) {
+      piecesCalc.textContent = '';
+      return;
+    }
+    if (currentStockInfo.is_piece) {
+      const kgPer = currentStockInfo.kg_per_unit;
+      const pieces = Math.ceil(kg / kgPer);
+      const actualKg = pieces * kgPer;
+      const have = currentStockInfo.quantity;
+      const warning = pieces > have ? ' ⚠ ombor yetmaydi!' : '';
+      piecesCalc.textContent = `= ${pieces} dona (haqiqiy ${actualKg} kg)${warning}`;
+      piecesCalc.className = pieces > have ? 'text-danger fw-bold' : 'text-success fw-bold';
+    } else {
+      const have = currentStockInfo.quantity;
+      const warning = kg > have ? ' ⚠ ombor yetmaydi!' : '';
+      piecesCalc.textContent = `${kg} kg${warning}`;
+      piecesCalc.className = kg > have ? 'text-danger fw-bold' : 'text-muted';
+    }
+  }
+
+  document.getElementById('warehouse_id').addEventListener('change', refreshStock);
+  document.getElementById('source_search').addEventListener('input', () => setTimeout(refreshStock, 50));
+  qtyInput.addEventListener('input', updatePiecesCalc);
+
   document.getElementById('convertForm').addEventListener('submit', (e) => {
     const src = document.getElementById('source_product_id').value;
     const tgt = document.getElementById('target_product_id').value;
     if (!src || !tgt) {
       e.preventDefault();
       alert("Iltimos, mahsulotlarni ro'yxatdan to'g'ri tanlang.");
+      return;
+    }
+    // Stock yetishmovchilik ogohlantirish (client-side)
+    if (currentStockInfo) {
+      const kg = parseFloat(qtyInput.value || '0');
+      let need;
+      if (currentStockInfo.is_piece) {
+        need = Math.ceil(kg / currentStockInfo.kg_per_unit);
+      } else {
+        need = kg;
+      }
+      if (need > currentStockInfo.quantity) {
+        if (!confirm("Ombor yetmaydi. Davom etasizmi? (server baribir rad qiladi)")) {
+          e.preventDefault();
+        }
+      }
     }
   });
 })();

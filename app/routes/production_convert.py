@@ -3,12 +3,18 @@
 Biznes kontekst: yarim_tayyor yetmasa, tayyor mahsulotni buzib yarim_tayyor
 sifatida ishlatish. StockMovement (conversion_out + conversion_in) yaratiladi,
 target Stock.cost_price source cost_price bilan weighted average orqali yangilanadi.
+
+Birlik konversiyasi: manba `dona` (masalan "MALINALI 400gr" = 0.4 kg/dona) bo'lsa
+belgilangan kg miqdoridan kerak bo'ladigan dona soni hisoblanadi (ceil). Target
+yarim_tayyor ga actual_kg (dona_soni * kg_per_unit) qo'shiladi.
 """
+import math
+import re
 from datetime import datetime
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 
@@ -25,6 +31,33 @@ logger = get_logger("production_convert")
 router = APIRouter(prefix="/production/convert", tags=["production-convert"])
 
 
+def _product_kg_per_unit(product) -> float:
+    """Mahsulot nomidan 1 birlikning og'irligi kg da aniqlash.
+    Masalan: "MALINALI 400gr" -> 0.4; "Xalva 1kg" -> 1.0; "Malinali" (kg birlik) -> 1.0."""
+    if not product or not getattr(product, "name", None):
+        return 1.0
+    name = (product.name or "").lower()
+    m_gr = re.search(r'(\d+)\s*gr', name)
+    if m_gr:
+        return int(m_gr.group(1)) / 1000.0
+    m_g = re.search(r'(\d+)\s*g(?:\b|\))', name)
+    if m_g:
+        return int(m_g.group(1)) / 1000.0
+    m_kg = re.search(r'([\d.]+)\s*kg', name)
+    if m_kg:
+        return float(m_kg.group(1))
+    return 1.0
+
+
+def _is_piece_unit(product) -> bool:
+    """Mahsulot 'dona' birlikdami?"""
+    unit = getattr(product, "unit", None)
+    if not unit:
+        return False
+    txt = ((getattr(unit, "name", None) or "") + " " + (getattr(unit, "code", None) or "")).lower()
+    return "dona" in txt
+
+
 def _next_conversion_number(db: Session) -> str:
     today = datetime.now()
     prefix = f"CONV-{today.strftime('%Y%m%d')}"
@@ -39,6 +72,42 @@ def _next_conversion_number(db: Session) -> str:
     except Exception:
         seq = 1
     return f"{prefix}-{seq:03d}"
+
+
+@router.get("/api/stock")
+async def convert_api_stock(
+    warehouse_id: int,
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """UI live calculator uchun: manba mahsulot qoldig'i, birlik, kg_per_unit."""
+    if not current_user:
+        return JSONResponse(status_code=401, content={"error": "auth"})
+    product = db.query(Product).options(joinedload(Product.unit)).filter(Product.id == product_id).first()
+    if not product:
+        return JSONResponse(status_code=404, content={"error": "product_not_found"})
+    stock = (
+        db.query(Stock)
+        .filter(Stock.warehouse_id == warehouse_id, Stock.product_id == product_id)
+        .first()
+    )
+    qty = float(stock.quantity or 0) if stock else 0.0
+    cost = float(getattr(stock, "cost_price", None) or 0) if stock else 0.0
+    if cost <= 0:
+        cost = float(product.purchase_price or 0)
+    is_piece = _is_piece_unit(product)
+    kg_per_unit = _product_kg_per_unit(product) if is_piece else 1.0
+    return {
+        "product_id": product.id,
+        "product_name": product.name,
+        "unit": (getattr(product.unit, "name", None) if product.unit else None) or "",
+        "is_piece": is_piece,
+        "kg_per_unit": kg_per_unit,
+        "quantity": qty,  # mahsulot birligida (dona yoki kg)
+        "quantity_kg": qty * kg_per_unit if is_piece else qty,
+        "cost_price": cost,
+    }
 
 
 @router.get("", response_class=HTMLResponse)
@@ -104,7 +173,7 @@ async def convert_create(
     if source_product_id == target_product_id:
         return RedirectResponse(url="/production/convert?error=same&detail=" + quote("Manba va qabul qiluvchi mahsulot bir xil bo'lmasin"), status_code=303)
 
-    source = db.query(Product).filter(Product.id == source_product_id).first()
+    source = db.query(Product).options(joinedload(Product.unit)).filter(Product.id == source_product_id).first()
     target = db.query(Product).filter(Product.id == target_product_id).first()
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if not source or not target or not warehouse:
@@ -114,6 +183,18 @@ async def convert_create(
     if target.type != "yarim_tayyor":
         return RedirectResponse(url="/production/convert?error=tgt_type&detail=" + quote("Qabul qiluvchi mahsulot 'yarim_tayyor' turiga tegishli bo'lishi kerak"), status_code=303)
 
+    # Birlik konversiyasi: manba dona bo'lsa kg ga o'gir
+    is_piece = _is_piece_unit(source)
+    kg_per_unit = _product_kg_per_unit(source) if is_piece else 1.0
+    target_kg = float(quantity)  # UI'da user target kg miqdorini kiritadi
+    if is_piece:
+        # Kerak dona = ceil(target_kg / kg_per_unit); haqiqiy kg = dona * kg_per_unit
+        source_units = math.ceil(target_kg / kg_per_unit) if kg_per_unit > 0 else 0
+        actual_kg = source_units * kg_per_unit
+    else:
+        source_units = target_kg  # manba ham kg
+        actual_kg = target_kg
+
     # Stock lock + yetishmovchilik tekshiruvi (race safety)
     source_stock = (
         db.query(Stock)
@@ -122,15 +203,20 @@ async def convert_create(
         .first()
     )
     have = float(source_stock.quantity or 0) if source_stock else 0.0
-    if have + 1e-6 < float(quantity):
+    if have + 1e-6 < source_units:
+        unit_label = "dona" if is_piece else "kg"
         return RedirectResponse(
-            url="/production/convert?error=stock&detail=" + quote(f"Ombor yetmaydi: {source.name} kerak {quantity}, bor {have}"),
+            url="/production/convert?error=stock&detail=" + quote(
+                f"Ombor yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}"
+            ),
             status_code=303,
         )
 
     source_cost = float(getattr(source_stock, "cost_price", None) or 0)
     if source_cost <= 0:
         source_cost = float(source.purchase_price or 0)
+    # source_cost = 1 dona narxi. Target kg ga ko'chirishda: kg narxi = dona_narxi / kg_per_unit
+    target_cost_per_kg = (source_cost / kg_per_unit) if (is_piece and kg_per_unit > 0) else source_cost
 
     number = _next_conversion_number(db)
     conv = ProductConversion(
@@ -139,9 +225,9 @@ async def convert_create(
         warehouse_id=warehouse_id,
         source_product_id=source_product_id,
         target_product_id=target_product_id,
-        quantity=float(quantity),
+        quantity=actual_kg,  # target ga qo'shiladigan kg (haqiqiy)
         source_cost_price=source_cost,
-        note=note.strip() or None,
+        note=(note.strip() or None),
         user_id=current_user.id if current_user else None,
         status="confirmed",
     )
@@ -152,53 +238,59 @@ async def convert_create(
         db=db,
         warehouse_id=warehouse_id,
         product_id=source_product_id,
-        quantity_change=-float(quantity),
+        quantity_change=-source_units,  # manba birligida (dona yoki kg)
         operation_type="conversion_out",
         document_type="Conversion",
         document_id=conv.id,
         document_number=number,
         user_id=current_user.id if current_user else None,
-        note=f"Konversiya (chiqim): {source.name} → {target.name}",
+        note=f"Konversiya (chiqim): {source.name} → {target.name} [{actual_kg} kg]",
         created_at=conv.date,
     )
     create_stock_movement(
         db=db,
         warehouse_id=warehouse_id,
         product_id=target_product_id,
-        quantity_change=+float(quantity),
+        quantity_change=+actual_kg,
         operation_type="conversion_in",
         document_type="Conversion",
         document_id=conv.id,
         document_number=number,
         user_id=current_user.id if current_user else None,
-        note=f"Konversiya (kirim): {source.name} → {target.name}",
+        note=f"Konversiya (kirim): {source.name} ({source_units} dona) → {target.name}"
+             if is_piece else f"Konversiya (kirim): {source.name} → {target.name}",
         created_at=conv.date,
     )
 
-    # Target Stock cost_price — weighted average
-    if source_cost > 0 and hasattr(Stock, "cost_price"):
+    # Target Stock cost_price — weighted average (kg bo'yicha)
+    if target_cost_per_kg > 0 and hasattr(Stock, "cost_price"):
         target_stock = (
             db.query(Stock)
             .filter(Stock.warehouse_id == warehouse_id, Stock.product_id == target_product_id)
             .first()
         )
         if target_stock:
-            qty_old = (target_stock.quantity or 0) - float(quantity)
+            qty_old = (target_stock.quantity or 0) - actual_kg
             cost_old = float(getattr(target_stock, "cost_price", None) or 0)
             if qty_old <= 0 or cost_old <= 0:
-                target_stock.cost_price = source_cost
+                target_stock.cost_price = target_cost_per_kg
             else:
-                target_stock.cost_price = (qty_old * cost_old + float(quantity) * source_cost) / (target_stock.quantity or 1)
+                target_stock.cost_price = (qty_old * cost_old + actual_kg * target_cost_per_kg) / (target_stock.quantity or 1)
 
     db.commit()
     logger.info(
-        "conversion_create: #%s wh=%s %s(%s) -> %s(%s) qty=%s cost=%.2f user=%s",
+        "conversion_create: #%s wh=%s %s(%s)=-%s%s -> %s(%s)=+%skg cost=%.2f user=%s",
         number, warehouse_id, source.name, source_product_id,
-        target.name, target_product_id, quantity, source_cost,
+        source_units, ("dona" if is_piece else "kg"),
+        target.name, target_product_id, actual_kg, source_cost,
         current_user.id if current_user else None,
     )
+    if is_piece:
+        summary = f"✅ {number}: {source.name} {source_units} dona → {target.name} {actual_kg} kg"
+    else:
+        summary = f"✅ {number}: {source.name} {actual_kg} kg → {target.name} {actual_kg} kg"
     return RedirectResponse(
-        url="/production/convert?msg=" + quote(f"✅ {number} tasdiqlandi: {source.name} {quantity} kg → {target.name}"),
+        url="/production/convert?msg=" + quote(summary),
         status_code=303,
     )
 
@@ -216,11 +308,20 @@ async def convert_revert(
     if conv.status != "confirmed":
         return RedirectResponse(url="/production/convert?error=already_cancelled", status_code=303)
 
+    # Manba birligini aniqlash — agar dona bo'lsa, qaytariladigan dona = actual_kg / kg_per_unit
+    source = db.query(Product).options(joinedload(Product.unit)).filter(Product.id == conv.source_product_id).first()
+    actual_kg = float(conv.quantity or 0)
+    if source and _is_piece_unit(source):
+        kg_per_unit = _product_kg_per_unit(source)
+        source_units_back = (actual_kg / kg_per_unit) if kg_per_unit > 0 else 0
+    else:
+        source_units_back = actual_kg
+
     create_stock_movement(
         db=db,
         warehouse_id=conv.warehouse_id,
         product_id=conv.source_product_id,
-        quantity_change=+float(conv.quantity or 0),
+        quantity_change=+source_units_back,
         operation_type="conversion_revert",
         document_type="Conversion",
         document_id=conv.id,
