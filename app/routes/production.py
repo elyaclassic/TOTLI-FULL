@@ -42,13 +42,13 @@ from app.services.stock_service import create_stock_movement
 router = APIRouter(prefix="/production", tags=["production"])
 
 
-def _recipe_max_stage(recipe) -> int:
+def _recipe_max_stage(recipe) -> int:  # noqa: used as helper, type of recipe flexible
     if not recipe or not recipe.stages:
         return 2
     return max(s.stage_number for s in recipe.stages)
 
 
-def _calculate_recipe_cost_per_kg(db, recipe_id, _cache=None):
+def _calculate_recipe_cost_per_kg(db: Session, recipe_id: int, _cache: Optional[dict] = None) -> float:
     """Retsept bo'yicha 1 kg uchun tannarxni hisoblash (rekursiv - yarim tayyor mahsulotlar uchun ham).
     _cache: recipe_id -> cost_per_kg memoization, rekursiv chaqiruvlarda bir xil retsept qayta hisoblanmaydi."""
     if _cache is None:
@@ -104,7 +104,7 @@ def _calculate_recipe_cost_per_kg(db, recipe_id, _cache=None):
     return result
 
 
-def calculate_production_tannarx(db, production, recipe):
+def calculate_production_tannarx(db: Session, production, recipe) -> tuple[float, float, float]:
     """Jami xarajat (faqat xom ashyo) va tannarx = jami ÷ ishlab chiqarish miqdori. Narx: Product.purchase_price yoki shu ombordagi Stock.cost_price."""
     if production.production_items:
         items_to_use = [(pi.product_id, float(pi.quantity or 0)) for pi in production.production_items]
@@ -167,9 +167,14 @@ def _warehouse_id_for_ingredient(db, product_id, production):
     return production.warehouse_id
 
 
-def _do_complete_production_stock(db, production, recipe):
+def _do_complete_production_stock(db: Session, production, recipe):
     """Xom ashyo yetishmasini tekshiradi — yetmasa xato qaytaradi.
     Xom ashyo 1-ombordan, yarim tayyor mahsulotlar nomida 'yarim'/'semi' bor ombordan chiqariladi."""
+    logger.info(
+        "production_complete: start #%s qty=%s recipe=%s wh=%s",
+        production.number, production.quantity, recipe.id if recipe else None,
+        production.warehouse_id,
+    )
     if production.production_items:
         items_to_use = [(pi.product_id, pi.quantity) for pi in production.production_items]
     else:
@@ -195,6 +200,9 @@ def _do_complete_production_stock(db, production, recipe):
     if shortage_lines:
         from urllib.parse import quote
         detail = ", ".join(shortage_lines)
+        logger.warning(
+            "production_complete: SHORTAGE #%s items=%s", production.number, shortage_lines,
+        )
         return RedirectResponse(
             url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi: {detail}"),
             status_code=303,
@@ -266,6 +274,10 @@ def _do_complete_production_stock(db, production, recipe):
         created_at=production.created_at or datetime.now(),
     )
     db.flush()
+    logger.info(
+        "production_complete: OK #%s output=%s units cost=%.2f cost_per_unit=%.2f wh=%s",
+        production.number, output_units, total_material_cost, cost_per_unit, out_wh_id,
+    )
     # cost_price ni hisoblash (faqat tayyor mahsulot uchun)
     product_stock = db.query(Stock).filter(
         Stock.warehouse_id == out_wh_id,

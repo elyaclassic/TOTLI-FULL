@@ -2,9 +2,12 @@
 Ombor — qoldiqlar, eksport/import, ombordan omborga o'tkazish.
 """
 import io
+import logging
 import traceback
 from datetime import datetime
 from urllib.parse import quote, unquote
+
+logger = logging.getLogger("app.routes.warehouse")
 
 import openpyxl
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
@@ -595,6 +598,11 @@ async def warehouse_transfer_confirm(
         )
     transfer.status = "confirmed"
     db.commit()
+    logger.info(
+        "transfer_confirm: #%s wh=%s->%s items=%s user=%s",
+        transfer.number, transfer.from_warehouse_id, transfer.to_warehouse_id,
+        len(items), current_user.id if current_user else None,
+    )
     return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?confirmed=1", status_code=303)
 
 
@@ -641,6 +649,11 @@ async def warehouse_transfer_revert(
         )
     transfer.status = "draft"
     db.commit()
+    logger.info(
+        "transfer_revert: #%s wh=%s->%s items=%s user=%s",
+        transfer.number, transfer.from_warehouse_id, transfer.to_warehouse_id,
+        len(items), current_user.id if current_user else None,
+    )
     return RedirectResponse(url="/warehouse/transfers?reverted=1", status_code=303)
 
 
@@ -1367,6 +1380,10 @@ async def inventory_confirm(
                     stock_row.quantity = new_qty + float(after_changes)
     doc.status = "confirmed"
     db.commit()
+    logger.info(
+        "inventory_confirm: #%s doc_id=%s items=%s user=%s",
+        doc.number, doc.id, len(items), current_user.id if current_user else None,
+    )
     return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)
 
 
