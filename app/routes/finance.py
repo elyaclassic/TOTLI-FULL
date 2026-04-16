@@ -1438,7 +1438,9 @@ async def cash_transfers_my_pending(
             user_cash_ids.append(cr.id)
         if not user_cash_ids:
             return JSONResponse([])
-        # Sender: from_cash=mening + pending. Receiver: to_cash=mening + in_transit.
+        # Sender: from_cash=mening + pending (action: Yuborish)
+        # Receiver: to_cash=mening + pending  (ko'rinadi, tugma disabled — sender kutilmoqda)
+        # Receiver: to_cash=mening + in_transit (action: Qabul qilish)
         from sqlalchemy import and_, or_
         transfers = (
             db.query(CashTransfer)
@@ -1446,7 +1448,7 @@ async def cash_transfers_my_pending(
             .filter(
                 or_(
                     and_(CashTransfer.from_cash_id.in_(user_cash_ids), CashTransfer.status == "pending"),
-                    and_(CashTransfer.to_cash_id.in_(user_cash_ids), CashTransfer.status == "in_transit"),
+                    and_(CashTransfer.to_cash_id.in_(user_cash_ids), CashTransfer.status.in_(("pending", "in_transit"))),
                 )
             )
             .order_by(CashTransfer.created_at.desc())
@@ -1454,7 +1456,7 @@ async def cash_transfers_my_pending(
         )
 
         def _role_for(t):
-            if t.status == "pending" and t.from_cash_id in user_cash_ids:
+            if t.from_cash_id in user_cash_ids and t.status == "pending":
                 return "sender"
             return "receiver"
     result = []
