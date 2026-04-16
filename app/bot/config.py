@@ -27,7 +27,7 @@ REALTIME_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC
 
 # ===== Bot ichidan operatsiya (kirim / harajat / o'tkazma) =====
 # Faqat shu Telegram ID'lar ma'lumot kirityish huquqiga ega
-OPS_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC
+OPS_CHAT_IDS = [1340383182, 1057546370]  # @elya_classic + @RD2197 (rahbar)
 
 # PIN kod (.env da BOT_ADMIN_PIN o'rnating, default 1234)
 BOT_ADMIN_PIN = os.environ.get("BOT_ADMIN_PIN", "1234")
