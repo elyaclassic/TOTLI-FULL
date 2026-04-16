@@ -1249,10 +1249,11 @@ async def production_orders_fix_dates_from_numbers(
     return RedirectResponse(url=f"/production/orders?fix_dates={msg}", status_code=303)
 
 
-def _production_revert_one(db, production) -> Optional[str]:
+def _production_revert_one(db: Session, production) -> Optional[str]:
     """Bitta buyurtmani tasdiqdan qaytaradi. Muvaffaqiyat bo'lsa None, xato bo'lsa xabar qaytaradi."""
     if production.status != "completed":
         return None
+    logger.info("production_revert: start #%s", production.number)
     recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
     if not recipe:
         return "Retsept topilmadi"
@@ -1273,6 +1274,10 @@ def _production_revert_one(db, production) -> Optional[str]:
         out_product = db.query(Product).filter(Product.id == recipe.product_id).first()
         wh_name = (out_wh.name if out_wh else "2-ombor") or "2-ombor"
         prod_name = (out_product.name if out_product else "tayyor mahsulot") or "tayyor mahsulot"
+        logger.warning(
+            "production_revert: INSUFFICIENT #%s wh=%s prod=%s need=%.1f have=%.1f",
+            production.number, out_wh_id, recipe.product_id, output_units, current_qty,
+        )
         return f"«{wh_name}» da «{prod_name}» dan kerak: {output_units:,.1f}, mavjud: {current_qty:,.1f}"
     create_stock_movement(
         db=db,
@@ -1298,6 +1303,10 @@ def _production_revert_one(db, production) -> Optional[str]:
             note="Tasdiqni bekor qilish: xom ashyo qaytarildi",
         )
     production.status = "draft"
+    logger.info(
+        "production_revert: OK #%s output_returned=%.1f raw_returned=%d items",
+        production.number, output_units, len(items_to_use),
+    )
     return None
 
 
