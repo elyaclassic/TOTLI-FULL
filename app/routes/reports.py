@@ -1540,6 +1540,58 @@ async def report_partner_reconciliation(
     })
 
 
+def _partner_recon_parse_dates(date_from: Optional[str], date_to: Optional[str]) -> tuple:
+    """Returns: (dt_from, dt_to, iso_from, iso_to)."""
+    today = datetime.now()
+    if not date_from:
+        date_from = today.replace(day=1).strftime("%Y-%m-%d")
+    if not date_to:
+        date_to = today.strftime("%Y-%m-%d")
+    try:
+        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        dt_from = today.replace(day=1)
+        dt_to = today
+    return dt_from, dt_to, date_from, date_to
+
+
+def _partner_product_analytics(db: Session, partner_id: int, dt_from: datetime, dt_to: datetime) -> tuple:
+    """Kontragent bilan davrda xarid qilingan/sotilgan mahsulotlar bo'yicha yig'ma.
+    Returns: (products_purchased: list, products_sold: list)."""
+    date_from_start = dt_from.replace(hour=0, minute=0, second=0, microsecond=0)
+    date_to_end = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+    def _aggregate(pairs):
+        out = {}
+        for item, prod in pairs:
+            key = prod.id
+            if key not in out:
+                out[key] = {"product_name": prod.name or "", "product_code": prod.code or "", "quantity": 0.0, "total": 0.0}
+            out[key]["quantity"] += float(item.quantity or 0)
+            out[key]["total"] += float(item.total or 0)
+        return sorted(out.values(), key=lambda x: -x["total"])
+
+    purchase_pairs = (
+        db.query(PurchaseItem, Product)
+        .join(Purchase, PurchaseItem.purchase_id == Purchase.id)
+        .join(Product, PurchaseItem.product_id == Product.id)
+        .filter(Purchase.partner_id == partner_id,
+                Purchase.date >= date_from_start,
+                Purchase.date <= date_to_end)
+    ).all()
+    sale_pairs = (
+        db.query(OrderItem, Product)
+        .join(Order, OrderItem.order_id == Order.id)
+        .join(Product, OrderItem.product_id == Product.id)
+        .filter(Order.partner_id == partner_id,
+                Order.type == "sale",
+                Order.date >= date_from_start,
+                Order.date <= date_to_end)
+    ).all()
+    return _aggregate(purchase_pairs), _aggregate(sale_pairs)
+
+
 @router.get("/partner-reconciliation/export")
 async def report_partner_reconciliation_export(
     request: Request,
@@ -1558,61 +1610,13 @@ async def report_partner_reconciliation_export(
     partner = db.query(Partner).filter(Partner.id == partner_id).first()
     if not partner:
         return RedirectResponse(url="/reports/partner-reconciliation", status_code=303)
-    today = datetime.now()
-    if not date_from:
-        date_from = (today.replace(day=1)).strftime("%Y-%m-%d")
-    if not date_to:
-        date_to = today.strftime("%Y-%m-%d")
-    try:
-        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
-        dt_to = datetime.strptime(date_to, "%Y-%m-%d")
-    except (ValueError, TypeError):
-        dt_from = today.replace(day=1)
-        dt_to = today
+    dt_from, dt_to, date_from, date_to = _partner_recon_parse_dates(date_from, date_to)
     rows, opening_debit, opening_credit = _build_partner_movements(db, partner_id, dt_from, dt_to, period_only=False)
     total_debit = sum(r["debit"] for r in rows)
     total_credit = sum(r["credit"] for r in rows)
     opening_balance = opening_debit - opening_credit
     closing_balance = opening_balance + total_debit - total_credit
-
-    # Mahsulotlar bo'yicha analitika (veb sahifadagi kabi)
-    date_from_start = dt_from.replace(hour=0, minute=0, second=0, microsecond=0)
-    date_to_end = dt_to.replace(hour=23, minute=59, second=59, microsecond=999999)
-    by_product_purchase = {}
-    for pi, prod in (
-        db.query(PurchaseItem, Product)
-        .join(Purchase, PurchaseItem.purchase_id == Purchase.id)
-        .join(Product, PurchaseItem.product_id == Product.id)
-        .filter(
-            Purchase.partner_id == partner_id,
-            Purchase.date >= date_from_start,
-            Purchase.date <= date_to_end,
-        )
-    ).all():
-        key = prod.id
-        if key not in by_product_purchase:
-            by_product_purchase[key] = {"product_name": prod.name or "", "product_code": prod.code or "", "quantity": 0.0, "total": 0.0}
-        by_product_purchase[key]["quantity"] += float(pi.quantity or 0)
-        by_product_purchase[key]["total"] += float(pi.total or 0)
-    products_purchased = sorted(by_product_purchase.values(), key=lambda x: -x["total"])
-    by_product_sale = {}
-    for oi, prod in (
-        db.query(OrderItem, Product)
-        .join(Order, OrderItem.order_id == Order.id)
-        .join(Product, OrderItem.product_id == Product.id)
-        .filter(
-            Order.partner_id == partner_id,
-            Order.type == "sale",
-            Order.date >= date_from_start,
-            Order.date <= date_to_end,
-        )
-    ).all():
-        key = prod.id
-        if key not in by_product_sale:
-            by_product_sale[key] = {"product_name": prod.name or "", "product_code": prod.code or "", "quantity": 0.0, "total": 0.0}
-        by_product_sale[key]["quantity"] += float(oi.quantity or 0)
-        by_product_sale[key]["total"] += float(oi.total or 0)
-    products_sold = sorted(by_product_sale.values(), key=lambda x: -x["total"])
+    products_purchased, products_sold = _partner_product_analytics(db, partner_id, dt_from, dt_to)
 
     from openpyxl.styles import Alignment, Border, Side
     from openpyxl.utils import get_column_letter
@@ -1838,6 +1842,109 @@ async def report_partner_reconciliation_export(
 # FOYDA HISOBOTI
 # ==========================================
 
+def _parse_profit_date_range(date_from: Optional[str], date_to: Optional[str]) -> tuple:
+    """date_from/date_to parsing + default: oy boshi - bugun. Returns: (dt_from, dt_to, iso_from, iso_to)."""
+    today = datetime.now()
+    if not date_from:
+        date_from = today.replace(day=1).strftime("%Y-%m-%d")
+    if not date_to:
+        date_to = today.strftime("%Y-%m-%d")
+    try:
+        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
+        dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+    except (ValueError, TypeError):
+        dt_from = today.replace(day=1)
+        dt_to = today.replace(hour=23, minute=59, second=59)
+    return dt_from, dt_to, date_from, date_to
+
+
+def _compute_sales_and_cogs(db: Session, dt_from: datetime, dt_to: datetime) -> tuple:
+    """Returns: (sale_orders, revenue, cogs, sale_items)."""
+    sale_orders = (
+        db.query(Order)
+        .filter(Order.type == "sale", Order.status != "cancelled",
+                Order.date >= dt_from, Order.date <= dt_to)
+        .all()
+    )
+    revenue = sum(float(o.total or 0) for o in sale_orders)
+    sale_order_ids = [o.id for o in sale_orders]
+    sale_items = []
+    cogs = 0.0
+    if sale_order_ids:
+        sale_items = (
+            db.query(OrderItem, Product)
+            .join(Product, OrderItem.product_id == Product.id)
+            .filter(OrderItem.order_id.in_(sale_order_ids))
+            .all()
+        )
+        for oi, prod in sale_items:
+            cogs += float(prod.purchase_price or 0) * float(oi.quantity or 0)
+    return sale_orders, revenue, cogs, sale_items
+
+
+def _compute_operating_expenses(db: Session, dt_from: datetime, dt_to: datetime) -> tuple:
+    """Returns: (total_expenses, expense_list) — ExpenseDoc confirmed hujjatlari turiga qarab guruhlangan."""
+    expense_docs = (
+        db.query(ExpenseDoc)
+        .filter(ExpenseDoc.status == "confirmed",
+                ExpenseDoc.date >= dt_from, ExpenseDoc.date <= dt_to)
+        .all()
+    )
+    expense_by_type: dict = {}
+    if expense_docs:
+        expense_doc_ids = [e.id for e in expense_docs]
+        items = db.query(ExpenseDocItem).filter(ExpenseDocItem.expense_doc_id.in_(expense_doc_ids)).all()
+        for ei in items:
+            et = ei.expense_type
+            type_name = et.name if et else "Boshqa"
+            category = et.category if et else "Boshqa"
+            if type_name not in expense_by_type:
+                expense_by_type[type_name] = {"name": type_name, "category": category, "amount": 0.0}
+            expense_by_type[type_name]["amount"] += float(ei.amount or 0)
+    total_expenses = sum(v["amount"] for v in expense_by_type.values())
+    expense_list = sorted(expense_by_type.values(), key=lambda x: -x["amount"])
+    return total_expenses, expense_list
+
+
+def _compute_salary_total(db: Session, dt_from: datetime, dt_to: datetime) -> float:
+    """Davr oylari uchun jami Salary.total."""
+    months = set()
+    d = dt_from.replace(day=1)
+    while d <= dt_to:
+        months.add((d.year, d.month))
+        if d.month == 12:
+            d = d.replace(year=d.year + 1, month=1)
+        else:
+            d = d.replace(month=d.month + 1)
+    total = 0.0
+    for y, m in months:
+        sals = db.query(Salary).filter(Salary.year == y, Salary.month == m).all()
+        total += sum(float(s.total or 0) for s in sals)
+    return total
+
+
+def _compute_daily_trend(sale_orders: list, sale_items: list) -> tuple:
+    """Kunlik revenue + cogs → (labels, revenues, profits)."""
+    daily_data: dict = {}
+    for o in sale_orders:
+        if not o.date:
+            continue
+        key = o.date.strftime("%Y-%m-%d")
+        daily_data.setdefault(key, {"revenue": 0.0, "cogs": 0.0})["revenue"] += float(o.total or 0)
+    order_by_id = {o.id: o for o in sale_orders}
+    for oi, prod in sale_items:
+        o = order_by_id.get(oi.order_id)
+        if not o or not o.date:
+            continue
+        key = o.date.strftime("%Y-%m-%d")
+        if key in daily_data:
+            daily_data[key]["cogs"] += float(prod.purchase_price or 0) * float(oi.quantity or 0)
+    labels = sorted(daily_data.keys())
+    revenues = [daily_data[k]["revenue"] for k in labels]
+    profits = [daily_data[k]["revenue"] - daily_data[k]["cogs"] for k in labels]
+    return labels, revenues, profits
+
+
 @router.get("/profit", response_class=HTMLResponse)
 async def report_profit(
     request: Request,
@@ -1852,164 +1959,44 @@ async def report_profit(
     if "profit" not in allowed:
         return RedirectResponse(url="/reports", status_code=303)
 
-    today = datetime.now()
-    if not date_from:
-        date_from = today.replace(day=1).strftime("%Y-%m-%d")
-    if not date_to:
-        date_to = today.strftime("%Y-%m-%d")
-    try:
-        dt_from = datetime.strptime(date_from, "%Y-%m-%d")
-        dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
-    except (ValueError, TypeError):
-        dt_from = today.replace(day=1)
-        dt_to = today.replace(hour=23, minute=59, second=59)
+    dt_from, dt_to, date_from, date_to = _parse_profit_date_range(date_from, date_to)
 
-    # ===== 1. SOTUV DAROMADI =====
-    sale_orders = (
-        db.query(Order)
-        .filter(
-            Order.type == "sale",
-            Order.status != "cancelled",
-            Order.date >= dt_from,
-            Order.date <= dt_to,
-        ).all()
-    )
-    revenue = sum(float(o.total or 0) for o in sale_orders)
+    # Sotuv + COGS + qaytarishlar
+    sale_orders, revenue, cogs, sale_items = _compute_sales_and_cogs(db, dt_from, dt_to)
     sale_count = len(sale_orders)
-
-    # ===== 2. SOTUV TANNARXI (COGS) =====
-    sale_order_ids = [o.id for o in sale_orders]
-    cogs = 0.0
-    if sale_order_ids:
-        items = (
-            db.query(OrderItem, Product)
-            .join(Product, OrderItem.product_id == Product.id)
-            .filter(OrderItem.order_id.in_(sale_order_ids))
-            .all()
-        )
-        for oi, prod in items:
-            cost_price = float(prod.purchase_price or 0)
-            qty = float(oi.quantity or 0)
-            cogs += cost_price * qty
-
     gross_profit = revenue - cogs
-
-    # ===== 3. QAYTARISHLAR =====
     return_orders = (
         db.query(Order)
-        .filter(
-            Order.type == "return_sale",
-            Order.status != "cancelled",
-            Order.date >= dt_from,
-            Order.date <= dt_to,
-        ).all()
+        .filter(Order.type == "return_sale", Order.status != "cancelled",
+                Order.date >= dt_from, Order.date <= dt_to)
+        .all()
     )
     returns_total = sum(float(o.total or 0) for o in return_orders)
 
-    # ===== 4. XARID XARAJATLARI =====
+    # Xarid + operatsion xarajatlar + ish haqi
     purchases = (
         db.query(Purchase)
-        .filter(
-            Purchase.status == "confirmed",
-            Purchase.date >= dt_from,
-            Purchase.date <= dt_to,
-        ).all()
+        .filter(Purchase.status == "confirmed", Purchase.date >= dt_from, Purchase.date <= dt_to)
+        .all()
     )
     purchase_total = sum(float(p.total or 0) for p in purchases)
     purchase_expenses = sum(float(p.total_expenses or 0) for p in purchases)
+    total_expenses, expense_list = _compute_operating_expenses(db, dt_from, dt_to)
+    salary_total = _compute_salary_total(db, dt_from, dt_to)
 
-    # ===== 5. OPERATSION XARAJATLAR (ExpenseDoc) =====
-    expense_docs = (
-        db.query(ExpenseDoc)
-        .filter(
-            ExpenseDoc.status == "confirmed",
-            ExpenseDoc.date >= dt_from,
-            ExpenseDoc.date <= dt_to,
-        ).all()
-    )
-    expense_doc_ids = [e.id for e in expense_docs]
-    expense_items = []
-    expense_by_type = {}
-    if expense_doc_ids:
-        expense_items = (
-            db.query(ExpenseDocItem)
-            .filter(ExpenseDocItem.expense_doc_id.in_(expense_doc_ids))
-            .all()
-        )
-        for ei in expense_items:
-            et = ei.expense_type
-            type_name = et.name if et else "Boshqa"
-            category = et.category if et else "Boshqa"
-            if type_name not in expense_by_type:
-                expense_by_type[type_name] = {"name": type_name, "category": category, "amount": 0.0}
-            expense_by_type[type_name]["amount"] += float(ei.amount or 0)
-    total_expenses = sum(v["amount"] for v in expense_by_type.values())
-    expense_list = sorted(expense_by_type.values(), key=lambda x: -x["amount"])
+    # To'lovlar
+    _payment_sum = lambda ptype: float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.type == ptype, Payment.status != "cancelled",
+        Payment.date >= dt_from, Payment.date <= dt_to,
+    ).scalar() or 0)
+    payments_income = _payment_sum("income")
+    payments_expense = _payment_sum("expense")
 
-    # ===== 6. ISH HAQI =====
-    # Davr oylari uchun
-    salary_months = set()
-    d = dt_from.replace(day=1)
-    while d <= dt_to:
-        salary_months.add((d.year, d.month))
-        if d.month == 12:
-            d = d.replace(year=d.year + 1, month=1)
-        else:
-            d = d.replace(month=d.month + 1)
-
-    salary_total = 0.0
-    if salary_months:
-        for y, m in salary_months:
-            sals = db.query(Salary).filter(Salary.year == y, Salary.month == m).all()
-            salary_total += sum(float(s.total or 0) for s in sals)
-
-    # ===== 7. TO'LOVLAR (Payment) — qo'shimcha income/expense =====
-    payments_income = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(
-            Payment.type == "income",
-            Payment.status != "cancelled",
-            Payment.date >= dt_from,
-            Payment.date <= dt_to,
-        ).scalar()
-    ) or 0
-
-    payments_expense = (
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(
-            Payment.type == "expense",
-            Payment.status != "cancelled",
-            Payment.date >= dt_from,
-            Payment.date <= dt_to,
-        ).scalar()
-    ) or 0
-
-    # ===== HISOBLASH =====
+    # Yakuniy hisob + trend
     net_revenue = revenue - returns_total
     operating_expenses = total_expenses + salary_total
     net_profit = gross_profit - returns_total - operating_expenses
-
-    # ===== KUNLIK TREND =====
-    daily_data = {}
-    for o in sale_orders:
-        day_key = o.date.strftime("%Y-%m-%d") if o.date else ""
-        if day_key:
-            if day_key not in daily_data:
-                daily_data[day_key] = {"revenue": 0.0, "cogs": 0.0}
-            daily_data[day_key]["revenue"] += float(o.total or 0)
-
-    # COGS kunlik
-    if sale_order_ids:
-        for oi, prod in items:
-            order = next((o for o in sale_orders if o.id == oi.order_id), None)
-            if order and order.date:
-                day_key = order.date.strftime("%Y-%m-%d")
-                if day_key in daily_data:
-                    daily_data[day_key]["cogs"] += float(prod.purchase_price or 0) * float(oi.quantity or 0)
-
-    daily_labels = sorted(daily_data.keys())
-    daily_revenue = [daily_data[d]["revenue"] for d in daily_labels]
-    daily_profit = [daily_data[d]["revenue"] - daily_data[d]["cogs"] for d in daily_labels]
+    daily_labels, daily_revenue, daily_profit = _compute_daily_trend(sale_orders, sale_items)
 
     return templates.TemplateResponse("reports/profit.html", {
         "request": request,
