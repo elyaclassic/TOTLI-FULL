@@ -285,6 +285,11 @@ async def convert_create(
         target.name, target_product_id, actual_kg, source_cost,
         current_user.id if current_user else None,
     )
+    try:
+        from app.bot.services.audit_watchdog import audit_conversion
+        audit_conversion(conv.id)
+    except Exception:
+        pass
     if is_piece:
         summary = f"✅ {number}: {source.name} {source_units} dona → {target.name} {actual_kg} kg"
     else:
@@ -346,6 +351,11 @@ async def convert_revert(
     conv.status = "cancelled"
     db.commit()
     logger.info("conversion_revert: #%s user=%s", conv.number, current_user.id if current_user else None)
+    try:
+        from app.bot.services.audit_watchdog import audit_revert
+        audit_revert("Konversiya", conv.number, "bekor qilindi", current_user.username if current_user else "—")
+    except Exception:
+        pass
     return RedirectResponse(
         url="/production/convert?msg=" + quote(f"♻️ {conv.number} bekor qilindi"),
         status_code=303,

@@ -17,6 +17,8 @@ faqat 1 marta yuboriladi (AUDIT_COOLDOWN_MIN).
 from __future__ import annotations
 
 import hashlib
+import os
+import threading
 from datetime import datetime, timedelta, date
 from typing import Optional, List, Dict
 
@@ -30,14 +32,26 @@ from app.models.database import (
     SessionLocal,
     Order, OrderItem, Partner, Product, ProductPrice, Stock,
     Production, Recipe, RecipeItem, ProductionItem,
-    ExpenseDoc, ExpenseDocItem, Payment, CashRegister,
+    ExpenseDoc, ExpenseDocItem, Payment, CashRegister, CashTransfer,
     Purchase, PurchaseItem,
     StockAdjustmentDoc,
-    Warehouse,
+    Warehouse, WarehouseTransfer, WarehouseTransferItem,
+    ProductConversion,
+    Delivery,
+    User,
 )
 
 # ============ GLOBAL SOZLAMALAR ============
-AUDIT_ENABLED = True                 # False qilsa — hech narsa yuborilmaydi
+def _env_flag(name: str, default: bool = True) -> bool:
+    v = (os.getenv(name) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "on")
+
+
+AUDIT_ENABLED = _env_flag("AUDIT_ENABLED", True)       # False qilsa — hech narsa yuborilmaydi
+AUDIT_NOTIFY_ALL = _env_flag("AUDIT_NOTIFY_ALL", True) # Har hodisa uchun activity pulse
+ACTIVITY_FLUSH_LIMIT = 60                              # Bitta pulse da max qator
 
 # Miqdor chegaralari (so'm)
 BIG_SALE_DEBT = 5_000_000            # Bir buyurtmada qarz
@@ -71,6 +85,25 @@ def _is_enabled() -> bool:
 # Fallback: DB xatosi bo'lsa in-memory ishlatamiz (audit hech qachon crash qilmasligi kerak).
 _cooldown_fallback: Dict[str, datetime] = {}  # DB ishlamasa
 _last_digest_sig: Optional[str] = None
+
+# ============ ACTIVITY PULSE (har 10 daqiqa) ============
+# @elya_classic uchun "hamma hodisalar" oqimi — shubhasiz amallar ham tushadi.
+# Buffer har 10 daqiqada yoki 60 qator to'lganda Telegram ga yuboriladi.
+_activity_buffer: List[str] = []
+_activity_lock = threading.Lock()
+
+
+def _log_activity(event_type: str, summary: str):
+    """Hodisani activity bufferga qo'shish (shubhasiz amal).
+    Hodisalar har 10 daqiqada bir bundle qilib yuboriladi (audit_activity_flush)."""
+    if not AUDIT_ENABLED or not AUDIT_NOTIFY_ALL:
+        return
+    line = f"<i>{datetime.now().strftime('%H:%M')}</i> {event_type} — {summary}"
+    with _activity_lock:
+        _activity_buffer.append(line)
+        # Agar buffer 120 ga yetsa — eng eski 60 ni tashlab yuboramiz (memory safety)
+        if len(_activity_buffer) > 120:
+            del _activity_buffer[:60]
 
 
 def _cooldown_ok(key: str) -> bool:
@@ -240,6 +273,12 @@ def audit_sale(order_id: int):
                 + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"sale:{o.id}")
+        else:
+            p_name = partner.name if partner else "Naqd"
+            _log_activity(
+                "🛒 SOTUV",
+                f"<b>{o.number}</b>: {p_name} — {fmt(total)} so'm" + (f" (qarz: {fmt(debt)})" if debt > 0 else ""),
+            )
     except Exception as e:
         print(f"[Audit] sale xato: {e}", flush=True)
     finally:
@@ -282,15 +321,20 @@ def audit_purchase(purchase_id: int):
         if total >= BIG_PURCHASE:
             warnings.append(f"• Katta xarid: <b>{fmt(total)}</b> so'm")
 
+        partner = db.query(Partner).filter(Partner.id == pu.partner_id).first() if pu.partner_id else None
+        p_name = partner.name if partner else "—"
         if warnings:
-            partner = db.query(Partner).filter(Partner.id == pu.partner_id).first() if pu.partner_id else None
-            p_name = partner.name if partner else "—"
             text = (
                 _hdr("warn", "Xarid shubhali")
                 + f"\nHujjat: <b>{pu.number}</b>\nTa'minotchi: {p_name}\n"
                 + f"Summa: {fmt(total)}\n\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"purchase:{pu.id}")
+        else:
+            _log_activity(
+                "📥 XARID",
+                f"<b>{pu.number}</b>: {p_name} — {fmt(total)} so'm",
+            )
     except Exception as e:
         print(f"[Audit] purchase xato: {e}", flush=True)
     finally:
@@ -337,17 +381,22 @@ def audit_production(prod_id: int):
                             f"• <b>{pname}</b>: retseptdan {sign} {int(ratio*100)}% ({fmt(expected)} → <b>{fmt(actual)}</b>)"
                         )
 
+        p_name = ""
+        if recipe:
+            prod = db.query(Product).filter(Product.id == recipe.product_id).first()
+            p_name = prod.name if prod else ""
         if warnings:
-            p_name = ""
-            if recipe:
-                prod = db.query(Product).filter(Product.id == recipe.product_id).first()
-                p_name = prod.name if prod else ""
             text = (
                 _hdr("warn", "Ishlab chiqarish shubhali")
                 + f"\nHujjat: <b>{pr.number}</b>\nMahsulot: {p_name}\n"
                 + f"Miqdor: {fmt(qty)}\n\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"production:{pr.id}")
+        else:
+            _log_activity(
+                "🏭 IShL.CH.",
+                f"<b>{pr.number}</b>: {p_name} {fmt(qty)} kg",
+            )
     except Exception as e:
         print(f"[Audit] production xato: {e}", flush=True)
     finally:
@@ -400,6 +449,11 @@ def audit_expense(doc_id: int):
                 + f"Summa: {fmt(total)}\n\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"expense:{doc.id}")
+        else:
+            _log_activity(
+                "💸 HARAJAT",
+                f"<b>{doc.number or '#'+str(doc.id)}</b> — {fmt(total)} so'm",
+            )
     except Exception as e:
         print(f"[Audit] expense xato: {e}", flush=True)
     finally:
@@ -445,6 +499,12 @@ def audit_payment(payment_id: int):
                 + f"Summa: {fmt(amount)}\n\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"payment:{pay.id}")
+        else:
+            icon = "💰" if pay.type == "income" else "💳"
+            _log_activity(
+                f"{icon} TO'LOV",
+                f"<b>{pay.number or '#'+str(pay.id)}</b> [{pay.type}/{pay.category or '—'}] — {fmt(amount)} so'm",
+            )
     except Exception as e:
         print(f"[Audit] payment xato: {e}", flush=True)
     finally:
@@ -479,14 +539,20 @@ def audit_stock_adjustment(doc_id: int):
             warnings.append(f"• Katta farqlar: {len(big)} ta")
             warnings.extend(big[:8])
 
+        wh = db.query(Warehouse).filter(Warehouse.id == doc.warehouse_id).first() if doc.warehouse_id else None
+        wh_name = wh.name if wh else "—"
+        doc_num = getattr(doc, "number", None) or f"#{doc.id}"
         if warnings:
-            wh = db.query(Warehouse).filter(Warehouse.id == doc.warehouse_id).first() if doc.warehouse_id else None
             text = (
                 _hdr("warn", "Inventarizatsiya shubhali")
-                + f"\nHujjat: <b>{getattr(doc, 'number', None) or '#' + str(doc.id)}</b>\n"
-                + f"Ombor: {wh.name if wh else '—'}\n\n" + _fmt_list(warnings, 12)
+                + f"\nHujjat: <b>{doc_num}</b>\nOmbor: {wh_name}\n\n" + _fmt_list(warnings, 12)
             )
             _push(text, dedup_key=f"inv:{doc.id}")
+        else:
+            _log_activity(
+                "📋 INVENTAR",
+                f"<b>{doc_num}</b> [{wh_name}] — {len(items)} ta pozitsiya",
+            )
     except Exception as e:
         print(f"[Audit] stock_adjustment xato: {e}", flush=True)
     finally:
@@ -588,6 +654,292 @@ def audit_digest():
         print(f"[Audit] digest xato: {e}", flush=True)
     finally:
         db.close()
+
+
+# ============ ACTIVITY PULSE FLUSH (scheduler har 10 daq) ============
+def audit_activity_flush():
+    """Activity bufferini Telegram ga bundle qilib yuborish."""
+    if not AUDIT_ENABLED:
+        return
+    with _activity_lock:
+        if not _activity_buffer:
+            return
+        entries = _activity_buffer[:]
+        _activity_buffer.clear()
+    # Truncate agar juda ko'p
+    shown = entries[:ACTIVITY_FLUSH_LIMIT]
+    body = "\n".join(shown)
+    if len(entries) > ACTIVITY_FLUSH_LIMIT:
+        body += f"\n... va yana {len(entries) - ACTIVITY_FLUSH_LIMIT} ta"
+    text = _hdr("info", f"Faoliyat ({len(entries)} ta)") + "\n" + body
+    try:
+        _send_to_chats_sync(text, REALTIME_CHAT_IDS)
+    except Exception as e:
+        print(f"[Audit] activity flush TG xato: {e}", flush=True)
+
+
+# ============ 8) KONVERSIYA (tayyor -> yarim_tayyor) ============
+def audit_conversion(conv_id: int):
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        conv = db.query(ProductConversion).filter(ProductConversion.id == conv_id).first()
+        if not conv:
+            return
+        source = db.query(Product).filter(Product.id == conv.source_product_id).first()
+        target = db.query(Product).filter(Product.id == conv.target_product_id).first()
+        wh = db.query(Warehouse).filter(Warehouse.id == conv.warehouse_id).first()
+        s_name = source.name if source else f"#{conv.source_product_id}"
+        t_name = target.name if target else f"#{conv.target_product_id}"
+        wh_name = wh.name if wh else f"#{conv.warehouse_id}"
+        qty_kg = float(conv.quantity or 0)
+        cost = float(conv.source_cost_price or 0)
+
+        warnings: List[str] = []
+        # Katta miqdor (20 kg+)
+        if qty_kg >= 20:
+            warnings.append(f"• Katta miqdor: <b>{qty_kg} kg</b>")
+        # 24 soat ichida shu manba -> target uchun takror
+        since = datetime.now() - timedelta(hours=24)
+        dup = db.query(ProductConversion).filter(
+            ProductConversion.id != conv.id,
+            ProductConversion.source_product_id == conv.source_product_id,
+            ProductConversion.target_product_id == conv.target_product_id,
+            ProductConversion.status == "confirmed",
+            ProductConversion.created_at >= since,
+        ).count()
+        if dup >= 2:
+            warnings.append(f"• Takror? 24 soat ichida shu juftlik uchun {dup} ta konversiya")
+
+        if warnings:
+            text = (
+                _hdr("warn", "Konversiya shubhali")
+                + f"\nHujjat: <b>{conv.number}</b>\nOmbor: {wh_name}\n"
+                + f"{s_name} → {t_name}\nMiqdor: {qty_kg} kg, 1 kg tannarx: {fmt(cost)}\n\n"
+                + _fmt_list(warnings)
+            )
+            _push(text, dedup_key=f"conv:{conv.id}")
+        else:
+            _log_activity(
+                "♻️ KONVERSIYA",
+                f"<b>{conv.number}</b>: {s_name} → {t_name} {qty_kg} kg ({wh_name})",
+            )
+    except Exception as e:
+        print(f"[Audit] conversion xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 9) AGENT ORDER CONFIRM ============
+def audit_agent_order_confirm(order_id: int):
+    """Supervisor agent buyurtmasini tasdiqlaganda."""
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        o = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
+        if not o:
+            return
+        partner = db.query(Partner).filter(Partner.id == o.partner_id).first() if o.partner_id else None
+        p_name = partner.name if partner else "—"
+        items_count = db.query(OrderItem).filter(OrderItem.order_id == o.id).count()
+        total = float(o.total or 0)
+        debt = float(o.debt or 0)
+        supervisor = db.query(User).filter(User.id == o.user_id).first() if o.user_id else None
+        sup_name = supervisor.username if supervisor else "—"
+
+        warnings: List[str] = []
+        if items_count == 0:
+            warnings.append("• Bo'sh buyurtma (qatorlar yo'q)")
+        if debt >= BIG_SALE_DEBT:
+            warnings.append(f"• Katta qarz: <b>{fmt(debt)}</b>")
+        if partner and (partner.balance or 0) >= HUGE_PARTNER_DEBT:
+            warnings.append(f"• Mijoz <b>{p_name}</b> jami qarzi: <b>{fmt(partner.balance)}</b>")
+
+        if warnings:
+            text = (
+                _hdr("warn", "Agent buyurtma shubhali")
+                + f"\nHujjat: <b>{o.number}</b>\nMijoz: {p_name}\n"
+                + f"Summa: {fmt(total)}, qarz: {fmt(debt)}\nTasdiq: {sup_name}\n\n"
+                + _fmt_list(warnings)
+            )
+            _push(text, dedup_key=f"agent_order:{o.id}")
+        else:
+            _log_activity(
+                "📦 AGENT BUYURTMA",
+                f"<b>{o.number}</b>: {p_name} — {fmt(total)} so'm ({items_count} ta) — {sup_name}",
+            )
+    except Exception as e:
+        print(f"[Audit] agent_order_confirm xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 10) KASSA-KASSAGA O'TKAZMA ============
+def audit_cash_transfer(transfer_id: int):
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        tr = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
+        if not tr:
+            return
+        from_cr = db.query(CashRegister).filter(CashRegister.id == tr.from_cash_id).first() if tr.from_cash_id else None
+        to_cr = db.query(CashRegister).filter(CashRegister.id == tr.to_cash_id).first() if tr.to_cash_id else None
+        from_name = from_cr.name if from_cr else "—"
+        to_name = to_cr.name if to_cr else "—"
+        amount = float(tr.amount or 0)
+
+        warnings: List[str] = []
+        if amount >= BIG_PAYMENT:
+            warnings.append(f"• Katta o'tkazma: <b>{fmt(amount)}</b>")
+        # Chiqayotgan kassa manfiyga tushdimi?
+        if tr.from_cash_id:
+            try:
+                from app.services.finance_service import cash_balance_formula as _cb
+                bal, _, _ = _cb(db, tr.from_cash_id)
+                if bal < 0:
+                    warnings.append(f"• Kassa <b>{from_name}</b> manfiy: <b>{fmt(bal)}</b>")
+            except Exception:
+                pass
+
+        if warnings:
+            text = (
+                _hdr("warn", "Kassa o'tkazma shubhali")
+                + f"\n<b>{from_name}</b> → <b>{to_name}</b>\nSumma: {fmt(amount)}\n"
+                + f"Holat: {tr.status}\n\n" + _fmt_list(warnings)
+            )
+            _push(text, dedup_key=f"cash_transfer:{tr.id}")
+        else:
+            _log_activity(
+                "💱 O'TKAZMA",
+                f"{from_name} → {to_name}: {fmt(amount)} so'm [{tr.status}]",
+            )
+    except Exception as e:
+        print(f"[Audit] cash_transfer xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 11) OMBORDAN OMBORGA O'TKAZMA ============
+def audit_warehouse_transfer(transfer_id: int):
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        tr = db.query(WarehouseTransfer).filter(WarehouseTransfer.id == transfer_id).first()
+        if not tr:
+            return
+        from_wh = db.query(Warehouse).filter(Warehouse.id == tr.from_warehouse_id).first() if tr.from_warehouse_id else None
+        to_wh = db.query(Warehouse).filter(Warehouse.id == tr.to_warehouse_id).first() if tr.to_warehouse_id else None
+        from_name = from_wh.name if from_wh else "—"
+        to_name = to_wh.name if to_wh else "—"
+        items = db.query(WarehouseTransferItem).filter(WarehouseTransferItem.transfer_id == tr.id).all()
+        items_count = len(items)
+        total_qty = sum(float(it.quantity or 0) for it in items)
+        _log_activity(
+            "🚚 OMBOR O'TKAZMA",
+            f"<b>{tr.number}</b>: {from_name} → {to_name} — {items_count} ta pozitsiya (jami {total_qty} birlik)",
+        )
+    except Exception as e:
+        print(f"[Audit] warehouse_transfer xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 12) DELIVERY STATUS ============
+def audit_delivery_status(delivery_id: int, new_status: str, driver_name: str = "—"):
+    """Haydovchi yetkazish statusini o'zgartirganda."""
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        dl = db.query(Delivery).filter(Delivery.id == delivery_id).first()
+        if not dl:
+            return
+        icon = {"picked_up": "📦", "in_progress": "🚗", "delivered": "✅", "failed": "❌"}.get(new_status, "•")
+        order = db.query(Order).filter(Order.id == dl.order_id).first() if dl.order_id else None
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order and order.partner_id else None
+        p_name = partner.name if partner else "—"
+        total = float(order.total or 0) if order else 0
+
+        if new_status == "failed":
+            # Shubhali — sabab aniqlash kerak
+            text = (
+                _hdr("alert", "Yetkazish BEKOR")
+                + f"\n<b>{dl.number or '#' + str(dl.id)}</b>\n"
+                + f"Mijoz: {p_name}\nSumma: {fmt(total)}\n"
+                + f"Haydovchi: {driver_name}\n"
+                + f"Izoh: {(dl.notes or '—')[:300]}"
+            )
+            _push(text, dedup_key=f"delivery_failed:{dl.id}")
+        else:
+            _log_activity(
+                f"{icon} YETKAZISH",
+                f"{dl.number or '#'+str(dl.id)}: {p_name} [{new_status}] — {driver_name}",
+            )
+    except Exception as e:
+        print(f"[Audit] delivery_status xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 13) SOTUV BEKOR / O'CHIRISH ============
+def audit_sale_cancel(order_id: int, action: str = "cancel"):
+    """Sotuv bekor qilinganda yoki o'chirilganda."""
+    if not _is_enabled():
+        return
+    db = SessionLocal()
+    try:
+        o = db.query(Order).filter(Order.id == order_id).first()
+        if not o:
+            return
+        partner = db.query(Partner).filter(Partner.id == o.partner_id).first() if o.partner_id else None
+        p_name = partner.name if partner else "—"
+        total = float(o.total or 0)
+
+        # Bekor qilish takrorlanayaptimi? 24 soat
+        since = datetime.now() - timedelta(hours=24)
+        cancelled_count = db.query(Order).filter(
+            Order.status == "cancelled",
+            Order.type == "sale",
+            Order.updated_at >= since,
+        ).count() if hasattr(Order, "updated_at") else 0
+
+        warnings: List[str] = []
+        if total >= BIG_SALE_DEBT:
+            warnings.append(f"• Katta summa bekor: <b>{fmt(total)}</b>")
+        if cancelled_count >= 3:
+            warnings.append(f"• 24 soat ichida {cancelled_count} ta sotuv bekor qilingan — tekshirilsin")
+
+        if warnings:
+            text = (
+                _hdr("alert", f"Sotuv {action}")
+                + f"\n<b>{o.number}</b>\nMijoz: {p_name}\nSumma: {fmt(total)}\n\n"
+                + _fmt_list(warnings)
+            )
+            _push(text, dedup_key=f"sale_{action}:{o.id}")
+        else:
+            _log_activity(
+                f"🗑 SOTUV {action.upper()}",
+                f"<b>{o.number}</b>: {p_name} — {fmt(total)} so'm",
+            )
+    except Exception as e:
+        print(f"[Audit] sale_cancel xato: {e}", flush=True)
+    finally:
+        db.close()
+
+
+# ============ 14) REVERT (umumiy) ============
+def audit_revert(doc_type: str, doc_number: str, reason: str = "", user_name: str = "—"):
+    """Ixtiyoriy hujjat turi uchun 'tasdiqdan bekor qilish' bildirishnomasi."""
+    if not _is_enabled():
+        return
+    _log_activity(
+        "↩️ REVERT",
+        f"{doc_type} <b>{doc_number}</b> — {reason or 'tasdiq bekor'} [{user_name}]",
+    )
 
 
 # ============ TEST (qo'l bilan chaqirish uchun) ============

@@ -1601,6 +1601,11 @@ async def cash_transfer_admin_confirm(
     db.flush()
     _sync_cash_balance(db, t.to_cash_id)
     db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_cash_transfer
+        audit_cash_transfer(t.id)
+    except Exception:
+        pass
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?confirmed=1", status_code=303)
 
 

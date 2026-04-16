@@ -605,6 +605,11 @@ async def warehouse_transfer_confirm(
         transfer.number, transfer.from_warehouse_id, transfer.to_warehouse_id,
         len(items), current_user.id if current_user else None,
     )
+    try:
+        from app.bot.services.audit_watchdog import audit_warehouse_transfer
+        audit_warehouse_transfer(transfer.id)
+    except Exception:
+        pass
     return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?confirmed=1", status_code=303)
 
 

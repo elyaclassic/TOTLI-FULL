@@ -237,6 +237,15 @@ def _tg_audit_digest():
         print(f"[Scheduler] Audit digest xato: {e}")
 
 
+def _tg_audit_activity_flush():
+    """Har 10 daqiqada — shubhasiz hodisalar bundle qilib yuborish (activity pulse)."""
+    try:
+        from app.bot.services.audit_watchdog import audit_activity_flush
+        audit_activity_flush()
+    except Exception as e:
+        print(f"[Scheduler] Audit activity flush xato: {e}")
+
+
 
 
 _scheduler = None
@@ -283,6 +292,9 @@ def start_scheduler():
     _scheduler.add_job(_tg_audit_digest, "interval", minutes=30, id="tg_audit_digest")
     # Ishga tushganda 5 daqiqa keyin bir marta digest (tizim stabillashishi uchun)
     _scheduler.add_job(_tg_audit_digest, "date", run_date=datetime.now() + timedelta(minutes=5), id="tg_audit_digest_first")
+    # Activity pulse — har 10 daqiqada shubhasiz hodisalar bundle (@elya_classic)
+    _scheduler.add_job(_tg_audit_activity_flush, "interval", minutes=10, id="tg_audit_activity",
+                      misfire_grace_time=60, coalesce=True, max_instances=1)
     _scheduler.start()
     print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + live backup (5min) + Hikvision sync + TG notify + Audit)")
 

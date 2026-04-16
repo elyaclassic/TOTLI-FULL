@@ -211,6 +211,11 @@ async def driver_delivery_status(
                 order.status = "completed"
 
         db.commit()
+        try:
+            from app.bot.services.audit_watchdog import audit_delivery_status
+            audit_delivery_status(delivery.id, new_status, getattr(driver, "full_name", "") or getattr(driver, "code", "—"))
+        except Exception:
+            pass
         return {"success": True, "status": delivery.status}
     except Exception as e:
         db.rollback()

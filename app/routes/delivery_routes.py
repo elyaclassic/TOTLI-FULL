@@ -518,6 +518,11 @@ async def supervisor_confirm_agent_order(
             )
             db.add(delivery)
     db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_agent_order_confirm
+        audit_agent_order_confirm(order.id)
+    except Exception:
+        pass
     return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
 
 
