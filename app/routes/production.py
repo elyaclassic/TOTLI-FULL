@@ -167,19 +167,8 @@ def _warehouse_id_for_ingredient(db, product_id, production):
     return production.warehouse_id
 
 
-def _do_complete_production_stock(db: Session, production, recipe):
-    """Xom ashyo yetishmasini tekshiradi — yetmasa xato qaytaradi.
-    Xom ashyo 1-ombordan, yarim tayyor mahsulotlar nomida 'yarim'/'semi' bor ombordan chiqariladi."""
-    logger.info(
-        "production_complete: start #%s qty=%s recipe=%s wh=%s",
-        production.number, production.quantity, recipe.id if recipe else None,
-        production.warehouse_id,
-    )
-    if production.production_items:
-        items_to_use = [(pi.product_id, pi.quantity) for pi in production.production_items]
-    else:
-        items_to_use = [(item.product_id, item.quantity * production.quantity) for item in recipe.items]
-    # --- Yetishmovchilikni tekshirish ---
+def _check_production_shortage(db: Session, production, items_to_use: list) -> list:
+    """Xom ashyo yetishmovchilik tekshiruvi. Returns: shortage_lines list (bo'sh bo'lsa OK)."""
     shortage_lines = []
     for product_id, required in items_to_use:
         if required is None or required <= 0:
@@ -190,31 +179,17 @@ def _do_complete_production_stock(db: Session, production, recipe):
             Stock.product_id == product_id,
         ).first()
         available = (stock.quantity if stock else 0) or 0
-        # Float precision: 1e-6 tolerant
         if available + 1e-6 < required:
             prod = db.query(Product).filter(Product.id == product_id).first()
             prod_name = prod.name if prod else f"#{product_id}"
             shortage_lines.append(
                 f"{prod_name}: kerak {round(required, 3)}, omborda {round(available, 3)} (kam {round(required - available, 3)})"
             )
-    if shortage_lines:
-        from urllib.parse import quote
-        detail = ", ".join(shortage_lines)
-        logger.warning(
-            "production_complete: SHORTAGE #%s items=%s", production.number, shortage_lines,
-        )
-        return RedirectResponse(
-            url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi: {detail}"),
-            status_code=303,
-        )
-    # --- Yetarli — davom etish ---
-    items_actual = []
-    for product_id, required in items_to_use:
-        if required is None or required <= 0:
-            items_actual.append((product_id, 0.0))
-            continue
-        items_actual.append((product_id, required))
-    from app.services.stock_service import create_stock_movement
+    return shortage_lines
+
+
+def _consume_raw_materials(db: Session, production, items_actual: list) -> None:
+    """Xom ashyo hisobdan chiqarish — har bir item uchun production_consumption StockMovement."""
     for product_id, actual_use in items_actual:
         if actual_use <= 0:
             continue
@@ -231,36 +206,82 @@ def _do_complete_production_stock(db: Session, production, recipe):
             note=f"Ishlab chiqarish (xom ashyo): {production.number}",
             created_at=production.created_at or datetime.now(),
         )
-    total_material_cost = 0.0
+
+
+def _calculate_total_material_cost(db: Session, items_actual: list) -> float:
+    """Jami xom ashyo tannarxi — yarim_tayyor mahsulot uchun retsept tannarxidan, aks holda purchase_price/cost_price."""
+    total = 0.0
+    _cache: dict = {}
     for product_id, actual_use in items_actual:
         product = db.query(Product).filter(Product.id == product_id).first()
         if not product:
             continue
-        
-        # Yarim tayyor mahsulot uchun retsept tannarxini olamiz
         if getattr(product, 'type', None) == 'yarim_tayyor':
             semi_recipe = db.query(Recipe).filter(Recipe.product_id == product.id, Recipe.is_active == True).first()
             if semi_recipe:
-                cost_per_kg = _calculate_recipe_cost_per_kg(db, semi_recipe.id)
-                total_material_cost += actual_use * cost_per_kg
-            else:
-                # Retsept topilmasa, purchase_price yoki Stock.cost_price
-                cost = product.purchase_price or 0
-                stock = db.query(Stock).filter(Stock.product_id == product_id).first()
-                if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
-                    cost = stock.cost_price
-                total_material_cost += actual_use * cost
+                total += actual_use * _calculate_recipe_cost_per_kg(db, semi_recipe.id, _cache)
+                continue
+        cost = product.purchase_price or 0
+        stock = db.query(Stock).filter(Stock.product_id == product_id).first()
+        if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
+            cost = stock.cost_price
+        total += actual_use * cost
+    return total
+
+
+def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, output_units: float, cost_per_unit: float) -> None:
+    """Tayyor mahsulotning Stock.cost_price va Product.purchase_price ni weighted average bilan yangilaydi."""
+    product_stock = db.query(Stock).filter(
+        Stock.warehouse_id == out_wh_id,
+        Stock.product_id == recipe.product_id,
+    ).first()
+    if product_stock and hasattr(Stock, "cost_price"):
+        qty_old = (product_stock.quantity or 0) - output_units
+        cost_old = getattr(product_stock, "cost_price", None) or 0
+        if qty_old <= 0 or cost_old <= 0:
+            product_stock.cost_price = cost_per_unit
         else:
-            # Oddiy xom ashyo uchun purchase_price yoki Stock.cost_price
-            cost = product.purchase_price or 0
-            stock = db.query(Stock).filter(Stock.product_id == product_id).first()
-            if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
-                cost = stock.cost_price
-            total_material_cost += actual_use * cost
+            product_stock.cost_price = (qty_old * cost_old + output_units * cost_per_unit) / (product_stock.quantity or 1)
+    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+    if not output_product:
+        return
+    old_price = output_product.purchase_price or 0
+    old_qty = (product_stock.quantity - output_units) if product_stock else 0
+    if old_qty > 0 and old_price > 0 and output_units > 0:
+        output_product.purchase_price = (old_qty * old_price + output_units * cost_per_unit) / (old_qty + output_units)
+    elif cost_per_unit > 0:
+        output_product.purchase_price = cost_per_unit
+
+
+def _do_complete_production_stock(db: Session, production, recipe):
+    """Xom ashyo yetishmasini tekshiradi — yetmasa xato qaytaradi.
+    Xom ashyo 1-ombordan, yarim tayyor mahsulotlar nomida 'yarim'/'semi' bor ombordan chiqariladi."""
+    logger.info(
+        "production_complete: start #%s qty=%s recipe=%s wh=%s",
+        production.number, production.quantity, recipe.id if recipe else None,
+        production.warehouse_id,
+    )
+    if production.production_items:
+        items_to_use = [(pi.product_id, pi.quantity) for pi in production.production_items]
+    else:
+        items_to_use = [(item.product_id, item.quantity * production.quantity) for item in recipe.items]
+
+    shortage_lines = _check_production_shortage(db, production, items_to_use)
+    if shortage_lines:
+        from urllib.parse import quote
+        detail = ", ".join(shortage_lines)
+        logger.warning("production_complete: SHORTAGE #%s items=%s", production.number, shortage_lines)
+        return RedirectResponse(
+            url=f"/production/orders?error=shortage&detail=" + quote(f"Xom ashyo yetishmaydi: {detail}"),
+            status_code=303,
+        )
+
+    items_actual = [(pid, req if (req and req > 0) else 0.0) for pid, req in items_to_use]
+    _consume_raw_materials(db, production, items_actual)
+    total_material_cost = _calculate_total_material_cost(db, items_actual)
     output_units = production_output_quantity_for_stock(db, production, recipe)
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0
     out_wh_id = production.output_warehouse_id if production.output_warehouse_id else production.warehouse_id
-    # Tayyor mahsulot kirimi — create_stock_movement orqali (atomik)
     create_stock_movement(
         db=db,
         warehouse_id=out_wh_id,
@@ -278,30 +299,7 @@ def _do_complete_production_stock(db: Session, production, recipe):
         "production_complete: OK #%s output=%s units cost=%.2f cost_per_unit=%.2f wh=%s",
         production.number, output_units, total_material_cost, cost_per_unit, out_wh_id,
     )
-    # cost_price ni hisoblash (faqat tayyor mahsulot uchun)
-    product_stock = db.query(Stock).filter(
-        Stock.warehouse_id == out_wh_id,
-        Stock.product_id == recipe.product_id,
-    ).first()
-    if product_stock and hasattr(Stock, "cost_price"):
-        qty_old = (product_stock.quantity or 0) - output_units
-        cost_old = getattr(product_stock, "cost_price", None) or 0
-        if qty_old <= 0 or cost_old <= 0:
-            product_stock.cost_price = cost_per_unit
-        else:
-            product_stock.cost_price = (qty_old * cost_old + output_units * cost_per_unit) / (product_stock.quantity or 1)
-    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
-    if output_product:
-        product_stock = db.query(Stock).filter(
-            Stock.warehouse_id == out_wh_id,
-            Stock.product_id == recipe.product_id,
-        ).first()
-        old_price = output_product.purchase_price or 0
-        old_qty = (product_stock.quantity - output_units) if product_stock else 0
-        if old_qty > 0 and old_price > 0 and output_units > 0:
-            output_product.purchase_price = (old_qty * old_price + output_units * cost_per_unit) / (old_qty + output_units)
-        elif cost_per_unit > 0:
-            output_product.purchase_price = cost_per_unit
+    _update_output_cost_and_price(db, out_wh_id, recipe, output_units, cost_per_unit)
     return None
 
 
