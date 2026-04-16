@@ -16,8 +16,10 @@ from typing import Optional
 
 logger = logging.getLogger("telegram_bot")
 
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}"
+# Chat bot alohida token ishlatadi — TELEGRAM_CHAT_BOT_TOKEN.
+# Agar bo'sh bo'lsa, chat bot ishga tushmaydi (hisobot bot bilan polling konflikt oldini olish).
+BOT_TOKEN = os.environ.get("TELEGRAM_CHAT_BOT_TOKEN", "")
+API_BASE = f"https://api.telegram.org/bot{BOT_TOKEN}" if BOT_TOKEN else ""
 
 # Polling loop reference (to stop it)
 _polling_task: Optional[asyncio.Task] = None
@@ -210,14 +212,16 @@ async def poll_updates():
 
 
 def start_telegram_bot():
-    """Telegram botni background task sifatida ishga tushirish"""
+    """Telegram chat botni background task sifatida ishga tushirish.
+    TELEGRAM_CHAT_BOT_TOKEN env yo'q bo'lsa — ishga tushmaydi (hisobot bot
+    bilan polling konflikt oldini olish)."""
     global _polling_task
     if not BOT_TOKEN:
-        logger.info("TELEGRAM_BOT_TOKEN sozlanmagan — bot ishga tushmaydi")
+        logger.info("TELEGRAM_CHAT_BOT_TOKEN sozlanmagan — chat bot ishga tushmaydi (OK)")
         return
     loop = asyncio.get_event_loop()
     _polling_task = loop.create_task(poll_updates())
-    logger.info("Telegram bot ishga tushdi")
+    logger.info("Telegram chat bot ishga tushdi")
 
 
 def stop_telegram_bot():
