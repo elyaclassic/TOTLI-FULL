@@ -410,3 +410,93 @@ class TestMainAppIntegrity:
         assert "/employees/attendance" in paths
         assert "/employees/salary" in paths
         assert "/employees/hiring-docs" in paths
+
+
+class TestPostAuditHelpers:
+    """2026-04-16 audit refaktoridan keyin yaratilgan helper'lar mavjudligi."""
+
+    def test_production_helpers_exist(self):
+        from app.routes.production import (
+            _check_production_shortage,
+            _consume_raw_materials,
+            _calculate_total_material_cost,
+            _update_output_cost_and_price,
+            _calculate_recipe_cost_per_kg,
+            _do_complete_production_stock,
+        )
+        assert callable(_check_production_shortage)
+        assert callable(_consume_raw_materials)
+        assert callable(_calculate_total_material_cost)
+        assert callable(_update_output_cost_and_price)
+        assert callable(_calculate_recipe_cost_per_kg)
+        assert callable(_do_complete_production_stock)
+
+    def test_warehouse_helpers_exist(self):
+        from app.routes.warehouse import (
+            _merge_duplicate_stock_rows,
+            _apply_inventory_stock_changes,
+        )
+        assert callable(_merge_duplicate_stock_rows)
+        assert callable(_apply_inventory_stock_changes)
+
+    def test_reports_helpers_exist(self):
+        from app.routes.reports import (
+            _load_movement_doc_filters,
+            _apply_document_dates,
+            _check_production_quantity_mismatch,
+            _parse_profit_date_range,
+            _compute_sales_and_cogs,
+            _compute_operating_expenses,
+            _compute_salary_total,
+            _compute_daily_trend,
+            _partner_recon_parse_dates,
+            _partner_product_analytics,
+        )
+        assert callable(_parse_profit_date_range)
+        assert callable(_compute_daily_trend)
+
+    def test_constants_module(self):
+        from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY, QUERY_LIMIT_LIST
+        assert isinstance(QUERY_LIMIT_DEFAULT, int) and QUERY_LIMIT_DEFAULT > 0
+        assert isinstance(QUERY_LIMIT_HISTORY, int) and QUERY_LIMIT_HISTORY > 0
+        assert isinstance(QUERY_LIMIT_LIST, int) and QUERY_LIMIT_LIST > 0
+
+    def test_recipe_cost_memoization_works(self):
+        """_calculate_recipe_cost_per_kg cache parameter qabul qiladi."""
+        from app.routes.production import _calculate_recipe_cost_per_kg
+        import inspect
+        sig = inspect.signature(_calculate_recipe_cost_per_kg)
+        assert "_cache" in sig.parameters
+
+    def test_parse_profit_date_range_defaults(self):
+        """date_from/date_to None bo'lsa default oy boshi -> bugun."""
+        from app.routes.reports import _parse_profit_date_range
+        from datetime import datetime
+        dt_from, dt_to, iso_from, iso_to = _parse_profit_date_range(None, None)
+        assert dt_from.day == 1
+        assert dt_to >= dt_from
+        # to date should be end-of-day
+        assert dt_to.hour == 23
+
+    def test_partner_recon_parse_dates_returns_4(self):
+        from app.routes.reports import _partner_recon_parse_dates
+        result = _partner_recon_parse_dates(None, None)
+        assert len(result) == 4
+        assert result[0].day == 1  # default oy boshi
+
+
+class TestAgentOrderStockFlow:
+    """delivery_routes.py:supervisor_confirm/reject/delete agent order stock"""
+
+    def test_supervisor_confirm_endpoint_exists(self):
+        from app.routes.delivery_routes import router
+        paths = [r.path for r in router.routes]
+        assert "/supervisor/agent-orders/confirm/{order_id}" in paths
+        assert "/supervisor/agent-orders/reject/{order_id}" in paths
+        assert "/supervisor/agent-orders/delete/{order_id}" in paths
+
+    def test_supervisor_imports_stock_service(self):
+        """Yangi delivery_routes stock service'dan import qiladi."""
+        import app.routes.delivery_routes as m
+        assert hasattr(m, "create_stock_movement")
+        assert hasattr(m, "delete_stock_movements_for_document")
