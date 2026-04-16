@@ -26,7 +26,7 @@ from app.models.database import (
     Stock,
 )
 from app.deps import require_admin, require_admin_or_manager
-from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document, apply_sale_stock_deduction
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 from urllib.parse import quote
 from sqlalchemy.orm import joinedload
@@ -480,24 +480,8 @@ async def supervisor_confirm_agent_order(
             url="/supervisor/agent-orders?error=stock&detail=" + quote(f"Ombor yetmaydi: {detail}"),
             status_code=303,
         )
-    # Stock chiqarish
-    for it in valid_items:
-        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
-        if not wh_id:
-            continue
-        create_stock_movement(
-            db=db,
-            warehouse_id=wh_id,
-            product_id=it.product_id,
-            quantity_change=-float(it.quantity or 0),
-            operation_type="sale",
-            document_type="Sale",
-            document_id=order.id,
-            document_number=order.number,
-            user_id=current_user.id if current_user else None,
-            note=f"Agent sotuv (supervisor tasdiq): {order.number}",
-            created_at=order.date or datetime.now(),
-        )
+    # Stock chiqarish (DRY: stock_service.apply_sale_stock_deduction)
+    apply_sale_stock_deduction(db, order, current_user, note_prefix="Agent sotuv (supervisor tasdiq)")
     # Buyurtmani tasdiqlash
     order.status = "confirmed"
     order.user_id = current_user.id

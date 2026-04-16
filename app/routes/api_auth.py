@@ -380,23 +380,25 @@ async def agent_login(
                         "pin_set": True,
                     }
                 # PIN noto'g'ri — phone-as-password ga tushmaydi (downgrade yo'q)
+                # User enumeration oldini olish: generic xabar (kim PIN o'rnatganini bilib bo'lmasin)
                 record_failure(request)
                 record_agent_failure(identifier)
                 logger.warning(f"[AGENT_LOGIN] Xato PIN agent={agent.code} phone={identifier[:4]}***")
-                return {"success": False, "error": "PIN noto'g'ri"}
+                return {"success": False, "error": "Login yoki parol noto'g'ri"}
 
             # YO'L 3: LEGACY — pin_hash NULL, phone-as-password qabul qilinadi
             # DEPRECATION: AGENT_LEGACY_LOGIN_DISABLED=1 bo'lsa rad qilinadi.
             if password == agent.phone:
                 import os as _os
-                if (_os.getenv("AGENT_LEGACY_LOGIN_DISABLED", "0") or "0").strip() in ("1", "true", "yes"):
+                if (_os.getenv("AGENT_LEGACY_LOGIN_DISABLED", "").strip().lower() in ("1", "true", "yes")):
                     record_failure(request)
                     record_agent_failure(identifier)
                     logger.warning(
                         f"[AGENT_LOGIN_LEGACY_BLOCKED] agent={agent.code} phone={identifier[:4]}*** "
                         f"— legacy phone-login o'chirilgan"
                     )
-                    return {"success": False, "error": "Legacy login o'chirilgan. Admin orqali PIN o'rnating."}
+                    # User enumeration oldini olish: generic xabar
+                    return {"success": False, "error": "Login yoki parol noto'g'ri"}
                 record_success(request)
                 record_agent_success(identifier)
                 token = create_session_token(agent.id, "agent")
