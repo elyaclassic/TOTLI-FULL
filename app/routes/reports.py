@@ -405,6 +405,75 @@ async def report_stock_no_history_create_inventory(
     return RedirectResponse(url=f"/inventory/{doc.id}/edit?message={msg}", status_code=303)
 
 
+def _load_movement_doc_filters(db: Session, movements: list) -> tuple:
+    """Stock source: tasdiqlangan adjustment va completed production ID'larini yuklab qaytaradi.
+    Returns: (confirmed_adj_ids: set, completed_production_ids: set, adj_doc_dates: dict)"""
+    adj_ids = [m.document_id for m in movements if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id]
+    adj_doc_dates = {}
+    confirmed_adj_ids = set()
+    if adj_ids:
+        for doc in db.query(StockAdjustmentDoc).filter(
+            StockAdjustmentDoc.id.in_(adj_ids),
+            StockAdjustmentDoc.status == "confirmed",
+        ).all():
+            adj_doc_dates[doc.id] = doc.date
+            confirmed_adj_ids.add(doc.id)
+    prod_ids = [m.document_id for m in movements if (m.document_type or "") == "Production" and m.document_id]
+    completed_production_ids = set()
+    if prod_ids:
+        for p in db.query(Production).filter(Production.id.in_(prod_ids)).all():
+            if getattr(p, "status", None) == "completed":
+                completed_production_ids.add(p.id)
+    return confirmed_adj_ids, completed_production_ids, adj_doc_dates
+
+
+def _apply_document_dates(db: Session, rows: list) -> None:
+    """Purchase/Sale/Transfer uchun hujjat sanasini row['date'] ga o'rnatadi (mutates rows)."""
+    purchase_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "Purchase" and r.get("document_id")]
+    sale_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") in ("Sale", "SaleReturn", "SaleReturnRevert") and r.get("document_id")]
+    transfer_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "WarehouseTransfer" and r.get("document_id")]
+    purchases_by_id = {p.id: p for p in db.query(Purchase).filter(Purchase.id.in_(purchase_ids)).all()} if purchase_ids else {}
+    orders_by_id = {o.id: o for o in db.query(Order).filter(Order.id.in_(sale_ids)).all()} if sale_ids else {}
+    transfers_by_id = {t.id: t for t in db.query(WarehouseTransfer).filter(WarehouseTransfer.id.in_(transfer_ids)).all()} if transfer_ids else {}
+    for r in rows:
+        doc_type = r.get("document_type") or ""
+        doc_id = r.get("document_id")
+        if doc_type == "Purchase" and doc_id and doc_id in purchases_by_id and purchases_by_id[doc_id].date:
+            r["date"] = purchases_by_id[doc_id].date.strftime("%d.%m.%Y %H:%M")
+        elif doc_type in ("Sale", "SaleReturn", "SaleReturnRevert") and doc_id and doc_id in orders_by_id and orders_by_id[doc_id].date:
+            r["date"] = orders_by_id[doc_id].date.strftime("%d.%m.%Y %H:%M")
+        elif doc_type == "WarehouseTransfer" and doc_id and doc_id in transfers_by_id and transfers_by_id[doc_id].date:
+            r["date"] = transfers_by_id[doc_id].date.strftime("%d.%m.%Y %H:%M")
+
+
+def _check_production_quantity_mismatch(db: Session, rows: list) -> None:
+    """Production qatorlari uchun hujjatdagi miqdor vs harakatdagi miqdorni solishtirish (mutates rows).
+    Production sanasini ham ustun qilib qo'yadi."""
+    from sqlalchemy.orm import joinedload as _jl
+    from app.utils.production_order import production_output_quantity_for_stock
+    prod_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "Production" and r.get("document_id")]
+    if not prod_ids:
+        return
+    productions_by_id = {
+        p.id: p for p in db.query(Production).options(_jl(Production.recipe)).filter(Production.id.in_(prod_ids)).all()
+    }
+    for r in rows:
+        if (r.get("document_type") or "") != "Production" or not r.get("document_id"):
+            continue
+        prod = productions_by_id.get(r["document_id"])
+        if not prod:
+            continue
+        if prod.date:
+            r["date"] = prod.date.strftime("%d.%m.%Y %H:%M")
+        if not prod.recipe:
+            continue
+        expected = production_output_quantity_for_stock(db, prod, prod.recipe)
+        change = r.get("quantity_change") or 0
+        if abs(expected - change) > 0.001:
+            r["quantity_mismatch"] = True
+            r["document_quantity"] = expected
+
+
 @router.get("/stock/source", response_class=HTMLResponse)
 async def report_stock_source(
     request: Request,
@@ -431,24 +500,7 @@ async def report_stock_source(
         .order_by(StockMovement.created_at.asc())
         .all()
     )
-    # Faqat tasdiqlangan qoldiq tuzatish hujjatlarini ko'rsatamiz; qoralama/o'chirilganlarni olib tashlaymiz
-    doc_ids = [m.document_id for m in movements if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id]
-    doc_dates = {}
-    confirmed_adj_ids = set()
-    if doc_ids:
-        for doc in db.query(StockAdjustmentDoc).filter(
-            StockAdjustmentDoc.id.in_(doc_ids),
-            StockAdjustmentDoc.status == "confirmed",
-        ).all():
-            doc_dates[doc.id] = doc.date
-            confirmed_adj_ids.add(doc.id)
-    # Ishlab chiqarish: faqat tasdiqlangan (completed) buyurtma harakatlari ko'rinsin; bekor qilingan/draft ko'rsatilmasin
-    prod_doc_ids = [m.document_id for m in movements if (m.document_type or "") == "Production" and m.document_id]
-    completed_production_ids = set()
-    if prod_doc_ids:
-        for p in db.query(Production).filter(Production.id.in_(prod_doc_ids)).all():
-            if getattr(p, "status", None) == "completed":
-                completed_production_ids.add(p.id)
+    confirmed_adj_ids, completed_production_ids, doc_dates = _load_movement_doc_filters(db, movements)
     # Bir xil hujjat (document_type, document_id) uchun bitta qator — dublikat harakatlar birlashtiriladi
     rows = []
     seen_doc = set()  # (document_type, document_id)
@@ -494,46 +546,9 @@ async def report_stock_source(
                     if t.from_warehouse_id != warehouse_id:
                         row["wrong_warehouse"] = True
         rows.append(row)
-    # Barcha hujjat turlarida sana — hujjat sanasi (harakat yozilgan vaqt emas), barcha mahsulotlar uchun bir xil
-    purchase_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "Purchase" and r.get("document_id")]
-    sale_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") in ("Sale", "SaleReturn", "SaleReturnRevert") and r.get("document_id")]
-    transfer_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "WarehouseTransfer" and r.get("document_id")]
-    purchases_by_id = {p.id: p for p in db.query(Purchase).filter(Purchase.id.in_(purchase_ids)).all()} if purchase_ids else {}
-    orders_by_id = {o.id: o for o in db.query(Order).filter(Order.id.in_(sale_ids)).all()} if sale_ids else {}
-    transfers_by_id_dates = {t.id: t for t in db.query(WarehouseTransfer).filter(WarehouseTransfer.id.in_(transfer_ids)).all()} if transfer_ids else {}
-    for r in rows:
-        doc_type = r.get("document_type") or ""
-        doc_id = r.get("document_id")
-        if doc_type == "Purchase" and doc_id and doc_id in purchases_by_id and purchases_by_id[doc_id].date:
-            r["date"] = purchases_by_id[doc_id].date.strftime("%d.%m.%Y %H:%M")
-        elif doc_type in ("Sale", "SaleReturn", "SaleReturnRevert") and doc_id and doc_id in orders_by_id and orders_by_id[doc_id].date:
-            r["date"] = orders_by_id[doc_id].date.strftime("%d.%m.%Y %H:%M")
-        elif doc_type == "WarehouseTransfer" and doc_id and doc_id in transfers_by_id_dates and transfers_by_id_dates[doc_id].date:
-            r["date"] = transfers_by_id_dates[doc_id].date.strftime("%d.%m.%Y %H:%M")
-    # Ishlab chiqarish qatorlari uchun: hujjat sanasi va hujjatda ko'rsatilgan miqdor bilan harakatdagi miqdorni solishtirish (farq bo'lsa ogohlantirish)
-    from sqlalchemy.orm import joinedload
-    from app.utils.production_order import production_output_quantity_for_stock
-    prod_ids = [r["document_id"] for r in rows if (r.get("document_type") or "") == "Production" and r.get("document_id")]
-    productions_by_id = {}
-    if prod_ids:
-        for p in db.query(Production).options(joinedload(Production.recipe)).filter(Production.id.in_(prod_ids)).all():
-            productions_by_id[p.id] = p
-    for r in rows:
-        if (r.get("document_type") or "") != "Production" or not r.get("document_id"):
-            continue
-        prod = productions_by_id.get(r["document_id"])
-        if not prod:
-            continue
-        # Qoldiq manbai hisobotida sana — hujjat sanasi (Production.date), tasdiqlash vaqtida emas
-        if prod.date:
-            r["date"] = prod.date.strftime("%d.%m.%Y %H:%M")
-        if not prod.recipe:
-            continue
-        expected = production_output_quantity_for_stock(db, prod, prod.recipe)
-        change = r.get("quantity_change") or 0
-        if abs(expected - change) > 0.001:
-            r["quantity_mismatch"] = True
-            r["document_quantity"] = expected
+    # Hujjat sanalari va Production miqdor mos kelishini tekshirish (helperlar)
+    _apply_document_dates(db, rows)
+    _check_production_quantity_mismatch(db, rows)
     # Tartib: haqiqiy vaqt bo'yicha (created_at), matn sanasi emas — oxirgi qator = hozirgi qoldiq
     rows.sort(key=lambda r: (r.get("_sort_at") or datetime.min, r.get("document_id") or 0))
     # Qoldiq (harakatdan keyin) — ketma-ket yig'indi (sana tartibida)
