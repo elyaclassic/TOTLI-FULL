@@ -1717,6 +1717,20 @@ async def cash_transfer_admin_confirm(
     return RedirectResponse(url=f"/cash/transfers/{transfer_id}?confirmed=1", status_code=303)
 
 
+# Alias: /send -> /sotuvchi-confirm (template backward compat)
+@cash_router.post("/transfers/{transfer_id}/send")
+async def cash_transfer_send_alias(
+    transfer_id: int,
+    request: Request = None,
+    inkasator_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    return await cash_transfer_sotuvchi_confirm(
+        transfer_id, request=request, inkasator_id=inkasator_id, db=db, current_user=current_user,
+    )
+
+
 # Eski endpoint nomini saqlaymiz (backward compat)
 @cash_router.post("/transfers/{transfer_id}/confirm")
 async def cash_transfer_confirm_legacy(

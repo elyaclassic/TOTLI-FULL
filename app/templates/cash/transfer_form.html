@@ -142,8 +142,8 @@
             {% endif %}
         </dl>
         <div class="mt-4 pt-3 border-top d-flex flex-wrap gap-2">
-            {% if transfer.status == 'draft' %}
-            <form method="post" action="/cash/transfers/{{ transfer.id }}/send" class="d-inline" onsubmit="return confirm('Yuborish — hujjat qabul qiluvchi kassa tasdiqlashiga yuboriladi. Davom etasizmi?');">
+            {% if transfer.status == 'pending' %}
+            <form method="post" action="/cash/transfers/{{ transfer.id }}/sotuvchi-confirm" class="d-inline" onsubmit="return confirm('Yuborish — jo\'natuvchi kassadan pul ayriladi va yo\'lga jo\'natiladi. Davom etasizmi?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Yuborish</button>
             </form>
@@ -151,12 +151,12 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
             </form>
-            {% elif transfer.status == 'pending_approval' %}
-            <form method="post" action="/cash/transfers/{{ transfer.id }}/confirm" class="d-inline" onsubmit="return confirm('Pulni qabul qildingizmi? Tasdiqlash — jo\'natuvchi kassadan ayiriladi, sizning kassangizga qo\'shiladi.');">
+            {% elif transfer.status == 'in_transit' %}
+            <form method="post" action="/cash/transfers/{{ transfer.id }}/admin-confirm" class="d-inline" onsubmit="return confirm('Pulni qabul qildingizmi? Tasdiqlash — qabul qiluvchi kassaga qo\'shiladi.');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Tasdiqlash (qabul qilish)</button>
             </form>
-            {% elif transfer.status == 'confirmed' and current_user and current_user.role == 'admin' %}
+            {% elif transfer.status == 'completed' and current_user and current_user.role == 'admin' %}
             <form method="post" action="/cash/transfers/{{ transfer.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — balanslar qaytadi. Faqat admin. Davom etasizmi?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish"><i class="bi bi-arrow-counterclockwise me-1"></i> Bekor qilish</button>
