@@ -1692,14 +1692,23 @@ body {{ font-family: 'Segoe UI', Arial, sans-serif; width: 350px; margin: 0 auto
 async def cash_transfer_admin_confirm(
     transfer_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_auth),
 ):
-    """Admin qabul qiladi — inkasator pulni yetkazdi. Status: in_transit -> completed"""
+    """Qabul qiluvchi (admin yoki to_cash sotuvchisi) tasdiqlaydi.
+    Status: in_transit -> completed."""
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if t.status != "in_transit":
         return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat yoldagi hujjatni qabul qilish mumkin."), status_code=303)
+    # Admin/manager yoki to_cash ega sotuvchi qabul qila oladi
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    is_admin = role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+    if not is_admin and not _user_owns_cash_register(current_user, t.to_cash_id):
+        return RedirectResponse(
+            url=f"/cash/transfers/{transfer_id}?error=" + quote("Bu qabul qiluvchi kassa sizga tegishli emas."),
+            status_code=303,
+        )
     to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
     if not to_cash:
         return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qabul kassasi topilmadi."), status_code=303)
