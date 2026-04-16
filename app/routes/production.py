@@ -161,7 +161,7 @@ def calculate_production_tannarx(db: Session, production, recipe) -> tuple[float
     return total_material_cost, output_units, cost_per_unit
 
 
-def _warehouse_id_for_ingredient(db, product_id, production):
+def _warehouse_id_for_ingredient(db: Session, product_id: int, production) -> int:
     """Xom ashyo qaysi ombordan olinadi — production.warehouse_id (1-ombor) dan.
     Retseptda belgilangan ombor → production yaratilganda tanlangan → shu ombordan oladi."""
     return production.warehouse_id

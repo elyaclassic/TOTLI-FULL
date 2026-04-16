@@ -505,7 +505,7 @@ async def supervisor_confirm_agent_order(
             except Exception:
                 seq = 1
             delivery = Delivery(
-                number=f"{prefix}-{seq:03d}",
+                number=f"{prefix}-{seq:04d}",
                 driver_id=driver_id,
                 order_id=order.id,
                 order_number=order.number,

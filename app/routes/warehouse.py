@@ -2,12 +2,13 @@
 Ombor — qoldiqlar, eksport/import, ombordan omborga o'tkazish.
 """
 import io
-import logging
 import traceback
 from datetime import datetime
 from urllib.parse import quote, unquote
 
-logger = logging.getLogger("app.routes.warehouse")
+from app.logging_config import get_logger
+
+logger = get_logger("warehouse")
 
 import openpyxl
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
