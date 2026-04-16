@@ -500,3 +500,28 @@ class TestAgentOrderStockFlow:
         import app.routes.delivery_routes as m
         assert hasattr(m, "create_stock_movement")
         assert hasattr(m, "delete_stock_movements_for_document")
+
+
+class TestProductConversion:
+    """Tayyor -> Yarim-tayyor konversiya (yangi feature 2026-04-16)."""
+
+    def test_router_endpoints(self):
+        from app.routes.production_convert import router
+        paths = [r.path for r in router.routes]
+        assert "/production/convert" in paths
+        assert "/production/convert/{conv_id}/revert" in paths
+
+    def test_model_exists(self):
+        from app.models.database import ProductConversion
+        assert ProductConversion.__tablename__ == "product_conversions"
+        # Kutilgan columnlar
+        cols = {c.name for c in ProductConversion.__table__.columns}
+        expected = {"id", "number", "date", "warehouse_id", "source_product_id",
+                    "target_product_id", "quantity", "source_cost_price",
+                    "note", "user_id", "status", "created_at"}
+        assert expected.issubset(cols), f"Yetishmayotgan: {expected - cols}"
+
+    def test_included_in_main_app(self):
+        from main import app
+        paths = [r.path for r in app.routes if hasattr(r, "path")]
+        assert "/production/convert" in paths

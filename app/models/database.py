@@ -467,6 +467,43 @@ class StockAdjustmentDocItem(Base):
 
 
 # ==========================================
+# MAHSULOT KONVERSIYASI (tayyor -> yarim_tayyor)
+# ==========================================
+
+class ProductConversion(Base):
+    """Tayyor mahsulotni yarim_tayyor ga aylantirish hujjati.
+
+    Biznes kontekst: yarim_tayyor mahsulot yetmasa, mavjud tayyor mahsulotni
+    buzib yarim_tayyor sifatida ishlatish. Masalan: 'Malinali 400gr' paket
+    tayyor mahsuloti 6 kg bor - 5 kg ni buzib yarim_tayyor 'Malinali' qilish,
+    keyin yangi retsept bilan boshqa tayyor mahsulot chiqarish.
+
+    Tasdiqlanganda 2 ta StockMovement yaratiladi:
+      - conversion_out: source tayyor mahsulot -qty
+      - conversion_in: target yarim_tayyor mahsulot +qty
+    Target Stock.cost_price source cost_price bilan yangilanadi (weighted avg).
+    """
+    __tablename__ = "product_conversions"
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, index=True)
+    date = Column(DateTime, default=datetime.now)
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    source_product_id = Column(Integer, ForeignKey("products.id"))
+    target_product_id = Column(Integer, ForeignKey("products.id"))
+    quantity = Column(Float)  # kg
+    source_cost_price = Column(Float, default=0)  # konversiya paytidagi manba tannarxi
+    note = Column(String(500), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), default="confirmed")  # confirmed | cancelled
+    created_at = Column(DateTime, default=datetime.now)
+
+    warehouse = relationship("Warehouse")
+    source_product = relationship("Product", foreign_keys=[source_product_id])
+    target_product = relationship("Product", foreign_keys=[target_product_id])
+    user = relationship("User")
+
+
+# ==========================================
 # KASSA QOLDIQ HUJJATI (1C uslubida)
 # ==========================================
 
@@ -1816,6 +1853,7 @@ def init_db():
     ensure_dismissal_docs_table()
     ensure_production_groups_tables()
     ensure_production_group_docs_table()
+    ensure_product_conversions_table()
     ensure_attendance_improvements()
     ensure_visit_feedback_columns()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
@@ -1930,6 +1968,34 @@ def ensure_production_group_docs_table():
                     conn.execute(text("ALTER TABLE production_group_docs ADD COLUMN confirmed_at DATETIME"))
     except Exception as e:
         print(f"ensure_production_group_docs_table: {e}")
+
+
+def ensure_product_conversions_table():
+    """product_conversions jadvalini yaratish (tayyor → yarim_tayyor konversiyasi)."""
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='product_conversions'"))
+            if r.fetchone() is None:
+                conn.execute(text("""
+                    CREATE TABLE product_conversions (
+                        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                        number VARCHAR(50) NOT NULL UNIQUE,
+                        date DATETIME,
+                        warehouse_id INTEGER REFERENCES warehouses(id),
+                        source_product_id INTEGER REFERENCES products(id),
+                        target_product_id INTEGER REFERENCES products(id),
+                        quantity FLOAT,
+                        source_cost_price FLOAT DEFAULT 0,
+                        note VARCHAR(500),
+                        user_id INTEGER REFERENCES users(id),
+                        status VARCHAR(20) DEFAULT 'confirmed',
+                        created_at DATETIME
+                    )
+                """))
+                conn.execute(text("CREATE INDEX idx_conv_date ON product_conversions(date)"))
+                conn.execute(text("CREATE INDEX idx_conv_status ON product_conversions(status)"))
+    except Exception as e:
+        print(f"ensure_product_conversions_table: {e}")
 
 
 def ensure_attendance_improvements():

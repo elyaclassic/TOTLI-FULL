@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid py-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">♻️ Tayyor → Yarim-tayyor konversiya</h4>
+    <a href="/production" class="btn btn-outline-secondary btn-sm">← Ishlab chiqarish</a>
+  </div>
+
+  {% if msg %}
+    <div class="alert alert-success">{{ msg }}</div>
+  {% endif %}
+  {% if error %}
+    <div class="alert alert-danger">Xato: {{ detail or error }}</div>
+  {% endif %}
+
+  <div class="card mb-4">
+    <div class="card-header bg-success text-white">
+      <strong>Yangi konversiya</strong>
+    </div>
+    <div class="card-body">
+      <form method="POST" action="/production/convert">
+        <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token','') }}">
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Ombor</label>
+            <select name="warehouse_id" class="form-select" required>
+              {% for w in warehouses %}
+              <option value="{{ w.id }}">{{ w.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Manba (tayyor mahsulot)</label>
+            <select name="source_product_id" class="form-select" required>
+              <option value="">— tanlang —</option>
+              {% for p in tayyor_products %}
+              <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Qabul qiluvchi (yarim_tayyor)</label>
+            <select name="target_product_id" class="form-select" required>
+              <option value="">— tanlang —</option>
+              {% for p in yarim_products %}
+              <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label">Miqdor (kg)</label>
+            <input type="number" step="any" min="0.001" name="quantity" class="form-control" required>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Izoh (sabab)</label>
+            <input type="text" name="note" class="form-control" placeholder="Masalan: yarim-tayyor malinali yetmadi">
+          </div>
+          <div class="col-12">
+            <button type="submit" class="btn btn-success">♻️ Konversiya yaratish va tasdiqlash</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <strong>Oxirgi konversiyalar</strong>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive">
+        <table class="table table-striped table-hover mb-0">
+          <thead class="table-light">
+            <tr>
+              <th>#</th>
+              <th>Raqam</th>
+              <th>Sana</th>
+              <th>Ombor</th>
+              <th>Manba (tayyor)</th>
+              <th>Target (yarim)</th>
+              <th class="text-end">Miqdor</th>
+              <th class="text-end">Tannarx</th>
+              <th>Izoh</th>
+              <th>Holat</th>
+              <th>Kim</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in conversions %}
+            <tr class="{% if c.status == 'cancelled' %}text-muted{% endif %}">
+              <td>{{ loop.index }}</td>
+              <td><code>{{ c.number }}</code></td>
+              <td>{{ c.date.strftime('%d.%m.%Y %H:%M') if c.date else '—' }}</td>
+              <td>{{ c.warehouse.name if c.warehouse else '—' }}</td>
+              <td>{{ c.source_product.name if c.source_product else '—' }}</td>
+              <td>{{ c.target_product.name if c.target_product else '—' }}</td>
+              <td class="text-end">{{ "%.3f"|format(c.quantity or 0) }}</td>
+              <td class="text-end">{{ "{:,.0f}"|format(c.source_cost_price or 0) }}</td>
+              <td>{{ c.note or '' }}</td>
+              <td>
+                {% if c.status == 'confirmed' %}
+                  <span class="badge bg-success">Tasdiq</span>
+                {% else %}
+                  <span class="badge bg-secondary">Bekor</span>
+                {% endif %}
+              </td>
+              <td>{{ c.user.username if c.user else '—' }}</td>
+              <td>
+                {% if c.status == 'confirmed' %}
+                <form method="POST" action="/production/convert/{{ c.id }}/revert" class="d-inline"
+                      onsubmit="return confirm('Konversiyani bekor qilasizmi? Stock teskari qaytariladi.');">
+                  <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token','') }}">
+                  <button type="submit" class="btn btn-sm btn-outline-danger">Bekor</button>
+                </form>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="12" class="text-center text-muted py-4">Hali konversiyalar yo'q</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
