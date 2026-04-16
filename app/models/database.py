@@ -487,7 +487,8 @@ class ProductConversion(Base):
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
-    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))  # source ombori
+    target_warehouse_id = Column(Integer, ForeignKey("warehouses.id"), nullable=True)  # target ombori
     source_product_id = Column(Integer, ForeignKey("products.id"))
     target_product_id = Column(Integer, ForeignKey("products.id"))
     quantity = Column(Float)  # kg
@@ -497,7 +498,8 @@ class ProductConversion(Base):
     status = Column(String(20), default="confirmed")  # confirmed | cancelled
     created_at = Column(DateTime, default=datetime.now)
 
-    warehouse = relationship("Warehouse")
+    warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
+    target_warehouse = relationship("Warehouse", foreign_keys=[target_warehouse_id])
     source_product = relationship("Product", foreign_keys=[source_product_id])
     target_product = relationship("Product", foreign_keys=[target_product_id])
     user = relationship("User")
@@ -1982,6 +1984,7 @@ def ensure_product_conversions_table():
                         number VARCHAR(50) NOT NULL UNIQUE,
                         date DATETIME,
                         warehouse_id INTEGER REFERENCES warehouses(id),
+                        target_warehouse_id INTEGER REFERENCES warehouses(id),
                         source_product_id INTEGER REFERENCES products(id),
                         target_product_id INTEGER REFERENCES products(id),
                         quantity FLOAT,
@@ -1994,6 +1997,11 @@ def ensure_product_conversions_table():
                 """))
                 conn.execute(text("CREATE INDEX idx_conv_date ON product_conversions(date)"))
                 conn.execute(text("CREATE INDEX idx_conv_status ON product_conversions(status)"))
+            else:
+                # Additive migration: target_warehouse_id ustuni yo'q bo'lsa qo'shish
+                cols = [row[1] for row in conn.execute(text("PRAGMA table_info(product_conversions)"))]
+                if "target_warehouse_id" not in cols:
+                    conn.execute(text("ALTER TABLE product_conversions ADD COLUMN target_warehouse_id INTEGER REFERENCES warehouses(id)"))
     except Exception as e:
         print(f"ensure_product_conversions_table: {e}")
 

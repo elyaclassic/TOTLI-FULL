@@ -159,7 +159,8 @@ async def convert_list(
 
 @router.post("")
 async def convert_create(
-    warehouse_id: int = Form(...),
+    source_warehouse_id: int = Form(...),
+    target_warehouse_id: int = Form(...),
     source_product_id: int = Form(...),
     target_product_id: int = Form(...),
     quantity: float = Form(...),
@@ -167,7 +168,9 @@ async def convert_create(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Konversiya yaratish va darhol tasdiqlash (atomik)."""
+    """Konversiya yaratish va darhol tasdiqlash (atomik).
+    source_warehouse_id: tayyor mahsulot qaerdan olinadi
+    target_warehouse_id: yarim_tayyor qaerga qo'shiladi (odatda boshqa ombor)"""
     if quantity is None or quantity <= 0:
         return RedirectResponse(url="/production/convert?error=qty&detail=" + quote("Miqdor 0 dan katta bo'lishi kerak"), status_code=303)
     if source_product_id == target_product_id:
@@ -175,8 +178,9 @@ async def convert_create(
 
     source = db.query(Product).options(joinedload(Product.unit)).filter(Product.id == source_product_id).first()
     target = db.query(Product).filter(Product.id == target_product_id).first()
-    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
-    if not source or not target or not warehouse:
+    source_wh = db.query(Warehouse).filter(Warehouse.id == source_warehouse_id).first()
+    target_wh = db.query(Warehouse).filter(Warehouse.id == target_warehouse_id).first()
+    if not source or not target or not source_wh or not target_wh:
         return RedirectResponse(url="/production/convert?error=notfound", status_code=303)
     if source.type != "tayyor":
         return RedirectResponse(url="/production/convert?error=src_type&detail=" + quote("Manba mahsulot 'tayyor' turiga tegishli bo'lishi kerak"), status_code=303)
@@ -198,7 +202,7 @@ async def convert_create(
     # Stock lock + yetishmovchilik tekshiruvi (race safety)
     source_stock = (
         db.query(Stock)
-        .filter(Stock.warehouse_id == warehouse_id, Stock.product_id == source_product_id)
+        .filter(Stock.warehouse_id == source_warehouse_id, Stock.product_id == source_product_id)
         .with_for_update()
         .first()
     )
@@ -207,7 +211,7 @@ async def convert_create(
         unit_label = "dona" if is_piece else "kg"
         return RedirectResponse(
             url="/production/convert?error=stock&detail=" + quote(
-                f"Ombor yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}"
+                f"Manba omborda yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}"
             ),
             status_code=303,
         )
@@ -222,10 +226,11 @@ async def convert_create(
     conv = ProductConversion(
         number=number,
         date=datetime.now(),
-        warehouse_id=warehouse_id,
+        warehouse_id=source_warehouse_id,
+        target_warehouse_id=target_warehouse_id,
         source_product_id=source_product_id,
         target_product_id=target_product_id,
-        quantity=actual_kg,  # target ga qo'shiladigan kg (haqiqiy)
+        quantity=actual_kg,
         source_cost_price=source_cost,
         note=(note.strip() or None),
         user_id=current_user.id if current_user else None,
@@ -234,22 +239,23 @@ async def convert_create(
     db.add(conv)
     db.flush()
 
+    # Note ichiga target_warehouse_id ni kodlaymiz (revert paytida kerak)
     create_stock_movement(
         db=db,
-        warehouse_id=warehouse_id,
+        warehouse_id=source_warehouse_id,
         product_id=source_product_id,
-        quantity_change=-source_units,  # manba birligida (dona yoki kg)
+        quantity_change=-source_units,
         operation_type="conversion_out",
         document_type="Conversion",
         document_id=conv.id,
         document_number=number,
         user_id=current_user.id if current_user else None,
-        note=f"Konversiya (chiqim): {source.name} → {target.name} [{actual_kg} kg]",
+        note=f"Konversiya (chiqim): {source.name} → {target.name} [{actual_kg} kg, target_wh={target_warehouse_id}]",
         created_at=conv.date,
     )
     create_stock_movement(
         db=db,
-        warehouse_id=warehouse_id,
+        warehouse_id=target_warehouse_id,
         product_id=target_product_id,
         quantity_change=+actual_kg,
         operation_type="conversion_in",
@@ -257,16 +263,16 @@ async def convert_create(
         document_id=conv.id,
         document_number=number,
         user_id=current_user.id if current_user else None,
-        note=f"Konversiya (kirim): {source.name} ({source_units} dona) → {target.name}"
-             if is_piece else f"Konversiya (kirim): {source.name} → {target.name}",
+        note=(f"Konversiya (kirim): {source.name} ({source_units} dona) → {target.name} [source_wh={source_warehouse_id}]"
+              if is_piece else f"Konversiya (kirim): {source.name} → {target.name} [source_wh={source_warehouse_id}]"),
         created_at=conv.date,
     )
 
-    # Target Stock cost_price — weighted average (kg bo'yicha)
+    # Target Stock cost_price — weighted average (target omborda)
     if target_cost_per_kg > 0 and hasattr(Stock, "cost_price"):
         target_stock = (
             db.query(Stock)
-            .filter(Stock.warehouse_id == warehouse_id, Stock.product_id == target_product_id)
+            .filter(Stock.warehouse_id == target_warehouse_id, Stock.product_id == target_product_id)
             .first()
         )
         if target_stock:
@@ -279,10 +285,10 @@ async def convert_create(
 
     db.commit()
     logger.info(
-        "conversion_create: #%s wh=%s %s(%s)=-%s%s -> %s(%s)=+%skg cost=%.2f user=%s",
-        number, warehouse_id, source.name, source_product_id,
+        "conversion_create: #%s src_wh=%s %s(%s)=-%s%s -> tgt_wh=%s %s(%s)=+%skg cost=%.2f user=%s",
+        number, source_warehouse_id, source.name, source_product_id,
         source_units, ("dona" if is_piece else "kg"),
-        target.name, target_product_id, actual_kg, source_cost,
+        target_warehouse_id, target.name, target_product_id, actual_kg, source_cost,
         current_user.id if current_user else None,
     )
     try:
@@ -324,7 +330,7 @@ async def convert_revert(
 
     create_stock_movement(
         db=db,
-        warehouse_id=conv.warehouse_id,
+        warehouse_id=conv.warehouse_id,  # source wh
         product_id=conv.source_product_id,
         quantity_change=+source_units_back,
         operation_type="conversion_revert",
@@ -335,9 +341,11 @@ async def convert_revert(
         note=f"Konversiya bekor: manba qaytarildi",
         created_at=datetime.now(),
     )
+    # target_warehouse_id yo'q bo'lsa (eski yozuv) — source warehouse (backward compat)
+    tgt_wh_id = conv.target_warehouse_id or conv.warehouse_id
     create_stock_movement(
         db=db,
-        warehouse_id=conv.warehouse_id,
+        warehouse_id=tgt_wh_id,
         product_id=conv.target_product_id,
         quantity_change=-float(conv.quantity or 0),
         operation_type="conversion_revert",

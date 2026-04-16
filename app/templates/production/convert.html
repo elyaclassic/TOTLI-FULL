@@ -25,14 +25,22 @@
         <input type="hidden" name="target_product_id" id="target_product_id" required>
         <div class="row g-3">
           <div class="col-md-3">
-            <label class="form-label">Ombor</label>
-            <select name="warehouse_id" id="warehouse_id" class="form-select" required>
+            <label class="form-label">Manba ombori (tayyor)</label>
+            <select name="source_warehouse_id" id="source_warehouse_id" class="form-select" required>
               {% for w in warehouses %}
-              <option value="{{ w.id }}">{{ w.name }}</option>
+              <option value="{{ w.id }}" {% if 'tayyor' in (w.name or '')|lower and 'yarim' not in (w.name or '')|lower %}selected{% endif %}>{{ w.name }}</option>
               {% endfor %}
             </select>
           </div>
-          <div class="col-md-4">
+          <div class="col-md-3">
+            <label class="form-label">Qabul qiluvchi ombori (yarim)</label>
+            <select name="target_warehouse_id" id="target_warehouse_id" class="form-select" required>
+              {% for w in warehouses %}
+              <option value="{{ w.id }}" {% if 'yarim' in (w.name or '')|lower %}selected{% endif %}>{{ w.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
             <label class="form-label">Manba (tayyor mahsulot)</label>
             <input type="text" class="form-control" id="source_search" list="tayyor_list"
                    placeholder="Nomi yoki kodini yozing..." autocomplete="off" required>
@@ -58,7 +66,7 @@
             </datalist>
             <small class="text-muted" id="target_hint"></small>
           </div>
-          <div class="col-md-2">
+          <div class="col-md-3">
             <label class="form-label">Miqdor (kg)</label>
             <input type="number" step="any" min="0.001" name="quantity" id="quantity_input" class="form-control" required>
             <small class="text-primary fw-bold" id="pieces_calc"></small>
@@ -130,7 +138,7 @@
   const qtyInput = document.getElementById('quantity_input');
 
   async function refreshStock() {
-    const wh = document.getElementById('warehouse_id').value;
+    const wh = document.getElementById('source_warehouse_id').value;
     const src = document.getElementById('source_product_id').value;
     if (!wh || !src) {
       stockBox.style.display = 'none';
@@ -186,7 +194,7 @@
     }
   }
 
-  document.getElementById('warehouse_id').addEventListener('change', refreshStock);
+  document.getElementById('source_warehouse_id').addEventListener('change', refreshStock);
   document.getElementById('source_search').addEventListener('input', () => setTimeout(refreshStock, 50));
   qtyInput.addEventListener('input', updatePiecesCalc);
 
@@ -231,8 +239,9 @@
               <th>#</th>
               <th>Raqam</th>
               <th>Sana</th>
-              <th>Ombor</th>
+              <th>Manba ombori</th>
               <th>Manba (tayyor)</th>
+              <th>Target ombori</th>
               <th>Target (yarim)</th>
               <th class="text-end">Miqdor</th>
               <th class="text-end">Tannarx</th>
@@ -250,6 +259,7 @@
               <td>{{ c.date.strftime('%d.%m.%Y %H:%M') if c.date else '—' }}</td>
               <td>{{ c.warehouse.name if c.warehouse else '—' }}</td>
               <td>{{ c.source_product.name if c.source_product else '—' }}</td>
+              <td>{{ c.target_warehouse.name if c.target_warehouse else (c.warehouse.name if c.warehouse else '—') }}</td>
               <td>{{ c.target_product.name if c.target_product else '—' }}</td>
               <td class="text-end">{{ "%.3f"|format(c.quantity or 0) }}</td>
               <td class="text-end">{{ "%.0f"|format(c.source_cost_price or 0) }}</td>
@@ -273,7 +283,7 @@
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="12" class="text-center text-muted py-4">Hali konversiyalar yo'q</td></tr>
+            <tr><td colspan="13" class="text-center text-muted py-4">Hali konversiyalar yo'q</td></tr>
             {% endfor %}
           </tbody>
         </table>
