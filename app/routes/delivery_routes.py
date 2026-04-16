@@ -39,21 +39,41 @@ router = APIRouter(tags=["delivery"])
 async def delivery_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     drivers = db.query(Driver).all()
     today = datetime.now().date()
+    driver_ids = [d.id for d in drivers]
+    # Batch loadlar (3N -> 3 ta umumiy query)
+    last_loc_map: dict = {}
+    today_count_map: dict = {}
+    pending_count_map: dict = {}
+    if driver_ids:
+        # Oxirgi DriverLocation per driver — MAX(id) GROUP BY + load
+        max_loc_ids = [
+            r.max_id for r in
+            db.query(DriverLocation.driver_id, func.max(DriverLocation.id).label("max_id"))
+            .filter(DriverLocation.driver_id.in_(driver_ids))
+            .group_by(DriverLocation.driver_id).all()
+            if r.max_id
+        ]
+        if max_loc_ids:
+            for loc in db.query(DriverLocation).filter(DriverLocation.id.in_(max_loc_ids)).all():
+                last_loc_map[loc.driver_id] = loc
+        # Bugungi yetkazishlar soni
+        for r in (
+            db.query(Delivery.driver_id, func.count(Delivery.id).label("cnt"))
+            .filter(Delivery.driver_id.in_(driver_ids), Delivery.created_at >= today)
+            .group_by(Delivery.driver_id).all()
+        ):
+            today_count_map[r.driver_id] = r.cnt
+        # Pending yetkazishlar soni
+        for r in (
+            db.query(Delivery.driver_id, func.count(Delivery.id).label("cnt"))
+            .filter(Delivery.driver_id.in_(driver_ids), Delivery.status == "pending")
+            .group_by(Delivery.driver_id).all()
+        ):
+            pending_count_map[r.driver_id] = r.cnt
     for driver in drivers:
-        driver.last_location = (
-            db.query(DriverLocation)
-            .filter(DriverLocation.driver_id == driver.id)
-            .order_by(DriverLocation.recorded_at.desc())
-            .first()
-        )
-        driver.today_deliveries = (
-            db.query(Delivery)
-            .filter(Delivery.driver_id == driver.id, Delivery.created_at >= today)
-            .count()
-        )
-        driver.pending_deliveries = (
-            db.query(Delivery).filter(Delivery.driver_id == driver.id, Delivery.status == "pending").count()
-        )
+        driver.last_location = last_loc_map.get(driver.id)
+        driver.today_deliveries = today_count_map.get(driver.id, 0)
+        driver.pending_deliveries = pending_count_map.get(driver.id, 0)
     deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(50).all()
     return templates.TemplateResponse("delivery/list.html", {
         "request": request,

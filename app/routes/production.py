@@ -212,17 +212,30 @@ def _calculate_total_material_cost(db: Session, items_actual: list) -> float:
     """Jami xom ashyo tannarxi — yarim_tayyor mahsulot uchun retsept tannarxidan, aks holda purchase_price/cost_price."""
     total = 0.0
     _cache: dict = {}
+    pids = [pid for pid, _ in items_actual]
+    if not pids:
+        return 0.0
+    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(pids)).all()}
+    # Stock — har product uchun birinchi (warehouse-agnostic, eski mantiq)
+    stocks_map: dict = {}
+    for s in db.query(Stock).filter(Stock.product_id.in_(pids)).all():
+        stocks_map.setdefault(s.product_id, s)
+    semi_pids = [pid for pid, p in products_map.items() if getattr(p, 'type', None) == 'yarim_tayyor']
+    semi_recipes_map: dict = {}
+    if semi_pids:
+        for r in db.query(Recipe).filter(Recipe.product_id.in_(semi_pids), Recipe.is_active == True).all():
+            semi_recipes_map.setdefault(r.product_id, r)
     for product_id, actual_use in items_actual:
-        product = db.query(Product).filter(Product.id == product_id).first()
+        product = products_map.get(product_id)
         if not product:
             continue
         if getattr(product, 'type', None) == 'yarim_tayyor':
-            semi_recipe = db.query(Recipe).filter(Recipe.product_id == product.id, Recipe.is_active == True).first()
+            semi_recipe = semi_recipes_map.get(product_id)
             if semi_recipe:
                 total += actual_use * _calculate_recipe_cost_per_kg(db, semi_recipe.id, _cache)
                 continue
         cost = product.purchase_price or 0
-        stock = db.query(Stock).filter(Stock.product_id == product_id).first()
+        stock = stocks_map.get(product_id)
         if stock and getattr(stock, 'cost_price', None) and stock.cost_price > 0:
             cost = stock.cost_price
         total += actual_use * cost
