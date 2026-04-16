@@ -1404,6 +1404,89 @@ async def cash_transfer_create(
     return RedirectResponse(url=f"/cash/transfers/{t.id}", status_code=303)
 
 
+@cash_router.post("/transfers/sotuvchi-send")
+async def cash_transfer_sotuvchi_send(
+    to_cash_id: int = Form(...),
+    amount: float = Form(...),
+    from_cash_id: Optional[int] = Form(None),
+    inkasator_id: Optional[int] = Form(None),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuvchi o'z kassasidan pul yuboradi — darhol in_transit status.
+    Admin/manager har qanday kassadan yuborishi mumkin (from_cash_id Form bilan).
+    Sotuvchi faqat o'z kassasidan — from_cash_id avtomatik aniqlanadi."""
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    is_admin = role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+
+    # From cash aniqlash
+    if is_admin and from_cash_id:
+        src_id = from_cash_id
+    else:
+        # Sotuvchi uchun — user's cash
+        user_cash_ids = []
+        if getattr(current_user, "cash_register_id", None):
+            user_cash_ids.append(current_user.cash_register_id)
+        for cr in (getattr(current_user, "cash_registers_list", None) or []):
+            user_cash_ids.append(cr.id)
+        if not user_cash_ids:
+            return JSONResponse({"ok": False, "error": "Sizga kassa biriktirilmagan"}, status_code=400)
+        if from_cash_id and from_cash_id in user_cash_ids:
+            src_id = from_cash_id
+        else:
+            src_id = user_cash_ids[0]
+
+    if src_id == to_cash_id:
+        return JSONResponse({"ok": False, "error": "Manba va qabul kassasi bir xil bolmasin"}, status_code=400)
+    if not amount or amount <= 0:
+        return JSONResponse({"ok": False, "error": "Summa 0 dan katta bolishi kerak"}, status_code=400)
+
+    from_cash = db.query(CashRegister).filter(CashRegister.id == src_id).with_for_update().first()
+    to_cash = db.query(CashRegister).filter(CashRegister.id == to_cash_id).first()
+    if not from_cash or not to_cash:
+        return JSONResponse({"ok": False, "error": "Kassa topilmadi"}, status_code=404)
+
+    # Balans tekshirish
+    if (from_cash.balance or 0) < amount:
+        return JSONResponse({
+            "ok": False,
+            "error": f"Kassada yetarli mablag' yo'q: bor {(from_cash.balance or 0):,.0f}, kerak {amount:,.0f}",
+        }, status_code=400)
+
+    # Inkasator izohi
+    full_note = note or ""
+    if inkasator_id:
+        inkasator = db.query(Partner).filter(Partner.id == inkasator_id).first()
+        if inkasator:
+            ink_note = f"Inkasator: {inkasator.name}"
+            full_note = (full_note + " | " + ink_note) if full_note else ink_note
+
+    last_t = db.query(CashTransfer).order_by(CashTransfer.id.desc()).first()
+    num = f"KK-{datetime.now().strftime('%Y%m%d')}-{((last_t.id + 1) if last_t else 1):04d}"
+    t = CashTransfer(
+        number=num,
+        from_cash_id=src_id,
+        to_cash_id=to_cash_id,
+        amount=float(amount),
+        status="in_transit",  # darhol yo'lda
+        user_id=current_user.id if current_user else None,
+        sent_by_user_id=current_user.id if current_user else None,
+        sent_at=datetime.now(),
+        note=full_note or None,
+    )
+    db.add(t)
+    db.flush()
+    _sync_cash_balance(db, src_id)
+    db.commit()
+    try:
+        from app.bot.services.audit_watchdog import audit_cash_transfer
+        audit_cash_transfer(t.id)
+    except Exception:
+        pass
+    return JSONResponse({"ok": True, "id": t.id, "number": t.number})
+
+
 @cash_router.get("/transfers/my-pending")
 async def cash_transfers_my_pending(
     request: Request,

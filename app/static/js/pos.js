@@ -743,6 +743,59 @@
                 btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Tasdiqlash';
             });
     };
+    /* Yangi yuborish (sotuvchi boshlaydi) */
+    var posBtnNew = document.getElementById('posBtnNewTransfer');
+    var posNewBox = document.getElementById('posNewTransferBox');
+    if (posBtnNew && posNewBox) {
+        posBtnNew.addEventListener('click', function() {
+            posNewBox.style.display = (posNewBox.style.display === 'none') ? 'block' : 'none';
+        });
+        var cancelBtn = document.getElementById('posNewTrCancel');
+        if (cancelBtn) cancelBtn.addEventListener('click', function() { posNewBox.style.display = 'none'; });
+        var submitBtn = document.getElementById('posNewTrSubmit');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', function() {
+                var toCash = document.getElementById('posNewTrTo').value;
+                var amount = parseFloat(document.getElementById('posNewTrAmount').value || 0);
+                var ink = document.getElementById('posNewTrInk').value;
+                var note = (document.getElementById('posNewTrNote').value || '').trim();
+                if (!toCash) { alert('Qabul qiluvchi kassa tanlang'); return; }
+                if (!amount || amount <= 0) { alert("Summa 0 dan katta bo'lishi kerak"); return; }
+                if (!confirm(amount.toLocaleString('ru-RU') + " so'm yuborildimi?")) return;
+                submitBtn.disabled = true;
+                submitBtn.textContent = 'Yuborilmoqda...';
+                var csrfToken = (document.querySelector('meta[name=\"csrf-token\"]') || {}).content ||
+                    (document.querySelector('input[name=\"csrf_token\"]') || {}).value || '';
+                var fd = new FormData();
+                fd.append('csrf_token', csrfToken);
+                fd.append('to_cash_id', toCash);
+                fd.append('amount', amount);
+                if (ink) fd.append('inkasator_id', ink);
+                if (note) fd.append('note', note);
+                fetch('/cash/transfers/sotuvchi-send', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function(r) { return r.json().then(function(j) { return { ok: r.ok, data: j }; }); })
+                    .then(function(res) {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Yuborish';
+                        if (res.ok && res.data.ok) {
+                            alert('Yuborildi: ' + res.data.number);
+                            document.getElementById('posNewTrAmount').value = '';
+                            document.getElementById('posNewTrNote').value = '';
+                            posNewBox.style.display = 'none';
+                            loadInkasatsiya();
+                        } else {
+                            alert('Xato: ' + (res.data.error || 'nomalum'));
+                        }
+                    })
+                    .catch(function() {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Yuborish';
+                        alert('Tarmoq xatosi');
+                    });
+            });
+        }
+    }
+
     /* Receiver: in_transit -> completed (qabul qilish) */
     window.receiveInkasatsiya = function(id, btn, amount, fromCash, toCash, number) {
         if (!confirm('Pulni qabul qildingizmi? ' + (amount||0).toLocaleString('ru-RU') + " so'm " + toCash + ' ga kiradi.')) return;

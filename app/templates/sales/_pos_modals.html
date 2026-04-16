@@ -274,7 +274,42 @@
                         </tbody>
                     </table>
                 </div>
-                <div style="padding:0.75rem 1.75rem;background:#fff;border-top:1px solid #f0f2f5;text-align:right;">
+                <!-- Yangi yuborish formasi (sotuvchi boshlaydi) -->
+                <div id="posNewTransferBox" style="display:none;padding:1rem 1.75rem;background:#f0fdf4;border-top:1px solid #d1fae5;">
+                    <div class="fw-bold mb-2" style="color:#065f46;">➕ Yangi yuborish</div>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <label class="form-label small mb-1">Qabul qiluvchi kassa</label>
+                            <select id="posNewTrTo" class="form-select form-select-sm">
+                                {% for c in pos_cash_registers or [] %}
+                                <option value="{{ c.id }}">{{ c.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Summa (so'm)</label>
+                            <input type="number" step="any" min="1" id="posNewTrAmount" class="form-control form-control-sm" placeholder="0">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label small mb-1">Inkasator</label>
+                            <select id="posNewTrInk" class="form-select form-select-sm">
+                                <option value="">— tanlang —</option>
+                                {% for p in pos_partners %}
+                                <option value="{{ p.id }}">{{ p.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-2 d-flex align-items-end gap-1">
+                            <button type="button" id="posNewTrSubmit" class="btn btn-success btn-sm flex-fill" style="border-radius:10px;">Yuborish</button>
+                            <button type="button" id="posNewTrCancel" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">✕</button>
+                        </div>
+                        <div class="col-12">
+                            <input type="text" id="posNewTrNote" class="form-control form-control-sm" placeholder="Izoh (ixtiyoriy)" style="font-size:0.85rem;">
+                        </div>
+                    </div>
+                </div>
+                <div style="padding:0.75rem 1.75rem;background:#fff;border-top:1px solid #f0f2f5;display:flex;justify-content:space-between;align-items:center;">
+                    <button type="button" id="posBtnNewTransfer" class="btn btn-success btn-sm" style="border-radius:10px;">➕ Yangi yuborish</button>
                     <a href="/cash/transfers" class="btn btn-outline-secondary btn-sm" style="border-radius:10px;">Barcha hujjatlar</a>
                 </div>
             </div>

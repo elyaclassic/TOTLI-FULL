@@ -912,6 +912,8 @@ async def sales_pos(
             default_partner_id = pos_partners[0].id if pos_partners else None
     # Harajat turlari (POS expense modal uchun)
     pos_expense_types = db.query(ExpenseType).order_by(ExpenseType.name).all()
+    # Kassalar (inkasatsiya "Yangi yuborish" modali uchun)
+    pos_cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
     return templates.TemplateResponse("sales/pos.html", {
         "request": request,
         "page_title": "Sotuv oynasi",
@@ -926,6 +928,7 @@ async def sales_pos(
         "pos_categories": pos_categories,
         "pos_all_categories": pos_all_categories,
         "pos_partners": pos_partners,
+        "pos_cash_registers": pos_cash_registers,
         "default_partner_id": default_partner_id,
         "pos_expense_types": pos_expense_types,
         "success": success,
