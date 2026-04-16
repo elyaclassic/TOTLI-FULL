@@ -19,8 +19,10 @@
       <strong>Yangi konversiya</strong>
     </div>
     <div class="card-body">
-      <form method="POST" action="/production/convert">
+      <form method="POST" action="/production/convert" id="convertForm">
         <input type="hidden" name="csrf_token" value="{{ request.cookies.get('csrf_token','') }}">
+        <input type="hidden" name="source_product_id" id="source_product_id" required>
+        <input type="hidden" name="target_product_id" id="target_product_id" required>
         <div class="row g-3">
           <div class="col-md-3">
             <label class="form-label">Ombor</label>
@@ -32,21 +34,25 @@
           </div>
           <div class="col-md-4">
             <label class="form-label">Manba (tayyor mahsulot)</label>
-            <select name="source_product_id" class="form-select" required>
-              <option value="">— tanlang —</option>
+            <input type="text" class="form-control" id="source_search" list="tayyor_list"
+                   placeholder="Nomi yoki kodini yozing..." autocomplete="off" required>
+            <datalist id="tayyor_list">
               {% for p in tayyor_products %}
-              <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+              <option data-id="{{ p.id }}" value="{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}">
               {% endfor %}
-            </select>
+            </datalist>
+            <small class="text-muted" id="source_hint"></small>
           </div>
           <div class="col-md-3">
             <label class="form-label">Qabul qiluvchi (yarim_tayyor)</label>
-            <select name="target_product_id" class="form-select" required>
-              <option value="">— tanlang —</option>
+            <input type="text" class="form-control" id="target_search" list="yarim_list"
+                   placeholder="Nomi yoki kodini yozing..." autocomplete="off" required>
+            <datalist id="yarim_list">
               {% for p in yarim_products %}
-              <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+              <option data-id="{{ p.id }}" value="{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}">
               {% endfor %}
-            </select>
+            </datalist>
+            <small class="text-muted" id="target_hint"></small>
           </div>
           <div class="col-md-2">
             <label class="form-label">Miqdor (kg)</label>
@@ -61,6 +67,65 @@
           </div>
         </div>
       </form>
+
+<script>
+(function(){
+  // Tayyor va yarim ro'yxatlar (id -> label)
+  const tayyorMap = {};
+  {% for p in tayyor_products %}
+  tayyorMap[{{ p.id }}] = {{ (p.name ~ (' (' ~ p.code ~ ')' if p.code else '')) | tojson }};
+  {% endfor %}
+  const yarimMap = {};
+  {% for p in yarim_products %}
+  yarimMap[{{ p.id }}] = {{ (p.name ~ (' (' ~ p.code ~ ')' if p.code else '')) | tojson }};
+  {% endfor %}
+
+  function bindLookup(searchInput, hiddenInput, hintEl, map) {
+    // label -> id reverse map
+    const revMap = {};
+    Object.entries(map).forEach(([id, label]) => { revMap[label] = id; });
+    searchInput.addEventListener('input', () => {
+      const val = searchInput.value.trim();
+      const id = revMap[val];
+      if (id) {
+        hiddenInput.value = id;
+        hintEl.textContent = "✓ tanlandi (ID " + id + ")";
+        hintEl.className = "text-success";
+      } else {
+        hiddenInput.value = "";
+        if (val) {
+          hintEl.textContent = "⚠ ro'yxatdan tanlang";
+          hintEl.className = "text-warning";
+        } else {
+          hintEl.textContent = "";
+        }
+      }
+    });
+  }
+
+  bindLookup(
+    document.getElementById('source_search'),
+    document.getElementById('source_product_id'),
+    document.getElementById('source_hint'),
+    tayyorMap
+  );
+  bindLookup(
+    document.getElementById('target_search'),
+    document.getElementById('target_product_id'),
+    document.getElementById('target_hint'),
+    yarimMap
+  );
+
+  document.getElementById('convertForm').addEventListener('submit', (e) => {
+    const src = document.getElementById('source_product_id').value;
+    const tgt = document.getElementById('target_product_id').value;
+    if (!src || !tgt) {
+      e.preventDefault();
+      alert("Iltimos, mahsulotlarni ro'yxatdan to'g'ri tanlang.");
+    }
+  });
+})();
+</script>
     </div>
   </div>
 
