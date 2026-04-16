@@ -28,10 +28,14 @@ async def cmd_start(message: Message):
             parse_mode="HTML",
         )
         return
+    from app.bot.config import OPS_CHAT_IDS
+    ops_hint = ""
+    if message.from_user.id in OPS_CHAT_IDS:
+        ops_hint = "\n\n💼 <b>/ops</b> — amaliyot menyu (harajat, kirim, o'tkazma)"
     await message.answer(
         f"Salom, <b>{message.from_user.full_name}</b>!\n"
         f"TOTLI HOLVA hisobot boti tayyor.\n"
-        f"Quyidagi menyudan tanlang:",
+        f"Quyidagi menyudan tanlang:{ops_hint}",
         parse_mode="HTML",
         reply_markup=main_menu_reply_kb(),
     )

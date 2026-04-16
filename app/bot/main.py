@@ -2,9 +2,10 @@
 import asyncio
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.config import BOT_TOKEN
-from app.bot.handlers import start, reports
+from app.bot.handlers import start, reports, ops
 
 _bot = None
 _dp = None
@@ -14,7 +15,14 @@ _task = None
 def _create_bot_and_dp():
     global _bot, _dp
     _bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
-    _dp = Dispatcher()
+    # FSM storage — in-memory (bot restart da state yo'qoladi, lekin bu OK
+    # chunki foydalanuvchi /ops bilan qaytadan boshlashi mumkin)
+    _dp = Dispatcher(storage=MemoryStorage())
+    # MUHIM: ops router start routerdan OLDIN register bo'lishi kerak,
+    # chunki start router "F.text.in_(MENU_TEXT_MAP.keys())" filterli message handler
+    # bor — ops FSM state handler esa state bilan cheklangan bo'lgani uchun
+    # dispatcher tartibi aniq ishlashini ta'minlash uchun.
+    _dp.include_router(ops.router)
     _dp.include_router(start.router)
     _dp.include_router(reports.router)
     return _bot, _dp

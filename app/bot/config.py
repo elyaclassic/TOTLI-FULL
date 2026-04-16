@@ -24,3 +24,13 @@ NOTIFY_CHAT_IDS = [1057546370]  # @RD2197 — rahbar
 
 # Har bir hodisada alohida xabar (real-time)
 REALTIME_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC
+
+# ===== Bot ichidan operatsiya (kirim / harajat / o'tkazma) =====
+# Faqat shu Telegram ID'lar ma'lumot kirityish huquqiga ega
+OPS_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC
+
+# PIN kod (.env da BOT_ADMIN_PIN o'rnating, default 1234)
+BOT_ADMIN_PIN = os.environ.get("BOT_ADMIN_PIN", "1234")
+
+# PIN muvaffaqiyatli kiritilgandan keyin qancha soat faol (shundan keyin qayta PIN)
+BOT_PIN_SESSION_HOURS = int(os.environ.get("BOT_PIN_SESSION_HOURS", "12"))
