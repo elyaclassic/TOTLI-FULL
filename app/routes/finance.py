@@ -1695,14 +1695,13 @@ async def cash_transfer_admin_confirm(
     current_user: User = Depends(require_auth),
 ):
     """Qabul qiluvchi (admin yoki to_cash sotuvchisi) tasdiqlaydi.
-    - in_transit -> completed (oddiy holat)
-    - pending -> completed (admin/receiver "majburiy qabul" — sender bosmasa ham;
-                             from_cash balansi ham ayriladi)."""
+    Status: in_transit -> completed."""
     t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
     if not t:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    if t.status not in ("pending", "in_transit"):
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat pending yoki yoldagi hujjatni qabul qilish mumkin."), status_code=303)
+    if t.status != "in_transit":
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat yoldagi hujjatni qabul qilish mumkin."), status_code=303)
+    # Admin/manager yoki to_cash ega sotuvchi qabul qila oladi
     role = (getattr(current_user, "role", None) or "").strip().lower()
     is_admin = role in ("admin", "manager", "menejer", "rahbar", "raxbar")
     if not is_admin and not _user_owns_cash_register(current_user, t.to_cash_id):
@@ -1711,24 +1710,12 @@ async def cash_transfer_admin_confirm(
             status_code=303,
         )
     to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
-    from_cash = db.query(CashRegister).filter(CashRegister.id == t.from_cash_id).with_for_update().first()
-    if not to_cash or not from_cash:
-        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassa topilmadi."), status_code=303)
-
-    # Pending dan o'tsa — avval from_cash balansi tekshiriladi va sent marker qo'yiladi
-    if t.status == "pending":
-        if (from_cash.balance or 0) < (t.amount or 0):
-            return RedirectResponse(
-                url=f"/cash/transfers/{transfer_id}?error=" + quote(f"Manba kassada yetarli mablag' yo'q: {from_cash.balance or 0:,.0f} < {t.amount:,.0f}"),
-                status_code=303,
-            )
-        t.sent_by_user_id = current_user.id
-        t.sent_at = datetime.now()
+    if not to_cash:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qabul kassasi topilmadi."), status_code=303)
     t.status = "completed"
     t.approved_by_user_id = current_user.id
     t.approved_at = datetime.now()
     db.flush()
-    _sync_cash_balance(db, t.from_cash_id)
     _sync_cash_balance(db, t.to_cash_id)
     db.commit()
     try:
