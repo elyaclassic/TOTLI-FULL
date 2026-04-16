@@ -1,6 +1,22 @@
 """
 TOTLI HOLVA — global konstantalar (xato sahifalari va boshqalar).
 """
+import os as _os
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        v = _os.getenv(name)
+        return int(v) if v else default
+    except (ValueError, TypeError):
+        return default
+
+
+# Query limitlari — magic numberlar o'rniga. Env dan override mumkin.
+QUERY_LIMIT_DEFAULT = _env_int("QUERY_LIMIT_DEFAULT", 200)
+QUERY_LIMIT_HISTORY = _env_int("QUERY_LIMIT_HISTORY", 500)
+QUERY_LIMIT_LIST = _env_int("QUERY_LIMIT_LIST", 300)
+
 
 HTML_404 = """
 <!DOCTYPE html>

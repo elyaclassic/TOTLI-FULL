@@ -21,6 +21,7 @@ import re as _re
 from app.deps import require_auth, require_admin
 from app.utils.db_schema import ensure_payments_status_column, ensure_cash_opening_balance_column
 from app.utils.audit import log_action
+from app.constants import QUERY_LIMIT_DEFAULT
 
 router = APIRouter(prefix="/finance", tags=["finance"])
 cash_router = APIRouter(prefix="/cash", tags=["cash-transfers"])
@@ -123,7 +124,7 @@ async def finance(
             q = q.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    payments = q.limit(200).all()
+    payments = q.limit(QUERY_LIMIT_DEFAULT).all()
     # Har payment uchun ExpenseDoc va EmployeeAdvance linklari (klikab havolalar uchun)
     payment_ids_all = [p.id for p in payments if p.id]
     expense_doc_by_payment = {}
@@ -336,7 +337,7 @@ async def finance_harajatlar(
             q = q.filter(Payment.date < datetime.combine(dt + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    payments = q.limit(200).all()
+    payments = q.limit(QUERY_LIMIT_DEFAULT).all()
     filter_date_from = str(date_from or "").strip()[:10] if date_from else ""
     filter_date_to = str(date_to or "").strip()[:10] if date_to else ""
     purchase_expenses_q = (
@@ -360,7 +361,7 @@ async def finance_harajatlar(
             purchase_expenses_q = purchase_expenses_q.filter(Purchase.date < datetime.combine(dt + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    purchase_expenses_list = purchase_expenses_q.order_by(Purchase.date.desc()).limit(200).all()
+    purchase_expenses_list = purchase_expenses_q.order_by(Purchase.date.desc()).limit(QUERY_LIMIT_DEFAULT).all()
     # Har payment uchun bog'langan ExpenseDoc (HD-... raqamlari klikab bo'lishi uchun)
     payment_ids_expense = [p.id for p in payments if p.id]
     expense_doc_by_payment = {}

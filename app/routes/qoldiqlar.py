@@ -40,6 +40,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY, QUERY_LIMIT_LIST
 
 router = APIRouter(prefix="/qoldiqlar", tags=["qoldiqlar"])
 
@@ -67,24 +68,24 @@ async def qoldiqlar_page(
     cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).all()
     warehouses = get_warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
-    stocks = db.query(Stock).join(Warehouse).join(Product).order_by(Stock.updated_at.desc()).limit(300).all()
+    stocks = db.query(Stock).join(Warehouse).join(Product).order_by(Stock.updated_at.desc()).limit(QUERY_LIMIT_LIST).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     tovar_docs = (
         db.query(StockAdjustmentDoc)
         .order_by(StockAdjustmentDoc.id.desc())
-        .limit(500)
+        .limit(QUERY_LIMIT_HISTORY)
         .all()
     )
     cash_docs = (
         db.query(CashBalanceDoc)
         .order_by(CashBalanceDoc.created_at.desc())
-        .limit(200)
+        .limit(QUERY_LIMIT_DEFAULT)
         .all()
     )
     kontragent_docs = (
         db.query(PartnerBalanceDoc)
         .order_by(PartnerBalanceDoc.created_at.desc())
-        .limit(200)
+        .limit(QUERY_LIMIT_DEFAULT)
         .all()
     )
     # Xodimlar qoldiqlari — har xodimning oxirgi Salary.total qiymati (bitta query)
@@ -106,7 +107,7 @@ async def qoldiqlar_page(
     xodim_docs = (
         db.query(EmployeeBalanceDoc)
         .order_by(EmployeeBalanceDoc.created_at.desc())
-        .limit(200)
+        .limit(QUERY_LIMIT_DEFAULT)
         .all()
     )
     return templates.TemplateResponse("qoldiqlar/index.html", {
@@ -154,7 +155,7 @@ async def qoldiqlar_tarix(
             q = q.filter(StockMovement.warehouse_id == selected_warehouse_id)
         if selected_product_id:
             q = q.filter(StockMovement.product_id == selected_product_id)
-        q = q.order_by(StockMovement.created_at.desc()).limit(500)
+        q = q.order_by(StockMovement.created_at.desc()).limit(QUERY_LIMIT_HISTORY)
         movements = q.all()
 
         movement_rows = []
