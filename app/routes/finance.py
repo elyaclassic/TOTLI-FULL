@@ -1179,6 +1179,7 @@ async def finance_harajat_hujjat_tasdiqlash(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    ensure_payments_status_column(db)
     try:
         doc = db.query(ExpenseDoc).options(joinedload(ExpenseDoc.items)).filter(ExpenseDoc.id == doc_id).first()
         if not doc:
@@ -1192,7 +1193,13 @@ async def finance_harajat_hujjat_tasdiqlash(
         total = sum(getattr(it, "amount", 0) or 0 for it in doc.items)
         if total <= 0:
             return RedirectResponse(url="/finance/harajatlar?error=no_amount", status_code=303)
-        ensure_payments_status_column(db)
+        claim = db.execute(
+            text("UPDATE expense_docs SET status = 'confirmed', total_amount = :tot WHERE id = :id AND status != 'confirmed'"),
+            {"tot": total, "id": doc_id}
+        )
+        if claim.rowcount == 0:
+            db.rollback()
+            return RedirectResponse(url="/finance/harajatlar?error=already_confirmed", status_code=303)
         pay_number = f"PAY-{datetime.now().strftime('%Y%m%d%H%M%S')}-D{doc_id}"
         payment_date = datetime.now()
         if getattr(doc, "date", None):
@@ -1206,6 +1213,7 @@ async def finance_harajat_hujjat_tasdiqlash(
             first_user = db.query(User).order_by(User.id).first()
             uid = first_user.id if first_user else None
         if uid is None:
+            db.rollback()
             return RedirectResponse(url="/finance/harajatlar?error=no_user", status_code=303)
         payment = Payment(
             number=pay_number,
@@ -1224,8 +1232,8 @@ async def finance_harajat_hujjat_tasdiqlash(
         db.add(payment)
         db.flush()
         db.execute(
-            text("UPDATE expense_docs SET payment_id = :pid, status = 'confirmed', total_amount = :tot WHERE id = :id"),
-            {"pid": payment.id, "tot": total, "id": doc_id}
+            text("UPDATE expense_docs SET payment_id = :pid WHERE id = :id"),
+            {"pid": payment.id, "id": doc_id}
         )
         _sync_cash_balance(db, doc.cash_register_id)
         db.commit()
