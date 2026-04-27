@@ -180,15 +180,17 @@ async def auth_middleware_impl(request: Request, call_next):
         return await call_next(request)
 
     token = request.cookies.get("session_token")
+    from urllib.parse import quote
+    login_url = f"/login?next={quote(path, safe='/')}" if (method == "GET" and path not in ("/", "/login")) else "/login"
     if not token:
         if path.startswith("/api/"):
             return JSONResponse(status_code=401, content={"detail": "Login talab qilindi"})
-        return RedirectResponse(url="/login", status_code=303)
+        return RedirectResponse(url=login_url, status_code=303)
     user_data = get_user_from_token(token)
     if not user_data:
         if path.startswith("/api/"):
             return JSONResponse(status_code=401, content={"detail": "Session muddati tugadi"})
-        resp = RedirectResponse(url="/login", status_code=303)
+        resp = RedirectResponse(url=login_url, status_code=303)
         resp.delete_cookie("session_token")
         return resp
     # Eski format token: user_id int bo'lishi shart, aks holda qayta login
@@ -196,7 +198,7 @@ async def auth_middleware_impl(request: Request, call_next):
     if not isinstance(raw_uid, int):
         if path.startswith("/api/"):
             return JSONResponse(status_code=401, content={"detail": "Session muddati tugadi"})
-        resp = RedirectResponse(url="/login", status_code=303)
+        resp = RedirectResponse(url=login_url, status_code=303)
         resp.delete_cookie("session_token")
         return resp
     db = SessionLocal()
