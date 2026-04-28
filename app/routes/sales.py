@@ -77,11 +77,16 @@ async def sales_list(
     status: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
+    page: Optional[int] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     from urllib.parse import unquote
-    q = db.query(Order).filter(Order.type == "sale")
+    from app.utils.pagination import paginate, pagination_query_string
+    from sqlalchemy.orm import subqueryload
+    q = db.query(Order).options(
+        subqueryload(Order.partner), subqueryload(Order.warehouse)
+    ).filter(Order.type == "sale")
     if date_from and date_from.strip():
         q = q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
     if date_to and date_to.strip():
@@ -119,73 +124,66 @@ async def sales_list(
         q = q.order_by(Order.status.asc() if sort_order == "asc" else Order.status.desc())
     else:
         q = q.order_by(Order.date.desc())
-    orders = q.limit(QUERY_LIMIT_HISTORY).all()
-    confirmed_orders = [o for o in orders if o.status in ('completed', 'confirmed')]
-    total_sum = sum(float(o.total or 0) for o in confirmed_orders)
-    # split/mixed to'lovlarni bitta batch query bilan olish (N+1 oldini olish)
-    split_order_ids = [o.id for o in confirmed_orders if (o.payment_type or '').strip().lower() in ('split', 'mixed', '')]
-    pays_map: dict = {}
-    if split_order_ids:
-        batch_pays = db.query(Payment.order_id, Payment.payment_type, Payment.amount).filter(
-            Payment.order_id.in_(split_order_ids),
-            Payment.type == "income",
-            Payment.status == "confirmed",
-        ).all()
-        for p_oid, p_type, p_amt in batch_pays:
-            pays_map.setdefault(p_oid, []).append((p_type, p_amt))
-    # To'lov turlari: total = naqd + plastik + terminal + click + qarz
-    naqd_sum = 0
-    plastik_sum = 0
-    terminal_sum = 0
-    click_sum = 0
-    qarz_sum = 0
-    for o in confirmed_orders:
-        pt = (o.payment_type or '').strip().lower()
-        total = float(o.total or 0)
-        debt = float(o.debt or 0)
-        to_langan = total - debt  # to'langan qismi
-        if debt > 0:
-            qarz_sum += debt
-        if pt in ('split', 'mixed', ''):
-            pays = pays_map.get(o.id, [])
-            if pays:
-                for ppt, pamt in pays:
-                    ppt_l = (ppt or '').strip().lower()
-                    if ppt_l in ('cash', 'naqd'):
-                        naqd_sum += float(pamt or 0)
-                    elif ppt_l in ('card', 'plastik'):
-                        plastik_sum += float(pamt or 0)
-                    elif ppt_l == 'terminal':
-                        terminal_sum += float(pamt or 0)
-                    elif ppt_l == 'click':
-                        click_sum += float(pamt or 0)
-            else:
-                naqd_sum += to_langan
-        elif pt == 'naqd':
-            naqd_sum += to_langan
-        elif pt == 'plastik':
-            plastik_sum += to_langan
-        elif pt == 'terminal':
-            terminal_sum += to_langan
-        elif pt == 'click':
-            click_sum += to_langan
-        elif pt == 'qarz':
-            pass
+
+    pg = paginate(q, page or 1, per_page=50)
+    orders = pg["items"]
+
+    from sqlalchemy import func as sa_func
+    stats_row = db.query(
+        sa_func.coalesce(sa_func.sum(Order.total), 0),
+        sa_func.coalesce(sa_func.sum(Order.debt), 0),
+        sa_func.count(Order.id),
+    ).filter(
+        Order.type == "sale",
+        Order.status.in_(["completed", "confirmed"]),
+    )
+    if date_from and date_from.strip():
+        stats_row = stats_row.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+    if date_to and date_to.strip():
+        stats_row = stats_row.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+    if wh_id is not None and wh_id > 0:
+        stats_row = stats_row.filter(Order.warehouse_id == wh_id)
+    total_sum, qarz_sum, completed_count = stats_row.one()
+    total_sum = float(total_sum or 0)
+    qarz_sum = float(qarz_sum or 0)
+    draft_count = pg["total_count"] - completed_count
+
+    pay_stats = db.query(Payment.payment_type, sa_func.sum(Payment.amount)).join(
+        Order, Order.id == Payment.order_id
+    ).filter(
+        Order.type == "sale",
+        Order.status.in_(["completed", "confirmed"]),
+        Payment.type == "income",
+        Payment.status == "confirmed",
+    )
+    if date_from and date_from.strip():
+        pay_stats = pay_stats.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+    if date_to and date_to.strip():
+        pay_stats = pay_stats.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+    if wh_id is not None and wh_id > 0:
+        pay_stats = pay_stats.filter(Order.warehouse_id == wh_id)
+    pay_stats = pay_stats.group_by(Payment.payment_type).all()
+    pay_map = {(pt or "").strip().lower(): float(s or 0) for pt, s in pay_stats}
+    naqd_sum = pay_map.get("cash", 0) + pay_map.get("naqd", 0)
+    plastik_sum = pay_map.get("card", 0) + pay_map.get("plastik", 0)
+    terminal_sum = pay_map.get("terminal", 0)
+    click_sum = pay_map.get("click", 0)
+
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
     info = request.query_params.get("info")
     info_detail = unquote(request.query_params.get("detail", "") or "") if info else ""
     sort_by_val = sort_col if sort_col in ("number", "date", "partner", "warehouse", "total", "status") else "date"
-    from urllib.parse import urlencode
-    filter_params = urlencode({
-        k: v for k, v in [
-            ("date_from", (date_from or "").strip()[:10] or None),
-            ("date_to", (date_to or "").strip()[:10] or None),
-            ("warehouse_id", wh_id if wh_id else None),
-            ("status", status_filter or None),
-        ] if v is not None
-    })
+    filter_params = {
+        "date_from": (date_from or "").strip()[:10] or "",
+        "date_to": (date_to or "").strip()[:10] or "",
+        "warehouse_id": str(wh_id) if wh_id else "",
+        "status": status_filter or "",
+        "sort_by": sort_by_val,
+        "sort_dir": sort_order,
+    }
+    pq = pagination_query_string(filter_params)
     return templates.TemplateResponse("sales/list.html", {
         "request": request,
         "orders": orders,
@@ -202,7 +200,16 @@ async def sales_list(
         "selected_status": status_filter,
         "sort_by": sort_by_val,
         "sort_dir": sort_order,
-        "filter_params": filter_params,
+        "filter_params": "&".join(f"{k}={v}" for k, v in filter_params.items() if v),
+        "page": pg["page"],
+        "per_page": pg["per_page"],
+        "total_count": pg["total_count"],
+        "total_pages": pg["total_pages"],
+        "items_count": pg["items_count"],
+        "base_url": "/sales",
+        "pagination_query": pq,
+        "completed_count": completed_count,
+        "draft_count": draft_count,
         "page_title": "Sotuvlar",
         "current_user": current_user,
         "error": error,
