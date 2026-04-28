@@ -13,7 +13,7 @@ from sqlalchemy import desc
 
 from app.deps import get_db, require_admin
 from app.models.database import User, SalesPlan, Order, Agent
-from app.template_helpers import templates
+from app.core import templates
 from app.logging_config import get_logger
 
 logger = get_logger("admin_sales_plans")
