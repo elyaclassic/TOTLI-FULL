@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 
 {% block content %}
-{% set fmt = lambda v: ('{:,.0f}'.format(v|float).replace(',', ' ')) %}
 
 {% if request.query_params.get('saved') %}
 <div class="alert alert-success alert-dismissible fade show" role="alert">
@@ -71,7 +70,7 @@
                         {% for p in plans %}
                         <tr>
                             <td><code>{{ p.period }}</code></td>
-                            <td class="text-end fw-bold">{{ fmt(p.amount or 0) }}</td>
+                            <td class="text-end fw-bold">{{ "{:,.0f}".format((p.amount or 0)|float).replace(",", " ") }}</td>
                             <td class="text-muted small">{{ p.created_at.strftime('%d.%m.%Y') if p.created_at else '—' }}</td>
                             <td class="text-end">
                                 <form method="POST" action="/admin/sales-plans/delete/{{ p.id }}" style="display:inline;" onsubmit="return confirm('{{ p.period }} rejasini o\'chirmoqchimisiz?');">
@@ -99,7 +98,7 @@
     <div class="card-header py-2 d-flex justify-content-between align-items-center">
         <span class="fw-bold"><i class="bi bi-people-fill"></i> Joriy oy ({{ current_period }}) — agentlar bo'yicha</span>
         {% if current_plan %}
-        <span class="badge bg-primary">Reja: {{ fmt(current_plan.amount) }} so'm / agent</span>
+        <span class="badge bg-primary">Reja: {{ "{:,.0f}".format(current_plan.amount|float).replace(",", " ") }} so'm / agent</span>
         {% else %}
         <span class="badge bg-warning">Reja qo'yilmagan</span>
         {% endif %}
@@ -123,8 +122,8 @@
                 <tr>
                     <td class="muted-cell">{{ loop.index }}</td>
                     <td><strong>{{ r.agent.full_name or r.agent.code }}</strong>{% if r.agent.region %} <span class="text-muted small">— {{ r.agent.region }}</span>{% endif %}</td>
-                    <td class="text-end fw-bold">{{ fmt(r.sold) }}</td>
-                    <td class="text-end text-muted">{{ fmt(r.target) }}</td>
+                    <td class="text-end fw-bold">{{ "{:,.0f}".format(r.sold|float).replace(",", " ") }}</td>
+                    <td class="text-end text-muted">{{ "{:,.0f}".format(r.target|float).replace(",", " ") }}</td>
                     <td class="text-end">
                         {% if r.percent >= 100 %}
                         <span class="badge bg-success">{{ r.percent }}%</span>
@@ -136,7 +135,7 @@
                         <span class="text-muted">—</span>
                         {% endif %}
                     </td>
-                    <td class="text-end {% if r.remaining == 0 and r.target > 0 %}text-success{% endif %}">{{ fmt(r.remaining) }}</td>
+                    <td class="text-end {% if r.remaining == 0 and r.target > 0 %}text-success{% endif %}">{{ "{:,.0f}".format(r.remaining|float).replace(",", " ") }}</td>
                     <td style="min-width:140px;">
                         {% if r.target > 0 %}
                         <div class="progress" style="height:14px;">

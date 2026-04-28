@@ -82,13 +82,12 @@
 </div>
 
 {% if sales_plan_rows is defined and sales_plan_rows %}
-{% set fmt_money = lambda v: ('{:,.0f}'.format(v|float).replace(',', ' ')) %}
 <div class="card mb-3">
     <div class="card-header d-flex justify-content-between align-items-center py-2">
         <span class="fw-bold"><i class="bi bi-bullseye text-primary"></i> Oylik savdo rejasi — {{ sales_plan_period }}</span>
         <div>
             {% if sales_plan_amount > 0 %}
-            <span class="badge bg-primary me-2">Reja: {{ fmt_money(sales_plan_amount) }} so'm/agent</span>
+            <span class="badge bg-primary me-2">Reja: {{ "{:,.0f}".format(sales_plan_amount).replace(",", " ") }} so'm/agent</span>
             {% else %}
             <span class="badge bg-warning me-2">Reja qo'yilmagan</span>
             {% endif %}
@@ -111,7 +110,7 @@
                 {% for r in sales_plan_rows %}
                 <tr>
                     <td><strong>{{ r.agent.full_name or r.agent.code }}</strong>{% if r.agent.region %} <small class="text-muted">— {{ r.agent.region }}</small>{% endif %}</td>
-                    <td class="text-end fw-bold">{{ fmt_money(r.sold) }}</td>
+                    <td class="text-end fw-bold">{{ "{:,.0f}".format(r.sold).replace(",", " ") }}</td>
                     <td class="text-end">
                         {% if sales_plan_amount > 0 %}
                             {% if r.percent >= 100 %}<span class="badge bg-success">{{ r.percent }}%</span>
