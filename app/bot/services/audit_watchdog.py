@@ -38,7 +38,7 @@ from app.models.database import (
     Warehouse, WarehouseTransfer, WarehouseTransferItem,
     ProductConversion,
     Delivery,
-    User,
+    User, Employee,
 )
 
 # ============ GLOBAL SOZLAMALAR ============
@@ -264,20 +264,27 @@ def audit_sale(order_id: int):
             if partner and (partner.balance or 0) >= HUGE_PARTNER_DEBT:
                 warnings.append(f"• Mijoz <b>{partner.name}</b> jami qarzi: <b>{fmt(partner.balance)}</b>")
 
+        seller_name = ""
+        if o.user_id:
+            seller = db.query(User).filter(User.id == o.user_id).first()
+            seller_name = seller.username if seller else ""
+
         if warnings:
             p_name = partner.name if partner else "Naqd"
             text = (
                 _hdr("warn", "Sotuv shubhali")
                 + f"\nHujjat: <b>{o.number}</b>\nMijoz: {p_name}\n"
-                + f"Summa: {fmt(total)}, qarz: {fmt(debt)}\n\n"
-                + _fmt_list(warnings)
+                + f"Summa: {fmt(total)}, qarz: {fmt(debt)}\n"
+                + (f"Sotuvchi: {seller_name}\n" if seller_name else "")
+                + "\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"sale:{o.id}")
         else:
             p_name = partner.name if partner else "Naqd"
+            seller_tag = f" | {seller_name}" if seller_name else ""
             _log_activity(
                 "🛒 SOTUV",
-                f"<b>{o.number}</b>: {p_name} — {fmt(total)} so'm" + (f" (qarz: {fmt(debt)})" if debt > 0 else ""),
+                f"<b>{o.number}</b>: {p_name} — {fmt(total)} so'm" + (f" (qarz: {fmt(debt)})" if debt > 0 else "") + seller_tag,
             )
     except Exception as e:
         print(f"[Audit] sale xato: {e}", flush=True)
@@ -385,17 +392,35 @@ def audit_production(prod_id: int):
         if recipe:
             prod = db.query(Product).filter(Product.id == recipe.product_id).first()
             p_name = prod.name if prod else ""
+
+        import re
+        kg_per_piece = 0.0
+        m = re.search(r'(\d+(?:\.\d+)?)\s*(kg|gr|g)', p_name.lower())
+        if m:
+            val = float(m.group(1))
+            kg_per_piece = val / 1000 if m.group(2) in ('gr', 'g') else val
+        total_kg = qty * kg_per_piece if kg_per_piece > 0 else 0
+        qty_str = f"{fmt(qty)} dona ({total_kg:,.2f} kg)" if total_kg > 0 else f"{fmt(qty)}"
+
+        op_name = ""
+        if pr.operator_id:
+            emp = db.query(Employee).filter(Employee.id == pr.operator_id).first()
+            op_name = emp.full_name if emp else ""
+
         if warnings:
             text = (
                 _hdr("warn", "Ishlab chiqarish shubhali")
                 + f"\nHujjat: <b>{pr.number}</b>\nMahsulot: {p_name}\n"
-                + f"Miqdor: {fmt(qty)}\n\n" + _fmt_list(warnings)
+                + f"Miqdor: {qty_str}\n"
+                + (f"Operator: {op_name}\n" if op_name else "")
+                + "\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"production:{pr.id}")
         else:
+            op_tag = f" | {op_name}" if op_name else ""
             _log_activity(
                 "🏭 IShL.CH.",
-                f"<b>{pr.number}</b>: {p_name} {fmt(qty)} kg",
+                f"<b>{pr.number}</b>: {p_name} {qty_str}{op_tag}",
             )
     except Exception as e:
         print(f"[Audit] production xato: {e}", flush=True)
@@ -442,17 +467,28 @@ def audit_expense(doc_id: int):
         if dup_count:
             warnings.append(f"• Takror? 24 soat ichida shu kassada {dup_count} ta aynan shunday harajat")
 
+        exp_user = ""
+        if doc.user_id:
+            u = db.query(User).filter(User.id == doc.user_id).first()
+            exp_user = u.username if u else ""
+        cr = db.query(CashRegister).filter(CashRegister.id == doc.cash_register_id).first() if doc.cash_register_id else None
+        cr_name = cr.name if cr else ""
+
         if warnings:
             text = (
                 _hdr("warn", "Harajat shubhali")
                 + f"\nHujjat: <b>{doc.number or '#' + str(doc.id)}</b>\n"
-                + f"Summa: {fmt(total)}\n\n" + _fmt_list(warnings)
+                + f"Summa: {fmt(total)}\n"
+                + (f"Kassa: {cr_name}\n" if cr_name else "")
+                + (f"Foydalanuvchi: {exp_user}\n" if exp_user else "")
+                + "\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"expense:{doc.id}")
         else:
+            user_tag = f" | {exp_user}" if exp_user else ""
             _log_activity(
                 "💸 HARAJAT",
-                f"<b>{doc.number or '#'+str(doc.id)}</b> — {fmt(total)} so'm",
+                f"<b>{doc.number or '#'+str(doc.id)}</b> — {fmt(total)} so'm" + (f" ({cr_name})" if cr_name else "") + user_tag,
             )
     except Exception as e:
         print(f"[Audit] expense xato: {e}", flush=True)
@@ -491,19 +527,30 @@ def audit_payment(payment_id: int):
             except Exception:
                 pass
 
+        pay_user = ""
+        if pay.user_id:
+            u = db.query(User).filter(User.id == pay.user_id).first()
+            pay_user = u.username if u else ""
+        pay_cr = db.query(CashRegister).filter(CashRegister.id == pay.cash_register_id).first() if pay.cash_register_id else None
+        pay_cr_name = pay_cr.name if pay_cr else ""
+
         if warnings:
             text = (
                 _hdr("warn", "To'lov shubhali")
                 + f"\nHujjat: <b>{pay.number or '#' + str(pay.id)}</b>\n"
                 + f"Turi: {pay.type} / {pay.category or '—'}\n"
-                + f"Summa: {fmt(amount)}\n\n" + _fmt_list(warnings)
+                + f"Summa: {fmt(amount)}\n"
+                + (f"Kassa: {pay_cr_name}\n" if pay_cr_name else "")
+                + (f"Foydalanuvchi: {pay_user}\n" if pay_user else "")
+                + "\n" + _fmt_list(warnings)
             )
             _push(text, dedup_key=f"payment:{pay.id}")
         else:
             icon = "💰" if pay.type == "income" else "💳"
+            user_tag = f" | {pay_user}" if pay_user else ""
             _log_activity(
                 f"{icon} TO'LOV",
-                f"<b>{pay.number or '#'+str(pay.id)}</b> [{pay.type}/{pay.category or '—'}] — {fmt(amount)} so'm",
+                f"<b>{pay.number or '#'+str(pay.id)}</b> [{pay.type}/{pay.category or '—'}] {pay_cr_name} — {fmt(amount)} so'm{user_tag}",
             )
     except Exception as e:
         print(f"[Audit] payment xato: {e}", flush=True)
