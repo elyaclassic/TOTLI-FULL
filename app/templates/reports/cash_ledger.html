@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .ledger-sign { display:inline-block; width:22px; text-align:center; font-weight:700; }
+    .ledger-sign.plus  { color:#2e7d32; }
+    .ledger-sign.minus { color:#c62828; }
+    .cat-badge { font-size: .72rem; padding: .18rem .45rem; border-radius: 6px; background:#eef2f7; color:#334155; white-space: nowrap; }
+    .cat-badge.sale { background:#e8f5e9; color:#2e7d32; }
+    .cat-badge.agent_collection, .cat-badge.delivery { background:#e3f2fd; color:#1565c0; }
+    .cat-badge.expense, .cat-badge.expense_doc, .cat-badge.salary, .cat-badge.rent { background:#fdecea; color:#c62828; }
+    .cat-badge.advance { background:#fff8e1; color:#b45309; }
+    .cat-badge.supplier_payment, .cat-badge.purchase { background:#fff3e0; color:#e65100; }
+    .cat-badge.transfer { background:#f3e5f5; color:#7b1fa2; }
+    .cat-badge.other { background:#eef2f7; color:#334155; }
+    .doc-link { font-family: ui-monospace, Menlo, monospace; font-size: .85rem; color:#1a73e8; text-decoration:none; }
+    .doc-link:hover { text-decoration: underline; }
+    .ledger-table td { vertical-align: middle; }
+    .qty-cell { font-variant-numeric: tabular-nums; font-weight:600; }
+    .qty-cell.plus  { color:#2e7d32; }
+    .qty-cell.minus { color:#c62828; }
+    .desc-cell { max-width: 320px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+</style>
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-cash-stack text-success"></i> Kassa jurnali</h4>
+    <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+</div>
+
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/cash-ledger" class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Kassa</label>
+            <select name="cash_register_id" class="form-select">
+                <option value="">— Barchasi —</option>
+                {% for c in cash_registers %}
+                <option value="{{ c.id }}" {% if selected_cash_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Yo'nalish</label>
+            <select name="direction" class="form-select">
+                <option value="" {% if not selected_direction %}selected{% endif %}>— Barchasi —</option>
+                <option value="in" {% if selected_direction == 'in' %}selected{% endif %}>Kirim</option>
+                <option value="out" {% if selected_direction == 'out' %}selected{% endif %}>Chiqim</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Kategoriya</label>
+            <select name="category" class="form-select">
+                <option value="">— Barchasi —</option>
+                {% for code, label in category_items %}
+                <option value="{{ code }}" {% if selected_category == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Ko'rsatish</button>
+            <a href="/reports/cash-ledger" class="btn btn-outline-secondary">Tozalash</a>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary">{{ "{:,}".format(total_count) }}</div>
+            <div class="lbl"><i class="bi bi-list-ul me-1"></i>Jami qator</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success">+{{ "{:,.0f}".format(totals.kirim) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-down-circle me-1"></i>Kirim (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-danger">−{{ "{:,.0f}".format(totals.chiqim) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-up-circle me-1"></i>Chiqim (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num {% if totals.netto >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:+,.0f}".format(totals.netto) }}</div>
+            <div class="lbl"><i class="bi bi-calculator me-1"></i>Netto (so'm)</div>
+        </div>
+    </div>
+</div>
+
+<div class="card data-table">
+    <div class="card-header">
+        <span class="fw-600 d-flex align-items-center gap-2">
+            <i class="bi bi-cash-stack text-success"></i> Kassa harakatlari
+        </span>
+        <small class="text-muted">Sana kamayish tartibida</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 ledger-table">
+                <thead>
+                    <tr>
+                        <th style="width:32px"></th>
+                        <th style="width:52px">#</th>
+                        <th style="width:140px">Sana</th>
+                        <th>Hujjat</th>
+                        <th>Kassa</th>
+                        <th>Kategoriya</th>
+                        <th>Izoh</th>
+                        <th class="text-end">Summa</th>
+                        <th>Kontragent</th>
+                        <th>Kim</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if entries %}
+                        {% for e in entries %}
+                        {% set is_plus = e.direction == 'in' %}
+                        <tr>
+                            <td class="text-center">
+                                {% if is_plus %}
+                                    <span class="ledger-sign plus">+</span>
+                                {% else %}
+                                    <span class="ledger-sign minus">−</span>
+                                {% endif %}
+                            </td>
+                            <td class="muted-cell">{{ (page - 1) * per_page + loop.index }}</td>
+                            <td class="muted-cell" style="white-space:nowrap;">{{ e.date.strftime('%d.%m.%Y %H:%M') if e.date else '—' }}</td>
+                            <td>
+                                {% if e.doc_url %}
+                                <a href="{{ e.doc_url }}" target="_blank" class="doc-link">{{ e.number or '—' }}</a>
+                                {% else %}
+                                <code class="doc-link" style="color:#64748b;">{{ e.number or '—' }}</code>
+                                {% endif %}
+                            </td>
+                            <td>{{ e.cash_name }}</td>
+                            <td><span class="cat-badge {{ e.category }}">{{ e.category_label }}</span></td>
+                            <td class="desc-cell muted-cell" title="{{ e.description }}">{{ e.description or '—' }}</td>
+                            <td class="text-end qty-cell {{ 'plus' if is_plus else 'minus' }}">{{ "{:+,.0f}".format(e.sign_amount) }}</td>
+                            <td class="muted-cell">{{ e.partner_name or '—' }}</td>
+                            <td class="muted-cell">{{ e.user_name or '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center muted-cell py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                Tanlangan davr va filtrlar bo'yicha kassa harakatlari topilmadi
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% include "components/pagination.html" %}
+    </div>
+</div>
+{% endblock %}

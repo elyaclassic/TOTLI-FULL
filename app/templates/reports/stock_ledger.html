@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .ledger-sign { display:inline-block; width:22px; text-align:center; font-weight:700; }
+    .ledger-sign.plus  { color:#2e7d32; }
+    .ledger-sign.minus { color:#c62828; }
+    .op-badge { font-size: .72rem; padding: .18rem .45rem; border-radius: 6px; background:#eef2f7; color:#334155; white-space: nowrap; }
+    .op-badge.sale, .op-badge.transfer_out, .op-badge.production_consumption, .op-badge.conversion_out { background:#fdecea; color:#c62828; }
+    .op-badge.purchase, .op-badge.transfer_in, .op-badge.production_output, .op-badge.return_sale, .op-badge.conversion_in { background:#e8f5e9; color:#2e7d32; }
+    .op-badge.adjustment { background:#fff3e0; color:#e65100; }
+    .op-badge.initial_balance { background:#e3f2fd; color:#1565c0; }
+    .doc-link { font-family: ui-monospace, Menlo, monospace; font-size: .85rem; color:#1a73e8; text-decoration:none; }
+    .doc-link:hover { text-decoration: underline; }
+    .ledger-table td { vertical-align: middle; }
+    .qty-cell { font-variant-numeric: tabular-nums; font-weight:600; }
+    .qty-cell.plus  { color:#2e7d32; }
+    .qty-cell.minus { color:#c62828; }
+</style>
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-journals text-primary"></i> Ombor jurnali</h4>
+    <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+</div>
+
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/stock-ledger" class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Ombor</label>
+            <select name="warehouse_id" class="form-select">
+                <option value="">— Barchasi —</option>
+                {% for wh in warehouses %}
+                <option value="{{ wh.id }}" {% if selected_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Operatsiya</label>
+            <select name="operation_type" class="form-select">
+                <option value="">— Barchasi —</option>
+                {% for code, label in operation_types %}
+                <option value="{{ code }}" {% if selected_operation_type == code %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3 position-relative">
+            <label class="form-label">Mahsulot</label>
+            <input type="text" class="form-control" id="ledger_product_input"
+                   placeholder="Nomi yoki kodi bo'yicha qidirish..." autocomplete="off"
+                   value="{% if selected_product %}{{ selected_product.name }}{% if selected_product.code %} ({{ selected_product.code }}){% endif %}{% endif %}">
+            <input type="hidden" name="product_id" id="ledger_product_id" value="{{ selected_product_id or '' }}">
+            <div id="ledger_product_results" class="list-group position-absolute bg-white border"
+                 style="z-index:1000; max-height:260px; overflow-y:auto; display:none; left:0; right:0; box-shadow:0 4px 12px rgba(0,0,0,0.15); border-radius:.25rem; margin-top:2px;"></div>
+            <select id="ledger_product_select" style="display:none;" aria-hidden="true">
+                <option value="">Tanlang...</option>
+                {% for p in products %}
+                <option value="{{ p.id }}" data-name="{{ p.name or '' }}" data-code="{{ p.code or '' }}" data-barcode="{{ p.barcode or '' }}">{{ p.name }}{% if p.code or p.barcode %} ({{ p.code or p.barcode }}){% endif %}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-12 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Ko'rsatish</button>
+            <a href="/reports/stock-ledger" class="btn btn-outline-secondary">Tozalash</a>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary">{{ "{:,}".format(total_count) }}</div>
+            <div class="lbl"><i class="bi bi-list-ul me-1"></i>Jami harakat</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success">+{{ "{:,.2f}".format(totals.qushildi) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-down-circle me-1"></i>Kirim</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-danger">{{ "{:,.2f}".format(totals.ayrildi) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-up-circle me-1"></i>Chiqim</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num {% if totals.netto >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:+,.2f}".format(totals.netto) }}</div>
+            <div class="lbl"><i class="bi bi-calculator me-1"></i>Netto</div>
+        </div>
+    </div>
+</div>
+
+<div class="card data-table">
+    <div class="card-header">
+        <span class="fw-600 d-flex align-items-center gap-2">
+            <i class="bi bi-journals text-primary"></i> Ombor harakatlari
+        </span>
+        <small class="text-muted">Sana kamayish tartibida</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 ledger-table">
+                <thead>
+                    <tr>
+                        <th style="width:32px"></th>
+                        <th style="width:52px">#</th>
+                        <th style="width:140px">Sana</th>
+                        <th>Hujjat</th>
+                        <th>Ombor</th>
+                        <th>Mahsulot</th>
+                        <th>Operatsiya</th>
+                        <th class="text-end">Miqdor</th>
+                        <th class="text-end">Qoldiq (keyin)</th>
+                        <th>Kim</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if movements %}
+                        {% for m in movements %}
+                        {% set is_plus = m.quantity_change > 0 %}
+                        <tr>
+                            <td class="text-center">
+                                {% if is_plus %}
+                                    <span class="ledger-sign plus">+</span>
+                                {% else %}
+                                    <span class="ledger-sign minus">−</span>
+                                {% endif %}
+                            </td>
+                            <td class="muted-cell">{{ (page - 1) * per_page + loop.index }}</td>
+                            <td class="muted-cell" style="white-space:nowrap;">{{ m.created_at.strftime('%d.%m.%Y %H:%M') if m.created_at else '—' }}</td>
+                            <td>
+                                {% set url = document_url(m.document_type, m.document_id) %}
+                                {% if url and url != '#' %}
+                                <a href="{{ url }}" target="_blank" class="doc-link">{{ m.document_number or document_type_label(m.document_type) }}</a>
+                                {% else %}
+                                <code class="doc-link" style="color:#64748b;">{{ m.document_number or document_type_label(m.document_type) }}</code>
+                                {% endif %}
+                                <div class="text-muted" style="font-size:.75rem;">{{ document_type_label(m.document_type) }}</div>
+                            </td>
+                            <td>{{ m.warehouse.name if m.warehouse else '—' }}</td>
+                            <td>
+                                {{ m.product.name if m.product else '—' }}
+                                {% if m.product and m.product.code %}<small class="text-muted">({{ m.product.code }})</small>{% endif %}
+                            </td>
+                            <td><span class="op-badge {{ m.operation_type }}">{{ operation_type_labels.get(m.operation_type, m.operation_type) }}</span></td>
+                            <td class="text-end qty-cell {{ 'plus' if is_plus else 'minus' }}">{{ "{:+,.2f}".format(m.quantity_change) }}</td>
+                            <td class="text-end muted-cell">{{ "{:,.2f}".format(m.quantity_after or 0) }}</td>
+                            <td class="muted-cell">{{ m.user.username if m.user else '—' }}</td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="10" class="text-center muted-cell py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                Tanlangan davr va filtrlar bo'yicha harakatlar topilmadi
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% include "components/pagination.html" %}
+    </div>
+</div>
+
+<script>
+(function(){
+    var input = document.getElementById('ledger_product_input');
+    var hidden = document.getElementById('ledger_product_id');
+    var results = document.getElementById('ledger_product_results');
+    var productSelect = document.getElementById('ledger_product_select');
+    if (!input || !hidden || !results || !productSelect) return;
+
+    function clearResults(){
+        while (results.firstChild) results.removeChild(results.firstChild);
+    }
+
+    function addMessage(text){
+        var div = document.createElement('div');
+        div.className = 'list-group-item text-muted small';
+        div.textContent = text;
+        results.appendChild(div);
+    }
+
+    function addItem(opt){
+        var a = document.createElement('a');
+        a.href = '#';
+        a.className = 'list-group-item list-group-item-action';
+        a.textContent = opt.textContent;
+        a.dataset.value = opt.value;
+        a.dataset.name = opt.dataset.name || '';
+        a.addEventListener('click', function(e){
+            e.preventDefault();
+            input.value = opt.textContent.trim();
+            hidden.value = opt.value;
+            results.style.display = 'none';
+            clearResults();
+        });
+        results.appendChild(a);
+    }
+
+    input.addEventListener('input', function(){
+        var q = (this.value || '').trim().toLowerCase();
+        clearResults();
+        results.style.display = 'none';
+        hidden.value = '';
+        if (!q) return;
+        var opts = Array.from(productSelect.options).slice(1);
+        var found = opts.filter(function(o){
+            var name = (o.dataset.name || '').toLowerCase();
+            var code = (o.dataset.code || '').toLowerCase();
+            var barcode = (o.dataset.barcode || '').toLowerCase();
+            return name.indexOf(q) !== -1 || code.indexOf(q) !== -1 || barcode.indexOf(q) !== -1;
+        }).slice(0, 50);
+        if (found.length) {
+            found.forEach(addItem);
+        } else {
+            addMessage('Topilmadi');
+        }
+        results.style.display = 'block';
+    });
+
+    document.addEventListener('click', function(e){
+        if (!input.contains(e.target) && !results.contains(e.target)) {
+            results.style.display = 'none';
+        }
+    });
+})();
+</script>
+{% endblock %}

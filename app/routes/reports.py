@@ -7,13 +7,13 @@ from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Request, Depends, File, Form, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
-from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog
+from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer
 from app.deps import get_current_user, require_auth, require_admin
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
@@ -146,8 +146,8 @@ async def report_sales_export(
     ws["A1"] = "Savdo hisoboti"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = f"Davr: {start_date} — {end_date}"
-    ws.append(["№", "Sana", "Buyurtma", "Mijoz", "Jami", "Holat"])
-    for c in range(1, 7):
+    ws.append(["№", "Sana", "Buyurtma", "Ombor", "Mijoz", "Jami", "Holat"])
+    for c in range(1, 8):
         ws.cell(row=4, column=c).fill = header_fill
         ws.cell(row=4, column=c).font = Font(bold=True, color="FFFFFF")
     for i, o in enumerate(orders, 1):
@@ -155,12 +155,13 @@ async def report_sales_export(
             i,
             o.date.strftime("%d.%m.%Y %H:%M") if o.date else "",
             o.number or "",
+            o.warehouse.name if o.warehouse else "",
             o.partner.name if o.partner else "",
             float(o.total or 0),
             o.status or "",
         ])
     total = sum(o.total or 0 for o in orders)
-    ws.append(["", "", "", "JAMI:", total, ""])
+    ws.append(["", "", "", "", "JAMI:", total, ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
@@ -1145,6 +1146,369 @@ async def report_stock_import(
         url=f"/qoldiqlar/tovar/hujjat/{doc.id}?from=import&msg=" + quote("Hujjat qoralama. Qoldiq hisobotida ko'rinishi uchun «Tasdiqlash» bosing."),
         status_code=303,
     )
+
+
+OPERATION_TYPE_LABELS = {
+    "sale": "Sotuv",
+    "sale_revert": "Sotuv bekor",
+    "return_sale": "Qaytarish (kirim)",
+    "return_sale_revert": "Qaytarish bekor",
+    "purchase": "Xarid",
+    "purchase_revert": "Xarid bekor",
+    "transfer_in": "O'tkazma (kirim)",
+    "transfer_out": "O'tkazma (chiqim)",
+    "transfer_revert": "O'tkazma bekor",
+    "production_output": "Ishlab chiqarish (kirim)",
+    "production_consumption": "Ishlab chiqarish (sarf)",
+    "production_revert": "Ishlab chiqarish bekor",
+    "adjustment": "Inventarizatsiya / Qoldiq tuzatish",
+    "initial_balance": "Boshlang'ich qoldiq",
+    "conversion_in": "Konversiya (kirim)",
+    "conversion_out": "Konversiya (chiqim)",
+}
+
+
+@router.get("/stock-ledger", response_class=HTMLResponse)
+async def report_stock_ledger(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    warehouse_id: str = None,
+    product_id: str = None,
+    operation_type: str = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Ombor qoldig'i jurnali — faqat admin uchun (barcha stock_movements, 1C uslubida)."""
+    from sqlalchemy import case
+    from sqlalchemy.orm import joinedload
+    from app.utils.pagination import paginate, pagination_query_string
+
+    today = datetime.now()
+    if not start_date:
+        start_date = today.replace(day=1).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = today.strftime("%Y-%m-%d")
+
+    warehouses = get_warehouses_for_user(db, current_user)
+    wh_ids = [w.id for w in warehouses] if warehouses else []
+
+    wh_filter_id = None
+    if warehouse_id and str(warehouse_id).strip().isdigit():
+        try:
+            wid = int(warehouse_id)
+            if not wh_ids or wid in wh_ids:
+                wh_filter_id = wid
+        except (ValueError, TypeError):
+            pass
+
+    pid = None
+    if product_id and str(product_id).strip().isdigit():
+        try:
+            pid = int(product_id)
+        except (ValueError, TypeError):
+            pid = None
+
+    op_type = (operation_type or "").strip()
+
+    base_filters = [
+        StockMovement.created_at >= start_date,
+        StockMovement.created_at <= end_date + " 23:59:59",
+    ]
+    if wh_filter_id:
+        base_filters.append(StockMovement.warehouse_id == wh_filter_id)
+    elif wh_ids:
+        base_filters.append(StockMovement.warehouse_id.in_(wh_ids))
+    if pid:
+        base_filters.append(StockMovement.product_id == pid)
+    if op_type:
+        base_filters.append(StockMovement.operation_type == op_type)
+
+    q = (
+        db.query(StockMovement)
+        .options(
+            joinedload(StockMovement.warehouse),
+            joinedload(StockMovement.product),
+            joinedload(StockMovement.user),
+        )
+        .filter(*base_filters)
+        .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
+    )
+    pg = paginate(q, page=page, per_page=50)
+
+    totals_row = db.query(
+        func.coalesce(func.sum(case((StockMovement.quantity_change > 0, StockMovement.quantity_change), else_=0.0)), 0.0).label("qushildi"),
+        func.coalesce(func.sum(case((StockMovement.quantity_change < 0, StockMovement.quantity_change), else_=0.0)), 0.0).label("ayrildi"),
+    ).filter(*base_filters).first()
+    totals = {
+        "qushildi": float(totals_row.qushildi or 0) if totals_row else 0.0,
+        "ayrildi": float(totals_row.ayrildi or 0) if totals_row else 0.0,
+    }
+    totals["netto"] = totals["qushildi"] + totals["ayrildi"]
+
+    selected_product = db.query(Product).filter(Product.id == pid).first() if pid else None
+    products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+
+    pq = pagination_query_string({
+        "start_date": start_date,
+        "end_date": end_date,
+        "warehouse_id": warehouse_id or "",
+        "product_id": product_id or "",
+        "operation_type": op_type,
+    })
+
+    # Hujjat havolasi uchun helper'ni template'ga Jinja global sifatida o'tkazamiz
+    op_items = [(code, label) for code, label in OPERATION_TYPE_LABELS.items()]
+    op_items.sort(key=lambda x: x[1])
+
+    return templates.TemplateResponse("reports/stock_ledger.html", {
+        "request": request,
+        "page_title": "Ombor jurnali",
+        "current_user": current_user,
+        "movements": pg["items"],
+        "page": pg["page"],
+        "per_page": pg["per_page"],
+        "total_count": pg["total_count"],
+        "total_pages": pg["total_pages"],
+        "items_count": pg["items_count"],
+        "pagination_query": pq,
+        "base_url": "/reports/stock-ledger",
+        "start_date": start_date,
+        "end_date": end_date,
+        "warehouses": warehouses,
+        "selected_warehouse_id": wh_filter_id,
+        "selected_product_id": pid,
+        "selected_product": selected_product,
+        "products": products,
+        "selected_operation_type": op_type,
+        "operation_types": op_items,
+        "operation_type_labels": OPERATION_TYPE_LABELS,
+        "totals": totals,
+        "document_url": _document_url,
+        "document_type_label": _document_type_label,
+    })
+
+
+PAYMENT_CATEGORY_LABELS = {
+    "sale": "Sotuvdan kirim",
+    "agent_collection": "Agent inkassatsiya",
+    "delivery": "Yetkazib berishdan",
+    "purchase": "Xarid to'lovi",
+    "supplier_payment": "Ta'minotchiga to'lov",
+    "expense": "Harajat",
+    "expense_doc": "Harajat hujjati",
+    "salary": "Ish haqi",
+    "advance": "Avans",
+    "rent": "Ijara",
+    "other": "Boshqa",
+    "transfer": "Kassadan kassaga",
+}
+
+
+def _payment_effective_category(payment) -> str:
+    """Payment kategoriyasini haqiqiy mazmuniga ko'ra aniqlash (description prefix orqali).
+    Eski yozuvlar `category='other'` da yotadi (masalan avans) — description orqali kategoriyalaymiz.
+    """
+    cat = (payment.category or "").lower()
+    desc = (payment.description or "")
+    if desc.startswith("Avans:"):
+        return "advance"
+    return cat
+
+
+@router.get("/cash-ledger", response_class=HTMLResponse)
+async def report_cash_ledger(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    cash_register_id: str = None,
+    direction: str = None,
+    category: str = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Kassa jurnali — to'lovlar va kassalararo o'tkazmalar bitta ro'yxatda (faqat admin)."""
+    from app.utils.pagination import pagination_query_string
+
+    today = datetime.now()
+    if not start_date:
+        start_date = today.replace(day=1).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = today.strftime("%Y-%m-%d")
+
+    end_ts = end_date + " 23:59:59"
+    cash_filter_id = None
+    if cash_register_id and str(cash_register_id).strip().isdigit():
+        try:
+            cash_filter_id = int(cash_register_id)
+        except (ValueError, TypeError):
+            cash_filter_id = None
+
+    dir_filter = (direction or "").strip().lower()
+    if dir_filter not in ("in", "out"):
+        dir_filter = ""
+
+    cat_filter = (category or "").strip().lower()
+
+    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
+
+    include_payments = cat_filter != "transfer"
+    include_transfers = cat_filter in ("", "transfer")
+
+    payments: list = []
+    if include_payments:
+        pq = db.query(Payment).options(
+            joinedload(Payment.cash_register),
+            joinedload(Payment.partner),
+        ).filter(
+            Payment.date >= start_date,
+            Payment.date <= end_ts,
+            confirmed,
+        )
+        if cash_filter_id:
+            pq = pq.filter(Payment.cash_register_id == cash_filter_id)
+        if dir_filter == "in":
+            pq = pq.filter(Payment.type == "income")
+        elif dir_filter == "out":
+            pq = pq.filter(Payment.type == "expense")
+        if cat_filter == "advance":
+            pq = pq.filter(Payment.description.like("Avans:%"))
+        elif cat_filter and cat_filter != "transfer":
+            pq = pq.filter(Payment.category == cat_filter)
+        payments = pq.all()
+
+    transfers: list = []
+    if include_transfers:
+        tq = db.query(CashTransfer).options(
+            joinedload(CashTransfer.from_cash),
+            joinedload(CashTransfer.to_cash),
+        ).filter(
+            CashTransfer.date >= start_date,
+            CashTransfer.date <= end_ts,
+            CashTransfer.status.in_(("in_transit", "completed")),
+        )
+        if cash_filter_id:
+            tq = tq.filter(or_(
+                CashTransfer.from_cash_id == cash_filter_id,
+                CashTransfer.to_cash_id == cash_filter_id,
+            ))
+        transfers = tq.all()
+
+    user_ids = {p.user_id for p in payments if p.user_id}
+    user_ids.update({t.user_id for t in transfers if t.user_id})
+    users_map = {u.id: u.username for u in db.query(User).filter(User.id.in_(user_ids)).all()} if user_ids else {}
+
+    entries: list = []
+    for p in payments:
+        is_in = (p.type or "").lower() == "income"
+        eff_cat = _payment_effective_category(p)
+        entries.append({
+            "date": p.date,
+            "direction": "in" if is_in else "out",
+            "number": p.number or "",
+            "source": "payment",
+            "source_id": p.id,
+            "cash_name": p.cash_register.name if p.cash_register else "—",
+            "cash_id": p.cash_register_id,
+            "amount": float(p.amount or 0),
+            "sign_amount": float(p.amount or 0) * (1 if is_in else -1),
+            "category": eff_cat,
+            "category_label": PAYMENT_CATEGORY_LABELS.get(eff_cat, eff_cat or "—"),
+            "description": p.description or "",
+            "partner_name": p.partner.name if p.partner else "",
+            "order_id": p.order_id,
+            "doc_url": f"/sales/edit/{p.order_id}" if p.order_id else None,
+            "user_name": users_map.get(p.user_id, ""),
+        })
+
+    for t in transfers:
+        base = {
+            "date": t.date,
+            "number": t.number or "",
+            "source": "transfer",
+            "source_id": t.id,
+            "amount": float(t.amount or 0),
+            "category": "transfer",
+            "category_label": PAYMENT_CATEGORY_LABELS["transfer"],
+            "description": t.note or "",
+            "partner_name": "",
+            "doc_url": f"/cash/transfers/{t.id}",
+            "user_name": users_map.get(t.user_id, ""),
+            "order_id": None,
+        }
+        show_out = dir_filter in ("", "out")
+        show_in = dir_filter in ("", "in") and t.status == "completed"
+        if show_out:
+            entries.append({
+                **base,
+                "direction": "out",
+                "cash_name": t.from_cash.name if t.from_cash else "—",
+                "cash_id": t.from_cash_id,
+                "sign_amount": -float(t.amount or 0),
+                "description": f"→ {t.to_cash.name}" if t.to_cash else base["description"],
+            })
+        if show_in:
+            entries.append({
+                **base,
+                "direction": "in",
+                "cash_name": t.to_cash.name if t.to_cash else "—",
+                "cash_id": t.to_cash_id,
+                "sign_amount": +float(t.amount or 0),
+                "description": f"← {t.from_cash.name}" if t.from_cash else base["description"],
+            })
+
+    if cash_filter_id:
+        entries = [e for e in entries if e["cash_id"] == cash_filter_id]
+
+    entries.sort(key=lambda e: e["date"] or datetime.min, reverse=True)
+
+    totals = {
+        "kirim": sum(e["amount"] for e in entries if e["direction"] == "in"),
+        "chiqim": sum(e["amount"] for e in entries if e["direction"] == "out"),
+    }
+    totals["netto"] = totals["kirim"] - totals["chiqim"]
+
+    per_page = 50
+    total_count = len(entries)
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), total_pages))
+    items = entries[(page - 1) * per_page : page * per_page]
+
+    cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
+
+    pq_str = pagination_query_string({
+        "start_date": start_date,
+        "end_date": end_date,
+        "cash_register_id": cash_register_id or "",
+        "direction": dir_filter,
+        "category": cat_filter,
+    })
+
+    category_items = sorted(PAYMENT_CATEGORY_LABELS.items(), key=lambda x: x[1])
+
+    return templates.TemplateResponse("reports/cash_ledger.html", {
+        "request": request,
+        "page_title": "Kassa jurnali",
+        "current_user": current_user,
+        "entries": items,
+        "page": page,
+        "per_page": per_page,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "items_count": len(items),
+        "pagination_query": pq_str,
+        "base_url": "/reports/cash-ledger",
+        "start_date": start_date,
+        "end_date": end_date,
+        "cash_registers": cash_registers,
+        "selected_cash_id": cash_filter_id,
+        "selected_direction": dir_filter,
+        "selected_category": cat_filter,
+        "category_items": category_items,
+        "totals": totals,
+    })
 
 
 @router.get("/production", response_class=HTMLResponse)

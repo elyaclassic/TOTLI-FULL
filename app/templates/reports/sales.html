@@ -70,6 +70,7 @@
                         <th style="width:48px">#</th>
                         <th>Hujjat №</th>
                         <th>Sana</th>
+                        <th>Ombor</th>
                         <th>Mijoz</th>
                         <th class="text-end">Summa (so'm)</th>
                         <th>Holat</th>
@@ -82,6 +83,7 @@
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td><code class="num-cell">{{ order.number }}</code></td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') }}</td>
+                            <td>{{ order.warehouse.name if order.warehouse else '-' }}</td>
                             <td>{{ order.partner.name if order.partner else '-' }}</td>
                             <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total) }}</td>
                             <td>
@@ -97,7 +99,7 @@
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="6" class="text-center muted-cell py-5">
+                            <td colspan="7" class="text-center muted-cell py-5">
                                 <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
                                 Tanlangan davrda sotuvlar topilmadi
                             </td>
@@ -107,7 +109,7 @@
                 {% if orders %}
                 <tfoot>
                     <tr style="background:#f8f9fa; border-top: 2px solid #e9ecef;">
-                        <td colspan="4" class="text-end fw-700 muted-cell py-2">JAMI:</td>
+                        <td colspan="5" class="text-end fw-700 muted-cell py-2">JAMI:</td>
                         <td class="text-end sum-cell fw-700 py-2">{{ "{:,.0f}".format(total) }}</td>
                         <td></td>
                     </tr>
