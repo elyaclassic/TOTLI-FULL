@@ -1765,10 +1765,23 @@ async def production_revert(
 
 
 @router.post("/{prod_id}/cancel")
-async def cancel_production(prod_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_admin)):
+async def cancel_production(prod_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Topilmadi")
+    role = (current_user.role or "").strip().lower()
+    is_admin = role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+    is_creator = production.user_id == current_user.id
+    if production.status == "completed" and not is_admin:
+        return RedirectResponse(
+            url="/production/orders?error=cancel&detail=" + quote("Yakunlangan hujjatni faqat admin bekor qila oladi."),
+            status_code=303,
+        )
+    if not is_admin and not is_creator:
+        return RedirectResponse(
+            url="/production/orders?error=cancel&detail=" + quote("Faqat hujjat yaratgan operator yoki admin bekor qila oladi."),
+            status_code=303,
+        )
     production.status = "cancelled"
     db.commit()
     return RedirectResponse(url="/production/orders", status_code=303)
