@@ -87,6 +87,15 @@ totli_mobile/ios/Flutter/Flutter.podspec
 
 app/static/attendance_snapshots/
 
+# Generated data fayllar (analiz skriptlari va inventarizatsiya eksportlari)
+app/data/
+_analyze_*.py
+_partners_match_report.json
+kontragent_eksportda_yoq.xlsx
+inv_*.xlsx
+inv_*.txt
+Export*.xls
+
 # Claude skills source (kerak emas, .claude/commands/ ga ko'chirilgan)
 claude-skills-main/
 

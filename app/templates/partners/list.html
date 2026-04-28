@@ -65,7 +65,7 @@
 
     <!-- Filter Card -->
     <div class="filter-card mb-3">
-        <div class="d-flex align-items-center gap-2 flex-nowrap">
+        <div class="d-flex align-items-center gap-2 flex-nowrap flex-wrap">
             <a href="/partners" class="btn btn-sm type-filter-btn {% if current_type == 'all' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-grid"></i> Hammasi
             </a>
@@ -75,11 +75,23 @@
             <a href="/partners?type=supplier" class="btn btn-sm type-filter-btn {% if current_type == 'supplier' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-truck"></i> Yetkazib beruvchilar
             </a>
+            {% if route_partner_ids %}
+            <button type="button" id="notInRouteFilterBtn" class="btn btn-sm btn-outline-warning text-nowrap" onclick="toggleNotInRouteFilter()" title="Eksport ro'yxatida bo'lmagan kontragentlar (review uchun)">
+                <i class="bi bi-funnel"></i> Eksportda yo'q ({{ not_in_route_count }})
+            </button>
+            {% endif %}
             <div class="ms-auto search-wrap" style="min-width: 180px;">
                 <i class="bi bi-search"></i>
                 <input type="text" id="partnerSearchInput" class="form-control form-control-sm" placeholder="Qidirish..." oninput="filterPartnersTable(this.value)" autocomplete="off">
             </div>
         </div>
+        {% if route_partner_ids and route_generated_at %}
+        <div class="small text-muted mt-2">
+            <i class="bi bi-info-circle"></i>
+            Agent eksport: {{ route_export_total }} ta mijoz, mos kelganlar: {{ route_partner_ids|length }} ta
+            <span class="text-muted">· yangilangan: {{ route_generated_at[:16].replace('T', ' ') }}</span>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Bulk edit panel -->
@@ -172,11 +184,15 @@
                     <tbody>
                         {% if partners %}
                         {% for partner in partners %}
-                        <tr>
+                        {% set in_route = (not route_partner_ids) or (partner.id in route_partner_ids) %}
+                        <tr data-not-in-route="{{ '0' if in_route else '1' }}">
                             <td><input type="checkbox" class="partner-checkbox" value="{{ partner.id }}"></td>
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td>
                                 <strong>{{ partner.name or '-' }}</strong>
+                                {% if not in_route %}
+                                <span class="badge bg-warning text-dark ms-1" title="Agent eksport ro'yxatida topilmadi"><i class="bi bi-exclamation-triangle"></i> Eksportda yo'q</span>
+                                {% endif %}
                                 {% if (partner.discount_percent or 0) > 0 %}
                                 <br><small class="text-success"><i class="bi bi-tag"></i> {{ partner.discount_percent }}% chegirma</small>
                                 {% endif %}
@@ -788,21 +804,39 @@
 <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ{% if yandex_maps_apikey %}&apikey={{ yandex_maps_apikey }}{% endif %}" type="text/javascript"></script>
 
 <script>
-    // Client-side search filter
-    function filterPartnersTable(query) {
-        var q = (query || '').toLowerCase().trim();
+    var __notInRouteOnly = false;
+
+    function applyPartnerFilters() {
+        var input = document.getElementById('partnerSearchInput');
+        var q = input ? (input.value || '').toLowerCase().trim() : '';
         var rows = document.querySelectorAll('#partnersTable tbody tr');
         var visible = 0;
         rows.forEach(function(row) {
-            if (!row.querySelector('td[colspan]')) {
-                var text = row.textContent.toLowerCase();
-                var show = !q || text.indexOf(q) !== -1;
-                row.style.display = show ? '' : 'none';
-                if (show) visible++;
-            }
+            if (row.querySelector('td[colspan]')) return;
+            var matchText = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+            var notInRoute = row.getAttribute('data-not-in-route') === '1';
+            var matchRoute = !__notInRouteOnly || notInRoute;
+            var show = matchText && matchRoute;
+            row.style.display = show ? '' : 'none';
+            if (show) visible++;
         });
         var badge = document.getElementById('partnerCountBadge');
         if (badge) badge.textContent = visible + ' ta';
+    }
+
+    // Client-side search filter
+    function filterPartnersTable(query) {
+        applyPartnerFilters();
+    }
+
+    function toggleNotInRouteFilter() {
+        __notInRouteOnly = !__notInRouteOnly;
+        var btn = document.getElementById('notInRouteFilterBtn');
+        if (btn) {
+            btn.classList.toggle('btn-outline-warning', !__notInRouteOnly);
+            btn.classList.toggle('btn-warning', __notInRouteOnly);
+        }
+        applyPartnerFilters();
     }
 
     // Tashrif kuni, Kategoriya, Hudud — ixtiyoriy (barcha turlar uchun)

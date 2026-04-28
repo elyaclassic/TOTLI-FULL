@@ -2,6 +2,8 @@
 Kontragentlar (partners) — ro'yxat, qo'shish, tahrir, o'chirish, export/import.
 """
 import io
+import json
+import os
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, File, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
@@ -12,6 +14,17 @@ from app.models.database import get_db, User, Partner, Order, Purchase, Agent
 from app.deps import require_auth, require_admin
 
 router = APIRouter(prefix="/partners", tags=["partners"])
+
+_ROUTE_EXPORT_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "route_partner_ids.json")
+
+
+def _load_route_partner_ids():
+    try:
+        with open(_ROUTE_EXPORT_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        return set(payload.get("matched_partner_ids") or []), payload.get("generated_at"), payload.get("export_total")
+    except (FileNotFoundError, json.JSONDecodeError):
+        return set(), None, None
 
 
 @router.get("", response_class=HTMLResponse)
@@ -31,6 +44,10 @@ async def partners_list(
     except Exception:
         yandex_apikey = ""
     agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
+
+    route_ids, route_generated_at, route_export_total = _load_route_partner_ids()
+    not_in_route_count = sum(1 for p in partners if p.id not in route_ids) if route_ids else 0
+
     return templates.TemplateResponse("partners/list.html", {
         "request": request,
         "partners": partners,
@@ -39,6 +56,10 @@ async def partners_list(
         "current_user": current_user,
         "page_title": "Kontragentlar",
         "yandex_maps_apikey": yandex_apikey,
+        "route_partner_ids": route_ids,
+        "route_generated_at": route_generated_at,
+        "route_export_total": route_export_total,
+        "not_in_route_count": not_in_route_count,
     })
 
 
