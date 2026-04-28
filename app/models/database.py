@@ -270,8 +270,9 @@ class Product(Base):
     image = Column(String(255))  # Rasm fayli nomi
     description = Column(Text)
     is_active = Column(Boolean, default=True)
+    is_for_agent = Column(Boolean, default=False)  # Agent katalogida ko'rinishi
     created_at = Column(DateTime, default=datetime.now)
-    
+
     category = relationship("Category", back_populates="products")
     unit = relationship("Unit", back_populates="products")
     stock_items = relationship("Stock", back_populates="product")

@@ -877,12 +877,20 @@ async def agent_partner_add(
 
 @router.get("/agent/products")
 async def agent_products(request: Request, token: str = None, search: str = None, db: Session = Depends(get_db)):
-    """Mahsulotlar ro'yxati (agent buyurtma uchun) — stock va ProductPrice bilan."""
+    """Mahsulotlar ro'yxati (agent buyurtma uchun) — stock va ProductPrice bilan.
+
+    Faqat is_for_agent=True bo'lgan mahsulotlar ko'rinadi (agent katalogi).
+    Stock=0 bo'lsa ham ko'rsatiladi — supervisor stock yetmasa waiting_production qiladi.
+    """
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
-        q = db.query(Product).filter(Product.is_active == True, Product.type == "tayyor")
+        q = db.query(Product).filter(
+            Product.is_active == True,
+            Product.type == "tayyor",
+            Product.is_for_agent == True,
+        )
         if search:
             q = q.filter(Product.name.ilike(f"%{search}%"))
         products = q.order_by(Product.name).all()
@@ -967,7 +975,11 @@ async def agent_create_order(
                 continue
             if _pid <= 0 or qty <= 0:
                 continue
-            prod = db.query(Product).filter(Product.id == _pid, Product.is_active == True).first()
+            prod = db.query(Product).filter(
+                Product.id == _pid,
+                Product.is_active == True,
+                Product.is_for_agent == True,
+            ).first()
             if not prod:
                 continue
             # ProductPrice dan narx olish, fallback: Product.sale_price
@@ -1249,7 +1261,11 @@ async def agent_create_order_batch(
                         continue
                     if _pid <= 0 or qty <= 0:
                         continue
-                    prod = db.query(Product).filter(Product.id == _pid, Product.is_active == True).first()
+                    prod = db.query(Product).filter(
+                        Product.id == _pid,
+                        Product.is_active == True,
+                        Product.is_for_agent == True,
+                    ).first()
                     if not prod:
                         continue
                     pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()

@@ -109,6 +109,19 @@ def ensure_advance_is_product_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_product_is_for_agent_column(db: Session) -> None:
+    """products.is_for_agent — Agent katalogida ko'rinish flagi."""
+    try:
+        db.execute(text("ALTER TABLE products ADD COLUMN is_for_agent BOOLEAN DEFAULT 0"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
 def ensure_audit_cooldowns_table(db: Session) -> None:
     """audit_cooldowns jadvali — audit watchdog dedup/cooldown saqlanadi.
     Process restart paytida ham saqlanadi (B5 — O5 fix)."""

@@ -307,6 +307,7 @@ async def products_list(
     request: Request,
     type: str = "all",
     q: Optional[str] = None,
+    for_agent: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -341,6 +342,10 @@ async def products_list(
                 Product.barcode.ilike(like),
             )
         )
+    if for_agent == "1":
+        query = query.filter(Product.is_for_agent == True)
+    elif for_agent == "0":
+        query = query.filter(Product.is_for_agent == False)
     products = query.all()
     categories = db.query(Category).all()
     units = db.query(Unit).all()
@@ -356,6 +361,7 @@ async def products_list(
         "units": units,
         "current_type": type,
         "search_q": search_q,
+        "for_agent_filter": for_agent or "",
         "current_user": current_user,
         "page_title": "Tovarlar",
         "import_ok": import_ok,
@@ -395,6 +401,7 @@ async def product_add(
     barcode: str = Form(None),
     sale_price: float = Form(0),
     purchase_price: float = Form(0),
+    is_for_agent: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
@@ -409,6 +416,7 @@ async def product_add(
         barcode=barcode,
         sale_price=sale_price,
         purchase_price=purchase_price,
+        is_for_agent=bool(is_for_agent),
         image=None,
     )
     db.add(product)
@@ -432,6 +440,7 @@ async def product_edit(
     barcode: str = Form(None),
     sale_price: float = Form(0),
     purchase_price: float = Form(0),
+    is_for_agent: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
@@ -447,6 +456,7 @@ async def product_edit(
     product.barcode = barcode or None
     product.sale_price = sale_price
     product.purchase_price = purchase_price
+    product.is_for_agent = bool(is_for_agent)
     saved = await _validate_and_save_product_image(image, product)
     if saved:
         product.image = saved
@@ -525,6 +535,13 @@ async def product_bulk_update(
             new_category_id = v if v > 0 else -1  # -1 = tozalash (category_id = None)
         except (ValueError, TypeError):
             pass
+    # Agent katalogi: "" = o'zgartirmaslik, "1" = yoqish, "0" = o'chirish
+    for_agent_raw = (form.get("for_agent") or "").strip()
+    new_for_agent = None
+    if for_agent_raw == "1":
+        new_for_agent = True
+    elif for_agent_raw == "0":
+        new_for_agent = False
     updated = 0
     for sid in ids:
         try:
@@ -541,6 +558,9 @@ async def product_bulk_update(
                 changed = True
             if new_unit_id is not None:
                 product.unit_id = new_unit_id
+                changed = True
+            if new_for_agent is not None:
+                product.is_for_agent = new_for_agent
                 changed = True
             if changed:
                 updated += 1

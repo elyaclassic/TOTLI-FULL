@@ -72,6 +72,16 @@
                 <a href="/products?type=hom_ashyo{% if search_encoded %}&search={{ search_encoded }}{% endif %}" class="btn btn-sm {% if current_type == 'hom_ashyo' %}btn-info{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;">Xom ashyo</a>
                 <a href="/products?type=unused" class="btn btn-sm {% if current_type == 'unused' %}btn-danger{% else %}btn-outline-danger{% endif %}" style="border-radius:8px;">Ishlatilmagan</a>
             </div>
+            <div class="d-flex flex-nowrap gap-1 ms-auto">
+                <a href="/products?for_agent=1{% if current_type and current_type != 'all' %}&type={{ current_type }}{% endif %}{% if search_encoded %}&search={{ search_encoded }}{% endif %}"
+                   class="btn btn-sm {% if for_agent_filter == '1' %}btn-success{% else %}btn-outline-success{% endif %}" style="border-radius:8px;" title="Agent katalogida bor">
+                   <i class="bi bi-person-check"></i> Agent
+                </a>
+                <a href="/products?for_agent=0{% if current_type and current_type != 'all' %}&type={{ current_type }}{% endif %}{% if search_encoded %}&search={{ search_encoded }}{% endif %}"
+                   class="btn btn-sm {% if for_agent_filter == '0' %}btn-secondary{% else %}btn-outline-secondary{% endif %}" style="border-radius:8px;" title="Agent katalogida yo'q">
+                   <i class="bi bi-person-slash"></i> Agent emas
+                </a>
+            </div>
         </form>
     </div>
 
@@ -179,6 +189,7 @@
                         <th class="products-sort" data-sort="name" role="button" title="Saralash">Nomi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
                         <th class="products-sort" data-sort="type" role="button" title="Saralash">Turi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
                         <th class="products-sort" data-sort="unit" role="button" title="Saralash">O'lchov birligi <i class="bi bi-arrow-down-up products-sort-icon"></i></th>
+                        <th class="text-center" title="Agent katalogida ko'rinish"><i class="bi bi-person-check"></i></th>
                         <th class="text-center">Tarix</th>
                         <th></th>
                     </tr>
@@ -216,6 +227,13 @@
                             {% if product.unit %}{{ product.unit.name or product.unit.code or '—' }}{% else %}—{% endif %}
                         </td>
                         <td class="text-center">
+                            {% if product.is_for_agent %}
+                            <i class="bi bi-check-circle-fill text-success" title="Agent katalogida bor"></i>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
                             <a href="/qoldiqlar/tarix?product_id={{ product.id }}" class="btn-act" title="Mahsulot harakati tarixi">
                                 <i class="bi bi-clock-history"></i>
                             </a>
@@ -239,6 +257,7 @@
                                     data-barcode="{{ (product.barcode or '')|e }}"
                                     data-purchase-price="{{ product.purchase_price or 0 }}"
                                     data-sale-price="{{ product.sale_price or 0 }}"
+                                    data-is-for-agent="{{ '1' if product.is_for_agent else '0' }}"
                                     data-image="{{ product.image or '' }}">
                                     <i class="bi bi-pencil"></i>
                                 </button>
@@ -256,7 +275,7 @@
                     {% endfor %}
                     {% else %}
                     <tr>
-                        <td colspan="{% if current_user and current_user.role == 'admin' %}9{% else %}7{% endif %}" class="text-center text-muted py-5">
+                        <td colspan="{% if current_user and current_user.role == 'admin' %}10{% else %}8{% endif %}" class="text-center text-muted py-5">
                             <i class="bi bi-box-seam fs-1 d-block mb-2 opacity-25"></i>
                             Hozircha tovarlar yo'q<br>
                             <small>Yuqoridagi Yaratish tugmasini bosing</small>
@@ -315,6 +334,14 @@
                         <div class="col-md-6">
                             <label class="form-label small mb-0" for="add_product_barcode">Shtrixkod</label>
                             <input type="text" id="add_product_barcode" class="form-control form-control-sm" name="barcode" autocomplete="off">
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="add_product_is_for_agent" name="is_for_agent" value="1">
+                                <label class="form-check-label small" for="add_product_is_for_agent">
+                                    <i class="bi bi-person-check text-success"></i> Agentlar katalogida ko'rinsin
+                                </label>
+                            </div>
                         </div>
                         <div class="col-12">
                             <label class="form-label small mb-0">Rasm</label>
@@ -390,6 +417,14 @@
                             <input type="number" id="edit_product_sale_price" class="form-control form-control-sm" name="sale_price" step="any" min="0" value="0" placeholder="0">
                         </div>
                         <div class="col-12">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="edit_product_is_for_agent" name="is_for_agent" value="1">
+                                <label class="form-check-label small" for="edit_product_is_for_agent">
+                                    <i class="bi bi-person-check text-success"></i> Agentlar katalogida ko'rinsin
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-12">
                             <label class="form-label small mb-0">Rasm</label>
                             <div class="d-flex align-items-center gap-2 flex-wrap">
                                 <div id="edit_product_image_preview" class="mb-0" style="min-height: 40px;"></div>
@@ -411,7 +446,7 @@
 <div class="modal fade" id="bulkUpdateModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form id="productsBulkUpdateForm" method="POST" action="/products/bulk-update" onsubmit="var t=document.getElementById('bulkUpdateType'); var u=document.getElementById('bulkUpdateUnitId'); var c=document.getElementById('bulkUpdateCategoryId'); if ((!t||!t.value) && (!u||!u.value) && (!c||c.value==='')) { alert('Kamida bitta maydonni o\'zgartirish uchun tanlang (Turi, O\'lchov birligi yoki Kategoriya).'); return false; } return true;">
+            <form id="productsBulkUpdateForm" method="POST" action="/products/bulk-update" onsubmit="var t=document.getElementById('bulkUpdateType'); var u=document.getElementById('bulkUpdateUnitId'); var c=document.getElementById('bulkUpdateCategoryId'); var fa=document.getElementById('bulkUpdateForAgent'); if ((!t||!t.value) && (!u||!u.value) && (!c||c.value==='') && (!fa||fa.value==='')) { alert('Kamida bitta maydonni o\'zgartirish uchun tanlang.'); return false; } return true;">
                 <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
                 <div id="bulkUpdateProductIdsContainer"></div>
                 <div class="modal-header py-2">
@@ -439,13 +474,21 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="mb-0">
+                    <div class="mb-3">
                         <label class="form-label small mb-1">O'lchov birligi</label>
                         <select name="unit_id" class="form-select form-select-sm" id="bulkUpdateUnitId">
                             <option value="">— O'zgartirmaslik —</option>
                             {% for unit in units or [] %}
                             <option value="{{ unit.id }}">{{ unit.name }} ({{ unit.code }})</option>
                             {% endfor %}
+                        </select>
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label small mb-1">Agent katalogi</label>
+                        <select name="for_agent" class="form-select form-select-sm" id="bulkUpdateForAgent">
+                            <option value="">— O'zgartirmaslik —</option>
+                            <option value="1">✓ Agentlar uchun yoqish</option>
+                            <option value="0">✗ Agentlar uchun o'chirish</option>
                         </select>
                     </div>
                 </div>
@@ -479,6 +522,8 @@
         var saleVal = (btn.getAttribute('data-sale-price') || '0').toString().replace(',', '.');
         document.getElementById('edit_product_purchase_price').value = purchaseVal;
         document.getElementById('edit_product_sale_price').value = saleVal;
+        var agentCk = document.getElementById('edit_product_is_for_agent');
+        if (agentCk) agentCk.checked = (btn.getAttribute('data-is-for-agent') === '1');
         var imgName = btn.getAttribute('data-image') || '';
         var preview = document.getElementById('edit_product_image_preview');
         var fileInp = document.getElementById('edit_product_image');
@@ -517,6 +562,8 @@
             if (barcodeEl) barcodeEl.value = '';
             if (imageEl) imageEl.value = '';
         }
+        var agentCk = document.getElementById('add_product_is_for_agent');
+        if (agentCk) agentCk.checked = false;
     });
 })();
 

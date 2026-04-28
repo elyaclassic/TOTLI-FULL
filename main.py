@@ -20,6 +20,7 @@ from app.utils.db_schema import (
     ensure_agents_pin_hash_column,
     ensure_agents_pin_set_at_column,
     ensure_audit_cooldowns_table,
+    ensure_product_is_for_agent_column,
 )
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
@@ -265,6 +266,7 @@ async def startup():
             ensure_agents_pin_hash_column(db)
             ensure_agents_pin_set_at_column(db)
             ensure_audit_cooldowns_table(db)
+            ensure_product_is_for_agent_column(db)
         finally:
             db.close()
     except Exception as e:

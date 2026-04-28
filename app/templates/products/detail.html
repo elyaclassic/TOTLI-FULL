@@ -29,6 +29,14 @@
                     <span class="text-muted" style="font-size:13px;">Shtixkod</span>
                     <strong>{{ product.barcode or '—' }}</strong>
                 </div>
+                <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid #f1f3f5;">
+                    <span class="text-muted" style="font-size:13px;">Agent katalogi</span>
+                    {% if product.is_for_agent %}
+                    <span class="badge bg-success"><i class="bi bi-check-circle"></i> Bor</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Yo'q</span>
+                    {% endif %}
+                </div>
                 {% if product.image %}
                 <div class="mt-3">
                     <img src="/static/images/products/{{ product.image }}" alt="Rasm" class="img-thumbnail" style="max-width:200px;">
