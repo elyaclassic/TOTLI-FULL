@@ -22,11 +22,11 @@ async def pwa_config():
 async def app_version():
     """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
     return {
-        "version": "2.0.2",
-        "build": 49,
+        "version": "2.0.3",
+        "build": 51,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Vizit ekranida Rasm/Qo'ng'iroq/SMS tugmalari qo'shildi",
+        "changelog": "TOTLI HOLVA logotipi qo'shildi (login + ilova ikonasi)",
     }
 
 
