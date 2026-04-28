@@ -246,6 +246,16 @@ def _tg_audit_activity_flush():
         print(f"[Scheduler] Audit activity flush xato: {e}")
 
 
+def _tg_sales_plan_reminder():
+    """Oyning 1, 10, 20, 25-kunlarida agentlarga oylik savdo rejasi haqida eslatma."""
+    try:
+        if date.today().day in (1, 10, 20, 25):
+            from app.bot.services.notifier import send_sales_plan_reminder
+            send_sales_plan_reminder()
+    except Exception as e:
+        print(f"[Scheduler] Sales plan reminder xato: {e}")
+
+
 
 
 _scheduler = None
@@ -295,6 +305,8 @@ def start_scheduler():
     # Activity pulse — har 10 daqiqada shubhasiz hodisalar bundle (@elya_classic)
     _scheduler.add_job(_tg_audit_activity_flush, "interval", minutes=10, id="tg_audit_activity",
                       misfire_grace_time=60, coalesce=True, max_instances=1)
+    # Oylik savdo rejasi eslatma — har kuni 09:00 da (ichkarida 1, 10, 20, 25 da yuboradi)
+    _scheduler.add_job(_tg_sales_plan_reminder, "cron", hour=9, minute=0, id="tg_sales_plan_reminder")
     _scheduler.start()
     print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + live backup (5min) + Hikvision sync + TG notify + Audit)")
 

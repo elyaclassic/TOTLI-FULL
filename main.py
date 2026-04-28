@@ -21,6 +21,7 @@ from app.utils.db_schema import (
     ensure_agents_pin_set_at_column,
     ensure_audit_cooldowns_table,
     ensure_product_is_for_agent_column,
+    ensure_sales_plans_table,
 )
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
@@ -54,6 +55,7 @@ from app.routes import api_agent_advanced as api_agent_advanced_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
 from app.routes import admin as admin_routes
+from app.routes import admin_sales_plans as admin_sales_plans_routes
 from app.routes import audit_routes
 
 app = FastAPI(title="TOTLI HOLVA", description="Biznes boshqaruv tizimi", version="1.0")
@@ -109,6 +111,7 @@ app.include_router(api_agent_advanced_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)
 app.include_router(admin_routes.router)
+app.include_router(admin_sales_plans_routes.router)
 app.include_router(audit_routes.router)
 
 
@@ -267,6 +270,7 @@ async def startup():
             ensure_agents_pin_set_at_column(db)
             ensure_audit_cooldowns_table(db)
             ensure_product_is_for_agent_column(db)
+            ensure_sales_plans_table(db)
         finally:
             db.close()
     except Exception as e:

@@ -26,11 +26,11 @@ async def app_version():
     Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
     """
     return {
-        "version": "2.0.4",
-        "build": 52,
+        "version": "2.0.5",
+        "build": 53,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "TOTLI HOLVA logotipi qo'shildi (login + ilova ikonasi)",
+        "changelog": "Oylik savdo rejasi qo'shildi (Bosh sahifada progress bar)",
     }
 
 

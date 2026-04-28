@@ -38,6 +38,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   double _todayTotal = 0;
   double _totalDebt = 0;
 
+  // Oylik savdo rejasi
+  double _monthlySold = 0;
+  double _monthlyTarget = 0;
+  double _monthlyPercent = 0;
+
   // Driver stats
   int _pendingDeliveries = 0;
   int _todayDelivered = 0;
@@ -82,6 +87,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _todayOrders = s['today_orders'] ?? 0;
             _todayTotal = (s['today_total'] ?? 0).toDouble();
             _totalDebt = (s['total_debt'] ?? 0).toDouble();
+          });
+        }
+        // Oylik savdo rejasi
+        final kpi = await ApiService.getAgentKpi(token, period: 'monthly');
+        if (kpi['success'] == true && mounted) {
+          final m = kpi['metrics'] as Map<String, dynamic>? ?? {};
+          setState(() {
+            _monthlySold = (m['orders_total'] ?? 0).toDouble();
+            _monthlyTarget = (m['sales_target'] ?? 0).toDouble();
+            _monthlyPercent = (m['sales_percent'] ?? 0).toDouble();
           });
         }
       } else if (_role == 'driver') {
@@ -485,6 +500,94 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildSalesPlanCard() {
+    if (_monthlyTarget <= 0) {
+      return Card(
+        elevation: 2,
+        color: Colors.grey[50],
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(children: [
+            Icon(Icons.flag_outlined, color: Colors.grey[500], size: 28),
+            const SizedBox(width: 12),
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Oylik reja', style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                Text('Bu oyda reja qo\'yilmagan', style: TextStyle(fontSize: 14, color: Colors.grey[700])),
+              ],
+            )),
+          ]),
+        ),
+      );
+    }
+    final pct = _monthlyPercent.clamp(0, 200) / 100;
+    final color = _monthlyPercent >= 100
+        ? Colors.green
+        : _monthlyPercent >= 70
+            ? Colors.orange
+            : Colors.red;
+    final remaining = (_monthlyTarget - _monthlySold).clamp(0, double.infinity).toDouble();
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(Icons.flag, color: color, size: 22),
+              const SizedBox(width: 8),
+              const Text('Oylik savdo rejasi', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text('${_monthlyPercent.toStringAsFixed(1)}%',
+                    style: TextStyle(fontSize: 13, color: color, fontWeight: FontWeight.bold)),
+              ),
+            ]),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: LinearProgressIndicator(
+                value: pct > 1 ? 1.0 : pct.toDouble(),
+                minHeight: 12,
+                backgroundColor: Colors.grey[200],
+                valueColor: AlwaysStoppedAnimation<Color>(color),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Sotgan', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                  Text(_formatMoney(_monthlySold), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                ]),
+                Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+                  Text('Reja', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                  Text(_formatMoney(_monthlyTarget), style: const TextStyle(fontSize: 13)),
+                ]),
+                Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                  Text('Qoldi', style: TextStyle(fontSize: 11, color: Colors.grey[600])),
+                  Text(remaining == 0 ? '✓ Bajarildi' : _formatMoney(remaining),
+                      style: TextStyle(fontSize: 13, color: remaining == 0 ? Colors.green : null,
+                          fontWeight: remaining == 0 ? FontWeight.bold : FontWeight.normal)),
+                ]),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildAgentHome() {
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -503,6 +606,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _buildStatCard('Bugun summa', _formatMoney(_todayTotal), Icons.attach_money, Colors.orange, onTap: () => setState(() => _currentTab = 2)),
             _buildStatCard('Jami qarz', _formatMoney(_totalDebt), Icons.account_balance, Colors.red, onTap: _showDebtors),
           ]),
+          const SizedBox(height: 12),
+          _buildSalesPlanCard(),
           const SizedBox(height: 20),
           _buildActionTile('Yangi buyurtma', Icons.add_shopping_cart, Colors.green, () {
             setState(() => _currentTab = 2);

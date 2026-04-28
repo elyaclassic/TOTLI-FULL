@@ -402,6 +402,17 @@ async def agent_kpi(
         # Foizlar
         visits_pct = round((visits_done / visits_planned * 100), 1) if visits_planned > 0 else 0
 
+        # Oylik savdo rejasi (har agent alohida shu summaga qarshi solishtiriladi)
+        sales_target = 0.0
+        sales_percent = 0.0
+        if period == "monthly":
+            from app.models.database import SalesPlan
+            current_period = today.strftime("%Y-%m")
+            plan = db.query(SalesPlan).filter(SalesPlan.period == current_period).first()
+            if plan and plan.amount and plan.amount > 0:
+                sales_target = float(plan.amount)
+                sales_percent = round((orders_total / sales_target * 100), 1)
+
         return {
             "success": True,
             "period": period,
@@ -415,6 +426,8 @@ async def agent_kpi(
                 "orders_total": round(orders_total, 2),
                 "average_order_value": round(average_order_value, 2),
                 "new_partners": new_partners,
+                "sales_target": round(sales_target, 2),
+                "sales_percent": sales_percent,
             },
         }
     except Exception as e:

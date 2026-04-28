@@ -275,6 +275,11 @@ class ApiService {
     return _get('/api/agent/debtors', token);
   }
 
+  // Oylik KPI (savdo rejasi va fakt)
+  static Future<Map<String, dynamic>> getAgentKpi(String token, {String period = 'monthly'}) async {
+    return _get('/api/agent/kpi?period=$period', token);
+  }
+
   // ===== AGENT: SET PARTNER LOCATION =====
   static Future<Map<String, dynamic>> setPartnerLocation(String token, int partnerId, double latitude, double longitude) async {
     return _post('/api/agent/partner/$partnerId/set-location', {

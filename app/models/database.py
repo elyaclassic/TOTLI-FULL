@@ -1595,6 +1595,21 @@ class Region(Base):
 
 
 # ==========================================
+# AGENT SAVDO REJASI (SALES PLAN)
+# ==========================================
+class SalesPlan(Base):
+    """Agentlar uchun oylik savdo rejasi (har agent alohida shu summaga qarshi solishtiriladi)."""
+    __tablename__ = "sales_plans"
+
+    id = Column(Integer, primary_key=True, index=True)
+    period = Column(String(7), unique=True, index=True)  # YYYY-MM
+    amount = Column(Float, default=0)  # so'm — har agent alohida shu summani sotishi kerak
+    created_at = Column(DateTime, default=datetime.now)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    note = Column(Text, nullable=True)
+
+
+# ==========================================
 # BILDIRISHNOMALAR (NOTIFICATIONS)
 # ==========================================
 

@@ -381,6 +381,26 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         .limit(20)
         .all()
     )
+
+    # Oylik savdo rejasi widget (joriy oy)
+    from app.models.database import SalesPlan
+    month_start = today.replace(day=1)
+    current_period = today.strftime("%Y-%m")
+    sales_plan = db.query(SalesPlan).filter(SalesPlan.period == current_period).first()
+    plan_amount = float(sales_plan.amount) if sales_plan else 0.0
+    sales_plan_rows = []
+    for agent in agents:
+        sold = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
+            Order.agent_id == agent.id,
+            Order.source == "agent",
+            Order.status.in_(("confirmed", "completed")),
+            Order.date >= month_start,
+        ).scalar() or 0.0
+        sold = float(sold)
+        pct = round((sold / plan_amount * 100), 1) if plan_amount > 0 else 0.0
+        sales_plan_rows.append({"agent": agent, "sold": sold, "percent": pct})
+    sales_plan_rows.sort(key=lambda x: x["sold"], reverse=True)
+
     return templates.TemplateResponse("supervisor/dashboard.html", {
         "request": request,
         "current_user": current_user,
@@ -394,6 +414,9 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         "recent_deliveries": recent_deliveries,
         "agent_orders": agent_orders,
         "agent_payments": [p for p in _get_pending_agent_payments(db)],
+        "sales_plan_amount": plan_amount,
+        "sales_plan_period": current_period,
+        "sales_plan_rows": sales_plan_rows,
         "yandex_maps_apikey": _get_yandex_apikey(),
         "page_title": "Supervayzer",
         "now": datetime.now(),

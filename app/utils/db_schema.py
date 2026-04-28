@@ -109,6 +109,25 @@ def ensure_advance_is_product_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_sales_plans_table(db: Session) -> None:
+    """sales_plans jadvali — agent oylik savdo rejasi (global, har agent alohida shu summaga qarshi)."""
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS sales_plans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                period VARCHAR(7) UNIQUE NOT NULL,
+                amount FLOAT DEFAULT 0,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                created_by_user_id INTEGER REFERENCES users(id),
+                note TEXT
+            )
+        """))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_sales_plans_period ON sales_plans(period)"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
 def ensure_product_is_for_agent_column(db: Session) -> None:
     """products.is_for_agent — Agent katalogida ko'rinish flagi."""
     try:

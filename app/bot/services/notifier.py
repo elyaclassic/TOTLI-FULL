@@ -310,3 +310,60 @@ def send_daily_summary():
 
 # sqlalchemy func.sum import
 from sqlalchemy import func as func_sum
+
+
+def send_sales_plan_reminder():
+    """Agentlarga oylik savdo rejasi haqida eslatma (telegram_id bor bo'lganlarga shaxsiy)."""
+    from app.models.database import Agent, SalesPlan
+    from calendar import monthrange
+    db = SessionLocal()
+    try:
+        today = date.today()
+        period = today.strftime("%Y-%m")
+        plan = db.query(SalesPlan).filter(SalesPlan.period == period).first()
+        if not plan or not plan.amount or plan.amount <= 0:
+            return
+        target = float(plan.amount)
+        days_in_month = monthrange(today.year, today.month)[1]
+        days_left = days_in_month - today.day
+        month_start = today.replace(day=1)
+
+        agents = db.query(Agent).filter(Agent.is_active == True).all()
+        for agent in agents:
+            if not agent.telegram_id:
+                continue
+            sold = db.query(func_sum(Order.total)).filter(
+                Order.agent_id == agent.id,
+                Order.source == "agent",
+                Order.status.in_(("confirmed", "completed")),
+                Order.date >= month_start,
+            ).scalar() or 0.0
+            sold = float(sold)
+            pct = (sold / target * 100) if target > 0 else 0
+            remaining = max(0.0, target - sold)
+            if pct >= 100:
+                emoji = "✅"
+                status = "Reja bajarildi! Tabriklaymiz!"
+            elif pct >= 70:
+                emoji = "🟡"
+                status = "Reja yaxshi bajarilmoqda"
+            else:
+                emoji = "🔴"
+                status = "Rejaga yetishish uchun harakatni jadallashtiring"
+            text = (
+                f"{emoji} <b>Oylik savdo rejasi — {period}</b>\n\n"
+                f"<b>Reja:</b> {fmt(target)} so'm\n"
+                f"<b>Sotgan:</b> {fmt(sold)} so'm\n"
+                f"<b>Foiz:</b> {pct:.1f}%\n"
+                f"<b>Qoldi:</b> {fmt(remaining)} so'm\n"
+                f"<b>Oy oxirigacha:</b> {days_left} kun\n\n"
+                f"<i>{status}</i>"
+            )
+            try:
+                _send_to_chats_sync(text, [agent.telegram_id])
+            except Exception as e:
+                print(f"[TG Sales Plan] Xato (agent={agent.id}): {e}")
+    except Exception as e:
+        print(f"[TG Sales Plan] xato: {e}")
+    finally:
+        db.close()

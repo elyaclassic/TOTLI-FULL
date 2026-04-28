@@ -1074,10 +1074,17 @@
                 <small class="text-light opacity-50 px-3">MONITORING</small>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if 'Agent' in page_title %}active{% endif %}" href="/agents">
+                <a class="nav-link {% if 'Agent' in page_title and 'reja' not in (page_title or '')|lower %}active{% endif %}" href="/agents">
                     <i class="bi bi-person-walking"></i> Agentlar
                 </a>
             </li>
+            {% if user_role == 'admin' %}
+            <li class="nav-item">
+                <a class="nav-link {% if 'savdo rejasi' in (page_title or '')|lower %}active{% endif %}" href="/admin/sales-plans">
+                    <i class="bi bi-bullseye"></i> Agent savdo rejasi
+                </a>
+            </li>
+            {% endif %}
             <li class="nav-item">
                 <a class="nav-link {% if 'Yetkazish' in page_title %}active{% endif %}" href="/delivery">
                     <i class="bi bi-truck"></i> Yetkazish

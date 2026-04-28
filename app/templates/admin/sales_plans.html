@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set fmt = lambda v: ('{:,.0f}'.format(v|float).replace(',', ' ')) %}
+
+{% if request.query_params.get('saved') %}
+<div class="alert alert-success alert-dismissible fade show" role="alert">
+    <i class="bi bi-check-circle"></i> Reja saqlandi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('deleted') %}
+<div class="alert alert-secondary alert-dismissible fade show" role="alert">
+    <i class="bi bi-trash"></i> Reja o'chirildi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('error') == 'period' %}
+<div class="alert alert-danger alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> Davr formati noto'g'ri (kerak: YYYY-MM).
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-bullseye text-primary"></i> Agent oylik savdo rejasi</h5>
+    <div class="text-muted small">Joriy davr: <strong>{{ current_period }}</strong></div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header py-2"><span class="fw-bold"><i class="bi bi-pencil-square"></i> Reja qo'yish / yangilash</span></div>
+            <div class="card-body">
+                <form method="POST" action="/admin/sales-plans/save">
+                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Davr (YYYY-MM)</label>
+                        <input type="month" name="period" class="form-control form-control-sm" value="{{ current_period }}" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Reja summasi (so'm)</label>
+                        <input type="number" name="amount" class="form-control form-control-sm" step="any" min="0" value="{{ current_plan.amount if current_plan else 0 }}" placeholder="50000000" required>
+                        <div class="form-text small">Har agent shu summani sotishi kutiladi.</div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Izoh (ixtiyoriy)</label>
+                        <textarea name="note" class="form-control form-control-sm" rows="2">{{ current_plan.note if current_plan else '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Saqlash</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header py-2"><span class="fw-bold"><i class="bi bi-clock-history"></i> Oxirgi rejalar</span></div>
+            <div class="card-body p-0">
+                {% if plans %}
+                <table class="table table-sm mb-0">
+                    <thead>
+                        <tr>
+                            <th>Davr</th>
+                            <th class="text-end">Reja (so'm)</th>
+                            <th>Yaratilgan</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in plans %}
+                        <tr>
+                            <td><code>{{ p.period }}</code></td>
+                            <td class="text-end fw-bold">{{ fmt(p.amount or 0) }}</td>
+                            <td class="text-muted small">{{ p.created_at.strftime('%d.%m.%Y') if p.created_at else '—' }}</td>
+                            <td class="text-end">
+                                <form method="POST" action="/admin/sales-plans/delete/{{ p.id }}" style="display:inline;" onsubmit="return confirm('{{ p.period }} rejasini o\'chirmoqchimisiz?');">
+                                    <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-inbox d-block fs-3 opacity-25"></i>
+                    Hali reja qo'yilmagan
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Joriy oy agent ko'rsatkichlari -->
+<div class="card">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-bold"><i class="bi bi-people-fill"></i> Joriy oy ({{ current_period }}) — agentlar bo'yicha</span>
+        {% if current_plan %}
+        <span class="badge bg-primary">Reja: {{ fmt(current_plan.amount) }} so'm / agent</span>
+        {% else %}
+        <span class="badge bg-warning">Reja qo'yilmagan</span>
+        {% endif %}
+    </div>
+    <div class="card-body p-0">
+        {% if rows %}
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Agent</th>
+                    <th class="text-end">Sotgan (so'm)</th>
+                    <th class="text-end">Reja (so'm)</th>
+                    <th class="text-end">Foiz</th>
+                    <th class="text-end">Qoldi</th>
+                    <th>Progress</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for r in rows %}
+                <tr>
+                    <td class="muted-cell">{{ loop.index }}</td>
+                    <td><strong>{{ r.agent.full_name or r.agent.code }}</strong>{% if r.agent.region %} <span class="text-muted small">— {{ r.agent.region }}</span>{% endif %}</td>
+                    <td class="text-end fw-bold">{{ fmt(r.sold) }}</td>
+                    <td class="text-end text-muted">{{ fmt(r.target) }}</td>
+                    <td class="text-end">
+                        {% if r.percent >= 100 %}
+                        <span class="badge bg-success">{{ r.percent }}%</span>
+                        {% elif r.percent >= 70 %}
+                        <span class="badge bg-warning text-dark">{{ r.percent }}%</span>
+                        {% elif r.percent > 0 %}
+                        <span class="badge bg-danger">{{ r.percent }}%</span>
+                        {% else %}
+                        <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-end {% if r.remaining == 0 and r.target > 0 %}text-success{% endif %}">{{ fmt(r.remaining) }}</td>
+                    <td style="min-width:140px;">
+                        {% if r.target > 0 %}
+                        <div class="progress" style="height:14px;">
+                            <div class="progress-bar {% if r.percent >= 100 %}bg-success{% elif r.percent >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                                 role="progressbar" style="width:{{ r.percent if r.percent <= 100 else 100 }}%;"
+                                 aria-valuenow="{{ r.percent }}" aria-valuemin="0" aria-valuemax="100">
+                                {{ r.percent }}%
+                            </div>
+                        </div>
+                        {% else %}
+                        <span class="text-muted small">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-5">
+            <i class="bi bi-people fs-1 d-block mb-2 opacity-25"></i>
+            Faol agent topilmadi
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
