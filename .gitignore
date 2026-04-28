@@ -96,6 +96,9 @@ inv_*.xlsx
 inv_*.txt
 Export*.xls
 
+# Local runner skriptlar (mashinaga xos yo'l hardcoded)
+external/telegram_sheets_bot/_*.bat
+
 # Claude skills source (kerak emas, .claude/commands/ ga ko'chirilgan)
 claude-skills-main/
 
