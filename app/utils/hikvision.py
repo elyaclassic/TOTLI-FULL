@@ -313,19 +313,36 @@ class HikvisionAPI:
         return None
 
     def download_event_image(self, uri: str) -> Optional[bytes]:
-        """Hodisa rasmini yuklab bytes qaytaradi. uri nisbiy (/pic/...) yoki to'liq bo'lishi mumkin."""
+        """Hodisa rasmini yuklab bytes qaytaradi. uri nisbiy (/pic/...) yoki to'liq bo'lishi mumkin.
+
+        Strategiya: ulashilgan session bilan urinib ko'ramiz, agar bo'sh content kelsa
+        — fresh session bilan qayta urinamiz (long-lived keep-alive throttle muammosi uchun).
+        """
         if not uri:
             return None
-        try:
-            if uri.startswith("http://") or uri.startswith("https://"):
-                url = uri
-            else:
-                url = self.base_url.rstrip("/") + ("/" if not uri.startswith("/") else "") + uri
-            r = self._get_session().get(url, timeout=15)
-            if r.status_code == 200 and r.content:
-                return r.content
-        except Exception:
-            pass
+        if uri.startswith("http://") or uri.startswith("https://"):
+            url = uri
+        else:
+            url = self.base_url.rstrip("/") + ("/" if not uri.startswith("/") else "") + uri
+
+        for attempt in (1, 2):
+            try:
+                if attempt == 1:
+                    sess = self._get_session()
+                else:
+                    sess = requests.Session()
+                    sess.auth = HTTPDigestAuth(self.username, self.password)
+                    sess.verify = self.verify_ssl
+                r = sess.get(url, timeout=15)
+                if r.status_code == 200 and r.content:
+                    return r.content
+                print(
+                    f"[Hikvision Image] urinish={attempt} status={r.status_code} "
+                    f"len={len(r.content)} ct={r.headers.get('content-type','')} url={url[-80:]}",
+                    flush=True,
+                )
+            except Exception as e:
+                print(f"[Hikvision Image] urinish={attempt} xato: {e}", flush=True)
         return None
 
 
