@@ -20,10 +20,14 @@ async def pwa_config():
 
 @router.get("/app/version")
 async def app_version():
-    """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi."""
+    """Mobil ilova versiyasi tekshirish. Yangi versiya bo'lsa yangilash taklif qilinadi.
+
+    DIQQAT: pubspec.yaml va main.dart (appVersion, appBuild) bilan **birga** yangilanishi shart.
+    Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
+    """
     return {
-        "version": "2.0.3",
-        "build": 51,
+        "version": "2.0.4",
+        "build": 52,
         "force_update": False,
         "download_url": "/api/app/download",
         "changelog": "TOTLI HOLVA logotipi qo'shildi (login + ilova ikonasi)",
