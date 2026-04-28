@@ -160,19 +160,18 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                  const SizedBox(height: 48),
-                  Icon(Icons.store, size: 72, color: Colors.white.withOpacity(0.9)),
-                  const SizedBox(height: 16),
-                  Text(
-                    'TOTLI HOLVA',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white.withOpacity(0.95),
+                  const SizedBox(height: 32),
+                  Center(
+                    child: ClipOval(
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        height: 180,
+                        width: 180,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   Text(
                     'Agent / Haydovchi kirish',
                     textAlign: TextAlign.center,

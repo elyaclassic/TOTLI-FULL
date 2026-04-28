@@ -41,3 +41,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Signing — never commit!
+/android/key.properties
+/android/app/*.jks
+/android/app/*.keystore
+
+# iOS auto-generated
+/ios/Flutter/ephemeral/

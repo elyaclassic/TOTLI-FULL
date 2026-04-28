@@ -38,6 +38,27 @@ class _VisitsScreenState extends State<VisitsScreen> {
 
   String get _todayName => _dayNames[_todayVisitDay];
 
+  /// Faol (yopilmagan) vizit — bo'lsa, doim tepada banner sifatida ko'rsatiladi
+  Map<String, dynamic>? get _activeVisit {
+    for (final v in _visits) {
+      if (v['check_out_time'] == null) return v;
+    }
+    return null;
+  }
+
+  String _formatElapsed(String? checkInIso) {
+    if (checkInIso == null) return '';
+    try {
+      final start = DateTime.parse(checkInIso).toLocal();
+      final diff = DateTime.now().difference(start);
+      if (diff.inHours > 0) return '${diff.inHours} soat ${diff.inMinutes % 60} daq';
+      if (diff.inMinutes > 0) return '${diff.inMinutes} daqiqa';
+      return '${diff.inSeconds} soniya';
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// Bugungi kun bo'yicha rejadagi mijozlar (faqat bugun tanlanganda ishlaydi)
   List<Map<String, dynamic>> get _todayPlannedPartners {
     final today = _todayVisitDay;
@@ -138,6 +159,23 @@ class _VisitsScreenState extends State<VisitsScreen> {
             return;
           } else {
             final err = result['error']?.toString() ?? '';
+            // Ochiq vizit bor — to'g'ridan-to'g'ri unga olib o'tish
+            if (result['error_code'] == 'OPEN_VISIT' && result['open_visit'] != null) {
+              final ov = Map<String, dynamic>.from(result['open_visit']);
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text('Avval ${ov['partner_name']} viziti yakunlansin'),
+                backgroundColor: Colors.orange,
+              ));
+              _openActiveVisit({
+                'id': ov['visit_id'],
+                'partner_id': ov['partner_id'],
+                'partner_name': ov['partner_name'],
+                'check_in_time': ov['check_in_time'],
+                'check_out_time': null,
+                'status': 'visited',
+              });
+              return;
+            }
             if (err.contains('Timeout') || err.contains('Ulanish')) {
               // Server javob bermadi — offline saqlash
             } else {
@@ -302,6 +340,8 @@ class _VisitsScreenState extends State<VisitsScreen> {
               ],
             ),
           ),
+          // Faol vizit banneri — doim tepada turadi (sticky)
+          if (_activeVisit != null) _buildActiveVisitBanner(_activeVisit!),
           // Kontent
           Expanded(
             child: _isLoading
@@ -393,6 +433,78 @@ class _VisitsScreenState extends State<VisitsScreen> {
         foregroundColor: Colors.white,
         icon: const Icon(Icons.pin_drop),
         label: const Text('Vizit boshlash'),
+      ),
+    );
+  }
+
+  /// Faol vizit uchun sticky banner — doim tepada turadi
+  Widget _buildActiveVisitBanner(Map<String, dynamic> visit) {
+    final partnerName = visit['partner_name'] ?? 'Mijoz #${visit['partner_id']}';
+    final elapsed = _formatElapsed(visit['check_in_time']);
+    return Material(
+      color: const Color(0xFF017449),
+      child: InkWell(
+        onTap: () => _openActiveVisit(visit),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.pin_drop, color: Colors.white, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text('FAOL VIZIT',
+                              style: TextStyle(color: Color(0xFF017449), fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                        if (elapsed.isNotEmpty) ...[
+                          const SizedBox(width: 8),
+                          Text(elapsed, style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      partnerName,
+                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Text('Davom ettirish',
+                    style: TextStyle(color: Color(0xFF017449), fontSize: 12, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(width: 4),
+              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 14),
+            ],
+          ),
+        ),
       ),
     );
   }
