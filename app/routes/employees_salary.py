@@ -120,6 +120,7 @@ async def employee_salary_page(
                 if (row.salary or 0) > 0:
                     latest_doc_salary[row.employee_id] = float(row.salary)
     advance_sums = {}
+    product_purchase_sums = {}  # mahsulot xaridi (kvota qo'llanadi)
     from calendar import monthrange
     _, last_day = monthrange(year, month)
     start_d = date(year, month, 1)
@@ -129,7 +130,18 @@ async def employee_salary_page(
         EmployeeAdvance.advance_date <= end_d,
         EmployeeAdvance.confirmed_at.isnot(None),
     ).all():
-        advance_sums[a.employee_id] = advance_sums.get(a.employee_id, 0) + (a.amount or 0)
+        if getattr(a, "is_product", False):
+            product_purchase_sums[a.employee_id] = product_purchase_sums.get(a.employee_id, 0) + (a.amount or 0)
+        else:
+            advance_sums[a.employee_id] = advance_sums.get(a.employee_id, 0) + (a.amount or 0)
+    # Kvota qo'llash: mahsulot xaridining kvotadan oshgan qismi advance ga qo'shiladi
+    for emp_id, total_purchase in product_purchase_sums.items():
+        emp_obj = next((e for e in employees if e.id == emp_id), None)
+        quota = float(getattr(emp_obj, "monthly_free_quota", None) or 0) if emp_obj else 0
+        free_used = min(quota, total_purchase)
+        deductible = max(0, total_purchase - free_used)
+        if deductible > 0:
+            advance_sums[emp_id] = advance_sums.get(emp_id, 0) + deductible
     worked_days_by_emp = {}
     if emp_ids:
         try:

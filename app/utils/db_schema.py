@@ -83,6 +83,32 @@ def ensure_agents_pin_set_at_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_employee_quota_column(db: Session) -> None:
+    """employees.monthly_free_quota — oyiga bepul mahsulot kvotasi (so'm)."""
+    try:
+        db.execute(text("ALTER TABLE employees ADD COLUMN monthly_free_quota FLOAT DEFAULT 90000"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
+def ensure_advance_is_product_column(db: Session) -> None:
+    """employee_advances.is_product — mahsulot avansi (kvota qo'llanadi)."""
+    try:
+        db.execute(text("ALTER TABLE employee_advances ADD COLUMN is_product BOOLEAN DEFAULT 0"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
 def ensure_audit_cooldowns_table(db: Session) -> None:
     """audit_cooldowns jadvali — audit watchdog dedup/cooldown saqlanadi.
     Process restart paytida ham saqlanadi (B5 — O5 fix)."""

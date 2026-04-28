@@ -1099,6 +1099,7 @@ class Employee(Base):
     is_active = Column(Boolean, default=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     hikvision_id = Column(String(50))  # Hikvision tizimidagi ID
+    monthly_free_quota = Column(Float, default=90000)  # Oyiga bepul mahsulot kvotasi (so'm)
     created_at = Column(DateTime, default=datetime.now)
 
     salaries = relationship("Salary", back_populates="employee")
@@ -1178,6 +1179,7 @@ class EmployeeAdvance(Base):
     amount = Column(Float, default=0)
     advance_date = Column(Date, nullable=False)
     note = Column(String(500), nullable=True)
+    is_product = Column(Boolean, default=False)  # Mahsulot avansi (oylikdan kvota o'tib ushlanadi)
     confirmed_at = Column(DateTime, nullable=True)  # Tasdiqlangan vaqti
     created_at = Column(DateTime, default=datetime.now)
     

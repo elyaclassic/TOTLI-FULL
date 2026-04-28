@@ -1,0 +1,354 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid mt-3">
+  <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <h4 class="mb-0"><i class="bi bi-bag-check text-primary"></i> Hodim mahsulot xaridi</h4>
+    <div class="text-muted small">
+      <i class="bi bi-info-circle"></i> Bepul kvota oydan oydin yangilanadi. Kvotadan oshig'i oylikdan ushlanadi.
+    </div>
+  </div>
+
+  {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show">
+      {{ request.query_params.get('error') }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endif %}
+  {% if request.query_params.get('success') %}
+    <div class="alert alert-success alert-dismissible fade show">
+      {{ request.query_params.get('success') }}
+      <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+  {% endif %}
+
+  <!-- Yangi xarid formasi -->
+  <div class="card mb-4 shadow-sm">
+    <div class="card-header bg-light">
+      <strong><i class="bi bi-plus-circle"></i> Yangi xarid kiritish</strong>
+    </div>
+    <div class="card-body">
+      <form method="post" action="/employees/mahsulot/add" id="purchaseForm">
+        <div class="row g-2 mb-2">
+          <div class="col-md-4">
+            <label class="form-label small">Xodim <span class="text-danger">*</span></label>
+            <select class="form-select" name="employee_id" id="employeeSelect" required onchange="updateQuotaInfo()">
+              <option value="">— Tanlang —</option>
+              {% for e in employees %}
+                <option value="{{ e.id }}"
+                  data-quota="{{ summaries[e.id].quota }}"
+                  data-month-total="{{ summaries[e.id].month_total }}"
+                  data-free-used="{{ summaries[e.id].free_used }}"
+                  data-free-remaining="{{ summaries[e.id].free_remaining }}"
+                  data-deductible="{{ summaries[e.id].deductible }}">
+                  {{ e.full_name }}{% if e.position %} ({{ e.position }}){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Ombor <span class="text-danger">*</span></label>
+            <select class="form-select" name="warehouse_id" id="warehouseSelect" required onchange="loadProducts()">
+              <option value="">— Tanlang —</option>
+              {% for w in warehouses %}
+                <option value="{{ w.id }}">{{ w.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-md-2">
+            <label class="form-label small">Sana <span class="text-danger">*</span></label>
+            <input type="date" class="form-control" name="advance_date" value="{{ default_date }}" required>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label small">Izoh</label>
+            <input type="text" class="form-control" name="note" placeholder="(ixtiyoriy)">
+          </div>
+        </div>
+
+        <!-- Quota info -->
+        <div id="quotaInfo" class="alert alert-info py-2 mb-3 d-none">
+          <div class="row text-center small">
+            <div class="col">
+              <div class="text-muted">Oylik kvota</div>
+              <strong id="qiQuota">0</strong>
+            </div>
+            <div class="col">
+              <div class="text-muted">Bu oyda olgan</div>
+              <strong id="qiTotal">0</strong>
+            </div>
+            <div class="col">
+              <div class="text-muted">Bepul ishlatilgan</div>
+              <strong id="qiFreeUsed" class="text-success">0</strong>
+            </div>
+            <div class="col">
+              <div class="text-muted">Qolgan bepul</div>
+              <strong id="qiFreeRemaining" class="text-success">0</strong>
+            </div>
+            <div class="col">
+              <div class="text-muted">Oylikdan ushlanadi</div>
+              <strong id="qiDeductible" class="text-danger">0</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mahsulot qatorlari -->
+        <div class="table-responsive" style="overflow: visible;">
+          <table class="table table-bordered table-sm align-middle mb-2" id="productsTable" style="overflow: visible;">
+            <thead class="table-light">
+              <tr>
+                <th width="45%">Mahsulot</th>
+                <th width="15%">Miqdor</th>
+                <th width="15%">Narx (so'm)</th>
+                <th width="20%">Jami</th>
+                <th width="5%"></th>
+              </tr>
+            </thead>
+            <tbody id="productRows">
+              <!-- Qatorlar JS bilan qo'shiladi -->
+            </tbody>
+            <tfoot>
+              <tr class="table-secondary">
+                <td colspan="3" class="text-end"><strong>Jami:</strong></td>
+                <td><strong id="grandTotal">0</strong> so'm</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="d-flex gap-2 mb-2">
+          <button type="button" class="btn btn-outline-primary btn-sm" onclick="addRow()">
+            <i class="bi bi-plus"></i> Qator qo'shish
+          </button>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+          <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
+          <a href="/employees/mahsulot" class="btn btn-outline-secondary">Bekor qilish</a>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Filtrlash -->
+  <form method="get" class="row g-2 mb-3">
+    <div class="col-md-3">
+      <input type="date" class="form-control form-control-sm" name="date_from" value="{{ filter_date_from }}" placeholder="Sanadan">
+    </div>
+    <div class="col-md-3">
+      <input type="date" class="form-control form-control-sm" name="date_to" value="{{ filter_date_to }}" placeholder="Sanagacha">
+    </div>
+    <div class="col-md-3">
+      <select class="form-select form-select-sm" name="employee_id">
+        <option value="">— Barcha xodimlar —</option>
+        {% for e in employees %}
+          <option value="{{ e.id }}" {% if filter_employee_id == e.id %}selected{% endif %}>{{ e.full_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <button type="submit" class="btn btn-sm btn-secondary"><i class="bi bi-funnel"></i> Filtr</button>
+      <a href="/employees/mahsulot" class="btn btn-sm btn-outline-secondary">Tozalash</a>
+    </div>
+  </form>
+
+  <!-- Ro'yxat -->
+  <div class="card shadow-sm">
+    <div class="card-header bg-light">
+      <strong>Tarix</strong> — {{ advances|length }} ta yozuv
+    </div>
+    <div class="table-responsive">
+      <table class="table table-sm table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>Sana</th>
+            <th>Xodim</th>
+            <th class="text-end">Summa</th>
+            <th>Mahsulotlar</th>
+            <th width="60"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for a in advances %}
+            <tr>
+              <td>{{ a.advance_date.strftime('%Y-%m-%d') if a.advance_date else '' }}</td>
+              <td>{{ a.employee.full_name if a.employee else '—' }}</td>
+              <td class="text-end fw-bold">{{ '{:,.0f}'.format(a.amount or 0) }}</td>
+              <td class="small text-muted">{{ a.note or '' }}</td>
+              <td>
+                {% if current_user.role == 'admin' %}
+                  <form method="post" action="/employees/mahsulot/{{ a.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirish — stock qaytariladi. Davom etasizmi?');">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                  </form>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="5" class="text-center text-muted py-4">Yozuv yo'q</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<template id="rowTemplate">
+  <tr>
+    <td>
+      <div style="position: relative;">
+        <input type="text" class="form-control form-control-sm productSearch" placeholder="Yozib qidiring..." autocomplete="off">
+        <input type="hidden" class="productIdHidden" name="product_id" required>
+        <div class="productDropdown shadow-lg" style="display:none; position:absolute; top:calc(100% + 2px); left:0; min-width:100%; width:max-content; max-width:520px; max-height:320px; overflow-y:auto; background:#fff; border:1px solid #adb5bd; border-radius:6px; z-index:9999;"></div>
+      </div>
+    </td>
+    <td><input type="number" class="form-control form-control-sm qty" name="quantity" min="0" step="any" required></td>
+    <td><input type="number" class="form-control form-control-sm price" name="price" min="0" step="any" required></td>
+    <td class="lineTotal text-end fw-bold">0</td>
+    <td><button type="button" class="btn btn-sm btn-outline-danger removeBtn"><i class="bi bi-x"></i></button></td>
+  </tr>
+</template>
+
+<script>
+let productCache = [];
+
+function fmt(n) {
+  return Number(n || 0).toLocaleString('uz-UZ', {maximumFractionDigits: 0}).replace(/,/g, ' ');
+}
+
+function updateQuotaInfo() {
+  const sel = document.getElementById('employeeSelect');
+  const opt = sel.options[sel.selectedIndex];
+  const info = document.getElementById('quotaInfo');
+  if (!opt || !opt.value) {
+    info.classList.add('d-none');
+    return;
+  }
+  document.getElementById('qiQuota').textContent = fmt(opt.dataset.quota);
+  document.getElementById('qiTotal').textContent = fmt(opt.dataset.monthTotal);
+  document.getElementById('qiFreeUsed').textContent = fmt(opt.dataset.freeUsed);
+  document.getElementById('qiFreeRemaining').textContent = fmt(opt.dataset.freeRemaining);
+  document.getElementById('qiDeductible').textContent = fmt(opt.dataset.deductible);
+  info.classList.remove('d-none');
+}
+
+async function loadProducts() {
+  const wh = document.getElementById('warehouseSelect').value;
+  if (!wh) { productCache = []; return; }
+  try {
+    const r = await fetch('/employees/mahsulot/products-by-warehouse?warehouse_id=' + encodeURIComponent(wh));
+    const data = await r.json();
+    productCache = data.items || [];
+  } catch (e) {
+    console.error(e);
+    productCache = [];
+  }
+}
+
+function renderDropdown(searchInput, query) {
+  const tr = searchInput.closest('tr');
+  const dropdown = tr.querySelector('.productDropdown');
+  while (dropdown.firstChild) dropdown.removeChild(dropdown.firstChild);
+  const q = (query || '').toLowerCase().trim();
+  let count = 0;
+  for (const p of productCache) {
+    const name = (p.name || '').toLowerCase();
+    if (q && !name.includes(q)) continue;
+    const item = document.createElement('div');
+    item.className = 'productDropdownItem';
+    item.style.cssText = 'padding:6px 10px; cursor:pointer; border-bottom:1px solid #f0f0f0; font-size:13px;';
+    item.dataset.id = String(p.id);
+    item.dataset.name = p.name;
+    item.dataset.price = String(p.sale_price);
+    item.dataset.available = String(p.available);
+    // Asosiy qator: nom (qalin)
+    const nameDiv = document.createElement('div');
+    nameDiv.style.fontWeight = '500';
+    nameDiv.textContent = p.name;
+    item.appendChild(nameDiv);
+    // Sub qator: qoldiq + narx
+    const subDiv = document.createElement('div');
+    subDiv.style.cssText = 'font-size:11px; color:#666;';
+    subDiv.textContent = 'Qoldiq: ' + p.available + ' ' + (p.unit || '') + ' | Narx: ' + fmt(p.sale_price) + ' so\'m';
+    item.appendChild(subDiv);
+    item.addEventListener('mouseenter', () => { item.style.background = '#e7f3ff'; });
+    item.addEventListener('mouseleave', () => { item.style.background = '#fff'; });
+    item.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      selectProduct(searchInput, p);
+    });
+    dropdown.appendChild(item);
+    count++;
+    if (count >= 50) break; // ko'p natija bo'lsa cheklash
+  }
+  if (count === 0) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:8px 10px; color:#999; font-size:12px;';
+    empty.textContent = 'Topilmadi';
+    dropdown.appendChild(empty);
+  }
+  dropdown.style.display = 'block';
+}
+
+function selectProduct(searchInput, product) {
+  const tr = searchInput.closest('tr');
+  searchInput.value = product.name;
+  tr.querySelector('.productIdHidden').value = String(product.id);
+  if (product.sale_price > 0) {
+    tr.querySelector('.price').value = product.sale_price;
+  }
+  tr.querySelector('.productDropdown').style.display = 'none';
+  recalc(searchInput);
+  // Miqdorga focus
+  tr.querySelector('.qty').focus();
+}
+
+function addRow() {
+  const tbody = document.getElementById('productRows');
+  const tpl = document.getElementById('rowTemplate');
+  const clone = tpl.content.cloneNode(true);
+  const tr = clone.querySelector('tr');
+  const search = tr.querySelector('.productSearch');
+  // Combobox event listeners
+  search.addEventListener('focus', () => renderDropdown(search, search.value));
+  search.addEventListener('input', () => {
+    tr.querySelector('.productIdHidden').value = '';  // qidiruv o'zgartirsa ID tozalanadi
+    renderDropdown(search, search.value);
+  });
+  search.addEventListener('blur', () => {
+    setTimeout(() => { tr.querySelector('.productDropdown').style.display = 'none'; }, 150);
+  });
+  tr.querySelector('.qty').addEventListener('input', (ev) => recalc(ev.target));
+  tr.querySelector('.price').addEventListener('input', (ev) => recalc(ev.target));
+  tr.querySelector('.removeBtn').addEventListener('click', (ev) => removeRow(ev.target));
+  tbody.appendChild(tr);
+}
+
+function recalc(el) {
+  const tr = el.closest('tr');
+  const qty = parseFloat(tr.querySelector('.qty').value) || 0;
+  const price = parseFloat(tr.querySelector('.price').value) || 0;
+  tr.querySelector('.lineTotal').textContent = fmt(qty * price);
+  let total = 0;
+  document.querySelectorAll('#productRows tr').forEach(r => {
+    const q = parseFloat(r.querySelector('.qty')?.value) || 0;
+    const p = parseFloat(r.querySelector('.price')?.value) || 0;
+    total += q * p;
+  });
+  document.getElementById('grandTotal').textContent = fmt(total);
+}
+
+function removeRow(btn) {
+  btn.closest('tr').remove();
+  let total = 0;
+  document.querySelectorAll('#productRows tr').forEach(r => {
+    const q = parseFloat(r.querySelector('.qty')?.value) || 0;
+    const p = parseFloat(r.querySelector('.price')?.value) || 0;
+    total += q * p;
+  });
+  document.getElementById('grandTotal').textContent = fmt(total);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  addRow();
+});
+</script>
+{% endblock %}

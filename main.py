@@ -36,6 +36,7 @@ from app.routes import partners as partners_routes
 from app.routes import employees as employees_routes
 from app.routes import employees_dismissals as employees_dismissals_routes
 from app.routes import employees_advances as employees_advances_routes
+from app.routes import employees_product_purchases as employees_product_purchases_routes
 from app.routes import employees_attendance as employees_attendance_routes
 from app.routes import employees_salary as employees_salary_routes
 from app.routes import employees_employment as employees_employment_routes
@@ -90,6 +91,7 @@ app.include_router(partners_routes.router)
 app.include_router(employees_routes.router)
 app.include_router(employees_dismissals_routes.router)
 app.include_router(employees_advances_routes.router)
+app.include_router(employees_product_purchases_routes.router)
 app.include_router(employees_attendance_routes.router)
 app.include_router(employees_salary_routes.router)
 app.include_router(employees_employment_routes.router)
