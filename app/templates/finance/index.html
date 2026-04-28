@@ -112,6 +112,9 @@
       <a href="/finance" class="btn btn-sm btn-outline-secondary" title="Tozalash"><i class="bi bi-x-circle"></i></a>
     </form>
   </div>
+  <div class="px-3 pt-2 pb-1">
+    <input type="text" id="finSearchInput" class="form-control form-control-sm" placeholder="Qidirish: kassa, kontragent, izoh, summa..." oninput="filterFinTable(this.value)" style="border-radius:10px;max-width:400px;">
+  </div>
   <div class="card-body p-0" style="overflow-x:auto;">
     <table class="table mb-0">
       <thead>
@@ -129,7 +132,7 @@
           {% endif %}
         </tr>
       </thead>
-      <tbody>
+      <tbody id="finTableBody">
         {% if payments %}
           {% for payment in payments %}
           {% set p_status = payment.status|default('confirmed', true) %}
@@ -195,6 +198,7 @@
       </tbody>
     </table>
   </div>
+  {% include "components/pagination.html" %}
 </div>
 
 <script>
@@ -240,7 +244,7 @@ document.addEventListener('DOMContentLoaded', function() {
               <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" style="border-radius:10px;">
             </div>
             <div class="col-12">
-              <label class="form-label fw-semibold">Kontragent</label>
+              <label class="form-label fw-semibold">Kontragent *</label>
               <input type="hidden" name="partner_id" id="finPartnerIdInput">
               <div class="ss-wrap" style="position:relative;width:100%;">
                 <input type="text" class="form-control" id="finPartnerSearch" placeholder="Kontragent qidirish..." autocomplete="off" style="border-radius:10px;">
@@ -269,7 +273,7 @@ document.addEventListener('DOMContentLoaded', function() {
         </div>
         <div class="modal-footer border-0">
           <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="border-radius:10px;">Bekor</button>
-          <button type="submit" class="btn btn-primary" style="border-radius:10px;"><i class="bi bi-check-lg"></i> Saqlash</button>
+          <button type="submit" class="btn btn-primary" id="paymentSubmitBtn" style="border-radius:10px;"><i class="bi bi-check-lg"></i> Saqlash</button>
         </div>
       </form>
     </div>
@@ -279,6 +283,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% block extra_js %}
 <script>
+function filterFinTable(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#finTableBody tr').forEach(function(tr) {
+    var txt = tr.textContent.toLowerCase();
+    tr.style.display = (!q || txt.includes(q)) ? '' : 'none';
+  });
+}
+// Form validatsiya
+document.querySelector('#addPaymentModal form').addEventListener('submit', function(e) {
+  var pid = document.getElementById('finPartnerIdInput').value;
+  var amt = document.querySelector('#addPaymentModal input[name="amount"]').value;
+  if (!pid || pid === '0' || pid === '') {
+    e.preventDefault();
+    alert('Kontragent tanlanmagan!');
+    document.getElementById('finPartnerSearch').focus();
+    return false;
+  }
+  if (!amt || parseFloat(amt) <= 0) {
+    e.preventDefault();
+    alert('Summa kiritilmagan!');
+    return false;
+  }
+});
 // Modal ochilganda sana maydonini bugungi sana bilan to'ldirish
 document.getElementById('addPaymentModal').addEventListener('show.bs.modal', function() {
   var dateInput = document.getElementById('paymentDateInput');

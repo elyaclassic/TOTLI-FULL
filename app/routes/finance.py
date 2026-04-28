@@ -28,22 +28,8 @@ cash_router = APIRouter(prefix="/cash", tags=["cash-transfers"])
 
 
 def _cash_balance_formula(db: Session, cash_id: int) -> tuple:
-    cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
-    if not cash:
-        return (0.0, 0.0, 0.0)
-    opening = float(getattr(cash, "opening_balance", None) or 0)
-    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
-    income_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "income", confirmed)
-        .scalar()
-    ) or 0
-    expense_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "expense", confirmed)
-        .scalar()
-    ) or 0
-    return (opening + income_sum - expense_sum, income_sum, expense_sum)
+    from app.services.finance_service import cash_balance_formula
+    return cash_balance_formula(db, cash_id)
 
 
 def _sync_cash_balance(db: Session, cash_id: int) -> None:
@@ -124,7 +110,9 @@ async def finance(
             q = q.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    payments = q.limit(QUERY_LIMIT_DEFAULT).all()
+    from app.utils.pagination import paginate, pagination_query_string
+    _pg = paginate(q, request.query_params.get("page", 1), per_page=50)
+    payments = _pg["items"]
     # Har payment uchun ExpenseDoc va EmployeeAdvance linklari (klikab havolalar uchun)
     payment_ids_all = [p.id for p in payments if p.id]
     expense_doc_by_payment = {}
@@ -238,6 +226,13 @@ async def finance(
         "filter_date_from": filter_date_from,
         "filter_date_to": filter_date_to,
         "current_user": current_user,
+        "page": _pg["page"],
+        "per_page": _pg["per_page"],
+        "total_count": _pg["total_count"],
+        "total_pages": _pg["total_pages"],
+        "items_count": _pg["items_count"],
+        "base_url": "/finance",
+        "pagination_query": pagination_query_string({"date_from": filter_date_from, "date_to": filter_date_to}),
         "page_title": "Moliya"
     })
 
@@ -570,6 +565,9 @@ async def finance_payment_post(
     amount = float(amount)
     if amount <= 0:
         return RedirectResponse(url="/finance?error=amount", status_code=303)
+    if not partner_id or int(partner_id) <= 0:
+        from urllib.parse import quote
+        return RedirectResponse(url="/finance?error=" + quote("Kontragent tanlanmagan!"), status_code=303)
     # Dublikat himoyasi: 3 daqiqa ichida bir xil tur+summa+kassa+mijoz
     from datetime import timedelta
     three_min_ago = datetime.now() - timedelta(minutes=3)
@@ -593,7 +591,8 @@ async def finance_payment_post(
     pay_dt = datetime.now()
     if payment_date:
         try:
-            pay_dt = datetime.strptime(payment_date, "%Y-%m-%d")
+            d = datetime.strptime(payment_date, "%Y-%m-%d")
+            pay_dt = datetime.combine(d.date(), datetime.now().time())
         except ValueError:
             pass
     pay_date_str = pay_dt.strftime('%Y%m%d')
@@ -668,6 +667,7 @@ def _payment_apply_balance(db: Session, payment: Payment, sign: int):
 @router.post("/payment/{payment_id}/confirm")
 async def finance_payment_confirm(
     payment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -685,12 +685,15 @@ async def finance_payment_confirm(
         audit_payment(payment.id)
     except Exception:
         pass
-    return RedirectResponse(url="/finance?success=confirmed", status_code=303)
+    referer = request.headers.get("referer", "/finance")
+    sep = "&" if "?" in referer else "?"
+    return RedirectResponse(url=f"{referer}{sep}success=confirmed", status_code=303)
 
 
 @router.post("/payment/{payment_id}/cancel")
 async def finance_payment_cancel(
     payment_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -703,7 +706,9 @@ async def finance_payment_cancel(
     payment.status = "cancelled"
     _payment_apply_balance(db, payment, -1)
     db.commit()
-    return RedirectResponse(url="/finance?success=cancelled", status_code=303)
+    referer = request.headers.get("referer", "/finance")
+    sep = "&" if "?" in referer else "?"
+    return RedirectResponse(url=f"{referer}{sep}success=cancelled", status_code=303)
 
 
 @router.get("/payment/{payment_id}/edit", response_class=HTMLResponse)
@@ -1205,7 +1210,7 @@ async def finance_harajat_hujjat_tasdiqlash(
         if getattr(doc, "date", None):
             d = doc.date
             if hasattr(d, "date") and callable(getattr(d, "date")):
-                payment_date = datetime.combine(d.date(), datetime.min.time())
+                payment_date = datetime.combine(d.date(), datetime.now().time())
             else:
                 payment_date = d
         uid = getattr(current_user, "id", None) if current_user else None
