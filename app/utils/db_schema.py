@@ -109,6 +109,20 @@ def ensure_advance_is_product_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_orders_pending_driver_id_column(db: Session) -> None:
+    """orders.pending_driver_id — agent buyurtmasi waiting_production statusda saqlangan
+    haydovchi ID si (production tayyor bo'lgach avtomatik delivery yaratish uchun)."""
+    try:
+        db.execute(text("ALTER TABLE orders ADD COLUMN pending_driver_id INTEGER REFERENCES drivers(id)"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
 def ensure_sales_plans_table(db: Session) -> None:
     """sales_plans jadvali — agent oylik savdo rejasi (global, har agent alohida shu summaga qarshi)."""
     try:

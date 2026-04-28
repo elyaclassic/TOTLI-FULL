@@ -1390,6 +1390,12 @@ async def production_orders_bulk_complete(
         production = db.query(Production).filter(Production.id == pid).first()
         if production and production.status == "completed":
             notify_managers_production_ready(db, production)
+    # Waiting agent orderlarni avtomatik confirm qilish
+    try:
+        from app.services.agent_order_service import try_confirm_waiting_orders
+        try_confirm_waiting_orders(db)
+    except Exception as e:
+        print(f"[production bulk] try_confirm_waiting_orders xato: {e}")
     return RedirectResponse(url="/production/orders?bulk_completed=" + str(completed), status_code=303)
 
 
@@ -1597,6 +1603,11 @@ async def complete_production_stage(
         db.commit()
         check_low_stock_and_notify(db)
         notify_managers_production_ready(db, production)
+        try:
+            from app.services.agent_order_service import try_confirm_waiting_orders
+            try_confirm_waiting_orders(db)
+        except Exception as e:
+            print(f"[production stage early-complete] try_confirm_waiting_orders xato: {e}")
         return RedirectResponse(url="/production", status_code=303)
     if stage_number != current:
         return RedirectResponse(
@@ -1652,6 +1663,11 @@ async def complete_production_stage(
         audit_production(production.id)
     except Exception:
         pass
+    try:
+        from app.services.agent_order_service import try_confirm_waiting_orders
+        try_confirm_waiting_orders(db)
+    except Exception as e:
+        print(f"[production final-stage] try_confirm_waiting_orders xato: {e}")
     return RedirectResponse(url="/production", status_code=303)
 
 
@@ -1691,6 +1707,11 @@ async def complete_production(
         audit_production(production.id)
     except Exception:
         pass
+    try:
+        from app.services.agent_order_service import try_confirm_waiting_orders
+        try_confirm_waiting_orders(db)
+    except Exception as e:
+        print(f"[production complete] try_confirm_waiting_orders xato: {e}")
     return RedirectResponse(url="/production", status_code=303)
 
 

@@ -879,6 +879,7 @@ class Order(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
     source = Column(String(20), default="web")  # "web" | "agent"
     previous_partner_balance = Column(Float, nullable=True)  # Tasdiqdan oldingi partner balansi (revert uchun)
+    pending_driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)  # waiting_production: production tayyor bo'lganda yetkazadigan haydovchi
     created_at = Column(DateTime, default=datetime.now)
 
     partner = relationship("Partner", back_populates="orders")

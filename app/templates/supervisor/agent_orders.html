@@ -1,6 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
+{% if request.query_params.get('info') %}
+<div class="alert alert-info alert-dismissible fade show" role="alert">
+    <i class="bi bi-info-circle"></i> {{ request.query_params.get('info') }}
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
+{% if request.query_params.get('error') == 'already_confirmed' %}
+<div class="alert alert-warning alert-dismissible fade show" role="alert">
+    <i class="bi bi-exclamation-triangle"></i> Bu buyurtma allaqachon tasdiqlangan yoki holati o'zgargan.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 <div class="page-header mb-3 d-flex justify-content-between align-items-center">
     <div>
         <h5 class="mb-0"><i class="bi bi-cart-check"></i> Agent buyurtmalari</h5>
@@ -15,6 +27,10 @@
     <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm {{ 'btn-warning text-dark' if current_status == 'draft' else 'btn-outline-warning' }}">
         Yangi (kutmoqda)
         {% if draft_count is defined and draft_count > 0 %}<span class="badge bg-danger ms-1">{{ draft_count }}</span>{% endif %}
+    </a>
+    <a href="/supervisor/agent-orders?status=waiting_production" class="btn btn-sm {{ 'btn-secondary' if current_status == 'waiting_production' else 'btn-outline-secondary' }}">
+        <i class="bi bi-hourglass-split"></i> Production kutmoqda
+        {% if waiting_count is defined and waiting_count > 0 %}<span class="badge bg-danger ms-1">{{ waiting_count }}</span>{% endif %}
     </a>
     <a href="/supervisor/agent-orders?status=confirmed" class="btn btn-sm {{ 'btn-info' if current_status == 'confirmed' else 'btn-outline-info' }}">Tasdiqlangan</a>
     <a href="/supervisor/agent-orders?status=completed" class="btn btn-sm {{ 'btn-success' if current_status == 'completed' else 'btn-outline-success' }}">Bajarilgan</a>
@@ -33,6 +49,8 @@
                     </h6>
                     {% if order.status == 'draft' %}
                     <span class="badge bg-warning text-dark">Yangi</span>
+                    {% elif order.status == 'waiting_production' %}
+                    <span class="badge bg-secondary"><i class="bi bi-hourglass-split"></i> Production kutmoqda</span>
                     {% elif order.status == 'confirmed' %}
                     <span class="badge bg-info">Tasdiqlangan</span>
                     {% elif order.status == 'completed' %}

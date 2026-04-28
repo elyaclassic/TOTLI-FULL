@@ -312,6 +312,48 @@ def send_daily_summary():
 from sqlalchemy import func as func_sum
 
 
+def notify_production_needed(order_number: str, shortage_items: list):
+    """Stock yetmagan agent buyurtmasi haqida operatorlarga xabar (production kerak)."""
+    try:
+        items_text = "\n".join(
+            f"  • {it['name']}: kerak {fmt(it['need'])}, bor {fmt(it['have'])}"
+            for it in shortage_items[:10]
+        )
+        more = f"\n  ... va yana {len(shortage_items) - 10} ta" if len(shortage_items) > 10 else ""
+        text = (
+            f"🏭 <b>Yangi buyurtma — production kerak</b>\n\n"
+            f"<b>Buyurtma:</b> {order_number}\n\n"
+            f"<b>Yetishmayotgan mahsulotlar:</b>\n{items_text}{more}\n\n"
+            f"<i>Production tayyor bo'lgach, buyurtma avtomatik tasdiqlanadi va haydovchiga jo'natiladi.</i>"
+        )
+        send_notify_sync(text)
+    except Exception as e:
+        print(f"[TG Production Needed] xato: {e}")
+
+
+def notify_order_ready_for_delivery(order_number: str, driver_id: int = None):
+    """Production tugagach, agent buyurtmasi auto-confirm bo'lganini bildirish (rahbarlarga)."""
+    try:
+        driver_text = ""
+        if driver_id:
+            db = SessionLocal()
+            try:
+                from app.models.database import Driver
+                driver = db.query(Driver).filter(Driver.id == driver_id).first()
+                if driver:
+                    driver_text = f"\n<b>Haydovchi:</b> {driver.full_name}"
+            finally:
+                db.close()
+        text = (
+            f"✅ <b>Buyurtma yetkazishga tayyor</b>\n\n"
+            f"<b>Buyurtma:</b> {order_number}{driver_text}\n\n"
+            f"<i>Production tugadi — buyurtma avtomatik tasdiqlandi.</i>"
+        )
+        send_notify_sync(text)
+    except Exception as e:
+        print(f"[TG Order Ready] xato: {e}")
+
+
 def send_sales_plan_reminder():
     """Agentlarga oylik savdo rejasi haqida eslatma (telegram_id bor bo'lganlarga shaxsiy)."""
     from app.models.database import Agent, SalesPlan

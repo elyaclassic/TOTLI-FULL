@@ -22,6 +22,7 @@ from app.utils.db_schema import (
     ensure_audit_cooldowns_table,
     ensure_product_is_for_agent_column,
     ensure_sales_plans_table,
+    ensure_orders_pending_driver_id_column,
 )
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
@@ -271,6 +272,7 @@ async def startup():
             ensure_audit_cooldowns_table(db)
             ensure_product_is_for_agent_column(db)
             ensure_sales_plans_table(db)
+            ensure_orders_pending_driver_id_column(db)
         finally:
             db.close()
     except Exception as e:

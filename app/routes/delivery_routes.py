@@ -440,6 +440,7 @@ async def supervisor_agent_orders(
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
+    waiting_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "waiting_production").scalar() or 0
     return templates.TemplateResponse("supervisor/agent_orders.html", {
         "request": request,
         "current_user": current_user,
@@ -448,6 +449,7 @@ async def supervisor_agent_orders(
         "agents": agents,
         "current_status": status,
         "draft_count": draft_count,
+        "waiting_count": waiting_count,
         "page_title": "Agent buyurtmalari",
     })
 
@@ -486,6 +488,7 @@ async def supervisor_confirm_agent_order(
 
     # Ombor qoldig'ini tekshirish
     shortage = []
+    shortage_items = []  # production trigger uchun
     for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
         if not wh_id:
@@ -497,10 +500,23 @@ async def supervisor_confirm_agent_order(
             prod = products_map.get(it.product_id)
             name = prod.name if prod else f"#{it.product_id}"
             shortage.append(f"{name} (kerak: {need}, bor: {have})")
+            shortage_items.append({"name": name, "need": need, "have": have})
+
     if shortage:
-        detail = ", ".join(shortage)
+        # Stock yetmasa: waiting_production statusga o'tkazib, operatorlarga xabar
+        driver_id_int = int(driver_id_raw) if driver_id_raw and driver_id_raw.isdigit() else None
+        order.status = "waiting_production"
+        order.pending_driver_id = driver_id_int
+        order.user_id = current_user.id
+        order.note = (order.note or "") + f"\n[Production kutilmoqda] {', '.join(shortage)}"
+        db.commit()
+        try:
+            from app.bot.services.notifier import notify_production_needed
+            notify_production_needed(order.number, shortage_items)
+        except Exception:
+            pass
         return RedirectResponse(
-            url="/supervisor/agent-orders?error=stock&detail=" + quote(f"Ombor yetmaydi: {detail}"),
+            url="/supervisor/agent-orders?info=" + quote("Buyurtma production kutilmoqda — operatorlar xabardor qilindi"),
             status_code=303,
         )
     # Stock chiqarish (DRY: stock_service.apply_sale_stock_deduction)
