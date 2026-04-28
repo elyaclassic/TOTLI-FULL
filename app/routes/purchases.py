@@ -65,7 +65,9 @@ async def purchases_list(
             pass
     if wh_id and wh_id.isdigit():
         query = query.filter(Purchase.warehouse_id == int(wh_id))
-    purchases = query.limit(QUERY_LIMIT_DEFAULT).all()
+    from app.utils.pagination import paginate, pagination_query_string
+    _pg = paginate(query, request.query_params.get("page", 1), per_page=50)
+    purchases = _pg["items"]
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
@@ -77,6 +79,13 @@ async def purchases_list(
         "page_title": "Tovar kirimlari",
         "error": error,
         "error_detail": error_detail,
+        "page": _pg["page"],
+        "per_page": _pg["per_page"],
+        "total_count": _pg["total_count"],
+        "total_pages": _pg["total_pages"],
+        "items_count": _pg["items_count"],
+        "base_url": "/purchases",
+        "pagination_query": pagination_query_string({"date_from": date_from, "date_to": date_to, "warehouse_id": wh_id}),
     })
 
 
