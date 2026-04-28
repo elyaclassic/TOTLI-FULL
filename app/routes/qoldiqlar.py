@@ -155,8 +155,10 @@ async def qoldiqlar_tarix(
             q = q.filter(StockMovement.warehouse_id == selected_warehouse_id)
         if selected_product_id:
             q = q.filter(StockMovement.product_id == selected_product_id)
-        q = q.order_by(StockMovement.created_at.desc()).limit(QUERY_LIMIT_HISTORY)
-        movements = q.all()
+        q = q.order_by(StockMovement.created_at.desc())
+        from app.utils.pagination import paginate, pagination_query_string
+        _pg = paginate(q, request.query_params.get("page", 1), per_page=50)
+        movements = _pg["items"]
 
         movement_rows = []
         warehouse_ids = [m.warehouse_id for m in movements if m.warehouse_id is not None]
@@ -193,6 +195,13 @@ async def qoldiqlar_tarix(
             "selected_warehouse_id": selected_warehouse_id,
             "movements": movement_rows,
             "page_title": "Qoldiqlar — Mahsulot harakati tarixi",
+            "page": _pg["page"],
+            "per_page": _pg["per_page"],
+            "total_count": _pg["total_count"],
+            "total_pages": _pg["total_pages"],
+            "items_count": _pg["items_count"],
+            "base_url": "/qoldiqlar/tarix",
+            "pagination_query": pagination_query_string({"warehouse_id": str(selected_warehouse_id or ""), "product_id": str(selected_product_id or "")}),
         })
     except Exception as e:
         import logging
