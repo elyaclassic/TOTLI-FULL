@@ -39,12 +39,13 @@ def _redirect_after_login(user: User) -> str:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, current_user: Optional[User] = Depends(get_current_user)):
+    next_url = request.query_params.get("next", "")
     if current_user:
-        return RedirectResponse(url=_redirect_after_login(current_user), status_code=303)
+        return RedirectResponse(url=next_url or _redirect_after_login(current_user), status_code=303)
     err = request.query_params.get("error")
     if err == "please_retry":
         err = "Xatolik yuz berdi. Qayta kirishni urinib ko'ring."
-    return templates.TemplateResponse("login.html", {"request": request, "error": err})
+    return templates.TemplateResponse("login.html", {"request": request, "error": err, "next_url": next_url})
 
 
 @router.post("/login")
@@ -52,6 +53,7 @@ async def login(
     request: Request,
     username: str = Form(..., max_length=100),
     password: str = Form(..., max_length=256),
+    next_url: str = Form(""),
     db: Session = Depends(get_db),
 ):
     try:
@@ -90,7 +92,7 @@ async def login(
         role = (user.role or "user").strip().lower()
         token = create_session_token(user.id, role)
         use_https = os.getenv("HTTPS", "").lower() in ("1", "true", "yes")
-        redirect_url = _redirect_after_login(user)
+        redirect_url = next_url.strip() if next_url and next_url.strip().startswith("/") else _redirect_after_login(user)
         # Login ovozi uchun parametr qo'shish
         sep = "&" if "?" in redirect_url else "?"
         redirect_url += sep + "logged_in=1"
