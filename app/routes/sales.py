@@ -2507,19 +2507,23 @@ async def pos_pay_supplier(
     request: Request,
     partner_id: int = Form(...),
     amount: float = Form(...),
+    payment_type: str = Form("naqd"),
     note: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Sotuvchi o'z kassasidan ta'minotchiga to'lov qiladi."""
+    """Sotuvchi tanlangan kassadan ta'minotchiga to'lov qiladi."""
     if amount <= 0:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Summa+noto'g'ri", status_code=303)
+    pt = (payment_type or "naqd").strip().lower()
+    if pt not in ("naqd", "plastik", "click", "terminal"):
+        pt = "naqd"
     partner = db.query(Partner).filter(Partner.id == partner_id).first()
     if not partner:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kontragent+topilmadi", status_code=303)
-    # Sotuvchining kassasini topish
+    # Sotuvchining tanlangan turdagi kassasini topish
     department_id = getattr(current_user, "department_id", None)
-    cash_register = _get_pos_cash_register(db, "naqd", department_id, current_user=current_user)
+    cash_register = _get_pos_cash_register(db, pt, department_id, current_user=current_user)
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim)
@@ -2532,7 +2536,7 @@ async def pos_pay_supplier(
         cash_register_id=cash_register.id,
         partner_id=partner_id,
         amount=amount,
-        payment_type="naqd",
+        payment_type=pt,
         category="supplier_payment",
         description=note or f"Ta'minotchiga to'lov: {partner.name}",
         user_id=current_user.id,
@@ -2545,7 +2549,7 @@ async def pos_pay_supplier(
     if partner.balance is not None:
         partner.balance = (partner.balance or 0) + amount  # balance < 0 — biz qarz, + qo'shsak kamayadi
     db.commit()
-    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"To'lov: {partner.name} ga {amount:,.0f} so'm"), status_code=303)
+    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"To'lov: {partner.name} ga {amount:,.0f} so'm ({pt})"), status_code=303)
 
 
 # ==================== POS: Harajat yozish ====================
