@@ -26,11 +26,11 @@ async def app_version():
     Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
     """
     return {
-        "version": "2.0.5",
-        "build": 53,
+        "version": "2.0.10",
+        "build": 58,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Oylik savdo rejasi qo'shildi (Bosh sahifada progress bar)",
+        "changelog": "Yangi: Sales doctor migratsiyasi uchun tarixsiz qaytarish va almashtirish (parent ordersiz). API: /api/agent/standalone-return, /api/agent/standalone-exchange.",
     }
 
 

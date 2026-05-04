@@ -1,7 +1,7 @@
 name: totli_mobile
 description: TOTLI HOLVA - Agent va Haydovchi mobil ilovasi
 publish_to: 'none'
-version: 2.0.5+53
+version: 2.0.10+58
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -22,6 +22,8 @@ dependencies:
   flutter_map: ^6.1.0
   latlong2: ^0.9.0
   image_picker: ^1.0.7
+  flutter_secure_storage: ^9.2.2
+  crypto: ^3.0.3
 
 dev_dependencies:
   flutter_test:

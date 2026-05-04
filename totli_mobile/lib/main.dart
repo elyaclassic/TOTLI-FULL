@@ -4,13 +4,16 @@ import 'package:flutter/services.dart';
 import 'screens/login_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/consent_screen.dart';
+import 'screens/pin_lock_screen.dart';
+import 'screens/pin_setup_screen.dart';
 import 'services/session_service.dart';
 import 'services/api_service.dart';
 import 'services/sync_service.dart';
+import 'services/pin_service.dart';
 
 // Joriy ilova versiyasi
-const String appVersion = '2.0.5';
-const int appBuild = 53;
+const String appVersion = '2.0.10';
+const int appBuild = 58;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -111,23 +114,29 @@ class _SplashScreenState extends State<SplashScreen> {
     // Rozilik ekrani — birinchi ochilishda
     final hasConsent = await session.hasConsent();
     final isLoggedIn = await session.isLoggedIn();
+    final hasPin = await PinService().hasPin();
     if (!mounted) return;
+
+    Widget nextScreen;
+    if (!isLoggedIn) {
+      nextScreen = const LoginScreen();
+    } else if (!hasPin) {
+      nextScreen = const PinSetupScreen(firstTime: true);
+    } else {
+      nextScreen = const PinLockScreen();
+    }
 
     if (!hasConsent) {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(
-          builder: (_) => ConsentScreen(
-            nextScreenBuilder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
-          ),
+          builder: (_) => ConsentScreen(nextScreenBuilder: (_) => nextScreen),
         ),
       );
       return;
     }
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => nextScreen),
     );
   }
 
@@ -242,11 +251,19 @@ class _SplashScreenState extends State<SplashScreen> {
   void _continueToApp() async {
     final session = SessionService();
     final isLoggedIn = await session.isLoggedIn();
+    final hasPin = await PinService().hasPin();
     if (!mounted) return;
+    // Bug 5 fix — PIN bypass oldini olish
+    Widget next;
+    if (!isLoggedIn) {
+      next = const LoginScreen();
+    } else if (!hasPin) {
+      next = const PinSetupScreen(firstTime: true);
+    } else {
+      next = const PinLockScreen();
+    }
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => isLoggedIn ? const DashboardScreen() : const LoginScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => next),
     );
   }
 
