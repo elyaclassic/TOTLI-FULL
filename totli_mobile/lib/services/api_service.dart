@@ -39,6 +39,10 @@ class ApiService {
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body: body.entries.map((e) => '${Uri.encodeComponent(e.key)}=${Uri.encodeComponent(e.value)}').join('&'),
       ).timeout(const Duration(seconds: 15));
+      // Bug 2 fix — 401 signal
+      if (r.statusCode == 401) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
       return jsonDecode(r.body) as Map<String, dynamic>;
     } catch (e) {
       return {'success': false, 'error': 'Ulanish xatosi: $e'};
@@ -50,9 +54,14 @@ class ApiService {
       if (token != null) body['token'] = token;
       final r = await http.post(
         Uri.parse('$_baseUrl$path'),
-        headers: _jsonHeaders(null),
+        // Bug 6 fix — token ham header da uzatish (backend header autentifikatsiya qilsa)
+        headers: _jsonHeaders(token),
         body: jsonEncode(body),
       ).timeout(const Duration(seconds: 15));
+      // Bug 2 fix — token expire (401) signal qilish
+      if (r.statusCode == 401) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
       return jsonDecode(r.body) as Map<String, dynamic>;
     } catch (e) {
       return {'success': false, 'error': 'Ulanish xatosi: $e'};
@@ -105,8 +114,46 @@ class ApiService {
     return _postJson('/api/agent/order/create', orderData, token: token);
   }
 
-  static Future<Map<String, dynamic>> getProducts(String token) async {
-    return _get('/api/agent/products', token);
+  static Future<Map<String, dynamic>> returnOrder(String token, int orderId, List<Map<String, dynamic>> items, {String? note}) async {
+    return _postJson('/api/agent/order/$orderId/return', {
+      'items': items,
+      'note': note ?? '',
+    }, token: token);
+  }
+
+  static Future<Map<String, dynamic>> exchangeOrder(String token, int orderId, List<Map<String, dynamic>> returnItems, List<Map<String, dynamic>> newItems, {String? note}) async {
+    return _postJson('/api/agent/order/$orderId/exchange', {
+      'return_items': returnItems,
+      'new_items': newItems,
+      'note': note ?? '',
+    }, token: token);
+  }
+
+  // Tarixsiz qaytarish (sales doctor migratsiyasi uchun)
+  static Future<Map<String, dynamic>> standaloneReturn(String token, int partnerId, List<Map<String, dynamic>> items, {String? note}) async {
+    return _postJson('/api/agent/standalone-return', {
+      'partner_id': partnerId,
+      'items': items,
+      'note': note ?? '',
+    }, token: token);
+  }
+
+  // Tarixsiz almashtirish
+  static Future<Map<String, dynamic>> standaloneExchange(String token, int partnerId, List<Map<String, dynamic>> returnItems, List<Map<String, dynamic>> newItems, {String? note, int? newWarehouseId}) async {
+    final body = <String, dynamic>{
+      'partner_id': partnerId,
+      'return_items': returnItems,
+      'new_items': newItems,
+      'note': note ?? '',
+    };
+    if (newWarehouseId != null) body['new_warehouse_id'] = newWarehouseId;
+    return _postJson('/api/agent/standalone-exchange', body, token: token);
+  }
+
+  static Future<Map<String, dynamic>> getProducts(String token, {int? partnerId}) async {
+    // Bug 4 fix — partner_id uzatilsa, mos narx turi (price_type_id) ishlatiladi
+    final query = partnerId != null ? '?partner_id=$partnerId' : '';
+    return _get('/api/agent/products$query', token);
   }
 
   // ===== AGENT: VISITS =====
