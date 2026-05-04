@@ -151,25 +151,29 @@ def get_pos_cash_register(
     Sotuvchi uchun — faqat unga biriktirilgan kassalar ichidan tanlanadi."""
     payment_type = (payment_type or "").strip().lower()
     key = payment_type if payment_type in ("naqd", "plastik", "click", "terminal") else "plastik"
-    q = db.query(CashRegister).filter(CashRegister.is_active == True)
-    if department_id:
-        q = q.filter(CashRegister.department_id == department_id)
-    active = q.order_by(CashRegister.id).all()
-    if not active and department_id:
-        active = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.id).all()
-    if not active:
-        return None
 
-    # Sotuvchi uchun cheklov — faqat biriktirilgan kassalar
     role = ((current_user.role if current_user else "") or "").strip()
+    sotuvchi_assigned: Optional[set] = None
     if role == "sotuvchi" and current_user is not None:
         user = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
-        assigned_ids = {c.id for c in (getattr(user, "cash_registers_list", None) or []) if c}
-        if assigned_ids:
-            filtered = [c for c in active if c.id in assigned_ids]
-            if filtered:
-                active = filtered
-            # else: bo'sh natija — pastdagi mantiq active dan tanlaydi (fallback)
+        ids = {c.id for c in (getattr(user, "cash_registers_list", None) or []) if c}
+        if ids:
+            sotuvchi_assigned = ids
+
+    if sotuvchi_assigned:
+        active = db.query(CashRegister).filter(
+            CashRegister.is_active == True,
+            CashRegister.id.in_(sotuvchi_assigned),
+        ).order_by(CashRegister.id).all()
+    else:
+        q = db.query(CashRegister).filter(CashRegister.is_active == True)
+        if department_id:
+            q = q.filter(CashRegister.department_id == department_id)
+        active = q.order_by(CashRegister.id).all()
+        if not active and department_id:
+            active = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.id).all()
+    if not active:
+        return None
 
     for c in active:
         if getattr(c, "payment_type", None) and (c.payment_type or "").strip().lower() == key:
