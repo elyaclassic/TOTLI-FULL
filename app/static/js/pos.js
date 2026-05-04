@@ -734,7 +734,8 @@
                 var ptLabel = {
                     naqd: 'Naqd', plastik: 'Plastik', click: 'Click',
                     terminal: 'Terminal', split: 'Aralash',
-                    perechisleniye: 'Bank', bank: 'Bank'
+                    perechisleniye: 'Bank', bank: 'Bank',
+                    qarz: 'Qarzga'
                 };
                 var hdr = document.createElement('div');
                 hdr.className = 'mb-3 pb-2 border-bottom';
