@@ -26,11 +26,11 @@ async def app_version():
     Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
     """
     return {
-        "version": "2.0.11",
-        "build": 59,
+        "version": "2.0.12",
+        "build": 60,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Mijoz profilida 'Tarixsiz vozvrat' va 'Tarixsiz obmen' tugmalari (... menyu). Sales doctor migratsiyasi uchun.",
+        "changelog": "Vizit ekranidagi 'Vozvrat' va 'Obmen' tugmalari endi tarixsiz ham ishlaydi (parent buyurtma talab qilmaydi). Mahsulot+miqdor+narxni manual kiritasiz.",
     }
 
 

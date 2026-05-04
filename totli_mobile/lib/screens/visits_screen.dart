@@ -851,7 +851,8 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
     if (!mounted) return;
     final orders = List<Map<String, dynamic>>.from(ordersResult['orders'] ?? []);
     if (orders.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Qaytarish uchun buyurtma yo\'q')));
+      // Sales doctor migratsiyasi yoki yangi mijoz — tarixsiz vozvrat
+      _openStandaloneReturn();
       return;
     }
     final result = await Navigator.push(
@@ -869,11 +870,220 @@ class _ActiveVisitPageState extends State<_ActiveVisitPage> {
   }
 
   void _openExchange() async {
-    // Obmen = Vozvrat + Yangi buyurtma. Avval vozvrat.
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Obmen: avval qaytarish, keyin yangi buyurtma bering')),
+    // Obmen — to'g'ridan-to'g'ri standalone exchange (parent ordersiz)
+    _openStandaloneExchange();
+  }
+
+  // ============== STANDALONE (parent ordersiz) ==============
+  List<Map<String, dynamic>>? _sdProductsCache;
+  Future<List<Map<String, dynamic>>> _ensureSdProducts() async {
+    if (_sdProductsCache != null) return _sdProductsCache!;
+    final res = await ApiService.getProducts(widget.token, partnerId: _partnerId);
+    final list = List<Map<String, dynamic>>.from(res['products'] ?? []);
+    _sdProductsCache = list;
+    return list;
+  }
+
+  Future<Map<String, dynamic>?> _sdPickProduct() async {
+    final products = await _ensureSdProducts();
+    if (products.isEmpty) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mahsulotlar topilmadi')));
+      return null;
+    }
+    String query = '';
+    return showModalBottomSheet<Map<String, dynamic>>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+        final q = query.toLowerCase().trim();
+        final filtered = q.isEmpty ? products : products.where((p) => (p['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+        return Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: SizedBox(
+            height: MediaQuery.of(ctx).size.height * 0.7,
+            child: Column(children: [
+              const Padding(padding: EdgeInsets.all(12), child: Text('Mahsulot tanlang', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold))),
+              Padding(padding: const EdgeInsets.symmetric(horizontal: 12), child: TextField(
+                autofocus: true,
+                decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Qidirish...', border: OutlineInputBorder(), isDense: true),
+                onChanged: (v) => setSt(() => query = v),
+              )),
+              const SizedBox(height: 8),
+              Expanded(child: ListView.builder(
+                itemCount: filtered.length,
+                itemBuilder: (_, i) {
+                  final p = filtered[i];
+                  final price = (p['price'] ?? p['sale_price'] ?? 0).toString();
+                  return ListTile(title: Text(p['name'] ?? '-'), subtitle: Text('Narx: $price so\'m'), onTap: () => Navigator.pop(ctx, p));
+                },
+              )),
+            ]),
+          ),
+        );
+      }),
     );
-    _openReturn();
+  }
+
+  Future<Map<String, dynamic>?> _sdAddLine() async {
+    final product = await _sdPickProduct();
+    if (product == null) return null;
+    final qtyCtrl = TextEditingController();
+    final priceCtrl = TextEditingController(text: (product['price'] ?? product['sale_price'] ?? '').toString());
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(product['name'] ?? '-'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: qtyCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Miqdor (dona)', border: OutlineInputBorder()), autofocus: true),
+          const SizedBox(height: 12),
+          TextField(controller: priceCtrl, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Narx (so\'m)', border: OutlineInputBorder())),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Bekor')),
+          ElevatedButton(onPressed: () {
+            final qty = double.tryParse(qtyCtrl.text) ?? 0;
+            final price = double.tryParse(priceCtrl.text) ?? 0;
+            if (qty <= 0 || price <= 0) {
+              ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('Miqdor va narx 0 dan katta bo\'lsin')));
+              return;
+            }
+            Navigator.pop(ctx, {'product_id': product['id'], 'name': product['name'], 'qty': qty, 'price': price});
+          }, child: const Text('Qo\'shish')),
+        ],
+      ),
+    );
+  }
+
+  Widget _sdItemsBlock(String title, List<Map<String, dynamic>> items, VoidCallback onAdd, void Function(int) onRemove) {
+    final total = items.fold<double>(0, (s, it) => s + (it['qty'] as num) * (it['price'] as num));
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Row(children: [
+        Expanded(child: Text(title, style: const TextStyle(fontWeight: FontWeight.bold))),
+        Text('Jami: ${total.toStringAsFixed(0)} so\'m', style: const TextStyle(fontWeight: FontWeight.bold)),
+      ])),
+      ...items.asMap().entries.map((e) => ListTile(
+        dense: true,
+        title: Text(e.value['name'] ?? '#${e.value['product_id']}'),
+        subtitle: Text('${e.value['qty']} × ${e.value['price']} = ${((e.value['qty'] as num) * (e.value['price'] as num)).toStringAsFixed(0)}'),
+        trailing: IconButton(icon: const Icon(Icons.close, color: Colors.red), onPressed: () => onRemove(e.key)),
+      )),
+      Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: OutlinedButton.icon(onPressed: onAdd, icon: const Icon(Icons.add), label: const Text('Mahsulot qo\'shish'))),
+    ]);
+  }
+
+  Future<void> _openStandaloneReturn() async {
+    final items = <Map<String, dynamic>>[];
+    final noteCtrl = TextEditingController();
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.85,
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+              const Icon(Icons.undo, color: Colors.orange),
+              const SizedBox(width: 8),
+              Text('Tarixsiz vozvrat: $_partnerName', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ])),
+            const Divider(height: 1),
+            Expanded(child: ListView(children: [
+              _sdItemsBlock('Qaytariladigan mahsulotlar', items, () async {
+                final r = await _sdAddLine();
+                if (r != null) setSt(() => items.add(r));
+              }, (i) => setSt(() => items.removeAt(i))),
+              Padding(padding: const EdgeInsets.all(16), child: TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Izoh', border: OutlineInputBorder()), maxLines: 2)),
+            ])),
+            Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor'))),
+              const SizedBox(width: 12),
+              Expanded(child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                onPressed: items.isEmpty ? null : () => Navigator.pop(ctx, true),
+                child: const Text('Yuborish', style: TextStyle(color: Colors.white)),
+              )),
+            ])),
+          ]),
+        ),
+      )),
+    );
+    if (result != true || items.isEmpty) return;
+    final apiItems = items.map((e) => {'product_id': e['product_id'], 'qty': e['qty'], 'price': e['price']}).toList();
+    final res = await ApiService.standaloneReturn(widget.token, _partnerId, apiItems, note: noteCtrl.text.trim());
+    if (!mounted) return;
+    if (res['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Vozvrat draft: ${res['order_number']}'), backgroundColor: Colors.green));
+      _loadPartnerInfo();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error']?.toString() ?? 'Xato'), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _openStandaloneExchange() async {
+    final returnItems = <Map<String, dynamic>>[];
+    final newItems = <Map<String, dynamic>>[];
+    final noteCtrl = TextEditingController();
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: SizedBox(
+          height: MediaQuery.of(ctx).size.height * 0.9,
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+              const Icon(Icons.swap_horiz, color: Colors.blue),
+              const SizedBox(width: 8),
+              Text('Obmen: $_partnerName', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+            ])),
+            const Divider(height: 1),
+            Expanded(child: ListView(children: [
+              _sdItemsBlock('1) Mijozdan qaytgan', returnItems, () async {
+                final r = await _sdAddLine();
+                if (r != null) setSt(() => returnItems.add(r));
+              }, (i) => setSt(() => returnItems.removeAt(i))),
+              const Divider(),
+              _sdItemsBlock('2) Mijozga berilgan yangi', newItems, () async {
+                final r = await _sdAddLine();
+                if (r != null) setSt(() => newItems.add(r));
+              }, (i) => setSt(() => newItems.removeAt(i))),
+              Padding(padding: const EdgeInsets.all(16), child: TextField(controller: noteCtrl, decoration: const InputDecoration(labelText: 'Izoh', border: OutlineInputBorder()), maxLines: 2)),
+            ])),
+            Padding(padding: const EdgeInsets.all(12), child: Row(children: [
+              Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor'))),
+              const SizedBox(width: 12),
+              Expanded(child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+                onPressed: (returnItems.isEmpty || newItems.isEmpty) ? null : () => Navigator.pop(ctx, true),
+                child: const Text('Yuborish', style: TextStyle(color: Colors.white)),
+              )),
+            ])),
+          ]),
+        ),
+      )),
+    );
+    if (result != true) return;
+    final apiRet = returnItems.map((e) => {'product_id': e['product_id'], 'qty': e['qty'], 'price': e['price']}).toList();
+    final apiNew = newItems.map((e) => {'product_id': e['product_id'], 'qty': e['qty'], 'price': e['price']}).toList();
+    final res = await ApiService.standaloneExchange(widget.token, _partnerId, apiRet, apiNew, note: noteCtrl.text.trim());
+    if (!mounted) return;
+    if (res['success'] == true) {
+      final diff = (res['balance_diff'] as num?)?.toDouble() ?? 0;
+      final diffMsg = diff == 0 ? 'farqsiz' : (diff > 0 ? '+${diff.toStringAsFixed(0)}' : diff.toStringAsFixed(0));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Obmen draft: ${res['return_order_number']} / ${res['new_order_number']} ($diffMsg)'),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 4),
+      ));
+      _loadPartnerInfo();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res['error']?.toString() ?? 'Xato'), backgroundColor: Colors.red));
+    }
   }
 
   @override
