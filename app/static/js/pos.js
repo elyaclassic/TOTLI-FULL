@@ -752,15 +752,15 @@
                 if (d.returns_count > 0) {
                     xReportBody.appendChild(_xrRow('Qaytarishlar soni:', d.returns_count));
                     xReportBody.appendChild(_xrRow('Qaytarishlar summasi:', '−' + _xrFmt(d.returns_total)));
+                    var net = _xrRow('NET (sotuv − qaytarish):', _xrFmt(d.net_total), true);
+                    net.style.background = '#f0f9f4';
+                    xReportBody.appendChild(net);
                 }
                 if (d.cancelled_count > 0) {
                     var c = _xrRow('Bekor qilingan:', d.cancelled_count + ' ta — ' + _xrFmt(d.cancelled_total));
                     c.style.color = '#b44';
                     xReportBody.appendChild(c);
                 }
-                var net = _xrRow('NET (sotuv − qaytarish):', _xrFmt(d.net_total), true);
-                net.style.background = '#f0f9f4';
-                xReportBody.appendChild(net);
 
                 if (d.payment_breakdown && d.payment_breakdown.length) {
                     xReportBody.appendChild(_xrSection('TO\'LOV TURI BO\'YICHA:'));
