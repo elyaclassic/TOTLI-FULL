@@ -774,7 +774,7 @@
                 var hasExpense = (d.expense_to_partner && d.expense_to_partner.count > 0)
                               || (d.expense_other && d.expense_other.count > 0);
                 if (hasExpense || typeof d.qoldiq !== 'undefined') {
-                    xReportBody.appendChild(_xrSection('HARAJATLAR:'));
+                    xReportBody.appendChild(_xrSection('HARAJATLAR (NAQD KASSADAN):'));
                     if (d.expense_to_partner && d.expense_to_partner.count > 0) {
                         xReportBody.appendChild(_xrRow(
                             'Kontragentga to\'lov (' + d.expense_to_partner.count + ' ta):',
@@ -788,7 +788,7 @@
                         ));
                     }
                     if (typeof d.qoldiq !== 'undefined') {
-                        var qRow = _xrRow('QOLDIQ (sotuv − to\'lov − harajat):', _xrFmt(d.qoldiq), true);
+                        var qRow = _xrRow('NAQD QOLDIQ (kassada bo\'lishi kerak):', _xrFmt(d.qoldiq), true);
                         qRow.style.background = '#e3f2fd';
                         qRow.style.fontSize = '1.05em';
                         xReportBody.appendChild(qRow);

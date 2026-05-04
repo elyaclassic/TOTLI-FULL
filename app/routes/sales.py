@@ -1512,24 +1512,27 @@ async def sales_pos_x_report(
                     "sum": sum(float(t.amount or 0) for t in transfers),
                 }
 
-                expenses_q = db.query(Payment).filter(
-                    Payment.cash_register_id.in_(cash_ids),
-                    Payment.type == "expense",
-                    or_(Payment.status == "confirmed", Payment.status.is_(None)),
-                    func.date(Payment.created_at) == target_date,
-                ).all()
-                for e in expenses_q:
-                    amt = float(e.amount or 0)
-                    if e.partner_id:
-                        expense_to_partner["count"] += 1
-                        expense_to_partner["sum"] += amt
-                    else:
-                        expense_other["count"] += 1
-                        expense_other["sum"] += amt
+                naqd_cash_ids = [c.id for c in shop_cashes if (c.payment_type or "").strip().lower() == "naqd"]
+                if naqd_cash_ids:
+                    expenses_q = db.query(Payment).filter(
+                        Payment.cash_register_id.in_(naqd_cash_ids),
+                        Payment.type == "expense",
+                        or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                        func.date(Payment.created_at) == target_date,
+                    ).all()
+                    for e in expenses_q:
+                        amt = float(e.amount or 0)
+                        if e.partner_id:
+                            expense_to_partner["count"] += 1
+                            expense_to_partner["sum"] += amt
+                        else:
+                            expense_other["count"] += 1
+                            expense_other["sum"] += amt
     except Exception:
         pass
 
-    qoldiq = sales_total - returns_total - expense_to_partner["sum"] - expense_other["sum"]
+    naqd_income_today = float(by_type.get("naqd", {}).get("sum", 0) or 0)
+    qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"]
 
     return JSONResponse({
         "date": target_date.strftime("%d.%m.%Y"),
