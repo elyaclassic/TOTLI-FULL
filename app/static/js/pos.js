@@ -772,16 +772,9 @@
 
                 if (d.cash_balances && d.cash_balances.length) {
                     xReportBody.appendChild(_xrSection('KASSA BALANSI (joriy):'));
-                    var totalBal = 0;
                     d.cash_balances.forEach(function(c) {
                         xReportBody.appendChild(_xrRow(c.name + ':', _xrFmt(c.balance)));
-                        totalBal += Number(c.balance) || 0;
                     });
-                    if (d.cash_balances.length > 1) {
-                        var sumRow = _xrRow('Jami kassa balansi:', _xrFmt(totalBal), true);
-                        sumRow.style.background = '#fff8e1';
-                        xReportBody.appendChild(sumRow);
-                    }
                 }
 
                 if (d.inkasatsiya_today && d.inkasatsiya_today.count > 0) {
