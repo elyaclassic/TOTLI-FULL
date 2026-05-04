@@ -770,6 +770,30 @@
                     });
                 }
 
+                var hasExpense = (d.expense_to_partner && d.expense_to_partner.count > 0)
+                              || (d.expense_other && d.expense_other.count > 0);
+                if (hasExpense || typeof d.qoldiq !== 'undefined') {
+                    xReportBody.appendChild(_xrSection('HARAJATLAR:'));
+                    if (d.expense_to_partner && d.expense_to_partner.count > 0) {
+                        xReportBody.appendChild(_xrRow(
+                            'Kontragentga to\'lov (' + d.expense_to_partner.count + ' ta):',
+                            '−' + _xrFmt(d.expense_to_partner.sum)
+                        ));
+                    }
+                    if (d.expense_other && d.expense_other.count > 0) {
+                        xReportBody.appendChild(_xrRow(
+                            'Boshqa harajatlar (' + d.expense_other.count + ' ta):',
+                            '−' + _xrFmt(d.expense_other.sum)
+                        ));
+                    }
+                    if (typeof d.qoldiq !== 'undefined') {
+                        var qRow = _xrRow('QOLDIQ (sotuv − to\'lov − harajat):', _xrFmt(d.qoldiq), true);
+                        qRow.style.background = '#e3f2fd';
+                        qRow.style.fontSize = '1.05em';
+                        xReportBody.appendChild(qRow);
+                    }
+                }
+
                 if (d.cash_balances && d.cash_balances.length) {
                     xReportBody.appendChild(_xrSection('KASSA BALANSI (joriy):'));
                     d.cash_balances.forEach(function(c) {

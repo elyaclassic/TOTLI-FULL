@@ -1459,6 +1459,8 @@ async def sales_pos_x_report(
 
     cash_balances: list = []
     inkasatsiya_today = {"count": 0, "sum": 0.0}
+    expense_to_partner = {"count": 0, "sum": 0.0}
+    expense_other = {"count": 0, "sum": 0.0}
     try:
         from app.services.finance_service import cash_balance_formula
         from sqlalchemy.orm import joinedload
@@ -1486,8 +1488,25 @@ async def sales_pos_x_report(
                     "count": len(transfers),
                     "sum": sum(float(t.amount or 0) for t in transfers),
                 }
+
+                expenses_q = db.query(Payment).filter(
+                    Payment.cash_register_id.in_(cash_ids),
+                    Payment.type == "expense",
+                    or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                    func.date(Payment.created_at) == target_date,
+                ).all()
+                for e in expenses_q:
+                    amt = float(e.amount or 0)
+                    if e.partner_id:
+                        expense_to_partner["count"] += 1
+                        expense_to_partner["sum"] += amt
+                    else:
+                        expense_other["count"] += 1
+                        expense_other["sum"] += amt
     except Exception:
         pass
+
+    qoldiq = sales_total - returns_total - expense_to_partner["sum"] - expense_other["sum"]
 
     return JSONResponse({
         "date": target_date.strftime("%d.%m.%Y"),
@@ -1505,6 +1524,9 @@ async def sales_pos_x_report(
         "by_user": by_user,
         "cash_balances": cash_balances,
         "inkasatsiya_today": inkasatsiya_today,
+        "expense_to_partner": expense_to_partner,
+        "expense_other": expense_other,
+        "qoldiq": qoldiq,
     })
 
 
