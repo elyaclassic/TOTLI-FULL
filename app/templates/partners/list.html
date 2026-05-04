@@ -316,6 +316,7 @@
                                 <option value="customer">Mijoz</option>
                                 <option value="supplier">Yetkazib beruvchi</option>
                                 <option value="both">Ikkalasi</option>
+                                <option value="founder">Ta'sischi</option>
                             </select>
                         </div>
 
@@ -555,6 +556,7 @@
                                 <option value="customer">Mijoz</option>
                                 <option value="supplier">Yetkazib beruvchi</option>
                                 <option value="both">Ikkalasi</option>
+                                <option value="founder">Ta'sischi</option>
                             </select>
                         </div>
 
@@ -707,6 +709,16 @@
                             <label class="form-label">Chegirma %</label>
                             <input type="number" class="form-control" name="discount_percent" id="edit_discount_percent"
                                 value="0" step="0.5" max="100">
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Narx turi <small class="text-muted">(agent uchun)</small></label>
+                            <select class="form-select" name="price_type_id" id="edit_price_type_id">
+                                <option value="">— Default (Agent) —</option>
+                                {% for pt in price_types %}
+                                <option value="{{ pt.id }}">{{ pt.name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Agar bo'sh bo'lsa, agent buyurtmasida "Agent" narxi ishlatiladi.</small>
                         </div>
 
                         <!-- Requisites Accordion -->
@@ -945,6 +957,7 @@
                 document.getElementById('edit_address').value = p.address || '';
                 document.getElementById('edit_credit_limit').value = p.credit_limit || 0;
                 document.getElementById('edit_discount_percent').value = p.discount_percent || 0;
+                document.getElementById('edit_price_type_id').value = p.price_type_id != null ? p.price_type_id : '';
                 document.getElementById('edit_agent_id').value = p.agent_id || '';
                 document.getElementById('edit_legal_name').value = p.legal_name || '';
                 document.getElementById('edit_contact_person').value = p.contact_person || '';
