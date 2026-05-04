@@ -2554,22 +2554,26 @@ async def pos_expense(
     request: Request,
     expense_type: str = Form(...),
     amount: float = Form(...),
+    payment_type: str = Form("naqd"),
     note: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Sotuvchi o'z kassasidan harajat yozadi."""
+    """Sotuvchi tanlangan kassadan harajat yozadi (naqd/plastik/click/terminal)."""
     if amount <= 0:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Summa+noto'g'ri", status_code=303)
+    pt = (payment_type or "naqd").strip().lower()
+    if pt not in ("naqd", "plastik", "click", "terminal"):
+        pt = "naqd"
     # Harajat turi
     expense_type_name = "Boshqa"
     if expense_type != "other":
         et = db.query(ExpenseType).filter(ExpenseType.id == int(expense_type)).first()
         if et:
             expense_type_name = et.name
-    # Sotuvchining kassasini topish
+    # Sotuvchining tanlangan turdagi kassasini topish
     department_id = getattr(current_user, "department_id", None)
-    cash_register = _get_pos_cash_register(db, "naqd", department_id, current_user=current_user)
+    cash_register = _get_pos_cash_register(db, pt, department_id, current_user=current_user)
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim — harajat)
@@ -2584,7 +2588,7 @@ async def pos_expense(
         type="expense",
         cash_register_id=cash_register.id,
         amount=amount,
-        payment_type="naqd",
+        payment_type=pt,
         category="expense",
         description=description,
         user_id=current_user.id,
@@ -2594,4 +2598,4 @@ async def pos_expense(
         db.flush()
         _sync_cash_balance(db, cash_register.id)
     db.commit()
-    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"Harajat: {expense_type_name} — {amount:,.0f} so'm"), status_code=303)
+    return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"Harajat: {expense_type_name} — {amount:,.0f} so'm ({pt})"), status_code=303)

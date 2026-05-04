@@ -265,6 +265,15 @@
                             </select>
                         </div>
                         <div class="mb-3">
+                            <label class="form-label fw-semibold">To'lov turi (qaysi kassadan) *</label>
+                            <select name="payment_type" class="form-select" required>
+                                <option value="naqd" selected>Naqd</option>
+                                <option value="plastik">Plastik</option>
+                                <option value="click">Click</option>
+                                <option value="terminal">Terminal</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label fw-semibold">Summa (so'm) *</label>
                             <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
                         </div>
