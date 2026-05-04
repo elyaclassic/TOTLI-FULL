@@ -933,8 +933,11 @@ async def agent_products(request: Request, token: str = None, search: str = None
         tayyor_wh_id = tayyor_wh.id if tayyor_wh else None
         result = []
         for prod in products:
-            unit_name = prod.unit.name if prod.unit else ""
             price = _product_price_for_type(db, prod, price_type_id)
+            # Narx kiritilmagan mahsulotlar agent kataloga kirmaydi
+            if price <= 0:
+                continue
+            unit_name = prod.unit.name if prod.unit else ""
             # Faqat Tayyor mahsulot ombori dan qoldiq
             total_stock = db.query(sa_func.coalesce(sa_func.sum(Stock.quantity), 0)).filter(
                 Stock.product_id == prod.id, Stock.warehouse_id == tayyor_wh_id
