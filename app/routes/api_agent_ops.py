@@ -43,6 +43,27 @@ logger = get_logger("api_agent_ops")
 
 router = APIRouter(prefix="/api", tags=["api-agent"])
 
+# Agent buyurtma uchun default narx turi: "Agent" (price_types.id=4 — partners.price_type_id NULL bo'lsa)
+DEFAULT_AGENT_PRICE_TYPE_ID = 4
+
+
+def _resolve_price_type_id(partner: "Partner") -> int:
+    """Mijozga biriktirilgan narx turi (yoki default Agent)."""
+    if partner is not None and getattr(partner, "price_type_id", None):
+        return int(partner.price_type_id)
+    return DEFAULT_AGENT_PRICE_TYPE_ID
+
+
+def _product_price_for_type(db: Session, product, price_type_id: int) -> float:
+    """ProductPrice dan tanlangan narx turi bo'yicha narxni oladi (yoki 0)."""
+    pp = db.query(ProductPrice).filter(
+        ProductPrice.product_id == product.id,
+        ProductPrice.price_type_id == price_type_id,
+    ).first()
+    if pp and pp.sale_price:
+        return float(pp.sale_price)
+    return float(getattr(product, "sale_price", 0) or 0)
+
 
 @router.post("/agent/orders")
 async def agent_orders(token: str, db: Session = Depends(get_db)):
@@ -876,16 +897,21 @@ async def agent_partner_add(
 
 
 @router.get("/agent/products")
-async def agent_products(request: Request, token: str = None, search: str = None, db: Session = Depends(get_db)):
+async def agent_products(request: Request, token: str = None, search: str = None, partner_id: int = None, db: Session = Depends(get_db)):
     """Mahsulotlar ro'yxati (agent buyurtma uchun) — stock va ProductPrice bilan.
 
     Faqat is_for_agent=True bo'lgan mahsulotlar ko'rinadi (agent katalogi).
     Stock=0 bo'lsa ham ko'rsatiladi — supervisor stock yetmasa waiting_production qiladi.
+    Narx: partner_id berilsa — shu mijozga biriktirilgan narx turi, aks holda Agent.
     """
     try:
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
+        partner = None
+        if partner_id:
+            partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent.id).first()
+        price_type_id = _resolve_price_type_id(partner)
         q = db.query(Product).filter(
             Product.is_active == True,
             Product.type == "tayyor",
@@ -902,9 +928,7 @@ async def agent_products(request: Request, token: str = None, search: str = None
         result = []
         for prod in products:
             unit_name = prod.unit.name if prod.unit else ""
-            # ProductPrice dan narx olish (agar mavjud bo'lsa)
-            pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
-            price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
+            price = _product_price_for_type(db, prod, price_type_id)
             # Faqat Tayyor mahsulot ombori dan qoldiq
             total_stock = db.query(sa_func.coalesce(sa_func.sum(Stock.quantity), 0)).filter(
                 Stock.product_id == prod.id, Stock.warehouse_id == tayyor_wh_id
@@ -963,8 +987,9 @@ async def agent_create_order(
         else:
             seq = 1
         order_number = f"{prefix}-{seq:03d}"
-        # Partner chegirmasi
+        # Partner chegirmasi va narx turi
         partner_discount = float(partner.discount_percent or 0)
+        price_type_id = _resolve_price_type_id(partner)
         subtotal = 0.0
         order_items = []
         for it in items:
@@ -982,9 +1007,7 @@ async def agent_create_order(
             ).first()
             if not prod:
                 continue
-            # ProductPrice dan narx olish, fallback: Product.sale_price
-            pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
-            price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
+            price = _product_price_for_type(db, prod, price_type_id)
             total_line = qty * price
             subtotal += total_line
             order_items.append(OrderItem(
@@ -1046,6 +1069,7 @@ async def agent_create_order(
             user_id=None,
             agent_id=agent.id,
             source="agent",
+            price_type_id=price_type_id,
             subtotal=subtotal,
             discount_percent=partner_discount,
             discount_amount=discount_amount,
@@ -1251,6 +1275,7 @@ async def agent_create_order_batch(
                 order_number = f"{prefix}-{seq:03d}"
 
                 partner_discount = float(partner.discount_percent or 0)
+                price_type_id = _resolve_price_type_id(partner)
                 subtotal = 0.0
                 order_items = []
                 for it in items:
@@ -1268,8 +1293,7 @@ async def agent_create_order_batch(
                     ).first()
                     if not prod:
                         continue
-                    pp = db.query(ProductPrice).filter(ProductPrice.product_id == prod.id).first()
-                    price = float(pp.sale_price or 0) if pp else float(prod.sale_price or 0)
+                    price = _product_price_for_type(db, prod, price_type_id)
                     total_line = qty * price
                     subtotal += total_line
                     order_items.append(OrderItem(
@@ -1295,6 +1319,7 @@ async def agent_create_order_batch(
                     user_id=None,
                     agent_id=agent.id,
                     source="agent",
+                    price_type_id=price_type_id,
                     subtotal=subtotal,
                     discount_percent=partner_discount,
                     discount_amount=discount_amount,
@@ -1329,6 +1354,409 @@ async def agent_create_order_batch(
     except Exception as e:
         db.rollback()
         logger.error(f"agent_create_order_batch: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/order/{order_id}/return")
+async def agent_order_return(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """Agent qaytarish hujjati yaratadi (parent buyurtma asosida)."""
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token"))
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+        parent = db.query(Order).filter(Order.id == order_id, Order.agent_id == agent.id).first()
+        if not parent:
+            return {"success": False, "error": "Buyurtma topilmadi"}
+        if parent.status not in ("completed", "confirmed"):
+            return {"success": False, "error": "Faqat tasdiqlangan/yakunlangan buyurtmadan qaytarish"}
+        items_in = body.get("items", [])
+        if not items_in:
+            return {"success": False, "error": "Mahsulot tanlang"}
+
+        today = datetime.now()
+        prefix = f"AGT-{today.strftime('%Y%m%d')}"
+        last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq = 1
+        ret_number = f"{prefix}-{seq:03d}"
+
+        ret_items = []
+        subtotal = 0.0
+        for it in items_in:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            parent_oi = next((oi for oi in parent.items if oi.product_id == pid), None)
+            price = float(parent_oi.price or 0) if parent_oi else 0
+            total_line = qty * price
+            subtotal += total_line
+            ret_items.append(OrderItem(
+                product_id=pid, quantity=qty, price=price,
+                discount_percent=0, total=total_line,
+            ))
+        if not ret_items:
+            return {"success": False, "error": "Yaroqli mahsulot yo'q"}
+
+        order = Order(
+            number=ret_number, date=today, type="return_sale",
+            partner_id=parent.partner_id, warehouse_id=parent.warehouse_id,
+            agent_id=agent.id, source="agent", price_type_id=parent.price_type_id,
+            subtotal=subtotal, discount_percent=0, discount_amount=0,
+            total=subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
+            note=f"QAYTARISH: parent={parent.number}. Agent: {agent.code}",
+        )
+        db.add(order)
+        db.flush()
+        for oi in ret_items:
+            oi.order_id = order.id
+            db.add(oi)
+        db.commit()
+        return {"success": True, "id": order.id, "order_number": ret_number, "total": subtotal}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_order_return: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/order/{order_id}/exchange")
+async def agent_order_exchange(order_id: int, request: Request, db: Session = Depends(get_db)):
+    """Agent almashtirish: return + yangi sale ikkalasi atomik."""
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token"))
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+        parent = db.query(Order).filter(Order.id == order_id, Order.agent_id == agent.id).first()
+        if not parent:
+            return {"success": False, "error": "Buyurtma topilmadi"}
+        if parent.status not in ("completed", "confirmed"):
+            return {"success": False, "error": "Faqat tasdiqlangan buyurtmadan almashtirish"}
+
+        return_items = body.get("return_items", [])
+        new_items = body.get("new_items", [])
+        if not return_items or not new_items:
+            return {"success": False, "error": "Qaytariladigan va yangi mahsulot kerak"}
+
+        today = datetime.now()
+        prefix = f"AGT-{today.strftime('%Y%m%d')}"
+        last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+        try:
+            seq_start = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq_start = 1
+
+        partner = db.query(Partner).filter(Partner.id == parent.partner_id).first()
+        partner_discount = float(partner.discount_percent or 0) if partner else 0
+        price_type_id = parent.price_type_id
+
+        ret_subtotal = 0.0
+        ret_oi = []
+        for it in return_items:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            parent_oi = next((oi for oi in parent.items if oi.product_id == pid), None)
+            price = float(parent_oi.price or 0) if parent_oi else 0
+            total_line = qty * price
+            ret_subtotal += total_line
+            ret_oi.append(OrderItem(product_id=pid, quantity=qty, price=price, discount_percent=0, total=total_line))
+
+        new_subtotal = 0.0
+        new_oi = []
+        for it in new_items:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            prod = db.query(Product).filter(Product.id == pid, Product.is_active == True, Product.is_for_agent == True).first()
+            if not prod:
+                continue
+            price = _product_price_for_type(db, prod, price_type_id)
+            total_line = qty * price
+            new_subtotal += total_line
+            new_oi.append(OrderItem(product_id=pid, quantity=qty, price=price, discount_percent=partner_discount, total=total_line * (1 - partner_discount / 100)))
+
+        if not ret_oi or not new_oi:
+            return {"success": False, "error": "Yaroqli mahsulotlar yo'q"}
+
+        new_total = new_subtotal - (new_subtotal * partner_discount / 100)
+
+        ret_order = Order(
+            number=f"{prefix}-{seq_start:03d}", date=today, type="return_sale",
+            partner_id=parent.partner_id, warehouse_id=parent.warehouse_id,
+            agent_id=agent.id, source="agent", price_type_id=price_type_id,
+            subtotal=ret_subtotal, discount_percent=0, discount_amount=0,
+            total=ret_subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
+            note=f"OBMEN qaytarish: parent={parent.number}. Agent: {agent.code}",
+        )
+        db.add(ret_order)
+        db.flush()
+        for oi in ret_oi:
+            oi.order_id = ret_order.id
+            db.add(oi)
+
+        new_order = Order(
+            number=f"{prefix}-{seq_start + 1:03d}", date=today, type="sale",
+            partner_id=parent.partner_id, warehouse_id=parent.warehouse_id,
+            agent_id=agent.id, source="agent", price_type_id=price_type_id,
+            subtotal=new_subtotal,
+            discount_percent=partner_discount,
+            discount_amount=new_subtotal * partner_discount / 100,
+            total=new_total, paid=0, debt=new_total,
+            status="draft", payment_type="naqd",
+            note=f"OBMEN chiqarish: parent={parent.number}, return={ret_order.number}. Agent: {agent.code}",
+        )
+        db.add(new_order)
+        db.flush()
+        for oi in new_oi:
+            oi.order_id = new_order.id
+            db.add(oi)
+
+        db.commit()
+        return {
+            "success": True,
+            "return_order_id": ret_order.id, "return_order_number": ret_order.number,
+            "new_order_id": new_order.id, "new_order_number": new_order.number,
+            "return_total": ret_subtotal, "new_total": new_total,
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_order_exchange: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+# ==========================================
+# Sales Doctor migration: parent ordersiz return/exchange
+# ==========================================
+
+VOZVRAT_WAREHOUSE_ID = 7  # "Vozvrat (qaytarilgan tovarlar)" — qaytgan tovarlar shu yerga kirim
+
+
+def _next_agt_number(db: Session) -> str:
+    today = datetime.now()
+    prefix = f"AGT-{today.strftime('%Y%m%d')}"
+    last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+    try:
+        seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+    except (ValueError, IndexError, AttributeError):
+        seq = 1
+    return f"{prefix}-{seq:03d}"
+
+
+@router.post("/agent/standalone-return")
+async def agent_standalone_return(request: Request, db: Session = Depends(get_db)):
+    """Tarixsiz qaytarish (sales doctor migratsiyasi uchun) — parent buyurtma kerak emas.
+
+    Body: {token, partner_id, items: [{product_id, qty, price, reason?}], note?}
+    Stock kirim → Vozvrat ombori (#7). Order status='draft' — supervisor tasdiqlaydi.
+    """
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token"))
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        partner_id = int(body.get("partner_id") or 0)
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            return {"success": False, "error": "Mijoz topilmadi"}
+
+        items_in = body.get("items", [])
+        if not items_in:
+            return {"success": False, "error": "Mahsulot tanlang"}
+
+        ret_items = []
+        subtotal = 0.0
+        for it in items_in:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+                price = float(it.get("price") or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            total_line = qty * price
+            subtotal += total_line
+            ret_items.append({
+                "product_id": pid, "qty": qty, "price": price, "total": total_line,
+            })
+        if not ret_items:
+            return {"success": False, "error": "Yaroqli mahsulot yo'q"}
+
+        order = Order(
+            number=_next_agt_number(db), date=datetime.now(), type="return_sale",
+            partner_id=partner_id, warehouse_id=VOZVRAT_WAREHOUSE_ID,
+            agent_id=agent.id, source="agent",
+            subtotal=subtotal, discount_percent=0, discount_amount=0,
+            total=subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
+            note=f"VOZVRAT (tarixsiz, sales doctor): {body.get('note', '').strip()[:200]}. Agent: {agent.code}",
+        )
+        db.add(order)
+        db.flush()
+        for it in ret_items:
+            db.add(OrderItem(
+                order_id=order.id, product_id=it["product_id"],
+                quantity=it["qty"], price=it["price"],
+                discount_percent=0, total=it["total"],
+            ))
+        db.commit()
+        return {
+            "success": True, "id": order.id,
+            "order_number": order.number, "total": subtotal,
+            "warehouse_id": VOZVRAT_WAREHOUSE_ID,
+            "status": "draft",
+            "message": "Vozvrat hujjati yaratildi (draft). Supervisor tasdiqlasin.",
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_standalone_return: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
+@router.post("/agent/standalone-exchange")
+async def agent_standalone_exchange(request: Request, db: Session = Depends(get_db)):
+    """Tarixsiz almashtirish (sales doctor migratsiyasi uchun) — parent buyurtma kerak emas.
+
+    Body: {token, partner_id, return_items, new_items, return_warehouse_id?, new_warehouse_id?, note?}
+    - return_items: mijozdan qaytgan tovarlar [{product_id, qty, price}] -> Vozvrat ombori (#7)
+    - new_items: mijozga berilgan yangi tovarlar [{product_id, qty, price}] -> agent omboridan chiqim
+    - Narx farqi avtomatik partner balansiga ta'sir qiladi.
+    """
+    try:
+        body = await request.json()
+        tok = _extract_token(request, body.get("token"))
+        agent = _agent_from_token(tok, db)
+        if not agent:
+            return {"success": False, "error": "Token noto'g'ri"}
+
+        partner_id = int(body.get("partner_id") or 0)
+        partner = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not partner:
+            return {"success": False, "error": "Mijoz topilmadi"}
+
+        return_items = body.get("return_items", [])
+        new_items = body.get("new_items", [])
+        if not return_items or not new_items:
+            return {"success": False, "error": "Qaytariladigan va yangi mahsulot kerak"}
+
+        new_warehouse_id = body.get("new_warehouse_id")
+        if not new_warehouse_id:
+            new_warehouse_id = getattr(agent, "warehouse_id", None)
+        if not new_warehouse_id:
+            return {"success": False, "error": "Yangi mahsulot uchun ombor topilmadi"}
+
+        partner_discount = float(partner.discount_percent or 0)
+        today = datetime.now()
+        prefix = f"AGT-{today.strftime('%Y%m%d')}"
+        last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+        try:
+            seq_start = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq_start = 1
+
+        ret_oi = []
+        ret_subtotal = 0.0
+        for it in return_items:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+                price = float(it.get("price") or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            total_line = qty * price
+            ret_subtotal += total_line
+            ret_oi.append(OrderItem(
+                product_id=pid, quantity=qty, price=price,
+                discount_percent=0, total=total_line,
+            ))
+
+        new_oi = []
+        new_subtotal = 0.0
+        for it in new_items:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+                price = float(it.get("price") or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            total_line = qty * price
+            new_subtotal += total_line
+            new_oi.append(OrderItem(
+                product_id=pid, quantity=qty, price=price,
+                discount_percent=0, total=total_line,
+            ))
+        if not ret_oi or not new_oi:
+            return {"success": False, "error": "Yaroqli mahsulotlar yo'q"}
+
+        new_total = new_subtotal - (new_subtotal * partner_discount / 100)
+        note_user = body.get("note", "").strip()[:200]
+
+        ret_order = Order(
+            number=f"{prefix}-{seq_start:03d}", date=today, type="return_sale",
+            partner_id=partner_id, warehouse_id=VOZVRAT_WAREHOUSE_ID,
+            agent_id=agent.id, source="agent",
+            subtotal=ret_subtotal, discount_percent=0, discount_amount=0,
+            total=ret_subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
+            note=f"OBMEN qaytarish (tarixsiz, sales doctor): {note_user}. Agent: {agent.code}",
+        )
+        db.add(ret_order)
+        db.flush()
+        for oi in ret_oi:
+            oi.order_id = ret_order.id
+            db.add(oi)
+
+        new_order = Order(
+            number=f"{prefix}-{seq_start + 1:03d}", date=today, type="sale",
+            partner_id=partner_id, warehouse_id=new_warehouse_id,
+            agent_id=agent.id, source="agent",
+            subtotal=new_subtotal,
+            discount_percent=partner_discount,
+            discount_amount=new_subtotal * partner_discount / 100,
+            total=new_total, paid=0, debt=new_total,
+            status="draft", payment_type="naqd",
+            note=f"OBMEN chiqarish (tarixsiz, sales doctor): {note_user}. return={ret_order.number}. Agent: {agent.code}",
+        )
+        db.add(new_order)
+        db.flush()
+        for oi in new_oi:
+            oi.order_id = new_order.id
+            db.add(oi)
+
+        db.commit()
+        return {
+            "success": True,
+            "return_order_id": ret_order.id, "return_order_number": ret_order.number,
+            "new_order_id": new_order.id, "new_order_number": new_order.number,
+            "return_total": ret_subtotal, "new_total": new_total,
+            "balance_diff": new_total - ret_subtotal,
+            "status": "draft",
+            "message": "Obmen hujjatlari yaratildi (draft). Supervisor tasdiqlasin.",
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"agent_standalone_exchange: {e}")
         return {"success": False, "error": "Server xatosi"}
 
 
