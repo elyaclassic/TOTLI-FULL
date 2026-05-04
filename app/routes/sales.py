@@ -1464,20 +1464,28 @@ async def sales_pos_x_report(
         from sqlalchemy.orm import joinedload
         user_full = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
         user_cashes = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
-        if role == "sotuvchi" and user_cashes:
-            for c in user_cashes:
+        if role == "sotuvchi" and pos_wh:
+            wh_dept_id = getattr(pos_wh, "department_id", None)
+            shop_cashes = [c for c in user_cashes if getattr(c, "department_id", None) == wh_dept_id] if wh_dept_id else []
+            if not shop_cashes and wh_dept_id:
+                shop_cashes = db.query(CashRegister).filter(
+                    CashRegister.department_id == wh_dept_id,
+                    CashRegister.is_active == True,
+                ).all()
+            for c in shop_cashes:
                 bal, inc, exp = cash_balance_formula(db, c.id)
                 cash_balances.append({"id": c.id, "name": c.name, "balance": float(bal or 0)})
-            cash_ids = [c.id for c in user_cashes]
-            transfers = db.query(CashTransfer).filter(
-                CashTransfer.from_cash_id.in_(cash_ids),
-                CashTransfer.status.in_(("in_transit", "completed")),
-                func.date(CashTransfer.date) == target_date,
-            ).all()
-            inkasatsiya_today = {
-                "count": len(transfers),
-                "sum": sum(float(t.amount or 0) for t in transfers),
-            }
+            cash_ids = [c.id for c in shop_cashes]
+            if cash_ids:
+                transfers = db.query(CashTransfer).filter(
+                    CashTransfer.from_cash_id.in_(cash_ids),
+                    CashTransfer.status.in_(("in_transit", "completed")),
+                    func.date(CashTransfer.date) == target_date,
+                ).all()
+                inkasatsiya_today = {
+                    "count": len(transfers),
+                    "sum": sum(float(t.amount or 0) for t in transfers),
+                }
     except Exception:
         pass
 
@@ -1556,7 +1564,18 @@ async def sales_pos_z_report(
         from app.services.finance_service import cash_balance_formula
         from sqlalchemy.orm import joinedload as _jl
         user_full = db.query(User).options(_jl(User.cash_registers_list)).filter(User.id == current_user.id).first()
-        for c in (getattr(user_full, "cash_registers_list", None) or []) if user_full else []:
+        user_cashes_z = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
+        wh_dept_id = getattr(pos_wh, "department_id", None) if pos_wh else None
+        if role == "sotuvchi" and wh_dept_id:
+            shop_cashes = [c for c in user_cashes_z if getattr(c, "department_id", None) == wh_dept_id]
+            if not shop_cashes:
+                shop_cashes = db.query(CashRegister).filter(
+                    CashRegister.department_id == wh_dept_id,
+                    CashRegister.is_active == True,
+                ).all()
+        else:
+            shop_cashes = user_cashes_z
+        for c in shop_cashes:
             bal, inc, exp = cash_balance_formula(db, c.id)
             cash_snapshot.append({"id": c.id, "name": c.name, "balance": float(bal or 0), "income": float(inc or 0), "expense": float(exp or 0)})
     except Exception:
