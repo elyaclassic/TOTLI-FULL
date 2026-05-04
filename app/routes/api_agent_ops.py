@@ -55,13 +55,34 @@ def _resolve_price_type_id(partner: "Partner") -> int:
 
 
 def _product_price_for_type(db: Session, product, price_type_id: int) -> float:
-    """ProductPrice dan tanlangan narx turi bo'yicha narxni oladi (yoki 0)."""
+    """ProductPrice dan tanlangan narx turi bo'yicha narxni oladi.
+
+    Fallback zanjiri (agar tanlangan narx turi 0 yoki yo'q bo'lsa):
+      tanlangan_tip -> Chakana (1) -> Ulgurji (3) -> product.sale_price -> 0
+    Bu admin har mahsulotga 'Agent' narx kiritmagan holatda ham agent kataloga to'g'ri narx beradi.
+    """
     pp = db.query(ProductPrice).filter(
         ProductPrice.product_id == product.id,
         ProductPrice.price_type_id == price_type_id,
     ).first()
-    if pp and pp.sale_price:
+    if pp and pp.sale_price and float(pp.sale_price) > 0:
         return float(pp.sale_price)
+    # Fallback: Chakana
+    if price_type_id != 1:
+        pp_ch = db.query(ProductPrice).filter(
+            ProductPrice.product_id == product.id,
+            ProductPrice.price_type_id == 1,
+        ).first()
+        if pp_ch and pp_ch.sale_price and float(pp_ch.sale_price) > 0:
+            return float(pp_ch.sale_price)
+    # Fallback: Ulgurji
+    if price_type_id != 3:
+        pp_ul = db.query(ProductPrice).filter(
+            ProductPrice.product_id == product.id,
+            ProductPrice.price_type_id == 3,
+        ).first()
+        if pp_ul and pp_ul.sale_price and float(pp_ul.sale_price) > 0:
+            return float(pp_ul.sale_price)
     return float(getattr(product, "sale_price", 0) or 0)
 
 
