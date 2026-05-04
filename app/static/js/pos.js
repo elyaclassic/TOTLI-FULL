@@ -121,7 +121,13 @@
         if (!cart[index]) return;
         var pid = cart[index].productId;
         var maxQ = posStockByProduct[pid];
-        var q = cart[index].quantity + delta;
+        var q = Math.round((cart[index].quantity + delta) * 100) / 100;
+        if (delta < 0 && q < 1) {
+            if (confirm('"' + (cart[index].productName || 'Mahsulot') + '" savatdan olib tashlansinmi?')) {
+                removeFromCart(index);
+            }
+            return;
+        }
         if (q < 0.01) q = 0.01;
         if (maxQ !== undefined && !isNaN(maxQ) && q > maxQ) q = maxQ;
         cart[index].quantity = q;
@@ -146,7 +152,7 @@
             total += sum;
             var tr = document.createElement('tr');
             tr.innerHTML = '<td class="text-truncate align-middle" style="max-width:100px" title="' + (item.productName || '').replace(/"/g, '&quot;') + '">' + (item.productName || '') + '</td>' +
-                '<td class="align-middle"><div class="input-group input-group-sm" style="width:100px"><button type="button" class="btn btn-outline-secondary cart-minus" data-index="' + i + '">−</button><input type="number" class="form-control form-control-sm cart-qty text-center" data-index="' + i + '" value="' + item.quantity + '" step="0.01" min="0.01"><button type="button" class="btn btn-outline-secondary cart-plus" data-index="' + i + '">+</button></div></td>' +
+                '<td class="align-middle"><div class="input-group input-group-sm" style="width:100px"><button type="button" class="btn btn-outline-secondary cart-minus" data-index="' + i + '">−</button><input type="number" class="form-control form-control-sm cart-qty text-center" data-index="' + i + '" value="' + item.quantity + '" step="1" min="0.01"><button type="button" class="btn btn-outline-secondary cart-plus" data-index="' + i + '">+</button></div></td>' +
                 '<td class="align-middle"><span class="cart-price-display" style="font-size:0.85rem;font-weight:600;color:#2c3e50;white-space:nowrap;">' + (pr || 0).toLocaleString('ru-RU') + '</span><input type="hidden" class="cart-price" data-index="' + i + '" value="' + item.price + '"></td>' +
                 '<td class="cart-sum align-middle">' + (sum || 0).toLocaleString('ru-RU') + '</td>' +
                 '<td class="align-middle"><button type="button" class="btn btn-sm btn-outline-danger cart-remove" data-index="' + i + '"><i class="bi bi-trash"></i></button></td>';
@@ -165,9 +171,10 @@
             btn.addEventListener('click', function() { changeQty(parseInt(this.getAttribute('data-index'), 10), 1); });
         });
         cartBody.querySelectorAll('.cart-qty').forEach(function(inp) {
+            inp.addEventListener('wheel', function(e) { e.preventDefault(); this.blur(); }, { passive: false });
             inp.addEventListener('change', function() {
                 var i = parseInt(this.getAttribute('data-index'), 10);
-                var q = parseFloat(this.value) || 0;
+                var q = Math.round((parseFloat(this.value) || 0) * 100) / 100;
                 if (q <= 0) q = 1;
                 var pid = cart[i] && cart[i].productId;
                 var maxQ = pid !== undefined ? posStockByProduct[pid] : undefined;
@@ -448,7 +455,16 @@
         }
     });
 
+    var posSubmitInFlight = false;
+    function disableSubmitButtons() {
+        if (btnSotuv) { btnSotuv.disabled = true; btnSotuv.style.opacity = '0.6'; btnSotuv.style.cursor = 'wait'; }
+        var splitOk = document.getElementById('posSplitConfirm');
+        if (splitOk) splitOk.disabled = true;
+    }
     function doPayment(payment) {
+        if (posSubmitInFlight) return;
+        posSubmitInFlight = true;
+        disableSubmitButtons();
         if (paymentTypeInput) paymentTypeInput.value = payment;
         if (paymentSplitsInput) paymentSplitsInput.value = '';
         try { sessionStorage.removeItem(POS_CART_KEY); } catch (e) {}
@@ -514,6 +530,7 @@
     }
     if (splitConfirm) {
         splitConfirm.addEventListener('click', function() {
+            if (posSubmitInFlight) return;
             var total = getTotalFinal();
             var parts = [];
             var sum = 0;
@@ -526,6 +543,8 @@
             });
             if (!parts.length) { alert('Hech bolmaganda bitta summa kiriting.'); return; }
             if (Math.abs(total - sum) >= 0.01) { alert('Kiritilgan summalar jami bilan teng bolishi kerak.'); return; }
+            posSubmitInFlight = true;
+            disableSubmitButtons();
             if (paymentTypeInput) paymentTypeInput.value = 'split';
             if (paymentSplitsInput) paymentSplitsInput.value = JSON.stringify(parts);
             try { sessionStorage.removeItem(POS_CART_KEY); } catch (e) {}
@@ -621,7 +640,13 @@
                     var linkUrl = (o.type === 'return_sale') ? '/sales/returns' : '/sales/edit/' + o.id;
                     var linkText = (o.type === 'return_sale') ? 'Ro\'yxat' : 'Ochish';
                     var pt = (o.payment_type || 'naqd').toLowerCase();
-                    var ptLabel = pt === 'plastik' ? '<span class="badge bg-info">Plastik</span>' : pt === 'perechisleniye' ? '<span class="badge bg-warning text-dark">Bank</span>' : '<span class="badge bg-success">Naqd</span>';
+                    var ptLabel;
+                    if (pt === 'plastik') ptLabel = '<span class="badge bg-info">Plastik</span>';
+                    else if (pt === 'click') ptLabel = '<span class="badge" style="background:#0066ff;color:#fff;">Click</span>';
+                    else if (pt === 'terminal') ptLabel = '<span class="badge bg-secondary">Terminal</span>';
+                    else if (pt === 'split') ptLabel = '<span class="badge bg-dark">Aralash</span>';
+                    else if (pt === 'perechisleniye' || pt === 'bank') ptLabel = '<span class="badge bg-warning text-dark">Bank</span>';
+                    else ptLabel = '<span class="badge bg-success">Naqd</span>';
                     html += '<tr><td>' + (i + 1) + '</td><td>' + (o.number || '') + '</td><td>' + (o.created_at || '-') + '</td><td>' + (o.partner_name || '-') + '</td><td>' + (o.warehouse_name || '-') + '</td><td>' + ptLabel + '</td><td class="text-end fw-bold">' + totalStr + ' so\'m</td><td><a href="' + linkUrl + '" class="btn btn-sm btn-outline-primary" target="_blank">' + linkText + '</a></td></tr>';
                 });
                 dailyOrdersBody.innerHTML = html;
@@ -656,6 +681,201 @@
         });
     }
     if (dailyBtnShow) dailyBtnShow.addEventListener('click', loadDailyOrders);
+
+    /* X hisobot — smena yakuni */
+    var xReportBtn = document.getElementById('posBtnXHisobot');
+    var xReportModal = document.getElementById('posXReportModal');
+    var xReportBody = document.getElementById('posXReportBody');
+    var xReportDateInput = document.getElementById('posXReportDate');
+    var xReportReloadBtn = document.getElementById('posXReportReload');
+    function _xrFmt(n) { try { return Math.round(n).toLocaleString('ru-RU') + ' so\'m'; } catch(e) { return String(n); } }
+    function _xrRow(label, value, bold) {
+        var div = document.createElement('div');
+        div.className = 'd-flex justify-content-between border-bottom py-2';
+        var l = document.createElement('span'); l.textContent = label;
+        var v = document.createElement('span'); v.textContent = value;
+        if (bold) v.className = 'fw-bold';
+        div.appendChild(l); div.appendChild(v);
+        return div;
+    }
+    function _xrSection(title) {
+        var h = document.createElement('div');
+        h.className = 'mt-3 mb-2 fw-bold text-muted small';
+        h.textContent = title;
+        return h;
+    }
+    function _xrTd(text, cls) {
+        var td = document.createElement('td');
+        td.textContent = text;
+        if (cls) td.className = cls;
+        return td;
+    }
+    function loadXReport() {
+        if (!xReportBody) return;
+        xReportBody.textContent = '';
+        var loading = document.createElement('div');
+        loading.className = 'text-center py-5 text-muted';
+        loading.textContent = 'Yuklanmoqda...';
+        xReportBody.appendChild(loading);
+        var dateParam = (xReportDateInput && xReportDateInput.value) ? ('?date=' + encodeURIComponent(xReportDateInput.value)) : '';
+        fetch('/sales/pos/x-report' + dateParam, {credentials: 'same-origin'})
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (!d || d.error) {
+                    xReportBody.textContent = '';
+                    var err = document.createElement('div');
+                    err.className = 'alert alert-danger';
+                    err.textContent = (d && d.error) || 'Xato';
+                    xReportBody.appendChild(err);
+                    return;
+                }
+                xReportBody.textContent = '';
+                if (xReportDateInput && d.date_iso && !xReportDateInput.value) xReportDateInput.value = d.date_iso;
+                var ptLabel = {
+                    naqd: 'Naqd', plastik: 'Plastik', click: 'Click',
+                    terminal: 'Terminal', split: 'Aralash',
+                    perechisleniye: 'Bank', bank: 'Bank'
+                };
+                var hdr = document.createElement('div');
+                hdr.className = 'mb-3 pb-2 border-bottom';
+                var t1 = document.createElement('div');
+                t1.className = 'fw-bold';
+                t1.textContent = d.user + ' — ' + d.warehouse;
+                var t2 = document.createElement('small');
+                t2.className = 'text-muted';
+                t2.textContent = 'Sana: ' + d.date;
+                hdr.appendChild(t1); hdr.appendChild(t2);
+                xReportBody.appendChild(hdr);
+
+                xReportBody.appendChild(_xrRow('Sotuvlar soni:', d.sales_count));
+                xReportBody.appendChild(_xrRow('Sotuvlar summasi:', _xrFmt(d.sales_total), true));
+                if (d.returns_count > 0) {
+                    xReportBody.appendChild(_xrRow('Qaytarishlar soni:', d.returns_count));
+                    xReportBody.appendChild(_xrRow('Qaytarishlar summasi:', '−' + _xrFmt(d.returns_total)));
+                }
+                if (d.cancelled_count > 0) {
+                    var c = _xrRow('Bekor qilingan:', d.cancelled_count + ' ta — ' + _xrFmt(d.cancelled_total));
+                    c.style.color = '#b44';
+                    xReportBody.appendChild(c);
+                }
+                var net = _xrRow('NET (sotuv − qaytarish):', _xrFmt(d.net_total), true);
+                net.style.background = '#f0f9f4';
+                xReportBody.appendChild(net);
+
+                if (d.payment_breakdown && d.payment_breakdown.length) {
+                    xReportBody.appendChild(_xrSection('TO\'LOV TURI BO\'YICHA:'));
+                    d.payment_breakdown.forEach(function(p) {
+                        var name = ptLabel[p.type] || p.type;
+                        xReportBody.appendChild(_xrRow(name + ' (' + p.count + ' ta):', _xrFmt(p.sum)));
+                    });
+                }
+
+                if (d.cash_balances && d.cash_balances.length) {
+                    xReportBody.appendChild(_xrSection('KASSA BALANSI (joriy):'));
+                    var totalBal = 0;
+                    d.cash_balances.forEach(function(c) {
+                        xReportBody.appendChild(_xrRow(c.name + ':', _xrFmt(c.balance)));
+                        totalBal += Number(c.balance) || 0;
+                    });
+                    if (d.cash_balances.length > 1) {
+                        var sumRow = _xrRow('Jami kassa balansi:', _xrFmt(totalBal), true);
+                        sumRow.style.background = '#fff8e1';
+                        xReportBody.appendChild(sumRow);
+                    }
+                }
+
+                if (d.inkasatsiya_today && d.inkasatsiya_today.count > 0) {
+                    xReportBody.appendChild(_xrSection('INKASATSIYA (bugun topshirilgan):'));
+                    xReportBody.appendChild(_xrRow(
+                        'O\'tkazmalar (' + d.inkasatsiya_today.count + ' ta):',
+                        _xrFmt(d.inkasatsiya_today.sum)
+                    ));
+                }
+
+                if (d.by_user && d.by_user.length) {
+                    xReportBody.appendChild(_xrSection('SOTUVCHILAR BO\'YICHA:'));
+                    var tbl = document.createElement('table');
+                    tbl.className = 'table table-sm mb-0';
+                    var thead = document.createElement('thead');
+                    var thr = document.createElement('tr');
+                    ['Sotuvchi','Soni','Sotuv','Qaytarish','NET'].forEach(function(h, i) {
+                        var th = document.createElement('th');
+                        th.textContent = h;
+                        if (i > 0) th.className = 'text-end';
+                        thr.appendChild(th);
+                    });
+                    thead.appendChild(thr);
+                    tbl.appendChild(thead);
+                    var tb = document.createElement('tbody');
+                    d.by_user.forEach(function(u) {
+                        var tr = document.createElement('tr');
+                        tr.appendChild(_xrTd(u.user || '-'));
+                        tr.appendChild(_xrTd(String(u.count), 'text-end'));
+                        tr.appendChild(_xrTd(_xrFmt(u.sum), 'text-end'));
+                        tr.appendChild(_xrTd(u.returns ? '−' + _xrFmt(u.returns) : '0', 'text-end'));
+                        tr.appendChild(_xrTd(_xrFmt(u.net), 'text-end fw-bold'));
+                        tb.appendChild(tr);
+                    });
+                    tbl.appendChild(tb);
+                    xReportBody.appendChild(tbl);
+                }
+            })
+            .catch(function() {
+                xReportBody.textContent = '';
+                var err = document.createElement('div');
+                err.className = 'alert alert-danger';
+                err.textContent = 'Tarmoq xatosi';
+                xReportBody.appendChild(err);
+            });
+    }
+    if (xReportBtn && xReportModal) {
+        xReportBtn.addEventListener('click', function() {
+            var modal = bootstrap.Modal.getOrCreateInstance(xReportModal);
+            modal.show();
+            if (xReportDateInput && !xReportDateInput.value) {
+                var t = new Date();
+                xReportDateInput.value = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+            }
+            loadXReport();
+        });
+    }
+    if (xReportReloadBtn) xReportReloadBtn.addEventListener('click', loadXReport);
+    if (xReportDateInput) xReportDateInput.addEventListener('change', loadXReport);
+    var xReportPrintBtn = document.getElementById('posXReportPrintBtn');
+    if (xReportPrintBtn) {
+        xReportPrintBtn.addEventListener('click', function() { window.print(); });
+    }
+    var xReportZBtn = document.getElementById('posXReportZBtn');
+    if (xReportZBtn) {
+        xReportZBtn.addEventListener('click', function() {
+            if (!confirm('Smenani yopasizmi? Z-hisobot tarixga saqlanadi va keyin o\'zgartirib bo\'lmaydi.')) return;
+            var dateParam = (xReportDateInput && xReportDateInput.value) ? xReportDateInput.value : '';
+            xReportZBtn.disabled = true;
+            var csrfTokenZ = (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute('content') || '';
+            var zHeaders = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+            if (csrfTokenZ) zHeaders['X-CSRF-Token'] = csrfTokenZ;
+            fetch('/sales/pos/z-report', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: zHeaders,
+                body: JSON.stringify({date: dateParam})
+            })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    xReportZBtn.disabled = false;
+                    if (d && d.ok) {
+                        alert('Z-hisobot saqlandi: ' + (d.snapshot_id || ''));
+                        window.print();
+                    } else {
+                        alert('Xato: ' + (d && d.error ? d.error : 'noma\'lum'));
+                    }
+                })
+                .catch(function() {
+                    xReportZBtn.disabled = false;
+                    alert('Tarmoq xatosi');
+                });
+        });
+    }
 
     /* Inkasatsiya — kutilayotgan o'tkazmalar */
     if (document.getElementById('posBtnKassaniTasdiqlash')) {

@@ -31,6 +31,7 @@ from app.models.database import (
     Category,
     PosDraft,
     CashRegister,
+    CashTransfer,
     ExpenseType,
     StockMovement,
 )
@@ -43,6 +44,7 @@ def _check_order_access(order: Order, current_user: User):
         return
     if order.user_id and order.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
+from app.routes.period_close import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.audit import log_action
@@ -521,8 +523,19 @@ async def sales_confirm(
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     _check_order_access(order, current_user)
+    if is_period_closed(db, order.date):
+        return RedirectResponse(url=f"/sales/edit/{order_id}?error=period_closed", status_code=303)
     if order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE orders SET status='confirmed' WHERE id=:id AND type='sale' AND status='draft'"),
+        {"id": order_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
 
     # Qoldiq tekshiruvi va yetarli bo'lmagan mahsulotlarni yig'ish
     # Agar tanlangan omborda qoldiq 0 yoki <1 bo'lsa, avval yarim tayyor omborni tekshiramiz
@@ -691,15 +704,26 @@ async def sales_revert(
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    # Bug 1 — paid > 0 bo'lgan orderni revert qilish taqiqlanadi (refund kerak)
+    if (order.paid or 0) > 0:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=paid_block&detail=" + quote(
+                f"Bu sotuvga {order.paid:,.0f} so'm to'lov qabul qilingan. Avval refund (qaytarish) hujjati yarating, keyin tasdiqni bekor qilishingiz mumkin."
+            ),
+            status_code=303,
+        )
     status = (getattr(order, "status", None) or "").strip().lower()
     if status in ("waiting_production", "confirmed"):
         # Ombor hisobdan chiqarilmagan — faqat draft ga qaytarish
         order.status = "draft"
         # Confirmed bo'lsa — tegishli yetkazishni ham bekor qilish
+        # ('pending', 'in_progress', 'failed' — yetkazilmagan har qanday holat)
         if status == "confirmed":
             from app.models.database import Delivery as DeliveryModel
-            delivery = db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id, DeliveryModel.status.in_(["pending", "in_progress"])).first()
-            if delivery:
+            for delivery in db.query(DeliveryModel).filter(
+                DeliveryModel.order_id == order.id,
+                DeliveryModel.status.in_(["pending", "in_progress", "failed"]),
+            ).all():
                 delivery.status = "cancelled"
         db.commit()
         referer = "/sales/edit/" + str(order_id)
@@ -735,6 +759,13 @@ async def sales_revert(
             else:
                 partner.balance = (partner.balance or 0) - order.debt
     order.previous_partner_balance = None
+    # Yetkazilmagan delivery larni cancel qilish (cancelled/failed/delivered emasini)
+    from app.models.database import Delivery as DeliveryModel
+    for delivery in db.query(DeliveryModel).filter(
+        DeliveryModel.order_id == order.id,
+        DeliveryModel.status.in_(["pending", "in_progress", "failed"]),
+    ).all():
+        delivery.status = "cancelled"
     order.status = "draft"
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
@@ -767,6 +798,347 @@ async def sales_nakladnoy(
         "order": order,
         "current_user": current_user,
     })
+
+
+@router.get("/nakladnoy/excel/bulk")
+async def sales_nakladnoy_excel_bulk(
+    ids: str = "",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Bir nechta sotuv yuk xatini bitta Excel da jamlama. ids=1,2,3 formatda."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.worksheet.page import PageMargins
+    from openpyxl.worksheet.pagebreak import Break
+    from fastapi.responses import StreamingResponse
+
+    try:
+        order_ids = [int(x) for x in ids.split(",") if x.strip().isdigit()]
+    except Exception:
+        order_ids = []
+    if not order_ids:
+        raise HTTPException(status_code=400, detail="Hech qanday buyurtma tanlanmagan")
+
+    orders = (
+        db.query(Order)
+        .options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit),
+            joinedload(Order.partner),
+            joinedload(Order.warehouse),
+        )
+        .filter(Order.id.in_(order_ids), Order.type.in_(("sale", "return_sale")))
+        .order_by(Order.id)
+        .all()
+    )
+    if not orders:
+        raise HTTPException(status_code=404, detail="Buyurtmalar topilmadi")
+
+    # Order turi → hujjat sarlavhasi (Sales Doctor uslubida)
+    def _doc_label(o):
+        if o.type == "return_sale":
+            return "QAYTARISH"
+        # exchange uchun kelajakda: o.type == "exchange_in" -> "OBMEN (otgruz)", "exchange_out" -> "OBMEN (vozvrat)"
+        return "BUYURTMA"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Yuk xati (jamlama)"
+
+    # A4 portrait (knijniy) + fit to width — jadval bir sahifa kengligiga sig'adi
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0  # balandligi avtomatik (ko'p sahifa)
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.page_margins = PageMargins(left=0.4, right=0.4, top=0.5, bottom=0.5)
+    ws.print_options.horizontalCentered = True
+
+    thin = Side(border_style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+    section_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
+    bold_white = Font(bold=True, color="FFFFFF", size=11)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+
+    row = 1
+    today_str = datetime.now().strftime("%d.%m.%Y")
+    # A4 portrait da bitta sahifaga taxminan 68-72 qator sig'adi (default 11pt font, kichik margin)
+    # Har Yuk xati: 1 (sarlavha) + 3 (info) + 1 (bo'sh) + 1 (BUYURTMA) + 1 (jadval header) + N (items) + 1 (Jami) + 1 (bo'sh) + 1 (imzo) + 1 (bo'sh) = 11 + items
+    ROWS_PER_PAGE = 68
+    current_page_used = 0  # joriy sahifada ishlatilgan qatorlar
+
+    for idx, order in enumerate(orders, 1):
+        # Hujjat o'lchamini oldindan aniq hisoblash
+        items_count = len(order.items)
+        order_rows = 11 + items_count
+
+        # Agar joriy sahifaga sig'masa va birinchi hujjat emas — page break qo'yish
+        if idx > 1 and current_page_used + order_rows > ROWS_PER_PAGE:
+            ws.row_breaks.append(Break(id=row - 1))
+            current_page_used = 0
+
+        # Yuk xati sarlavhasi
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        cell = ws.cell(row=row, column=1, value=f"Yuk xati № {order.number}    sana: {order.date.strftime('%d.%m.%Y') if order.date else today_str}")
+        cell.font = Font(bold=True, size=13)
+        cell.fill = section_fill
+        cell.alignment = center
+        cell.border = border
+        row += 1
+
+        # Kimga/Manzil/Telefon | Narx turi/Ombor/Sana
+        partner_name = order.partner.name if order.partner else "Naqd mijoz"
+        partner_addr = order.partner.address if (order.partner and order.partner.address) else ""
+        partner_phone = order.partner.phone if (order.partner and order.partner.phone) else ""
+        wh_name = order.warehouse.name if order.warehouse else "-"
+        price_type_name = order.price_type.name if (hasattr(order, 'price_type') and order.price_type) else "Sotuv narxi"
+
+        ws.cell(row=row, column=1, value="Kimga:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_name)
+        ws.cell(row=row, column=5, value="Narx turi:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=price_type_name)
+        row += 1
+        ws.cell(row=row, column=1, value="Manzil:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_addr)
+        ws.cell(row=row, column=5, value="Ombor:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=wh_name)
+        row += 1
+        ws.cell(row=row, column=1, value="Telefon:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_phone)
+        ws.cell(row=row, column=5, value="Sana:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=order.date.strftime("%d.%m.%Y %H:%M") if order.date else "-")
+        row += 2
+
+        # Hujjat turi sarlavhasi (BUYURTMA / QAYTARISH / OBMEN)
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        doc_label = _doc_label(order)
+        zakaz_cell = ws.cell(row=row, column=1, value=f"{doc_label} ({order.number})")
+        zakaz_cell.font = Font(bold=True, size=11, color="C62828" if order.type == "return_sale" else "000000")
+        zakaz_cell.alignment = left
+        row += 1
+
+        # Jadval sarlavhasi (7 ustun: №, Kod, Nomi, O'lchov birligi, Soni, Narxi, Summa)
+        for col, h in enumerate(["№", "Kodi", "Nomi", "O'lchov birligi", "Soni", "Narxi", "Summa"], 1):
+            cell = ws.cell(row=row, column=col, value=h)
+            cell.font = bold_white
+            cell.fill = header_fill
+            cell.alignment = center
+            cell.border = border
+        row += 1
+
+        # Items
+        order_total = 0.0
+        order_qty_sum = 0.0
+        for i, item in enumerate(order.items, 1):
+            prod_name = item.product.name if item.product else f"#{item.product_id}"
+            prod_code = item.product.code if (item.product and item.product.code) else ""
+            unit = item.product.unit.name if (item.product and item.product.unit) else ""
+            qty = float(item.quantity or 0)
+            price = float(item.price or 0)
+            summa = float(item.total or (qty * price))
+            order_total += summa
+            order_qty_sum += qty
+
+            ws.cell(row=row, column=1, value=i).alignment = center
+            ws.cell(row=row, column=2, value=prod_code).alignment = center
+            ws.cell(row=row, column=3, value=prod_name).alignment = left
+            ws.cell(row=row, column=4, value=unit).alignment = center
+            ws.cell(row=row, column=5, value=qty).alignment = right
+            ws.cell(row=row, column=6, value=price).alignment = right
+            ws.cell(row=row, column=7, value=summa).alignment = right
+            for col in range(1, 8):
+                ws.cell(row=row, column=col).border = border
+                if col in (6, 7):
+                    ws.cell(row=row, column=col).number_format = '#,##0'
+            row += 1
+
+        # Jami
+        ws.cell(row=row, column=1, value="Jami").font = Font(bold=True)
+        ws.cell(row=row, column=1).alignment = left
+        ws.cell(row=row, column=1).border = border
+        for col in range(2, 8):
+            ws.cell(row=row, column=col).border = border
+        ws.cell(row=row, column=5, value=order_qty_sum).alignment = right
+        ws.cell(row=row, column=5).font = Font(bold=True)
+        ws.cell(row=row, column=7, value=order_total).alignment = right
+        ws.cell(row=row, column=7).font = Font(bold=True, color="2E7D32")
+        ws.cell(row=row, column=7).number_format = '#,##0" so\'m"'
+        row += 2
+
+        # Imzo joylari (har yuk xatidan keyin)
+        ws.cell(row=row, column=1, value="Topshirdi:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value="_______________________")
+        ws.cell(row=row, column=5, value="Qabul qildi:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value="_______________________")
+        row += 2  # imzo qatori + 1 ta bo'sh qator (ajratish uchun)
+
+        # Joriy sahifada ishlatilgan qator sonini yangilash
+        current_page_used += order_rows
+
+    # Ustun kengligi — 7 ustun
+    widths = [12, 12, 38, 14, 10, 14, 18]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"yuk_xati_jamlama_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/{order_id}/nakladnoy/excel")
+async def sales_nakladnoy_excel(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuv yuk xatini Excel formatda yuklab olish."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from fastapi.responses import StreamingResponse
+
+    order = (
+        db.query(Order)
+        .options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit),
+            joinedload(Order.partner),
+            joinedload(Order.warehouse),
+        )
+        .filter(Order.id == order_id, Order.type == "sale")
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Yuk xati"
+
+    thin = Side(border_style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    header_fill = PatternFill(start_color="2E7D32", end_color="2E7D32", fill_type="solid")
+    bold_white = Font(bold=True, color="FFFFFF", size=11)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+
+    # Sarlavha
+    ws.merge_cells("A1:F1")
+    ws["A1"] = "TOTLI HOLVA — Yuk xati"
+    ws["A1"].font = Font(bold=True, size=16)
+    ws["A1"].alignment = center
+
+    ws.merge_cells("A2:F2")
+    ws["A2"] = f"№ {order.number}    Sana: {order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-'}"
+    ws["A2"].font = Font(bold=True, size=11)
+    ws["A2"].alignment = center
+
+    # Mijoz va ombor
+    ws["A4"] = "Mijoz:"
+    ws["A4"].font = Font(bold=True)
+    ws.merge_cells("B4:F4")
+    ws["B4"] = order.partner.name if order.partner else "Naqd mijoz"
+
+    ws["A5"] = "Telefon:"
+    ws["A5"].font = Font(bold=True)
+    ws.merge_cells("B5:F5")
+    ws["B5"] = (order.partner.phone if order.partner and order.partner.phone else "-")
+
+    ws["A6"] = "Manzil:"
+    ws["A6"].font = Font(bold=True)
+    ws.merge_cells("B6:F6")
+    ws["B6"] = (order.partner.address if order.partner and order.partner.address else "-")
+
+    ws["A7"] = "Ombor:"
+    ws["A7"].font = Font(bold=True)
+    ws.merge_cells("B7:F7")
+    ws["B7"] = order.warehouse.name if order.warehouse else "-"
+
+    # Jadval sarlavhasi
+    headers = ["№", "Mahsulot", "Birlik", "Miqdor", "Narx (so'm)", "Summa (so'm)"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=9, column=col, value=h)
+        cell.font = bold_white
+        cell.fill = header_fill
+        cell.alignment = center
+        cell.border = border
+
+    # Items
+    row = 10
+    total = 0.0
+    for i, item in enumerate(order.items, 1):
+        prod_name = item.product.name if item.product else f"#{item.product_id}"
+        unit = item.product.unit.name if (item.product and item.product.unit) else ""
+        qty = float(item.quantity or 0)
+        price = float(item.price or 0)
+        summa = float(item.total or (qty * price))
+        total += summa
+
+        ws.cell(row=row, column=1, value=i).alignment = center
+        ws.cell(row=row, column=2, value=prod_name).alignment = left
+        ws.cell(row=row, column=3, value=unit).alignment = center
+        ws.cell(row=row, column=4, value=qty).alignment = right
+        ws.cell(row=row, column=5, value=price).alignment = right
+        ws.cell(row=row, column=6, value=summa).alignment = right
+
+        for col in range(1, 7):
+            ws.cell(row=row, column=col).border = border
+            if col in (5, 6):
+                ws.cell(row=row, column=col).number_format = '#,##0'
+        row += 1
+
+    # JAMI
+    ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=5)
+    jami_label = ws.cell(row=row, column=1, value="JAMI:")
+    jami_label.font = Font(bold=True, size=12)
+    jami_label.alignment = right
+    jami_label.border = border
+    jami_val = ws.cell(row=row, column=6, value=total)
+    jami_val.font = Font(bold=True, size=12, color="2E7D32")
+    jami_val.alignment = right
+    jami_val.number_format = '#,##0'
+    jami_val.border = border
+
+    # Imzo joylari
+    sig_row = row + 3
+    ws.cell(row=sig_row, column=1, value="Topshirdi (omborchi):").font = Font(bold=True)
+    ws.merge_cells(start_row=sig_row, start_column=2, end_row=sig_row, end_column=3)
+    ws.cell(row=sig_row, column=2, value="_______________________").alignment = left
+
+    ws.cell(row=sig_row, column=4, value="Qabul qildi:").font = Font(bold=True)
+    ws.merge_cells(start_row=sig_row, start_column=5, end_row=sig_row, end_column=6)
+    ws.cell(row=sig_row, column=5, value="_______________________").alignment = left
+
+    # Ustun kengligi
+    widths = [5, 35, 10, 12, 16, 18]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"yuk_xati_{order.number}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.post("/delete/{order_id}")
@@ -973,12 +1345,20 @@ async def sales_pos_daily_orders(
     o_type = (order_type or "sale").strip().lower()
     if o_type != "return_sale":
         o_type = "sale"
-    orders = db.query(Order).filter(
+    q = db.query(Order).filter(
         Order.type == o_type,
         Order.status == "completed",
         func.date(Order.created_at) >= d_from,
         func.date(Order.created_at) <= d_to,
-    ).order_by(Order.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
+    )
+    # Sotuvchi faqat o'z POS ombori sotuvlarini ko'radi (Do'kon 1 ↔ Do'kon 2 ajratish)
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if pos_wh:
+            q = q.filter(Order.warehouse_id == pos_wh.id)
+        else:
+            return []
+    orders = q.order_by(Order.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
     out = []
     for o in orders:
         out.append({
@@ -993,6 +1373,237 @@ async def sales_pos_daily_orders(
             "payment_type": o.payment_type or "naqd",
         })
     return out
+
+
+@router.get("/pos/x-report")
+async def sales_pos_x_report(
+    request: Request,
+    date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """X hisobot — sotuvchi smena yakuni: sotuv/qaytarish/bekor, to'lov turi, kassa balansi, inkasatsiya.
+
+    date — YYYY-MM-DD, default=today, max=today.
+    """
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"error": "Ruxsat yo'q"}, status_code=403)
+
+    target_date = date_type.today()
+    if date:
+        try:
+            parsed = dt.strptime(date[:10], "%Y-%m-%d").date()
+            if parsed > date_type.today():
+                return JSONResponse({"error": "Kelajak sanasi bo'lishi mumkin emas"}, status_code=400)
+            target_date = parsed
+        except ValueError:
+            return JSONResponse({"error": "Sana formati xato (YYYY-MM-DD)"}, status_code=400)
+
+    base_q = db.query(Order).filter(func.date(Order.created_at) == target_date)
+    pos_wh = None
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if not pos_wh:
+            return JSONResponse({"error": "Sizga POS ombor biriktirilmagan"}, status_code=400)
+        base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
+
+    completed_q = base_q.filter(Order.status == "completed")
+    cancelled_q = base_q.filter(Order.status == "cancelled")
+    orders = completed_q.all()
+    cancelled_orders = cancelled_q.all()
+
+    sales = [o for o in orders if (o.type or "sale") == "sale"]
+    returns = [o for o in orders if o.type == "return_sale"]
+    sales_total = sum(float(o.total or 0) for o in sales)
+    returns_total = sum(float(o.total or 0) for o in returns)
+    cancelled_total = sum(float(o.total or 0) for o in cancelled_orders)
+
+    by_type: dict = {}
+    for o in sales:
+        pt = (o.payment_type or "naqd").lower()
+        if pt not in by_type:
+            by_type[pt] = {"count": 0, "sum": 0.0}
+        by_type[pt]["count"] += 1
+        by_type[pt]["sum"] += float(o.total or 0)
+    payment_breakdown = [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in sorted(by_type.items(), key=lambda x: -x[1]["sum"])]
+
+    by_user: list = []
+    if role in ("admin", "manager"):
+        bu: dict = {}
+        for o in sales:
+            uid = o.user_id or 0
+            if uid not in bu:
+                bu[uid] = {"count": 0, "sum": 0.0, "returns": 0.0}
+            bu[uid]["count"] += 1
+            bu[uid]["sum"] += float(o.total or 0)
+        for o in returns:
+            uid = o.user_id or 0
+            if uid not in bu:
+                bu[uid] = {"count": 0, "sum": 0.0, "returns": 0.0}
+            bu[uid]["returns"] += float(o.total or 0)
+        if bu:
+            user_names = {u.id: (u.full_name or u.username) for u in db.query(User).filter(User.id.in_([uid for uid in bu.keys() if uid])).all()}
+            by_user = [
+                {
+                    "user_id": uid,
+                    "user": user_names.get(uid, "-") if uid else "—",
+                    "count": v["count"],
+                    "sum": v["sum"],
+                    "returns": v["returns"],
+                    "net": v["sum"] - v["returns"],
+                }
+                for uid, v in sorted(bu.items(), key=lambda x: -x[1]["sum"])
+            ]
+
+    cash_balances: list = []
+    inkasatsiya_today = {"count": 0, "sum": 0.0}
+    try:
+        from app.services.finance_service import cash_balance_formula
+        from sqlalchemy.orm import joinedload
+        user_full = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
+        user_cashes = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
+        if role == "sotuvchi" and user_cashes:
+            for c in user_cashes:
+                bal, inc, exp = cash_balance_formula(db, c.id)
+                cash_balances.append({"id": c.id, "name": c.name, "balance": float(bal or 0)})
+            cash_ids = [c.id for c in user_cashes]
+            transfers = db.query(CashTransfer).filter(
+                CashTransfer.from_cash_id.in_(cash_ids),
+                CashTransfer.status.in_(("in_transit", "completed")),
+                func.date(CashTransfer.date) == target_date,
+            ).all()
+            inkasatsiya_today = {
+                "count": len(transfers),
+                "sum": sum(float(t.amount or 0) for t in transfers),
+            }
+    except Exception:
+        pass
+
+    return JSONResponse({
+        "date": target_date.strftime("%d.%m.%Y"),
+        "date_iso": target_date.strftime("%Y-%m-%d"),
+        "user": current_user.full_name or current_user.username,
+        "warehouse": pos_wh.name if pos_wh else "Barcha",
+        "sales_count": len(sales),
+        "sales_total": sales_total,
+        "returns_count": len(returns),
+        "returns_total": returns_total,
+        "cancelled_count": len(cancelled_orders),
+        "cancelled_total": cancelled_total,
+        "net_total": sales_total - returns_total,
+        "payment_breakdown": payment_breakdown,
+        "by_user": by_user,
+        "cash_balances": cash_balances,
+        "inkasatsiya_today": inkasatsiya_today,
+    })
+
+
+@router.post("/pos/z-report")
+async def sales_pos_z_report(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Z-hisobot — smenani yopish: X-hisobot snapshot data/z_reports/ ga saqlanadi va audit log ga yoziladi."""
+    import os
+    import json as _json
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    date_str = (body.get("date") or "").strip()
+    target_date = date_type.today()
+    if date_str:
+        try:
+            parsed = dt.strptime(date_str[:10], "%Y-%m-%d").date()
+            if parsed > date_type.today():
+                return JSONResponse({"ok": False, "error": "Kelajak sanasi bo'lishi mumkin emas"}, status_code=400)
+            target_date = parsed
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Sana formati xato"}, status_code=400)
+
+    pos_wh = None
+    base_q = db.query(Order).filter(func.date(Order.created_at) == target_date)
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if not pos_wh:
+            return JSONResponse({"ok": False, "error": "Sizga POS ombor biriktirilmagan"}, status_code=400)
+        base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
+
+    completed = base_q.filter(Order.status == "completed").all()
+    cancelled = base_q.filter(Order.status == "cancelled").all()
+    sales = [o for o in completed if (o.type or "sale") == "sale"]
+    returns_o = [o for o in completed if o.type == "return_sale"]
+    sales_total = sum(float(o.total or 0) for o in sales)
+    returns_total = sum(float(o.total or 0) for o in returns_o)
+
+    by_type: dict = {}
+    for o in sales:
+        pt = (o.payment_type or "naqd").lower()
+        if pt not in by_type:
+            by_type[pt] = {"count": 0, "sum": 0.0}
+        by_type[pt]["count"] += 1
+        by_type[pt]["sum"] += float(o.total or 0)
+
+    cash_snapshot: list = []
+    try:
+        from app.services.finance_service import cash_balance_formula
+        from sqlalchemy.orm import joinedload as _jl
+        user_full = db.query(User).options(_jl(User.cash_registers_list)).filter(User.id == current_user.id).first()
+        for c in (getattr(user_full, "cash_registers_list", None) or []) if user_full else []:
+            bal, inc, exp = cash_balance_formula(db, c.id)
+            cash_snapshot.append({"id": c.id, "name": c.name, "balance": float(bal or 0), "income": float(inc or 0), "expense": float(exp or 0)})
+    except Exception:
+        pass
+
+    snapshot = {
+        "z_id": f"Z-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}",
+        "date": target_date.strftime("%Y-%m-%d"),
+        "closed_at": dt.now().isoformat(),
+        "user_id": current_user.id,
+        "user": current_user.full_name or current_user.username,
+        "role": role,
+        "warehouse_id": pos_wh.id if pos_wh else None,
+        "warehouse": pos_wh.name if pos_wh else "Barcha",
+        "sales_count": len(sales),
+        "sales_total": sales_total,
+        "returns_count": len(returns_o),
+        "returns_total": returns_total,
+        "cancelled_count": len(cancelled),
+        "cancelled_total": sum(float(o.total or 0) for o in cancelled),
+        "net_total": sales_total - returns_total,
+        "payment_breakdown": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in by_type.items()],
+        "cash_snapshot": cash_snapshot,
+        "order_numbers": [o.number for o in completed],
+    }
+
+    out_path = None
+    try:
+        out_dir = os.path.join("data", "z_reports", target_date.strftime("%Y-%m-%d"))
+        os.makedirs(out_dir, exist_ok=True)
+        out_path = os.path.join(out_dir, f"{snapshot['z_id']}.json")
+        with open(out_path, "w", encoding="utf-8") as f:
+            _json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": f"Snapshot saqlashda xato: {e}"}, status_code=500)
+
+    try:
+        log_action(
+            db, user=current_user, action="z_report",
+            entity_type="pos_shift", entity_id=0, entity_number=snapshot["z_id"],
+            details=f"Z-hisobot: {target_date}, Sotuv {sales_total:,.0f}, Qaytarish {returns_total:,.0f}, NET {sales_total - returns_total:,.0f}",
+            ip_address=request.client.host if request.client else "",
+        )
+    except Exception:
+        pass
+
+    return JSONResponse({"ok": True, "snapshot_id": snapshot["z_id"], "path": out_path})
 
 
 @router.post("/pos/draft/save")
@@ -1787,6 +2398,14 @@ async def sales_return_confirm(
     wh_id = doc.warehouse_id
     if not wh_id:
         return RedirectResponse(url="/sales/returns?error=confirm&detail=" + quote("Hujjatda ombor ko'rsatilmagan."), status_code=303)
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE orders SET status='completed' WHERE id=:id AND type='return_sale' AND status='cancelled'"),
+        {"id": return_order_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/sales/returns?error=confirm&detail=" + quote("Hujjat allaqachon tasdiqlangan."), status_code=303)
     for item in doc.items:
         create_stock_movement(
             db=db,
@@ -1801,7 +2420,7 @@ async def sales_return_confirm(
             note=f"Qaytarish qayta tasdiqlandi: {doc.number}",
             created_at=doc.date,
         )
-    doc.status = "completed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     return RedirectResponse(url="/sales/return/document/" + doc.number + "?confirmed=1", status_code=303)
 
