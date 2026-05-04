@@ -1497,9 +1497,6 @@ async def sales_pos_x_report(
                     CashRegister.department_id == wh_dept_id,
                     CashRegister.is_active == True,
                 ).all()
-            for c in shop_cashes:
-                bal, inc, exp = cash_balance_formula(db, c.id)
-                cash_balances.append({"id": c.id, "name": c.name, "balance": float(bal or 0)})
             cash_ids = [c.id for c in shop_cashes]
             if cash_ids:
                 transfers = db.query(CashTransfer).filter(
