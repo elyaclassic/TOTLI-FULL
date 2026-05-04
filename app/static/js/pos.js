@@ -793,6 +793,14 @@
                         qRow.style.fontSize = '1.05em';
                         xReportBody.appendChild(qRow);
                     }
+                    if (d.expense_non_cash && d.expense_non_cash.length) {
+                        d.expense_non_cash.forEach(function(e) {
+                            var name = (ptLabel[e.type] || e.type);
+                            var r = _xrRow(name + ' kassadan harajat (' + e.count + ' ta):', '−' + _xrFmt(e.sum));
+                            r.style.color = '#666';
+                            xReportBody.appendChild(r);
+                        });
+                    }
                 }
 
                 if (d.cash_balances && d.cash_balances.length) {

@@ -1484,6 +1484,7 @@ async def sales_pos_x_report(
     inkasatsiya_today = {"count": 0, "sum": 0.0}
     expense_to_partner = {"count": 0, "sum": 0.0}
     expense_other = {"count": 0, "sum": 0.0}
+    expense_non_cash: dict = {}
     try:
         from app.services.finance_service import cash_balance_formula
         from sqlalchemy.orm import joinedload
@@ -1510,21 +1511,31 @@ async def sales_pos_x_report(
                 }
 
                 naqd_cash_ids = [c.id for c in shop_cashes if (c.payment_type or "").strip().lower() == "naqd"]
-                if naqd_cash_ids:
+                cash_pt_lookup = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in shop_cashes}
+                if cash_ids:
                     expenses_q = db.query(Payment).filter(
-                        Payment.cash_register_id.in_(naqd_cash_ids),
+                        Payment.cash_register_id.in_(cash_ids),
                         Payment.type == "expense",
                         or_(Payment.status == "confirmed", Payment.status.is_(None)),
                         func.date(Payment.created_at) == target_date,
                     ).all()
                     for e in expenses_q:
                         amt = float(e.amount or 0)
-                        if e.partner_id:
-                            expense_to_partner["count"] += 1
-                            expense_to_partner["sum"] += amt
+                        pt = cash_pt_lookup.get(e.cash_register_id, "naqd")
+                        if pt == "perechisleniye":
+                            pt = "bank"
+                        if pt == "naqd":
+                            if e.partner_id:
+                                expense_to_partner["count"] += 1
+                                expense_to_partner["sum"] += amt
+                            else:
+                                expense_other["count"] += 1
+                                expense_other["sum"] += amt
                         else:
-                            expense_other["count"] += 1
-                            expense_other["sum"] += amt
+                            if pt not in expense_non_cash:
+                                expense_non_cash[pt] = {"count": 0, "sum": 0.0}
+                            expense_non_cash[pt]["count"] += 1
+                            expense_non_cash[pt]["sum"] += amt
     except Exception:
         pass
 
@@ -1549,6 +1560,7 @@ async def sales_pos_x_report(
         "inkasatsiya_today": inkasatsiya_today,
         "expense_to_partner": expense_to_partner,
         "expense_other": expense_other,
+        "expense_non_cash": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in sorted(expense_non_cash.items(), key=lambda x: -x[1]["sum"])],
         "qoldiq": qoldiq,
     })
 
