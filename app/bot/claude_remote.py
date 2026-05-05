@@ -383,15 +383,24 @@ def _register_handlers(dp: Dispatcher) -> None:
         except Exception as e:
             logger.error(f"inbox append (text): {e}")
 
-        try:
-            await message.bot.send_chat_action(message.chat.id, "typing")
-        except Exception:
-            pass
-
-        result, new_sid = await _run_claude(uid, text)
-        if new_sid:
-            _save_session_id(uid, new_sid)
-        await _send_long(message, result)
+        # Bot Claude CLI auto-reply o'chirilgan — faqat inbox'ga saqlash.
+        # Asosiy Claude (Code IDE da) MCP inbox orqali o'qib bu yerga
+        # javob beradi va Stop hook orqali Telegramga push qiladi.
+        # Auto-reply'ni qaytarish uchun CLAUDE_BOT_AUTOREPLY=1 env qo'ying.
+        if os.environ.get("CLAUDE_BOT_AUTOREPLY", "").strip() == "1":
+            try:
+                await message.bot.send_chat_action(message.chat.id, "typing")
+            except Exception:
+                pass
+            result, new_sid = await _run_claude(uid, text)
+            if new_sid:
+                _save_session_id(uid, new_sid)
+            await _send_long(message, result)
+        else:
+            try:
+                await message.answer("✓ Xabar qabul qilindi (kompyuterdagi Claude javob beradi).")
+            except Exception:
+                pass
 
 
 def notify_owner(text: str) -> bool:
