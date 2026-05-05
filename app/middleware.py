@@ -93,7 +93,7 @@ async def csrf_middleware_impl(request: Request, call_next):
         return response
 
     # Himoyalanmaydigan yo'llar (API login, Android/PWA)
-    if path in ("/login", "/api/login", "/api/agent/login", "/api/driver/login", "/api/app/version", "/api/app/download", "/api/pwa/config") or path.startswith("/static"):
+    if path in ("/login", "/api/login", "/api/agent/login", "/api/driver/login", "/api/app/version", "/api/app/download", "/api/pwa/config") or path.startswith("/static") or path.startswith("/api/internal/"):
         try:
             setattr(request.state, "csrf_token", request.cookies.get("csrf_token") or generate_csrf_token())
         except Exception:
@@ -167,6 +167,8 @@ async def auth_middleware_impl(request: Request, call_next):
     if path in ("/api/login", "/api/agent/login", "/api/driver/login"):
         return await call_next(request)
     if path == "/api/app/version" or path == "/api/app/download" or path == "/api/pwa/config":
+        return await call_next(request)
+    if path.startswith("/api/internal/"):
         return await call_next(request)
     if (path == "/api/agent/location" or path == "/api/driver/location") and method == "POST":
         return await call_next(request)
