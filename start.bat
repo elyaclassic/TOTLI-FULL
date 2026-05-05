@@ -197,7 +197,7 @@ exit /b 0
     echo @echo off
     echo cd /d "%WORK_DIR%"
     echo set TELEGRAM_BOT_TOKEN=%TELEGRAM_BOT_TOKEN%
-    echo %PYTHON_CMD% -m uvicorn main:app --host %BIND_HOST% --port %PORT% --reload ^> "%LOG_FILE%" 2^>^&1
+    echo %PYTHON_CMD% -m uvicorn main:app --host %BIND_HOST% --port %PORT% --workers 1 ^> "%LOG_FILE%" 2^>^&1
 )
 :: VBS orqali yashirin oynada ishga tushirish
 > "%TEMP%\totli_start_server.vbs" (
