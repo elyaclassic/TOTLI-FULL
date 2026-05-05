@@ -4,11 +4,20 @@ API — tizim endpointlari (PWA config, app versiya, APK download).
 Tier C2 1-bosqich: api_routes.py:54-82 dan ajratib olindi.
 """
 import os
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Request, Form
+from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/api", tags=["api-system"])
+
+
+def _is_local_request(request: Request) -> bool:
+    """Faqat lokal so'rovlar (localhost / 127.0.0.1 / ::1)."""
+    client = request.client
+    if not client:
+        return False
+    return client.host in ("127.0.0.1", "::1", "localhost")
 
 
 @router.get("/pwa/config")
@@ -45,3 +54,36 @@ async def app_download():
         media_type="application/vnd.android.package-archive",
         filename="totli-agent.apk",
     )
+
+
+@router.post("/internal/notify-owner")
+async def internal_notify_owner(request: Request):
+    """Localhost'dan owner ga Telegram orqali xabar yuborish.
+
+    Claude Code Stop hook tomonidan chaqiriladi - har Claude javobini Telegramga push qilish uchun.
+    Faqat localhost (127.0.0.1) qabul qilinadi - tashqi tarmoqdan kirish yo'q.
+
+    Body (JSON yoki form): {"text": "..."}
+    Qaytaradi: {"ok": true} agar yuborildi, yoki xato.
+    """
+    if not _is_local_request(request):
+        return JSONResponse({"ok": False, "error": "Faqat localhost"}, status_code=403)
+    text = ""
+    try:
+        ctype = (request.headers.get("content-type") or "").lower()
+        if "application/json" in ctype:
+            data = await request.json()
+            text = (data.get("text") or "").strip()
+        else:
+            form = await request.form()
+            text = (form.get("text") or "").strip()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Body o'qib bo'lmadi"}, status_code=400)
+    if not text:
+        return JSONResponse({"ok": False, "error": "text bo'sh"}, status_code=400)
+    try:
+        from app.bot.claude_remote import notify_owner
+        ok = notify_owner(text)
+        return {"ok": bool(ok)}
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
