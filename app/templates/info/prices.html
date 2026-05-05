@@ -41,19 +41,19 @@
 
     <!-- Filtr -->
     <div class="filter-card">
-        <form method="get" action="/info/prices" class="row g-2 align-items-end">
+        <form method="get" action="/info/prices" class="row g-2 align-items-end" id="pricesFilterForm">
             <input type="hidden" name="price_type_id" value="{{ current_price_type_id or '' }}">
             <div class="col-12 col-md-4">
                 <label class="form-label">Mahsulot nomi yoki barkod</label>
                 <div class="search-wrap">
                     <i class="bi bi-search"></i>
-                    <input type="text" name="search" class="form-control form-control-sm"
-                           value="{{ filter_search|default('', true) }}" placeholder="Qidirish...">
+                    <input type="text" name="search" id="pricesLiveSearch" class="form-control form-control-sm"
+                           value="{{ filter_search|default('', true) }}" placeholder="Yozing — avtomatik filtrlanadi" autocomplete="off">
                 </div>
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Turi</label>
-                <select name="type_filter" class="form-select form-select-sm">
+                <select name="type_filter" class="form-select form-select-sm" data-auto-submit="1">
                     <option value="">Barchasi</option>
                     <option value="tayyor" {% if filter_type == 'tayyor' %}selected{% endif %}>Tayyor</option>
                     <option value="yarim_tayyor" {% if filter_type == 'yarim_tayyor' %}selected{% endif %}>Yarim tayyor</option>
@@ -62,7 +62,7 @@
             </div>
             <div class="col-6 col-md-2">
                 <label class="form-label">Sotuv narxi</label>
-                <select name="price_status" class="form-select form-select-sm">
+                <select name="price_status" class="form-select form-select-sm" data-auto-submit="1">
                     <option value="all" {% if filter_price_status == 'all' %}selected{% endif %}>Barchasi</option>
                     <option value="set" {% if filter_price_status == 'set' %}selected{% endif %}>O'rnatilgan</option>
                     <option value="not_set" {% if filter_price_status == 'not_set' %}selected{% endif %}>O'rnatilmagan</option>
@@ -112,8 +112,9 @@
                     {% set _is_dona = _uc in ['dona', 'pc', 'pcs', 'ta', 'шт'] %}
                     {% set sale_fmt = "%.0f"|format(sale_price_val or 0) if _is_dona else "%.2f"|format(sale_price_val or 0) %}
                     {% set sale_step = "1" if _is_dona else "0.01" %}
-                    <tr>
-                        <td class="muted-cell">{{ loop.index }}</td>
+                    {% set _search_key = ((product.name or '') ~ ' ' ~ (product.barcode or ''))|lower %}
+                    <tr data-search-key="{{ _search_key }}">
+                        <td class="muted-cell row-index">{{ loop.index }}</td>
                         <td>
                             <strong>{{ product.name }}</strong>
                             {% if product.barcode %}<br><small class="muted-cell"><code>{{ product.barcode }}</code></small>{% endif %}
@@ -286,6 +287,67 @@
 
 <script>
 (function() {
+    // Live qidiruv (client-side) — yozayotganda jadval avtomatik filtrlanadi
+    document.addEventListener('DOMContentLoaded', function() {
+        var searchInput = document.getElementById('pricesLiveSearch');
+        var tbody = document.querySelector('.data-table tbody');
+        if (searchInput && tbody) {
+            var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr[data-search-key]'));
+            var emptyRow = null;
+            function ensureEmptyRow() {
+                if (emptyRow) return emptyRow;
+                var tr = document.createElement('tr');
+                tr.id = 'pricesNoMatch';
+                var td = document.createElement('td');
+                td.colSpan = 7;
+                td.className = 'text-center text-muted py-4';
+                var icon = document.createElement('i');
+                icon.className = 'bi bi-search opacity-50';
+                td.appendChild(icon);
+                td.appendChild(document.createTextNode(' Mos mahsulot topilmadi'));
+                tr.appendChild(td);
+                tr.style.display = 'none';
+                tbody.appendChild(tr);
+                emptyRow = tr;
+                return tr;
+            }
+            function syncRedirectSearch(val) {
+                document.querySelectorAll('input[name="redirect_search"]').forEach(function(el) {
+                    el.value = val;
+                });
+            }
+            function applyFilter() {
+                var raw = (searchInput.value || '').trim();
+                var q = raw.toLowerCase();
+                var visible = 0;
+                var idx = 0;
+                for (var i = 0; i < rows.length; i++) {
+                    var r = rows[i];
+                    var match = !q || (r.getAttribute('data-search-key') || '').indexOf(q) !== -1;
+                    r.style.display = match ? '' : 'none';
+                    if (match) {
+                        idx++;
+                        var indexCell = r.querySelector('.row-index');
+                        if (indexCell) indexCell.textContent = idx;
+                        visible++;
+                    }
+                }
+                ensureEmptyRow().style.display = (visible === 0 && rows.length > 0) ? '' : 'none';
+                syncRedirectSearch(raw);
+            }
+            searchInput.addEventListener('input', applyFilter);
+            // Sahifa ochilganda — boshlang'ich qiymatni inline formlarga sinxronlash
+            syncRedirectSearch((searchInput.value || '').trim());
+        }
+        // Selectlar (Turi, Sotuv narxi) — o'zgarganda formani avtomatik submit
+        var form = document.getElementById('pricesFilterForm');
+        if (form) {
+            form.querySelectorAll('select[data-auto-submit="1"]').forEach(function(sel) {
+                sel.addEventListener('change', function() { form.submit(); });
+            });
+        }
+    });
+
     // Sotuv narxi / tannarx: boshidagi 0 ni olib tashlash (075000 -> 75000), . yoki , dan oldin 0 qo'shish (.56 -> 0.56)
     function normalizePriceInput(el) {
         if (!el || el.type !== 'number' && el.type !== 'text') return;

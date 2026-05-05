@@ -621,6 +621,43 @@ class _OrdersScreenState extends State<OrdersScreen> {
                   ),
                 ]),
               ],
+              // Qaytarish va almashtirish — faqat tasdiqlangan/bajarilgan buyurtma uchun
+              if (status == 'confirmed' || status == 'completed') ...[
+                const SizedBox(height: 20),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showReturnDialog(o);
+                      },
+                      icon: const Icon(Icons.undo, size: 18),
+                      label: const Text('Qaytarish'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.orange[700],
+                        side: BorderSide(color: Colors.orange[700]!),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _showExchangeDialog(o);
+                      },
+                      icon: const Icon(Icons.swap_horiz, size: 18),
+                      label: const Text('Almashtirish'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.blue[700],
+                        side: BorderSide(color: Colors.blue[700]!),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
+                  ),
+                ]),
+              ],
             ],
           ),
         ),
@@ -628,11 +665,122 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  Future<void> _showReturnDialog(Map<String, dynamic> o) async {
+    final items = List<Map<String, dynamic>>.from(o['items'] ?? []);
+    if (items.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Buyurtmada mahsulot yo\'q')));
+      return;
+    }
+    final selected = <int, double>{};  // product_id -> qty
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(builder: (ctx, setSt) {
+        return Container(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                const Icon(Icons.undo, color: Colors.orange),
+                const SizedBox(width: 8),
+                Text('Qaytarish: ${o['number']}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ]),
+            ),
+            const Divider(height: 1),
+            Flexible(child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: items.length,
+              itemBuilder: (_, idx) {
+                final item = items[idx];
+                final pid = item['product_id'] as int? ?? 0;
+                final maxQty = (item['quantity'] ?? item['qty'] ?? 0).toDouble();
+                final cur = selected[pid] ?? 0;
+                return ListTile(
+                  title: Text(item['name'] ?? '#$pid'),
+                  subtitle: Text('Sotilgan: ${maxQty.toStringAsFixed(0)} dona'),
+                  trailing: SizedBox(
+                    width: 110,
+                    child: TextFormField(
+                      initialValue: cur > 0 ? cur.toStringAsFixed(0) : '',
+                      keyboardType: TextInputType.number,
+                      decoration: InputDecoration(
+                        hintText: 'Qaytarish',
+                        isDense: true,
+                        border: const OutlineInputBorder(),
+                        suffixText: 'dona',
+                      ),
+                      onChanged: (v) {
+                        final n = double.tryParse(v) ?? 0;
+                        if (n <= 0) {
+                          selected.remove(pid);
+                        } else if (n > maxQty) {
+                          selected[pid] = maxQty;
+                        } else {
+                          selected[pid] = n;
+                        }
+                      },
+                    ),
+                  ),
+                );
+              },
+            )),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(children: [
+                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Bekor'))),
+                const SizedBox(width: 12),
+                Expanded(child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Tasdiqlash', style: TextStyle(color: Colors.white)),
+                )),
+              ]),
+            ),
+          ]),
+        );
+      }),
+    );
+    if (result != true || selected.isEmpty) return;
+
+    final token = await _session.getToken();
+    if (token == null) return;
+    final returnItems = selected.entries.map((e) => {'product_id': e.key, 'qty': e.value}).toList();
+    final res = await ApiService.returnOrder(token, o['id'] as int, returnItems);
+    if (!mounted) return;
+    if (res['success'] == true) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Qaytarish yaratildi: ${res['order_number']}'),
+        backgroundColor: Colors.green,
+      ));
+      _loadOrders();
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(res['error']?.toString() ?? 'Xato'),
+        backgroundColor: Colors.red,
+      ));
+    }
+  }
+
+  Future<void> _showExchangeDialog(Map<String, dynamic> o) async {
+    // Almashtirish — sodda versiya: Almashtirishni 2 qadamda qiladi
+    // 1. Avval qaytariladigan mahsulotlar tanlanadi
+    // 2. Keyin yangi mahsulotlar tanlash uchun create order page ochiladi
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Almashtirish: avval qaytariladigan mahsulotlarni tanlang, keyin yangi buyurtma yarating. Backend bog\'lashni qo\'lda qiling.'),
+      duration: Duration(seconds: 5),
+    ));
+    // MVP uchun: avval Qaytarish, keyin alohida Yangi buyurtma
+    await _showReturnDialog(o);
+  }
+
   Future<void> _editOrder(Map<String, dynamic> o) async {
     final token = await _session.getToken();
     if (token == null) return;
 
-    final productsResult = await ApiService.getProducts(token);
+    // Bug 4 fix — partner narx turi bilan mahsulotlarni yuklash
+    final partnerId = o['partner_id'] as int?;
+    final productsResult = await ApiService.getProducts(token, partnerId: partnerId);
     final partnersResult = await ApiService.getPartners(token);
     if (!mounted) return;
 
@@ -739,13 +887,17 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
   String _paymentType = 'naqd';
   final Map<int, double> _cart = {};
   bool _isSending = false;
+  bool _isReloadingPrices = false;
   String _searchQuery = '';
+  // Bug 4 — partner narx turi bilan mahsulotlar (default widget.products)
+  late List<Map<String, dynamic>> _products;
 
   bool get _isEdit => widget.editOrder != null;
 
   @override
   void initState() {
     super.initState();
+    _products = List<Map<String, dynamic>>.from(widget.products);
     if (_isEdit) {
       final o = widget.editOrder!;
       _selectedPartnerId = o['partner_id'] as int?;
@@ -760,6 +912,24 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
     }
   }
 
+  /// Bug 4 fix — partner tanlanganda mahsulot narxlarini partner price_type bo'yicha qayta yuklash
+  Future<void> _reloadPricesForPartner(int? partnerId) async {
+    if (partnerId == null) {
+      setState(() => _products = List<Map<String, dynamic>>.from(widget.products));
+      return;
+    }
+    setState(() => _isReloadingPrices = true);
+    final result = await ApiService.getProducts(widget.token, partnerId: partnerId);
+    if (!mounted) return;
+    setState(() {
+      _isReloadingPrices = false;
+      if (result['success'] == true) {
+        _products = List<Map<String, dynamic>>.from(result['products'] ?? widget.products);
+      }
+      // Xato bo'lsa default narxlar qoladi
+    });
+  }
+
   String _formatMoney(double v) {
     final s = v.toStringAsFixed(0);
     final buf = StringBuffer();
@@ -771,15 +941,15 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
   }
 
   List<Map<String, dynamic>> get _filteredProducts {
-    if (_searchQuery.isEmpty) return widget.products;
+    if (_searchQuery.isEmpty) return _products;
     final q = _searchQuery.toLowerCase();
-    return widget.products.where((p) => (p['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+    return _products.where((p) => (p['name'] ?? '').toString().toLowerCase().contains(q)).toList();
   }
 
   double get _total {
     double t = 0;
     _cart.forEach((pid, qty) {
-      final p = widget.products.firstWhere((x) => x['id'] == pid, orElse: () => {});
+      final p = _products.firstWhere((x) => x['id'] == pid, orElse: () => {});
       t += (p['price'] ?? 0).toDouble() * qty;
     });
     return t;
@@ -830,7 +1000,7 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
     setState(() => _isSending = true);
 
     final items = _cart.entries.map((e) {
-      final p = widget.products.firstWhere((x) => x['id'] == e.key, orElse: () => {});
+      final p = _products.firstWhere((x) => x['id'] == e.key, orElse: () => {});
       return {
         'product_id': e.key,
         'qty': e.value,
@@ -928,7 +1098,10 @@ class _CreateOrderPageState extends State<_CreateOrderPage> {
                     value: p['id'] as int,
                     child: Text(p['name'] ?? '', overflow: TextOverflow.ellipsis),
                   )).toList(),
-                  onChanged: (v) => setState(() => _selectedPartnerId = v),
+                  onChanged: (v) {
+                    setState(() => _selectedPartnerId = v);
+                    _reloadPricesForPartner(v);
+                  },
                 ),
                 const SizedBox(height: 8),
                 TextField(

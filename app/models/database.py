@@ -839,9 +839,10 @@ class Partner(Base):
     notes = Column(Text, nullable=True)  # Izoh
     photo = Column(String(255), nullable=True)  # Rasm fayli nomi
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True, index=True)  # Qaysi agent qo'shgan
+    price_type_id = Column(Integer, ForeignKey("price_types.id"), nullable=True)  # NULL = default Agent
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.now)
-    
+
     orders = relationship("Order", back_populates="partner")
     payments = relationship("Payment", back_populates="partner")
 
@@ -2094,6 +2095,26 @@ class AuditLog(Base):
     ip_address = Column(String(50), nullable=True)
 
     user = relationship("User", foreign_keys=[user_id])
+
+
+# ==========================================
+# OY YOPISH (PERIOD CLOSE)
+# ==========================================
+
+class ClosedPeriod(Base):
+    """Yopilgan oylar — yopilgan davrda hujjat yaratish/tahrirlash taqiqlanadi"""
+    __tablename__ = "closed_periods"
+    id = Column(Integer, primary_key=True, index=True)
+    period = Column(String(7), unique=True, index=True)  # "2026-04" formatda
+    closed_at = Column(DateTime, default=datetime.now)
+    closed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    note = Column(Text, nullable=True)
+    # Snapshot ma'lumotlari
+    snapshot_stock = Column(Text, nullable=True)  # JSON: {warehouse_id: {product_id: qty}}
+    snapshot_cash = Column(Text, nullable=True)  # JSON: {cash_register_id: balance}
+    snapshot_partner_debt = Column(Text, nullable=True)  # JSON: {partner_id: balance}
+
+    user = relationship("User", foreign_keys=[closed_by])
 
 
 if __name__ == "__main__":

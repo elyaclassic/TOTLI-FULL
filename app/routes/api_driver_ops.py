@@ -15,6 +15,7 @@ from app.models.database import (
     get_db, Driver, Delivery, Order, Partner, CashRegister, Payment, DriverLocation,
 )
 from app.utils.auth import get_user_from_token
+from app.services.stock_service import create_stock_movement
 from app.logging_config import get_logger
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
@@ -68,6 +69,7 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 for oi in order.items:
                     prod = oi.product
                     items.append({
+                        "product_id": oi.product_id,  # Bug fix: ishonchli ID — nom o'rniga
                         "name": prod.name if prod else f"#{oi.product_id}",
                         "quantity": float(oi.quantity or 0),
                         "price": float(oi.price or 0),
@@ -143,23 +145,80 @@ async def driver_delivery_status(
             delivery.notes = (delivery.notes or "") + "\n" + notes if delivery.notes else notes
 
         # Haydovchi o'zgartirgan itemlarni yangilash
+        # Bug fix: avval product_id orqali topish (ishonchli), keyin name orqali fallback
         if items and delivery.order_id:
             try:
                 modified_items = json.loads(items)
                 order = db.query(Order).filter(Order.id == delivery.order_id).first()
                 if order:
                     for mi in modified_items:
-                        item_name = mi.get("name", "")
                         new_qty = float(mi.get("quantity", 0))
-                        new_total = float(mi.get("total", 0))
-                        for oi in order.items:
-                            if oi.product and oi.product.name == item_name:
-                                oi.quantity = new_qty
-                                oi.total = new_total
-                                break
-                    order.total = sum(oi.total for oi in order.items)
+                        # Total: yuborilgan bo'lsa shu, aks holda qty * price
+                        if mi.get("total") is not None:
+                            new_total = float(mi.get("total") or 0)
+                        else:
+                            new_total = new_qty * float(mi.get("price") or 0)
+                        pid = mi.get("product_id")
+                        item_name = (mi.get("name") or "").strip()
+                        target_oi = None
+                        # 1) product_id orqali (ishonchli)
+                        if pid:
+                            try:
+                                pid = int(pid)
+                                target_oi = next((oi for oi in order.items if oi.product_id == pid), None)
+                            except (ValueError, TypeError):
+                                pass
+                        # 2) name orqali fallback
+                        if not target_oi and item_name:
+                            target_oi = next((oi for oi in order.items if oi.product and (oi.product.name or "").strip() == item_name), None)
+                        if target_oi:
+                            old_qty = float(target_oi.quantity or 0)
+                            diff = old_qty - new_qty
+                            target_oi.quantity = new_qty
+                            target_oi.total = new_total
+                            if diff > 0.001 and order.status == "confirmed":
+                                wh_id = target_oi.warehouse_id or order.warehouse_id
+                                if wh_id and target_oi.product_id:
+                                    create_stock_movement(
+                                        db=db,
+                                        warehouse_id=wh_id,
+                                        product_id=target_oi.product_id,
+                                        quantity_change=+diff,
+                                        operation_type="delivery_partial",
+                                        document_type="Sale",
+                                        document_id=order.id,
+                                        document_number=order.number,
+                                        user_id=driver.user_id if hasattr(driver, 'user_id') else None,
+                                        note=f"Yetkazilmagan qoldiq qaytarish: {target_oi.product.name if target_oi.product else ''} ({diff:.0f} dona)",
+                                        created_at=datetime.now(),
+                                    )
+                    order.total = sum(float(oi.total or 0) for oi in order.items)
+                    order.subtotal = order.total
+                    order.debt = max(0.0, order.total - float(order.paid or 0))
             except Exception as e:
                 logger.warning(f"Items update xatosi: {e}")
+
+        if new_status == "failed" and delivery.order_id:
+            order = db.query(Order).filter(Order.id == delivery.order_id).first()
+            if order and order.status == "confirmed" and not (order.paid or 0) > 0:
+                for it in order.items:
+                    wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+                    if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
+                        continue
+                    create_stock_movement(
+                        db=db,
+                        warehouse_id=wh_id,
+                        product_id=it.product_id,
+                        quantity_change=+float(it.quantity or 0),
+                        operation_type="delivery_failed",
+                        document_type="Sale",
+                        document_id=order.id,
+                        document_number=order.number,
+                        user_id=driver.user_id if hasattr(driver, 'user_id') else None,
+                        note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
+                        created_at=datetime.now(),
+                    )
+                order.status = "cancelled"
 
         if new_status == "delivered":
             delivery.delivered_at = datetime.now()

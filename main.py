@@ -22,7 +22,9 @@ from app.utils.db_schema import (
     ensure_audit_cooldowns_table,
     ensure_product_is_for_agent_column,
     ensure_sales_plans_table,
+    ensure_closed_periods_table,
     ensure_orders_pending_driver_id_column,
+    ensure_partners_price_type_id_column,
 )
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
@@ -58,6 +60,7 @@ from app.routes import delivery_routes
 from app.routes import admin as admin_routes
 from app.routes import admin_sales_plans as admin_sales_plans_routes
 from app.routes import audit_routes
+from app.routes import period_close as period_close_routes
 
 app = FastAPI(title="TOTLI HOLVA", description="Biznes boshqaruv tizimi", version="1.0")
 
@@ -114,6 +117,7 @@ app.include_router(delivery_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(admin_sales_plans_routes.router)
 app.include_router(audit_routes.router)
+app.include_router(period_close_routes.router)
 
 
 # ==========================================
@@ -273,6 +277,7 @@ async def startup():
             ensure_product_is_for_agent_column(db)
             ensure_sales_plans_table(db)
             ensure_orders_pending_driver_id_column(db)
+            ensure_partners_price_type_id_column(db)
         finally:
             db.close()
     except Exception as e:
@@ -292,6 +297,11 @@ async def startup():
         await start_bot()
     except Exception as e:
         print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
+    try:
+        from app.bot.claude_remote import start_claude_bot
+        await start_claude_bot()
+    except Exception as e:
+        print("[Startup] Claude remote bot ishga tushmadi:", e)
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)

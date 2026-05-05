@@ -1881,8 +1881,15 @@ async def production_group_doc_confirm(
     doc = db.query(ProductionGroupDoc).filter(ProductionGroupDoc.id == doc_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    doc.status = "confirmed"
-    doc.confirmed_at = datetime.now()
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE production_group_docs SET status='confirmed', confirmed_at=:now "
+              "WHERE id=:id AND status != 'confirmed'"),
+        {"id": doc_id, "now": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/info/production-group-doc/{doc_id}?already=1", status_code=303)
     db.commit()
     return RedirectResponse(url=f"/info/production-group-doc/{doc_id}?confirmed=1", status_code=303)
 

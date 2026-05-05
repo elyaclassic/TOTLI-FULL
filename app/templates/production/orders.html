@@ -298,7 +298,7 @@
                         <td class="text-end">
                             {% set unit_name = (prod.recipe.product.unit.name if prod.recipe and prod.recipe.product and prod.recipe.product.unit else 'kg') %}
                             {% set _kg_per_unit = prod._kg_per_unit if prod._kg_per_unit else 1.0 %}
-                            {% set qty_kg = prod.quantity * _kg_per_unit %}
+                            {% set qty_kg = prod._actual_kg if prod._actual_kg else (prod.quantity * _kg_per_unit) %}
                             {% if (unit_name or '')|lower == 'kg' %}{{ "%.2f"|format(prod.quantity) }} kg{% else %}{{ "%.2f"|format(prod.quantity) }} {{ unit_name }}<br><small class="text-muted">({{ "%.2f"|format(qty_kg) }} kg)</small>{% endif %}
                         </td>
                         <td class="text-end num-cell">{% set _tkg = prod.output_kg|default(qty_kg) %}{% if _tkg %}{{ "%.2f"|format(_tkg) }}{% else %}-{% endif %}</td>

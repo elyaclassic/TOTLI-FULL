@@ -59,7 +59,11 @@
         </h5>
         <div class="d-flex gap-2 flex-wrap">
             <a href="/sales/pos" class="top-btn btn btn-outline-primary"><i class="bi bi-cart-check"></i> Sotuv oynasi</a>
+            {% if current_user and current_user.role == 'sotuvchi' %}
             <a href="/sales/pos" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            {% else %}
+            <a href="javascript:void(0)" onclick="if(document.referrer&&document.referrer.indexOf(location.host)!==-1){history.back();}else{location.href='/sales/list';}return false;" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            {% endif %}
         </div>
     </div>
 
@@ -90,7 +94,7 @@
                         </form>
                         {% endif %}
                         {% elif (order.status or '')|lower == 'completed' %}
-                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> Nakladnoy</a>
+                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> YUK XATI</a>
                         {% if current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
                             <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>

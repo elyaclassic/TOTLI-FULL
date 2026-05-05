@@ -12,6 +12,7 @@ import 'kassa_screen.dart';
 import 'deliveries_screen.dart';
 import 'map_screen.dart';
 import 'driver_map_screen.dart';
+import 'pin_setup_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -197,6 +198,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
           IconButton(icon: const Icon(Icons.my_location, size: 20), onPressed: _sendLocationNow, tooltip: 'GPS yuborish'),
+          IconButton(
+            icon: const Icon(Icons.lock_outline, size: 20),
+            tooltip: 'PIN o\'zgartirish',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const PinSetupScreen(firstTime: false)),
+              );
+            },
+          ),
           IconButton(icon: const Icon(Icons.logout, size: 20), onPressed: _logout, tooltip: 'Chiqish'),
         ],
       ),

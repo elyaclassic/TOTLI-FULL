@@ -12,7 +12,11 @@
         <div class="card" style="border-radius:16px;">
             <div class="card-header d-flex align-items-center justify-content-between">
                 <span class="fw-bold"><i class="bi bi-cart-plus text-primary"></i> Yangi sotuv</span>
-                <a href="/sales" class="btn btn-outline-secondary top-btn"><i class="bi bi-arrow-left"></i> Orqaga</a>
+                {% if current_user and current_user.role == 'sotuvchi' %}
+                <a href="/sales/pos" class="btn btn-outline-secondary top-btn"><i class="bi bi-arrow-left"></i> Orqaga</a>
+                {% else %}
+                <a href="javascript:void(0)" onclick="if(document.referrer&&document.referrer.indexOf(location.host)!==-1){history.back();}else{location.href='/sales';}return false;" class="btn btn-outline-secondary top-btn"><i class="bi bi-arrow-left"></i> Orqaga</a>
+                {% endif %}
             </div>
             <div class="card-body">
                 <div class="row g-3 mb-2">
@@ -69,15 +73,20 @@
             <div class="card-body">
                 <div class="mb-3">
                     <label class="form-label">Ombor *</label>
-                    <select class="form-select" id="sales_warehouse_select" style="max-width: 320px;">
-                        <option value="">-- Tanlang --</option>
-                        {% if show_all_warehouses and warehouses %}
-                        <option value="all">Barcha omborlar</option>
-                        {% endif %}
-                        {% for wh in warehouses %}
-                        <option value="{{ wh.id }}">{{ wh.name }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="d-flex align-items-center gap-2">
+                        <select class="form-select" id="sales_warehouse_select" style="max-width: 320px;">
+                            <option value="">-- Tanlang --</option>
+                            {% if show_all_warehouses and warehouses %}
+                            <option value="all">Barcha omborlar</option>
+                            {% endif %}
+                            {% for wh in warehouses %}
+                            <option value="{{ wh.id }}">{{ wh.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <a href="/warehouse/transfers/new" id="btnTransfer" class="btn btn-outline-primary btn-sm text-nowrap" style="display:none;" title="Omborlar o'rtasida o'tkazish">
+                            <i class="bi bi-arrow-left-right"></i> O'tkazish
+                        </a>
+                    </div>
                     <div id="sales_order_warehouse_wrap" class="mt-2" style="display: none;">
                         <label class="form-label small">Sotuv ombori *</label>
                         <select class="form-select" id="sales_order_warehouse_select" style="max-width: 320px;">
@@ -345,8 +354,16 @@
         }
         if (noProductsMsg) noProductsMsg.style.display = (cards.length === 0) ? 'block' : 'none';
     }
+    var btnTransfer = document.getElementById('btnTransfer');
     if (whSelect) {
-        whSelect.addEventListener('change', filterProductsByWarehouse);
+        whSelect.addEventListener('change', function() {
+            filterProductsByWarehouse();
+            if (btnTransfer) {
+                var wid = whSelect.value;
+                btnTransfer.style.display = (wid && wid !== 'all') ? 'inline-flex' : 'none';
+                btnTransfer.href = '/warehouse/transfers/new?from_warehouse_id=' + wid;
+            }
+        });
         filterProductsByWarehouse();
     }
 

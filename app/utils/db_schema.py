@@ -123,6 +123,19 @@ def ensure_orders_pending_driver_id_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_partners_price_type_id_column(db: Session) -> None:
+    """partners.price_type_id — mijozga biriktirilgan narx turi (NULL = default Agent)."""
+    try:
+        db.execute(text("ALTER TABLE partners ADD COLUMN price_type_id INTEGER REFERENCES price_types(id)"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
 def ensure_sales_plans_table(db: Session) -> None:
     """sales_plans jadvali — agent oylik savdo rejasi (global, har agent alohida shu summaga qarshi)."""
     try:
@@ -137,6 +150,29 @@ def ensure_sales_plans_table(db: Session) -> None:
             )
         """))
         db.execute(text("CREATE INDEX IF NOT EXISTS idx_sales_plans_period ON sales_plans(period)"))
+        db.commit()
+    except Exception:
+        db.rollback()
+
+
+def ensure_closed_periods_table(db: Session) -> None:
+    """closed_periods jadvali — oy yopish (davr boshqaruvi)."""
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS closed_periods (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                year INTEGER NOT NULL,
+                month INTEGER NOT NULL,
+                closed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                closed_by_id INTEGER NOT NULL REFERENCES users(id),
+                snapshot TEXT,
+                reopen_reason TEXT,
+                reopened_at DATETIME,
+                reopened_by_id INTEGER REFERENCES users(id),
+                is_closed BOOLEAN DEFAULT 1,
+                UNIQUE(year, month)
+            )
+        """))
         db.commit()
     except Exception:
         db.rollback()

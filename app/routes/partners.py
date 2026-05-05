@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 import openpyxl
 
 from app.core import templates
-from app.models.database import get_db, User, Partner, Order, Purchase, Agent
+from app.models.database import get_db, User, Partner, Order, Purchase, Agent, PriceType
 from app.deps import require_auth, require_admin
 
 router = APIRouter(prefix="/partners", tags=["partners"])
@@ -44,6 +44,7 @@ async def partners_list(
     except Exception:
         yandex_apikey = ""
     agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
+    price_types = db.query(PriceType).filter(PriceType.is_active == True).order_by(PriceType.id).all()
 
     route_ids, route_generated_at, route_export_total = _load_route_partner_ids()
     not_in_route_count = sum(1 for p in partners if p.id not in route_ids) if route_ids else 0
@@ -52,6 +53,7 @@ async def partners_list(
         "request": request,
         "partners": partners,
         "agents": agents,
+        "price_types": price_types,
         "current_type": type,
         "current_user": current_user,
         "page_title": "Kontragentlar",
@@ -126,6 +128,7 @@ async def partner_detail_json(
         "region": p.region or "",
         "credit_limit": float(p.credit_limit or 0),
         "discount_percent": float(p.discount_percent or 0),
+        "price_type_id": p.price_type_id,
         "agent_id": p.agent_id,
         "latitude": p.latitude,
         "longitude": p.longitude,
@@ -188,6 +191,11 @@ async def partner_edit(
     partner.address = address
     partner.credit_limit = credit_limit
     partner.discount_percent = discount_percent
+    price_type_id_raw = form.get("price_type_id", "").strip()
+    if price_type_id_raw and price_type_id_raw.isdigit():
+        partner.price_type_id = int(price_type_id_raw)
+    else:
+        partner.price_type_id = None
     try:
         partner.agent_id = int(agent_id_raw) if agent_id_raw and agent_id_raw.isdigit() else None
     except (ValueError, TypeError):

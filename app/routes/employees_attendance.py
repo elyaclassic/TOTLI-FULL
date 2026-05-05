@@ -328,17 +328,26 @@ async def attendance_form_confirm(
         return RedirectResponse(url="/employees/attendance/form?error=Noto'g'ri sana", status_code=303)
     existing = db.query(AttendanceDoc).filter(AttendanceDoc.date == doc_date).first()
     if existing:
-        if existing.confirmed_at:
+        # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+        from sqlalchemy import text as _text
+        claim = db.execute(
+            _text("UPDATE attendance_docs SET confirmed_at=:now, user_id=:uid WHERE id=:id AND confirmed_at IS NULL"),
+            {"id": existing.id, "now": datetime.now(), "uid": current_user.id}
+        )
+        if claim.rowcount == 0:
             return RedirectResponse(url="/employees/attendance?already=1", status_code=303)
-        existing.confirmed_at = datetime.now()
-        existing.user_id = current_user.id
         db.commit()
         return RedirectResponse(url="/employees/attendance?confirmed=1", status_code=303)
     count = db.query(AttendanceDoc).filter(AttendanceDoc.date >= doc_date.replace(day=1)).count()
     number = f"TBL-{doc_date.strftime('%Y%m%d')}-{count + 1:04d}"
     doc = AttendanceDoc(number=number, date=doc_date, user_id=current_user.id, confirmed_at=datetime.now())
     db.add(doc)
-    db.flush()
+    try:
+        db.flush()
+    except Exception:
+        # Race condition: boshqa request shu sanaga AttendanceDoc yaratdi (UNIQUE constraint)
+        db.rollback()
+        return RedirectResponse(url="/employees/attendance?already=1", status_code=303)
     db.query(Attendance).filter(Attendance.date == doc_date).update({"doc_id": doc.id})
     db.commit()
     return RedirectResponse(url="/employees/attendance?confirmed=1", status_code=303)

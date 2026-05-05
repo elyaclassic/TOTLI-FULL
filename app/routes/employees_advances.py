@@ -358,7 +358,14 @@ async def employee_advance_confirm(
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
         return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
-    adv.confirmed_at = datetime.now()
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE employee_advances SET confirmed_at=:now WHERE id=:id AND confirmed_at IS NULL"),
+        {"id": advance_id, "now": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/employees/advances?already=1", status_code=303)
     db.commit()
     return RedirectResponse(url="/employees/advances?confirmed=1", status_code=303)
 

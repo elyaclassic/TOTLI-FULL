@@ -2,6 +2,7 @@
 Agentlar — ro'yxat, qo'shish, tafsilot.
 """
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
@@ -97,12 +98,25 @@ async def agent_app(request: Request):
 async def agent_detail(
     request: Request,
     agent_id: int,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent topilmadi")
+
+    from datetime import datetime, timedelta
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        d_from = datetime.strptime(date_from, "%Y-%m-%d") if date_from else today
+    except (ValueError, TypeError):
+        d_from = today
+    try:
+        d_to = (datetime.strptime(date_to, "%Y-%m-%d") if date_to else today).replace(hour=23, minute=59, second=59)
+    except (ValueError, TypeError):
+        d_to = today.replace(hour=23, minute=59, second=59)
     locations = (
         db.query(AgentLocation)
         .filter(AgentLocation.agent_id == agent_id)
@@ -120,9 +134,8 @@ async def agent_detail(
     )
     orders = (
         db.query(Order)
-        .filter(Order.agent_id == agent_id)
+        .filter(Order.agent_id == agent_id, Order.date >= d_from, Order.date <= d_to)
         .order_by(Order.id.desc())
-        .limit(50)
         .all()
     )
     calls = (
@@ -139,6 +152,22 @@ async def agent_detail(
         .limit(50)
         .all()
     )
+    # Tasdiqlash modali uchun haydovchilar (faol)
+    from app.models.database import Driver, Delivery
+    drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
+
+    # Har order uchun haydovchi nomini olish (Delivery.driver_id orqali)
+    order_drivers = {}
+    if orders:
+        order_ids = [o.id for o in orders]
+        deliveries = db.query(Delivery).filter(Delivery.order_id.in_(order_ids)).all()
+        driver_map = {d.id: d.full_name for d in db.query(Driver).filter(Driver.id.in_([dl.driver_id for dl in deliveries if dl.driver_id])).all()}
+        for dl in deliveries:
+            if dl.driver_id and dl.driver_id in driver_map:
+                # Faqat birinchi (oxirgi yaratilgan) delivery — ko'p delivery bo'lsa eng yangisi
+                if dl.order_id not in order_drivers:
+                    order_drivers[dl.order_id] = driver_map[dl.driver_id]
+
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
         "agent": agent,
@@ -147,6 +176,10 @@ async def agent_detail(
         "orders": orders,
         "calls": calls,
         "sms_list": sms_list,
+        "drivers": drivers,
+        "order_drivers": order_drivers,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
+        "date_from": d_from.strftime("%Y-%m-%d"),
+        "date_to": d_to.strftime("%Y-%m-%d"),
     })

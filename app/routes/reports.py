@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
-from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer
+from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category
 from app.deps import get_current_user, require_auth, require_admin
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
@@ -31,11 +31,11 @@ def get_allowed_report_types(user: User) -> list:
     """Foydalanuvchiga ruxsat berilgan hisobot turlarini qaytaradi."""
     if not user:
         return []
-    # Admin uchun barcha hisobotlar
-    if user.role == "admin":
+    # Admin va manager uchun barcha hisobotlar
+    if user.role in ("admin", "manager", "menejer"):
         return ["sales", "stock", "debts", "production", "employees", "profit", "partner_reconciliation"]
     # allowed_sections bo'sh yoki None bo'lsa, hech narsa ko'rsatilmaydi
-    if not user.allowed_sections:
+    if not getattr(user, "allowed_sections", None):
         return []
     try:
         sections = json.loads(user.allowed_sections) if isinstance(user.allowed_sections, str) else user.allowed_sections
@@ -93,20 +93,34 @@ async def report_sales(
     request: Request,
     start_date: str = None,
     end_date: str = None,
+    warehouse_id: Optional[str] = None,
+    partner_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+        partner_id = int(partner_id) if partner_id and str(partner_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id, partner_id = None, None
     if not start_date:
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    orders = db.query(Order).filter(
+    q = db.query(Order).filter(
         Order.type == "sale",
         Order.date >= start_date,
         Order.date <= end_date + " 23:59:59",
-    ).all()
+    )
+    if warehouse_id:
+        q = q.filter(Order.warehouse_id == warehouse_id)
+    if partner_id:
+        q = q.filter(Order.partner_id == partner_id)
+    orders = q.all()
+    warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
+    partners = db.query(Partner).filter(Partner.type.in_(["customer", "both"])).order_by(Partner.name).all()
     total = sum(o.total or 0 for o in orders)
     return templates.TemplateResponse("reports/sales.html", {
         "request": request,
@@ -114,6 +128,10 @@ async def report_sales(
         "total": total,
         "start_date": start_date,
         "end_date": end_date,
+        "warehouse_id": warehouse_id,
+        "partner_id": partner_id,
+        "warehouses": warehouses,
+        "partners": partners,
         "page_title": "Savdo hisoboti",
         "current_user": current_user,
     })
@@ -124,21 +142,33 @@ async def report_sales_export(
     request: Request,
     start_date: str = None,
     end_date: str = None,
+    warehouse_id: Optional[str] = None,
+    partner_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+        partner_id = int(partner_id) if partner_id and str(partner_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id, partner_id = None, None
     if not start_date:
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    orders = db.query(Order).filter(
+    q = db.query(Order).filter(
         Order.type == "sale",
         Order.date >= start_date,
         Order.date <= end_date + " 23:59:59",
-    ).order_by(Order.date.desc()).all()
+    )
+    if warehouse_id:
+        q = q.filter(Order.warehouse_id == warehouse_id)
+    if partner_id:
+        q = q.filter(Order.partner_id == partner_id)
+    orders = q.order_by(Order.date.desc()).all()
     wb = Workbook()
     ws = wb.active
     ws.title = "Savdo"
@@ -1959,7 +1989,7 @@ def _partner_product_analytics(db: Session, partner_id: int, dt_from: datetime, 
 @router.get("/partner-reconciliation/export")
 async def report_partner_reconciliation_export(
     request: Request,
-    partner_id: int = None,
+    partner_id: Optional[str] = None,
     date_from: str = None,
     date_to: str = None,
     db: Session = Depends(get_db),
@@ -1969,6 +1999,10 @@ async def report_partner_reconciliation_export(
     _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/reports", status_code=303)
+    try:
+        partner_id = int(partner_id) if partner_id and str(partner_id).strip() else None
+    except (ValueError, TypeError):
+        partner_id = None
     if not partner_id:
         return RedirectResponse(url="/reports/partner-reconciliation?error=partner", status_code=303)
     partner = db.query(Partner).filter(Partner.id == partner_id).first()
@@ -2405,10 +2439,12 @@ async def sold_products_report(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     warehouse_id: Optional[int] = None,
+    category_id: Optional[int] = None,
+    name_query: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Sotilgan mahsulotlar — sana va ombor bo'yicha."""
+    """Sotilgan mahsulotlar — sana, ombor, kategoriya va nom bo'yicha."""
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
@@ -2422,6 +2458,14 @@ async def sold_products_report(
         d_to = today_end
 
     warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
+    categories = (
+        db.query(Category)
+        .join(Product, Product.category_id == Category.id)
+        .filter(Product.is_active == True)
+        .group_by(Category.id, Category.name)
+        .order_by(Category.name)
+        .all()
+    )
 
     # Sotilgan mahsulotlar (OrderItem + Order)
     q = (
@@ -2443,6 +2487,10 @@ async def sold_products_report(
     )
     if warehouse_id:
         q = q.filter(Order.warehouse_id == warehouse_id)
+    if category_id:
+        q = q.filter(Product.category_id == category_id)
+    if name_query and name_query.strip():
+        q = q.filter(Product.name.ilike(f"%{name_query.strip()}%"))
 
     rows = q.group_by(Product.id, Product.name).order_by(func.sum(OrderItem.total).desc()).all()
 
@@ -2469,9 +2517,12 @@ async def sold_products_report(
         "page_title": "Sotilgan mahsulotlar",
         "items": items,
         "warehouses": warehouses,
+        "categories": categories,
         "date_from": d_from.strftime("%Y-%m-%d"),
         "date_to": d_to.strftime("%Y-%m-%d"),
         "selected_warehouse_id": warehouse_id,
+        "selected_category_id": category_id,
+        "name_query": name_query or "",
         "grand_qty": grand_qty,
         "grand_sum": grand_sum,
     })

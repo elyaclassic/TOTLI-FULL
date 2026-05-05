@@ -92,23 +92,67 @@
     <div class="col-12">
         <div class="data-table">
             <div class="card-header">
-                <i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})
+                <span><i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})</span>
+                <div class="d-flex gap-2 flex-wrap align-items-center">
+                    <form method="get" id="orderDateFilterForm" class="d-flex gap-1 align-items-center">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-success" onclick="setQuickRange('today')"><i class="bi bi-calendar-day"></i> Bugun</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuickRange('yesterday')">Kecha</button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="setQuickRange('week')">1 hafta</button>
+                        </div>
+                        <input type="date" name="date_from" id="orderDateFrom" value="{{ date_from }}" class="form-control form-control-sm" style="width:140px;" onchange="document.getElementById('orderDateFilterForm').submit()">
+                        <span class="text-muted small">—</span>
+                        <input type="date" name="date_to" id="orderDateTo" value="{{ date_to }}" class="form-control form-control-sm" style="width:140px;" onchange="document.getElementById('orderDateFilterForm').submit()">
+                    </form>
+                    <button type="button" id="bulkConfirmBtn" class="btn btn-sm btn-success" disabled onclick="confirmSelected()">
+                        <i class="bi bi-check2-all"></i> Belgilanganlar tasdiqlash (<span id="bulkConfirmCount">0</span>)
+                    </button>
+                    <button type="button" id="bulkExcelBtn" class="btn btn-sm btn-outline-success" disabled onclick="exportSelectedToExcel()">
+                        <i class="bi bi-file-earmark-excel"></i> Tanlanganlar Excel (<span id="bulkCount">0</span>)
+                    </button>
+                </div>
             </div>
+            <script>
+            function setQuickRange(kind) {
+                var today = new Date();
+                var d = function(dt) { return dt.toISOString().slice(0, 10); };
+                var from, to;
+                if (kind === 'today') { from = to = d(today); }
+                else if (kind === 'yesterday') {
+                    var y = new Date(today); y.setDate(y.getDate() - 1);
+                    from = to = d(y);
+                }
+                else if (kind === 'week') {
+                    var w = new Date(today); w.setDate(w.getDate() - 6);
+                    from = d(w); to = d(today);
+                }
+                document.getElementById('orderDateFrom').value = from;
+                document.getElementById('orderDateTo').value = to;
+                document.getElementById('orderDateFilterForm').submit();
+            }
+            </script>
             <div class="card-body p-0" style="max-height: 400px; overflow-y: auto;">
                 <table class="table table-sm mb-0">
                     <thead>
                         <tr>
+                            <th style="width:36px;"><input type="checkbox" id="selectAllOrders" onclick="toggleAllOrders(this)"></th>
                             <th>Raqam</th>
                             <th>Sana</th>
                             <th>Mijoz</th>
                             <th>Jami</th>
                             <th>Status</th>
+                            <th>Haydovchi</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for order in orders %}
                         <tr>
+                            <td>
+                                {% if order.status in ('confirmed', 'completed', 'draft', 'waiting_production') %}
+                                <input type="checkbox" class="order-cb" data-id="{{ order.id }}" data-status="{{ order.status }}" data-num="{{ order.number }}" onclick="updateBulkBtn()">
+                                {% endif %}
+                            </td>
                             <td><a href="/sales/edit/{{ order.id }}">{{ order.number }}</a></td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
                             <td>{{ order.partner.name if order.partner else '-' }}</td>
@@ -126,32 +170,32 @@
                                 <span class="badge-waiting">{{ order.status }}</span>
                                 {% endif %}
                             </td>
+                            <td class="muted-cell"><small>{{ order_drivers.get(order.id, '—') }}</small></td>
                             <td class="text-nowrap">
                                 {% if order.status == 'draft' %}
-                                <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm btn-outline-success py-0 px-2" title="Tasdiqlash">
+                                <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" title="Tasdiqlash"
+                                        onclick="openConfirmModal({{ order.id }}, '{{ order.number }}')">
                                     <i class="bi bi-check-lg"></i>
-                                </a>
-                                {% endif %}
-                                {% if order.status in ('draft', 'confirmed') %}
+                                </button>
                                 <a href="/sales/edit/{{ order.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Tahrirlash">
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% endif %}
-                                {% if order.status == 'confirmed' %}
-                                <form action="/sales/{{ order.id }}/revert" method="POST" style="display:inline" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi? (Draft ga qaytadi)')">
-                                    <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Draft ga qaytarish">
+                                {% if order.status in ('confirmed', 'completed', 'waiting_production') %}
+                                <a href="/sales/{{ order.id }}/nakladnoy/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Yuk xati (Excel)">
+                                    <i class="bi bi-file-earmark-excel"></i>
+                                </a>
+                                {% endif %}
+                                {% if order.status in ('confirmed', 'completed', 'waiting_production') %}
+                                <form action="/sales/{{ order.id }}/revert" method="POST" style="display:inline" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi? Draft ga qaytadi, ombor va yetkazish ham qaytariladi.')">
+                                    <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Tasdiqlashni bekor qilish (Draft ga qaytarish)">
                                         <i class="bi bi-arrow-counterclockwise"></i>
                                     </button>
                                 </form>
-                                <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani bekor qilasizmi?')">
-                                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Bekor qilish">
-                                        <i class="bi bi-x-lg"></i>
-                                    </button>
-                                </form>
                                 {% endif %}
-                                {% if order.status in ('cancelled', 'draft') %}
-                                <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani o`chirasizmi?')">
-                                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="O'chirish">
+                                {% if order.status in ('cancelled', 'draft') and current_user and current_user.role == 'admin' %}
+                                <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani o`chirasizmi? Bu qaytarilmaydi.')">
+                                    <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="O'chirish (faqat admin)">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </form>
@@ -160,7 +204,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="6" class="text-center text-muted py-3">Buyurtmalar yo'q</td>
+                            <td colspan="8" class="text-center text-muted py-3">Buyurtmalar yo'q</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -356,6 +400,144 @@
 {% endblock %}
 
 {% block extra_js %}
+<!-- Tasdiqlash modali (faqat 2+ haydovchi bo'lganda chiqadi) -->
+<div class="modal fade" id="confirmOrderModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <form id="confirmOrderForm" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+        <div class="modal-header">
+          <h5 class="modal-title">Buyurtmani tasdiqlash: <span id="confirmOrderNum"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <label class="form-label">Haydovchi *</label>
+          <select name="driver_id" class="form-select" required>
+            <option value="">— Tanlang —</option>
+            {% for d in drivers %}
+            <option value="{{ d.id }}">{{ d.full_name }}{% if d.vehicle_number %} ({{ d.vehicle_number }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+          <button type="submit" class="btn btn-success"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+<script>
+    // Mavjud faol haydovchilar (1 ta bo'lsa avtomatik tanlanadi, modal kerak emas)
+    var DRIVERS = [
+        {% for d in drivers %}{ id: {{ d.id }}, name: {{ d.full_name | tojson }} }{% if not loop.last %},{% endif %}{% endfor %}
+    ];
+    var CSRF_TOKEN = "{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}";
+
+    function toggleAllOrders(masterCb) {
+        document.querySelectorAll('.order-cb').forEach(cb => { cb.checked = masterCb.checked; });
+        updateBulkBtn();
+    }
+    function updateBulkBtn() {
+        const checked = Array.from(document.querySelectorAll('.order-cb:checked'));
+        // Excel: confirmed/completed/waiting_production orderlar uchun
+        const excelStatuses = ['confirmed', 'completed', 'waiting_production'];
+        const excelCount = checked.filter(cb => excelStatuses.includes(cb.dataset.status)).length;
+        document.getElementById('bulkCount').textContent = excelCount;
+        document.getElementById('bulkExcelBtn').disabled = excelCount === 0;
+        // Confirm: faqat draft uchun
+        const draftCount = checked.filter(cb => cb.dataset.status === 'draft').length;
+        document.getElementById('bulkConfirmCount').textContent = draftCount;
+        document.getElementById('bulkConfirmBtn').disabled = draftCount === 0;
+    }
+    function exportSelectedToExcel() {
+        const excelStatuses = ['confirmed', 'completed', 'waiting_production'];
+        const ids = Array.from(document.querySelectorAll('.order-cb:checked'))
+            .filter(cb => excelStatuses.includes(cb.dataset.status))
+            .map(cb => cb.dataset.id);
+        if (ids.length === 0) { alert("Hech qanday tasdiqlangan/kutilayotgan buyurtma tanlanmagan"); return; }
+        window.location.href = '/sales/nakladnoy/excel/bulk?ids=' + ids.join(',');
+    }
+    async function confirmSelected() {
+        const drafts = Array.from(document.querySelectorAll('.order-cb:checked'))
+            .filter(cb => cb.dataset.status === 'draft');
+        if (drafts.length === 0) { alert("Belgilangan draft buyurtma yo'q"); return; }
+        if (DRIVERS.length === 0) { alert("Faol haydovchi yo'q"); return; }
+        // Haydovchi tanlash
+        let driverId;
+        let driverName;
+        if (DRIVERS.length === 1) {
+            driverId = DRIVERS[0].id;
+            driverName = DRIVERS[0].name;
+        } else {
+            // Modal yoki prompt — eng oddiy: prompt
+            const opts = DRIVERS.map((d, i) => (i + 1) + '. ' + d.name).join('\n');
+            const idx = parseInt(prompt("Haydovchi raqamini kiriting:\n" + opts), 10);
+            if (!idx || idx < 1 || idx > DRIVERS.length) return;
+            driverId = DRIVERS[idx - 1].id;
+            driverName = DRIVERS[idx - 1].name;
+        }
+        const numbers = drafts.map(cb => cb.dataset.num).join(', ');
+        if (!confirm(drafts.length + " ta buyurtmani " + driverName + " ga tasdiqlaysizmi?\n\n" + numbers)) return;
+
+        const btn = document.getElementById('bulkConfirmBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Tasdiqlanmoqda...';
+
+        let success = 0, failed = 0;
+        for (const cb of drafts) {
+            try {
+                const fd = new FormData();
+                fd.append('driver_id', String(driverId));
+                fd.append('csrf_token', CSRF_TOKEN);
+                const r = await fetch('/supervisor/agent-orders/confirm/' + cb.dataset.id, {
+                    method: 'POST',
+                    body: fd,
+                    redirect: 'manual',
+                });
+                // 303 (redirect) yoki 200 — muvaffaqiyat hisoblanadi
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') {
+                    success++;
+                } else {
+                    failed++;
+                }
+            } catch (e) {
+                failed++;
+            }
+        }
+        alert("Tasdiqlandi: " + success + " ta\nXato: " + failed + " ta");
+        location.reload();
+    }
+    function _appendHidden(form, name, value) {
+        var input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+    }
+    function openConfirmModal(orderId, orderNum) {
+        if (DRIVERS.length === 0) {
+            alert("Faol haydovchi yo'q. Avval haydovchi qo'shing.");
+            return;
+        }
+        // 1 ta haydovchi bo'lsa — avtomatik tasdiqlash, modal kerak emas
+        if (DRIVERS.length === 1) {
+            if (!confirm(orderNum + " buyurtmasini " + DRIVERS[0].name + " ga tasdiqlaysizmi?")) return;
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/supervisor/agent-orders/confirm/' + orderId;
+            _appendHidden(form, 'driver_id', String(DRIVERS[0].id));
+            _appendHidden(form, 'csrf_token', CSRF_TOKEN);
+            document.body.appendChild(form);
+            form.submit();
+            return;
+        }
+        // 2+ haydovchi — modal ochiladi
+        document.getElementById('confirmOrderForm').action = '/supervisor/agent-orders/confirm/' + orderId;
+        document.getElementById('confirmOrderNum').textContent = orderNum;
+        new bootstrap.Modal(document.getElementById('confirmOrderModal')).show();
+    }
+</script>
 {% if locations %}
 <script src="https://api-maps.yandex.ru/2.1/?lang=uz_UZ&apikey=096da66c-342b-4bab-80cd-3b44b851429c" type="text/javascript"></script>
 <script>

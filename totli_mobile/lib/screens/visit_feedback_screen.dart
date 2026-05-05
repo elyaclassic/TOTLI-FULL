@@ -66,8 +66,8 @@ class _VisitFeedbackScreenState extends State<VisitFeedbackScreen> {
       return;
     }
 
-    // Feedback ni saqlash
-    await ApiService.saveVisitFeedback(
+    // Bug 7 fix — feedback xatosini tekshirish, yo'qolish oldini olish
+    final fbResult = await ApiService.saveVisitFeedback(
       token,
       visitId: widget.visitId,
       customerFeedback: _customerCtrl.text.trim(),
@@ -75,10 +75,31 @@ class _VisitFeedbackScreenState extends State<VisitFeedbackScreen> {
       problemDescription: _hasProblem ? _problemCtrl.text.trim() : '',
       hasProblem: _hasProblem,
     );
+    if (fbResult['success'] != true) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      final err = fbResult['error']?.toString() ?? 'Server xatosi';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Feedback saqlanmadi: $err. Qayta urinib ko\'ring.'),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 5),
+      ));
+      return;
+    }
 
-    // Check-out qilish
+    // Check-out qilish (faqat feedback muvaffaqiyatli bo'lgach)
     if (withCheckout) {
-      await ApiService.checkOut(token, visitId: widget.visitId);
+      final coResult = await ApiService.checkOut(token, visitId: widget.visitId);
+      if (coResult['success'] != true) {
+        if (!mounted) return;
+        setState(() => _busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Feedback saqlandi, lekin check-out xatosi: ${coResult['error'] ?? '—'}'),
+          backgroundColor: Colors.orange,
+          duration: const Duration(seconds: 5),
+        ));
+        return;
+      }
     }
 
     if (!mounted) return;

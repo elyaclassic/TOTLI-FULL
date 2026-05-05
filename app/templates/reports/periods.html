@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-calendar-check"></i> Davr yopish</h5>
+</div>
+
+{% if request.query_params.get('success') == 'closed' %}
+<div class="alert alert-success py-2 small">Davr muvaffaqiyatli yopildi. Snapshot saqlandi.</div>
+{% elif request.query_params.get('success') == 'reopened' %}
+<div class="alert alert-warning py-2 small">Davr qayta ochildi.</div>
+{% endif %}
+{% if request.query_params.get('error') == 'already_closed' %}
+<div class="alert alert-danger py-2 small">Bu davr allaqachon yopilgan.</div>
+{% elif request.query_params.get('error') == 'not_found' %}
+<div class="alert alert-danger py-2 small">Davr topilmadi.</div>
+{% elif request.query_params.get('error') == 'drafts' %}
+<div class="alert alert-danger py-2 small">
+    Davrni yopib bo'lmaydi — qoralama hujjatlar bor:
+    {% if request.query_params.get('drafts_sales', '0') != '0' %}
+    <strong>{{ request.query_params.get('drafts_sales') }}</strong> ta sotuv qoralama
+    {% endif %}
+    {% if request.query_params.get('drafts_purchases', '0') != '0' %}
+    , <strong>{{ request.query_params.get('drafts_purchases') }}</strong> ta kirim qoralama
+    {% endif %}
+    . Avval ularni tasdiqlang yoki o'chiring.
+</div>
+{% endif %}
+
+<div class="card data-table">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Davr</th>
+                        <th>Holat</th>
+                        <th>Yopilgan sana</th>
+                        <th>Kim yopgan</th>
+                        <th>Izoh</th>
+                        <th style="width:200px">Amal</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for m in months %}
+                    <tr>
+                        <td class="fw-bold">{{ m.period }}</td>
+                        <td>
+                            {% if m.closed %}
+                            <span class="badge bg-danger"><i class="bi bi-lock-fill"></i> Yopilgan</span>
+                            {% else %}
+                            <span class="badge bg-success"><i class="bi bi-unlock-fill"></i> Ochiq</span>
+                            {% endif %}
+                        </td>
+                        <td class="muted-cell">{{ m.closed.closed_at.strftime('%d.%m.%Y %H:%M') if m.closed else '—' }}</td>
+                        <td>{{ m.closed.user.full_name if (m.closed and m.closed.user) else '—' }}</td>
+                        <td class="muted-cell">{{ m.closed.note or '—' if m.closed else '—' }}</td>
+                        <td>
+                            {% if m.closed %}
+                            <form method="post" action="/admin/periods/reopen" class="d-inline" onsubmit="return confirm('{{ m.period }} davrini qayta ochmoqchimisiz? Hujjatlarni tahrirlash mumkin bo\'ladi.');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                                <input type="hidden" name="period" value="{{ m.period }}">
+                                <button type="submit" class="btn btn-outline-warning btn-sm"><i class="bi bi-unlock"></i> Qayta ochish</button>
+                            </form>
+                            {% else %}
+                            <button type="button" class="btn btn-outline-danger btn-sm" data-bs-toggle="modal" data-bs-target="#closeModal{{ loop.index }}">
+                                <i class="bi bi-lock"></i> Yopish
+                            </button>
+                            <div class="modal fade" id="closeModal{{ loop.index }}" tabindex="-1">
+                                <div class="modal-dialog">
+                                    <div class="modal-content">
+                                        <form method="post" action="/admin/periods/close">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                                            <input type="hidden" name="period" value="{{ m.period }}">
+                                            <div class="modal-header">
+                                                <h6 class="modal-title">{{ m.period }} davrini yopish</h6>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                <p class="small">Bu davrdagi barcha hujjatlar qulflanadi:</p>
+                                                <ul class="small">
+                                                    <li>Sotuv yaratish/tahrirlash/tasdiqlash</li>
+                                                    <li>Kirim yaratish/tahrirlash/tasdiqlash</li>
+                                                    <li>Harajat, to'lov, transfer hujjatlari</li>
+                                                </ul>
+                                                <p class="small text-muted">Stock, kassa va mijoz qarzlari snapshot sifatida saqlanadi.</p>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">Izoh (ixtiyoriy)</label>
+                                                    <input type="text" name="note" class="form-control form-control-sm" placeholder="Masalan: Aprel oyi yopildi">
+                                                </div>
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor qilish</button>
+                                                <button type="submit" class="btn btn-danger btn-sm"><i class="bi bi-lock"></i> Yopish</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -26,6 +26,7 @@ from app.models.database import (
     Department,
 )
 from app.deps import require_auth, require_admin
+from app.routes.period_close import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.audit import log_action
 from app.utils.user_scope import get_warehouses_for_user
@@ -63,12 +64,24 @@ async def purchases_list(
             query = query.filter(Purchase.date <= datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1))
         except ValueError:
             pass
+    # Foydalanuvchining ko'ra oladigan omborlari (admin/rahbar — barchasi)
+    warehouses = get_warehouses_for_user(db, current_user)
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    is_full_access = role in ("admin", "rahbar", "raxbar")
+    if not is_full_access:
+        allowed_ids = [w.id for w in warehouses]
+        if not allowed_ids:
+            query = query.filter(Purchase.id == None)  # bo'sh natija
+        else:
+            query = query.filter(Purchase.warehouse_id.in_(allowed_ids))
+            # Foydalanuvchi ruxsat etilmagan ombor wh_id bersa — e'tibor bermaymiz
+            if wh_id and wh_id.isdigit() and int(wh_id) not in allowed_ids:
+                wh_id = ""
     if wh_id and wh_id.isdigit():
         query = query.filter(Purchase.warehouse_id == int(wh_id))
     from app.utils.pagination import paginate, pagination_query_string
     _pg = paginate(query, request.query_params.get("page", 1), per_page=50)
     purchases = _pg["items"]
-    warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
     return templates.TemplateResponse("purchases/list.html", {
@@ -226,6 +239,12 @@ async def purchase_edit(
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    is_full_access = role in ("admin", "rahbar", "raxbar")
+    if not is_full_access:
+        allowed_ids = [w.id for w in get_warehouses_for_user(db, current_user)]
+        if purchase.warehouse_id not in allowed_ids:
+            raise HTTPException(status_code=403, detail="Bu hujjat sizning omboringizga tegishli emas")
     if purchase.status == "confirmed" and current_user.role != "admin":
         raise HTTPException(status_code=403, detail="Tasdiqlangan kirimni faqat administrator tahrirlashi mumkin")
     products = db.query(Product).filter(Product.is_active == True).all()
@@ -385,6 +404,8 @@ async def purchase_confirm(
     purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
+    if is_period_closed(db, purchase.date):
+        return RedirectResponse(url=f"/purchases/{purchase_id}?error=period_closed", status_code=303)
 
     # --- Atomik biznes operatsiyasi (stock + price + partner balance + log) ---
     from app.services.document_service import confirm_purchase_atomic, DocumentError

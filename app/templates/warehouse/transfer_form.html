@@ -32,6 +32,9 @@
             </form>
             {% endif %}
             {% endif %}
+            {% if transfer %}
+            <a href="/warehouse/transfers/{{ transfer.id }}/print" target="_blank" class="btn btn-outline-primary btn-sm"><i class="bi bi-printer"></i> Chop etish</a>
+            {% endif %}
             <a href="/warehouse/transfers" class="btn btn-outline-secondary btn-sm">Ro'yxat</a>
             <a href="/warehouse/transfers" class="btn btn-outline-secondary btn-sm">Chiqish</a>
         </div>
@@ -99,7 +102,7 @@
                     <select name="from_warehouse_id" class="form-select w-100" required id="fromWh">
                         <option value="">— Tanlang —</option>
                         {% for wh in warehouses %}
-                        <option value="{{ wh.id }}" {% if transfer and transfer.from_warehouse_id == wh.id %}selected{% endif %}>{{ wh.name }}</option>
+                        <option value="{{ wh.id }}" {% if (transfer and transfer.from_warehouse_id == wh.id) or (not transfer and from_warehouse_id and from_warehouse_id == wh.id) %}selected{% endif %}>{{ wh.name }}</option>
                         {% endfor %}
                     </select>
                     {% endif %}

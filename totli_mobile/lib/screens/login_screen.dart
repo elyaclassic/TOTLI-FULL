@@ -3,7 +3,9 @@ import '../services/api_service.dart';
 import '../services/session_service.dart';
 import '../services/location_service.dart';
 import '../services/sync_service.dart';
+import '../services/pin_service.dart';
 import 'dashboard_screen.dart';
+import 'pin_setup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -124,8 +126,13 @@ class _LoginScreenState extends State<LoginScreen> {
           await syncService.refreshCache();
         } catch (_) {}
 
+        // PIN o'rnatilganmi tekshirish — yo'q bo'lsa o'rnatish ekraniga
+        final hasPin = await PinService().hasPin();
+        if (!mounted) return;
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (_) => const DashboardScreen()),
+          MaterialPageRoute(
+            builder: (_) => hasPin ? const DashboardScreen() : const PinSetupScreen(firstTime: true),
+          ),
         );
       } else {
         setState(() {

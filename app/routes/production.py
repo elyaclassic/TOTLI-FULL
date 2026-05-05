@@ -1054,7 +1054,19 @@ async def production_edit_materials(
             cost = float(prod.purchase_price or 0)
             total_material_cost += qty * cost
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0.0
-    total_material_qty = sum(float(pi.quantity or 0) for pi in production.production_items)
+    # Jami kg — faqat kg/gr/litr birligidagi xom ashyolar (dona qo'shilmaydi)
+    _kg_units = {"kg", "gr", "l", "kilogramm", "litr"}
+    total_material_qty = 0.0
+    for pi in production.production_items:
+        unit_code = ""
+        if pi.product and pi.product.unit:
+            unit_code = (pi.product.unit.code or pi.product.unit.name or "").lower()
+        if unit_code in _kg_units:
+            qty = float(pi.quantity or 0)
+            # gr → kg
+            if unit_code == "gr":
+                qty = qty / 1000.0
+            total_material_qty += qty
     return templates.TemplateResponse("production/edit_materials.html", {
         "request": request,
         "current_user": current_user,
@@ -1187,7 +1199,17 @@ async def production_orders(
         is_yarim_tayyor = p_type == "yarim_tayyor"
         is_qiyom = p.recipe and "qiyom" in (getattr(p.recipe, "name", None) or "").lower()
         p._kg_per_unit = recipe_kg_per_unit(p.recipe)
-        out_kg = p._kg_per_unit * (float(p.quantity or 0))
+        # T.KG: operator KIRIM kg (yarim_tayyor mahsulot kg). Aks holda recipe formulasi.
+        operator_kg = 0.0
+        if p.production_items:
+            for pi in p.production_items:
+                prod_obj = db.query(Product).filter(Product.id == pi.product_id).first()
+                if prod_obj and (prod_obj.type or "") == "yarim_tayyor":
+                    operator_kg += float(pi.quantity or 0)
+        if operator_kg > 0:
+            out_kg = operator_kg
+        else:
+            out_kg = p._kg_per_unit * (float(p.quantity or 0))
         completed_only = getattr(p, "status", None) == "completed"
         if is_yarim_tayyor or is_qiyom:
             p.output_kg = 0.0
@@ -1203,6 +1225,7 @@ async def production_orders(
             p.yarim_tayyor_kg = 0.0
             if completed_only:
                 total_output_kg += out_kg
+        p._actual_kg = out_kg
     machines = db.query(Machine).filter(Machine.is_active == True).all()
     employees = db.query(Employee).filter(Employee.is_active == True).all()
     error = request.query_params.get("error")
@@ -1377,12 +1400,19 @@ async def production_orders_bulk_complete(
                 url="/production/orders?error=complete&detail=" + quote(f"{production.number}: Retsept topilmadi."),
                 status_code=303,
             )
+        # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+        max_st = _recipe_max_stage(recipe)
+        claim = db.execute(
+            text("UPDATE productions SET status='completed', current_stage=:max "
+                 "WHERE id=:pid AND status IN ('draft','in_progress')"),
+            {"pid": pid, "max": max_st}
+        )
+        if claim.rowcount == 0:
+            continue  # boshqa request allaqachon tasdiqlagan
         err = _do_complete_production_stock(db, production, recipe)
         if err:
             db.rollback()
             return err
-        production.status = "completed"
-        production.current_stage = _recipe_max_stage(recipe)
         completed += 1
     db.commit()
     check_low_stock_and_notify(db)
@@ -1595,11 +1625,18 @@ async def complete_production_stage(
         return RedirectResponse(url="/production", status_code=303)
     current = getattr(production, "current_stage", None) or 1
     if current > max_stage:
+        # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+        claim = db.execute(
+            text("UPDATE productions SET status='completed', current_stage=:max "
+                 "WHERE id=:pid AND status != 'completed'"),
+            {"pid": prod_id, "max": max_stage}
+        )
+        if claim.rowcount == 0:
+            return RedirectResponse(url="/production?already=1", status_code=303)
         err = _do_complete_production_stock(db, production, recipe)
         if err:
+            db.rollback()
             return err
-        production.status = "completed"
-        production.current_stage = max_stage
         db.commit()
         check_low_stock_and_notify(db)
         notify_managers_production_ready(db, production)
@@ -1640,11 +1677,18 @@ async def complete_production_stage(
         # Bosqich tugagach keyingi bosqich operatorlarini xabardor qilish
         notify_next_stage_operators(db, production, stage_number)
         return RedirectResponse(url="/production/orders", status_code=303)
+    # Atomik UPDATE WHERE — oxirgi bosqich, double-confirm xavfini oldini olish
+    claim = db.execute(
+        text("UPDATE productions SET status='completed', current_stage=:max "
+             "WHERE id=:pid AND status != 'completed'"),
+        {"pid": prod_id, "max": max_stage}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/production?already=1", status_code=303)
     err = _do_complete_production_stock(db, production, recipe)
     if err:
+        db.rollback()
         return err
-    production.status = "completed"
-    production.current_stage = max_stage
     db.commit()
     check_low_stock_and_notify(db)
     # Oxirgi bosqich (qadoqlash) tugadi — admin va menejerga bildirish

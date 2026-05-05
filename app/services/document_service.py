@@ -63,6 +63,16 @@ def confirm_purchase_atomic(
         raise DocumentError("Tasdiqlash uchun kamida bitta mahsulot qo'shing.")
 
     try:
+        # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+        from sqlalchemy import text as _text
+        claim = db.execute(
+            _text("UPDATE purchases SET status='confirmed' WHERE id=:id AND status='draft'"),
+            {"id": purchase.id}
+        )
+        if claim.rowcount == 0:
+            db.rollback()
+            raise DocumentError("Tovar kirimi allaqachon tasdiqlangan")
+
         total_expenses = purchase.total_expenses or 0
         items_total = purchase.total or 0
 
@@ -117,8 +127,7 @@ def confirm_purchase_atomic(
                 created_at=purchase.date,
             )
 
-        # --- Status o'zgartirish ---
-        purchase.status = "confirmed"
+        # --- Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi ---
 
         # --- Partner balansini yangilash ---
         total_with_expenses = items_total + total_expenses
@@ -290,6 +299,16 @@ def revert_purchase_atomic(
             raise DocumentError(f"Ombor qoldig'i yetarli emas: {name}")
 
     try:
+        # Atomik UPDATE WHERE — double-revert xavfini oldini olish
+        from sqlalchemy import text as _text
+        claim = db.execute(
+            _text("UPDATE purchases SET status='draft' WHERE id=:id AND status='confirmed'"),
+            {"id": purchase.id}
+        )
+        if claim.rowcount == 0:
+            db.rollback()
+            raise DocumentError("Tovar kirimi allaqachon bekor qilingan")
+
         # --- Stock movement orqali qaytarish ---
         for item in purchase.items:
             create_stock_movement(
@@ -313,8 +332,7 @@ def revert_purchase_atomic(
             if partner:
                 partner.balance += total_with_expenses
 
-        # --- Status ---
-        purchase.status = "draft"
+        # --- Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi ---
 
         # --- Yagona commit ---
         db.commit()

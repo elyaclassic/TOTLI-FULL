@@ -24,7 +24,7 @@
 {% endif %}
 
 {% if items %}
-<form method="POST" action="/warehouse/{{ mode }}/{{ warehouse.id }}/confirm" id="otxodForm">
+<form method="POST" action="/warehouse/{{ mode }}/{{ warehouse.id }}/confirm" id="otxodForm" onsubmit="if(this.dataset.submitted==='1'){return false;} this.dataset.submitted='1'; var b=document.getElementById('confirmBtn'); if(b){b.disabled=true; b.style.opacity='0.6'; b.style.cursor='wait';} return true;">
     <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
 
     <div class="data-table mb-3">

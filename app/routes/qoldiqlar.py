@@ -343,6 +343,14 @@ async def qoldiqlar_kassa_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta kassa qatori bo'lishi kerak")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE cash_balance_docs SET status='confirmed' WHERE id=:id AND status='draft'"),
+        {"id": doc_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}?already=1", status_code=303)
     from app.services.finance_service import cash_balance_formula as _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
@@ -356,7 +364,7 @@ async def qoldiqlar_kassa_hujjat_tasdiqlash(
             # opening_balance ni shunday moslaymizki: opening + income - expense = target
             cash.opening_balance = target - income_sum + expense_sum
             cash.balance = target
-    doc.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
 
@@ -517,12 +525,20 @@ async def qoldiqlar_kontragent_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta kontragent qatori bo'lishi kerak")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE partner_balance_docs SET status='confirmed' WHERE id=:id AND status='draft'"),
+        {"id": doc_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}?already=1", status_code=303)
     for item in doc.items:
         partner = db.query(Partner).filter(Partner.id == item.partner_id).first()
         if partner:
             item.previous_balance = partner.balance
             partner.balance = (partner.balance or 0) + item.balance  # Mavjud balansga QO'SHISH
-    doc.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
 
@@ -707,6 +723,14 @@ async def qoldiqlar_xodim_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta xodim qatori bo'lishi kerak")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE employee_balance_docs SET status='confirmed' WHERE id=:id AND status='draft'"),
+        {"id": doc_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/qoldiqlar/xodim/hujjat/{doc_id}?already=1", status_code=303)
     now = datetime.now()
     year, month = doc.date.year if doc.date else now.year, doc.date.month if doc.date else now.month
     for item in doc.items:
@@ -1340,6 +1364,14 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
         raise HTTPException(status_code=400, detail="Hujjat allaqachon tasdiqlangan")
     if not doc.items:
         raise HTTPException(status_code=400, detail="Kamida bitta qator bo'lishi kerak")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE stock_adjustment_docs SET status='confirmed' WHERE id=:id AND status='draft'"),
+        {"id": doc_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/qoldiqlar/tovar/hujjat/{doc_id}?already=1", status_code=303)
 
     doc_warehouse_ids = list({item.warehouse_id for item in doc.items})
     doc_pairs = {(item.warehouse_id, item.product_id) for item in doc.items}
@@ -1384,7 +1416,7 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
 
     # Faqat hujjatdagi tovarlar yangilanadi — boshqa tovarlarning qoldig'iga tegmaydi
 
-    doc.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     try:
         from app.bot.services.audit_watchdog import audit_stock_adjustment

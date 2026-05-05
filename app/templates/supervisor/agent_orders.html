@@ -114,57 +114,51 @@
                             <i class="bi bi-check-lg"></i> Tasdiqlash
                         </button>
                     </form>
-                    <!-- O'zgartirish va Bekor qilish -->
+                    <!-- O'zgartirish va O'chirish (faqat admin) -->
                     <div class="d-flex gap-1">
                         <a href="/sales/edit/{{ order.id }}" class="btn btn-outline-primary btn-sm">
                             <i class="bi bi-pencil"></i> O'zgartirish
                         </a>
-                        <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('{{ order.number }} buyurtmani bekor qilasizmi?')">
-                            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm">
-                                <i class="bi bi-x-lg"></i> Bekor
-                            </button>
-                        </form>
-                    </div>
-                </div>
-                {% elif order.status == 'confirmed' %}
-                <div class="d-flex flex-column gap-2 align-items-end">
-                    <span class="text-info"><i class="bi bi-truck"></i> Haydovchiga berilgan</span>
-                    <div class="d-flex gap-1">
-                        <form action="/supervisor/agent-orders/reject/{{ order.id }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('{{ order.number }} tasdiqlashni bekor qilasizmi?')">
-                            <button type="submit" class="btn btn-outline-warning btn-sm">
-                                <i class="bi bi-arrow-counterclockwise"></i> Bekor qilish
-                            </button>
-                        </form>
+                        {% if current_user and current_user.role == 'admin' %}
                         <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
                               onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
-                            <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirish (faqat admin)">
                                 <i class="bi bi-trash"></i> O'chirish
                             </button>
                         </form>
+                        {% endif %}
                     </div>
                 </div>
-                {% elif order.status == 'completed' %}
+                {% elif order.status in ('confirmed', 'completed', 'waiting_production') %}
                 <div class="d-flex flex-column gap-2 align-items-end">
+                    {% if order.status == 'confirmed' %}
+                    <span class="text-info"><i class="bi bi-truck"></i> Haydovchiga berilgan</span>
+                    {% elif order.status == 'completed' %}
                     <span class="text-success"><i class="bi bi-check-circle"></i> Yakunlangan</span>
-                    <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
-                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                            <i class="bi bi-trash"></i> O'chirish
+                    {% else %}
+                    <span class="text-warning"><i class="bi bi-hourglass-split"></i> Production kutilmoqda</span>
+                    {% endif %}
+                    <form action="/sales/{{ order.id }}/revert" method="POST" class="d-inline"
+                          onsubmit="return confirm('{{ order.number }} tasdiqlashni bekor qilasizmi? Draft ga qaytadi, ombor va yetkazish qaytariladi.')">
+                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                        <button type="submit" class="btn btn-outline-warning btn-sm" title="Tasdiqlashni bekor qilish — buyurtma Draft ga qaytadi, undan keyin o'zgartirish/o'chirish mumkin">
+                            <i class="bi bi-arrow-counterclockwise"></i> Tasdiqlashni bekor qilish
                         </button>
                     </form>
                 </div>
                 {% elif order.status == 'cancelled' %}
                 <div class="d-flex flex-column gap-2 align-items-end">
                     <span class="text-danger"><i class="bi bi-x-circle"></i> Bekor qilingan</span>
+                    {% if current_user and current_user.role == 'admin' %}
                     <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
                           onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
-                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirish (faqat admin)">
                             <i class="bi bi-trash"></i> O'chirish
                         </button>
                     </form>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>

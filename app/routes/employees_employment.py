@@ -475,12 +475,16 @@ async def employment_docs_bulk_confirm(
         doc_ids = []
     if not doc_ids:
         return RedirectResponse(url="/employees/hiring-docs?error=" + quote("Hech qanday hujjat tanlanmagan."), status_code=303)
-    confirmed = 0
-    for did in doc_ids:
-        doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == did).first()
-        if doc and not doc.confirmed_at:
-            doc.confirmed_at = datetime.now()
-            confirmed += 1
+    # Atomik bulk UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    placeholders = ",".join(f":id{i}" for i in range(len(doc_ids)))
+    params = {f"id{i}": v for i, v in enumerate(doc_ids)}
+    params["now"] = datetime.now()
+    claim = db.execute(
+        _text(f"UPDATE employment_docs SET confirmed_at=:now WHERE id IN ({placeholders}) AND confirmed_at IS NULL"),
+        params
+    )
+    confirmed = claim.rowcount or 0
     db.commit()
     return RedirectResponse(url=f"/employees/hiring-docs?confirmed=1&count={confirmed}", status_code=303)
 
@@ -520,7 +524,14 @@ async def employment_doc_confirm(
     doc = db.query(EmploymentDoc).filter(EmploymentDoc.id == doc_id).first()
     if not doc:
         return RedirectResponse(url="/employees/hiring-docs?error=Hujjat topilmadi", status_code=303)
-    doc.confirmed_at = datetime.now()
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE employment_docs SET confirmed_at=:now WHERE id=:id AND confirmed_at IS NULL"),
+        {"id": doc_id, "now": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/employees/hiring-docs?already=1", status_code=303)
     db.commit()
     return RedirectResponse(url="/employees/hiring-docs?confirmed=1", status_code=303)
 

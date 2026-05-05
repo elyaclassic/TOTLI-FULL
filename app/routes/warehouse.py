@@ -38,6 +38,7 @@ from app.models.database import (
 )
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.deps import require_auth, require_admin
+from app.routes.period_close import is_period_closed
 from app.utils.user_scope import get_warehouses_for_user
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
@@ -393,6 +394,7 @@ async def warehouse_transfers_list(
 @router.get("/transfers/new", response_class=HTMLResponse)
 async def warehouse_transfer_new(
     request: Request,
+    from_warehouse_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -417,6 +419,7 @@ async def warehouse_transfer_new(
         "products_list": products_list,
         "stock_by_warehouse_product": stock_by_warehouse_product,
         "now": datetime.now(),
+        "from_warehouse_id": from_warehouse_id,
         "page_title": "Ombordan omborga o'tkazish (yaratish)",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
     })
@@ -455,6 +458,27 @@ async def warehouse_transfer_edit(
         "now": transfer.date or datetime.now(),
         "page_title": f"O'tkazish {transfer.number}",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
+    })
+
+
+@router.get("/transfers/{transfer_id}/print", response_class=HTMLResponse)
+async def warehouse_transfer_print(
+    request: Request,
+    transfer_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """O'tkazish hujjati nakladnoy ko'rinishida — chop etish uchun."""
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    transfer = db.query(WarehouseTransfer).filter(WarehouseTransfer.id == transfer_id).first()
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    return templates.TemplateResponse("warehouse/transfer_nakladnoy.html", {
+        "request": request,
+        "current_user": current_user,
+        "transfer": transfer,
+        "show_tannarx": (getattr(current_user, "role", None) or "") == "admin",
     })
 
 
@@ -549,11 +573,21 @@ async def warehouse_transfer_confirm(
     transfer = db.query(WarehouseTransfer).filter(WarehouseTransfer.id == transfer_id).first()
     if not transfer:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if is_period_closed(db, transfer.date):
+        return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?error=" + quote("Bu davr yopilgan. Hujjatni tasdiqlab bo'lmaydi."), status_code=303)
     if transfer.status == "confirmed":
         return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?error=" + quote("Hujjat allaqachon tasdiqlangan."), status_code=303)
     items = db.query(WarehouseTransferItem).filter(WarehouseTransferItem.transfer_id == transfer_id).all()
     if not items:
         return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?error=" + quote("Kamida bitta mahsulot qo'shing."), status_code=303)
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE warehouse_transfers SET status='confirmed' WHERE id=:id AND status != 'confirmed'"),
+        {"id": transfer_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?already=1", status_code=303)
     for item in items:
         src = db.query(Stock).filter(
             Stock.warehouse_id == transfer.from_warehouse_id,
@@ -598,7 +632,7 @@ async def warehouse_transfer_confirm(
             note=f"O'tkazma kirim: {transfer.number}",
             created_at=transfer.date,
         )
-    transfer.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     logger.info(
         "transfer_confirm: #%s wh=%s->%s items=%s user=%s",
@@ -1257,6 +1291,14 @@ async def inventory_confirm(
         return RedirectResponse(url="/inventory", status_code=303)
     if not doc.items:
         return RedirectResponse(url=f"/inventory/{doc_id}/edit?message=Jadval bo'sh. Avval qoldiq tovarlarni yuklang yoki tovar qo'shing.", status_code=303)
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE stock_adjustment_docs SET status='confirmed' WHERE id=:id AND status='draft'"),
+        {"id": doc_id}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/inventory?already=1", status_code=303)
     form = await request.form()
     doc_date_str = form.get("doc_date")
     if doc_date_str:
@@ -1300,7 +1342,7 @@ async def inventory_confirm(
     db.commit()
     db.refresh(doc)
     items_count = _apply_inventory_stock_changes(db, doc, is_stock_entry, current_user)
-    doc.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     logger.info(
         "inventory_confirm: #%s doc_id=%s items=%s user=%s stock_entry=%s",

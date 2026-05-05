@@ -26,6 +26,7 @@ class SyncService {
   VoidCallback? onStatusChanged;
 
   /// Ilovani ishga tushirganda chaqirish
+  /// connectivity_plus 5.0.2 (yolg'iz enum) — v6+ List qaytaradi
   Future<void> init() async {
     final result = await _connectivity.checkConnectivity();
     _isOnline = result != ConnectivityResult.none;
@@ -144,6 +145,11 @@ class SyncService {
             serverNumber: result['order_number']?.toString(),
           );
           synced++;
+        } else if (result['auth_failed'] == true) {
+          // Bug 2 fix — token expire: sync to'xtatish, logout signal
+          await _session.logout();
+          errors.add('Sessiya tugadi — qayta kiriting');
+          break;
         } else {
           final err = (result['error']?.toString()) ?? 'Noma\'lum xato';
           await _db.markOrderFailed(localId, err);

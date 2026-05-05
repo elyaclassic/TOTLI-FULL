@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <title>YUK XATI {{ transfer.number }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 210mm; margin: 0 auto; }
+        .no-print { margin-bottom: 16px; }
+        @media print { .no-print { display: none !important; } body { padding: 10px; } }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: left; }
+        th { background: #f5f5f5; font-weight: 600; }
+        .header { margin-bottom: 20px; text-align: center; }
+        .header h1 { margin: 0 0 8px 0; font-size: 20px; }
+        .header .sub { font-size: 14px; color: #555; }
+        .meta { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 16px 24px; }
+        .meta span { font-size: 12px; }
+        .meta strong { margin-right: 4px; }
+        .signatures { margin-top: 32px; display: flex; justify-content: space-between; gap: 40px; }
+        .sig-block { flex: 1; text-align: center; }
+        .sig-line { border-bottom: 1px solid #333; height: 40px; margin-bottom: 4px; }
+        .sig-label { font-size: 11px; color: #555; }
+        .text-right { text-align: right; }
+        .text-center { text-align: center; }
+        .badge-status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
+        .badge-confirmed { background: #d1fae5; color: #065f46; }
+        .badge-draft { background: #fef3c7; color: #92400e; }
+    </style>
+</head>
+<body>
+    <div class="no-print">
+        <a href="/warehouse/transfers/{{ transfer.id }}">← Orqaga</a> &nbsp;
+        <button onclick="window.print();" style="padding: 6px 14px;">Chop etish</button>
+    </div>
+    <div class="header">
+        <h1>YUK XATI</h1>
+        <div class="sub">Ombordan omborga o'tkazish hujjati</div>
+    </div>
+    <div class="meta">
+        <span><strong>Hujjat №:</strong> {{ transfer.number }}</span>
+        <span><strong>Sana:</strong> {{ (transfer.date or transfer.created_at).strftime('%d.%m.%Y %H:%M') if (transfer.date or transfer.created_at) else '—' }}</span>
+        <span><strong>Holati:</strong>
+            {% if transfer.status == 'confirmed' %}<span class="badge-status badge-confirmed">Tasdiqlangan</span>
+            {% else %}<span class="badge-status badge-draft">{{ transfer.status }}</span>{% endif %}
+        </span>
+        <span><strong>Qayerdan:</strong> {{ transfer.from_warehouse.name if transfer.from_warehouse else '-' }}</span>
+        <span><strong>Qayerga:</strong> {{ transfer.to_warehouse.name if transfer.to_warehouse else '-' }}</span>
+        <span><strong>Yaratdi:</strong> {{ (transfer.user.full_name or transfer.user.username) if transfer.user else '-' }}</span>
+        {% if transfer.approved_by %}
+        <span><strong>Tasdiqladi:</strong> {{ transfer.approved_by.full_name or transfer.approved_by.username }}</span>
+        {% endif %}
+        {% if transfer.note %}<span><strong>Izoh:</strong> {{ transfer.note }}</span>{% endif %}
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 40px;">№</th>
+                <th>Mahsulot</th>
+                <th class="text-right" style="width: 100px;">Miqdor</th>
+                <th class="text-right" style="width: 80px;">Birlik</th>
+                {% if show_tannarx %}
+                <th class="text-right" style="width: 100px;">Tannarx (so'm)</th>
+                <th class="text-right" style="width: 120px;">Summa (so'm)</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% set ns = namespace(grand_total=0) %}
+            {% for item in transfer.items %}
+            {% set tannarx = (item.product.purchase_price or 0) if item.product else 0 %}
+            {% set line_total = (item.quantity or 0) * tannarx %}
+            {% set ns.grand_total = ns.grand_total + line_total %}
+            <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ item.product.name if item.product else '-' }}{% if item.product and item.product.code %} <small>({{ item.product.code }})</small>{% endif %}</td>
+                <td class="text-right">{{ "{:,.3f}".format(item.quantity or 0) }}</td>
+                <td class="text-right">{{ item.product.unit.code if item.product and item.product.unit else '—' }}</td>
+                {% if show_tannarx %}
+                <td class="text-right">{{ "{:,.0f}".format(tannarx) }}</td>
+                <td class="text-right">{{ "{:,.0f}".format(line_total) }}</td>
+                {% endif %}
+            </tr>
+            {% else %}
+            <tr><td colspan="{% if show_tannarx %}6{% else %}4{% endif %}" class="text-center">Mahsulotlar yo'q</td></tr>
+            {% endfor %}
+        </tbody>
+        {% if show_tannarx %}
+        <tfoot>
+            <tr>
+                <th colspan="5" class="text-right">Jami:</th>
+                <th class="text-right">{{ "{:,.0f}".format(ns.grand_total) }}</th>
+            </tr>
+        </tfoot>
+        {% endif %}
+    </table>
+    <div class="signatures">
+        <div class="sig-block">
+            <div class="sig-line"></div>
+            <div class="sig-label">Berildi (imzo) — {{ transfer.from_warehouse.name if transfer.from_warehouse else '' }}</div>
+        </div>
+        <div class="sig-block">
+            <div class="sig-line"></div>
+            <div class="sig-label">Qabul qildi (imzo) — {{ transfer.to_warehouse.name if transfer.to_warehouse else '' }}</div>
+        </div>
+    </div>
+</body>
+</html>

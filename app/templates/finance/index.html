@@ -178,7 +178,11 @@
                   <button type="submit" class="btn-act warning" title="Bekor qilish"><i class="bi bi-x-circle"></i></button>
                 </form>
                 {% endif %}
+                {% if p_status == 'confirmed' %}
+                <a href="/finance/payment/{{ payment.id }}/edit?view=1" class="btn-act" title="Ko'rish"><i class="bi bi-eye"></i></a>
+                {% else %}
                 <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                {% endif %}
                 <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirish?');">
                   <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                 </form>

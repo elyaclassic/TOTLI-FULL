@@ -222,13 +222,16 @@ class _CreatePaymentSheetState extends State<_CreatePaymentSheet> {
     setState(() => _isSending = true);
 
     // Har bir to'lov turi uchun alohida so'rov
+    // Bug 3 fix — partial success ham xato hisoblanadi (har bir xato sarlavhada ko'rsatiladi)
     int sent = 0;
-    String? lastError;
-    for (final entry in [
-      {'type': 'naqd', 'amount': _naqd},
-      {'type': 'plastik', 'amount': _plastik},
-      {'type': 'perechisleniye', 'amount': _per},
-    ]) {
+    int failed = 0;
+    final errors = <String>[];
+    final entries = [
+      {'type': 'naqd', 'amount': _naqd, 'label': 'Naqd'},
+      {'type': 'plastik', 'amount': _plastik, 'label': 'Plastik'},
+      {'type': 'perechisleniye', 'amount': _per, 'label': 'Perechisleniye'},
+    ];
+    for (final entry in entries) {
       if ((entry['amount'] as double) <= 0) continue;
       final result = await ApiService.createAgentPayment(widget.token, {
         'partner_id': _selectedPartnerId,
@@ -239,17 +242,63 @@ class _CreatePaymentSheetState extends State<_CreatePaymentSheet> {
       if (result['success'] == true) {
         sent++;
       } else {
-        lastError = result['error']?.toString();
+        failed++;
+        final err = result['error']?.toString() ?? 'Noma\'lum xato';
+        errors.add('${entry['label']}: $err');
       }
     }
 
     if (!mounted) return;
     setState(() => _isSending = false);
-    if (sent > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$sent ta to\'lov qo\'shildi'), backgroundColor: Colors.green));
+
+    if (failed == 0 && sent > 0) {
+      // Hammasi muvaffaqiyatli
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('$sent ta to\'lov qo\'shildi'),
+        backgroundColor: Colors.green,
+      ));
       Navigator.pop(context, true);
+    } else if (sent > 0 && failed > 0) {
+      // Qisman muvaffaqiyat — POPga chiqmaymiz, foydalanuvchi xatolarni ko'rsin
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('⚠️ Qisman muvaffaqiyat'),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Yuborildi: $sent ta\nXato: $failed ta\n'),
+                const Divider(),
+                const Text('Xatolar:', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 4),
+                ...errors.map((e) => Padding(padding: const EdgeInsets.only(top: 4), child: Text('• $e'))),
+                const SizedBox(height: 12),
+                const Text('Yuborilmaganlarni qayta yuborish uchun mos summa qoldirib, qaytadan ▶ bosing.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('OK'))],
+        ),
+      );
+      // Yuborilganlarni controllerdan tozalash (foydalanuvchi takror yuborib qo'ymasligi uchun)
+      for (final entry in entries) {
+        if ((entry['amount'] as double) <= 0) continue;
+        if (!errors.any((e) => e.startsWith(entry['label'] as String))) {
+          // Bu muvaffaqiyatli yuborildi — controllerni tozalash
+          if (entry['type'] == 'naqd') _naqdController.clear();
+          if (entry['type'] == 'plastik') _plastikController.clear();
+          if (entry['type'] == 'perechisleniye') _perController.clear();
+        }
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(lastError ?? 'Xato'), backgroundColor: Colors.red));
+      // Hammasi xato
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(errors.isNotEmpty ? errors.join(' | ') : 'Yuborilmadi'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 

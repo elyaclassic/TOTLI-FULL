@@ -11,7 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
-from app.deps import get_db, require_admin
+from app.deps import get_db, require_admin, require_admin_or_manager
 from app.models.database import User, SalesPlan, Order, Agent
 from app.core import templates
 from app.logging_config import get_logger
@@ -28,7 +28,7 @@ def _current_period() -> str:
 async def admin_sales_plans_list(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_manager),
 ):
     """Sales plans ro'yxati + joriy oy ko'rsatkichlari (har agent bo'yicha)."""
     plans = db.query(SalesPlan).order_by(desc(SalesPlan.period)).limit(24).all()

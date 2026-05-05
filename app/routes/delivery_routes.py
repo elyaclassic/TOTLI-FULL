@@ -469,10 +469,15 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     if order.status not in ("draft",):
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
-    # Race condition oldini olish — orderga lock olamiz
-    order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").with_for_update().first()
-    if not order or order.status != "draft":
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish (with_for_update SQLite da no-op)
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE orders SET status='confirmed' WHERE id=:id AND source='agent' AND status='draft'"),
+        {"id": order_id}
+    )
+    if claim.rowcount == 0:
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+    db.refresh(order)
 
     # Order itemlari uchun batch load (Stock + Product) — N+1 oldini olish
     valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
@@ -503,7 +508,7 @@ async def supervisor_confirm_agent_order(
             shortage_items.append({"name": name, "need": need, "have": have})
 
     if shortage:
-        # Stock yetmasa: waiting_production statusga o'tkazib, operatorlarga xabar
+        # Stock yetmasa: vaqtincha 'confirmed' status'ni 'waiting_production' ga qaytarish
         driver_id_int = int(driver_id_raw) if driver_id_raw and driver_id_raw.isdigit() else None
         order.status = "waiting_production"
         order.pending_driver_id = driver_id_int
@@ -521,8 +526,7 @@ async def supervisor_confirm_agent_order(
         )
     # Stock chiqarish (DRY: stock_service.apply_sale_stock_deduction)
     apply_sale_stock_deduction(db, order, current_user, note_prefix="Agent sotuv (supervisor tasdiq)")
-    # Buyurtmani tasdiqlash
-    order.status = "confirmed"
+    # Status allaqachon atomik UPDATE WHERE bilan 'confirmed' ga o'tkazildi
     order.user_id = current_user.id
     db.flush()
     # Haydovchiga yetkazish yaratish
@@ -577,6 +581,16 @@ async def supervisor_reject_agent_order(
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").with_for_update().first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
+    # Bug 1 — paid > 0 bo'lgan orderni darhol bekor qilish taqiqlanadi (refund kerak)
+    if (order.paid or 0) > 0:
+        referer = request.headers.get("referer", "/supervisor/agent-orders")
+        sep = "&" if "?" in referer else "?"
+        return RedirectResponse(
+            url=f"{referer}{sep}error=paid_block&detail=" + quote(
+                f"Bu buyurtmaga {order.paid:,.0f} so'm to'lov qabul qilingan. Avval refund qiling, keyin bekor qilish mumkin."
+            ),
+            status_code=303,
+        )
     # Agar tasdiqlangan bo'lsa — stock qaytarish + yetkazishni ham bekor qilish
     if order.status == "confirmed":
         for it in order.items:
@@ -599,12 +613,11 @@ async def supervisor_reject_agent_order(
                 created_at=datetime.now(),
             )
         from app.models.database import Delivery as DeliveryModel
-        # Confirm `in_progress` qo'yadi, lekin pending ham bo'lishi mumkin (oldingi flow)
-        delivery = db.query(DeliveryModel).filter(
+        # Bug 6 — failed delivery ham cancelled bo'lsin
+        for delivery in db.query(DeliveryModel).filter(
             DeliveryModel.order_id == order.id,
-            DeliveryModel.status.in_(["pending", "in_progress"]),
-        ).first()
-        if delivery:
+            DeliveryModel.status.in_(["pending", "in_progress", "failed"]),
+        ).all():
             delivery.status = "cancelled"
     order.status = "cancelled"
     db.commit()
@@ -704,10 +717,16 @@ async def supervisor_confirm_agent_payment(
     if ap.status != "pending":
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
 
-    # 1. Agent to'lovini tasdiqlash
-    ap.status = "confirmed"
-    ap.confirmed_by = current_user.id
-    ap.confirmed_at = datetime.now()
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE agent_payments SET status='confirmed', confirmed_by=:uid, confirmed_at=:at "
+              "WHERE id=:id AND status='pending'"),
+        {"id": payment_id, "uid": current_user.id, "at": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
+    db.refresh(ap)
 
     # 2. Mijoz qarzidan ayirish (balance = qarzdorlik)
     partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()

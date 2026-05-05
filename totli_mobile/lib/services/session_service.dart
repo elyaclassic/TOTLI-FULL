@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import 'pin_service.dart';
 
 class SessionService {
   static const _keyToken = 'session_token';
@@ -81,5 +82,7 @@ class SessionService {
     await prefs.remove(_keyUserId);
     await prefs.remove(_keyFullName);
     await prefs.remove(_keyPhone);
+    // Lokal PIN ham tozalanadi — qayta login da yangi PIN o'rnatiladi
+    await PinService().clearPin();
   }
 }

@@ -26,7 +26,23 @@
                 {% endfor %}
             </select>
         </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-tags"></i> Kategoriya</label>
+            <select name="category_id" class="form-select form-select-sm">
+                <option value="">Barchasi</option>
+                {% for c in categories %}
+                <option value="{{ c.id }}" {% if selected_category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-search"></i> Nom (qism)</label>
+            <input type="text" name="name_query" class="form-control form-control-sm" value="{{ name_query }}" placeholder="patir, pechenn..." style="min-width:160px;">
+        </div>
         <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel"></i> Ko'rsatish</button>
+        {% if selected_category_id or name_query or selected_warehouse_id %}
+        <a href="/reports/sold-products?date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-outline-secondary btn-sm" title="Filtrlarni tozalash"><i class="bi bi-x-circle"></i></a>
+        {% endif %}
     </form>
 </div>
 

@@ -390,10 +390,13 @@ def create_production_from_order(
         
         # Ishlab chiqarish buyurtmasi yaratish
         today = datetime.now()
-        count = db.query(Production).filter(
-            Production.date >= today.replace(hour=0, minute=0, second=0)
-        ).count()
-        number = f"PR-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(3)}"
+        prefix = f"PR-{today.strftime('%Y%m%d')}-"
+        last = db.query(Production).filter(Production.number.like(f"{prefix}%")).order_by(Production.id.desc()).first()
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq = 1
+        number = f"{prefix}{str(seq).zfill(3)}"
         
         production = Production(
             number=number,

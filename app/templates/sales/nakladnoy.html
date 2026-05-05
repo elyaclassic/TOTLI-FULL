@@ -2,7 +2,7 @@
 <html lang="uz">
 <head>
     <meta charset="UTF-8">
-    <title>Nakladnoy {{ order.number if order else '' }}</title>
+    <title>YUK XATI {{ order.number if order else '' }}</title>
     <style>
         * { box-sizing: border-box; }
         body { font-family: Arial, sans-serif; font-size: 12px; padding: 20px; max-width: 210mm; margin: 0 auto; }
@@ -27,12 +27,16 @@
 </head>
 <body>
     <div class="no-print">
-        <a href="/sales/edit/{{ order.id }}">← Orqaga</a> &nbsp;
+        {% if current_user and current_user.role == 'sotuvchi' %}
+        <a href="/sales/pos">← Orqaga</a> &nbsp;
+        {% else %}
+        <a href="javascript:void(0)" onclick="if(document.referrer&&document.referrer.indexOf(location.host)!==-1){history.back();}else{location.href='/sales/edit/{{ order.id }}';}return false;">← Orqaga</a> &nbsp;
+        {% endif %}
         <button onclick="window.print();" style="padding: 6px 14px;">Chop etish</button>
     </div>
     {% if order %}
     <div class="header">
-        <h1>NAKLADNOY</h1>
+        <h1>YUK XATI</h1>
         <div class="sub">Sotuv hujjati</div>
     </div>
     <div class="meta">

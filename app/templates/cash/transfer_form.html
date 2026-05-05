@@ -20,6 +20,12 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
+{% if request.query_params.get('edited') == '1' %}
+<div class="alert alert-success alert-dismissible fade show py-2 small" role="alert">
+    <i class="bi bi-check-circle"></i> Hujjat tahrirlandi.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+{% endif %}
 {% if request.query_params.get('error') %}
 <div class="alert alert-danger alert-dismissible fade show py-2 small" role="alert">
     {{ request.query_params.get('error') }}
@@ -70,6 +76,12 @@
                     <label class="form-label">Summa (so'm) *</label>
                     <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required placeholder="0">
                 </div>
+                {% if current_user and (current_user.role or '')|lower in ['admin', 'manager', 'menejer'] %}
+                <div class="col-md-6">
+                    <label class="form-label">Sana <span class="text-muted small">(retroaktiv kiritish uchun)</span></label>
+                    <input type="date" name="date" class="form-control" value="{{ today_str }}" max="{{ today_str }}">
+                </div>
+                {% endif %}
                 <div class="col-12">
                     <label class="form-label">Izoh</label>
                     <input type="text" name="note" class="form-control" placeholder="Izoh">
@@ -87,6 +99,7 @@
             var toSel = document.getElementById('to_cash_id');
             var warn = document.getElementById('sameCashWarn');
             var btn = document.getElementById('btnCreateTransfer');
+            var dateInp = form ? form.querySelector('input[name="date"]') : null;
             function checkSame() {
                 var from = (fromSel && fromSel.value) || '';
                 var to = (toSel && toSel.value) || '';
@@ -95,13 +108,156 @@
                 if (btn) btn.disabled = !!same;
                 return !same;
             }
+            function formatNum(n) {
+                try { return Math.round(n).toLocaleString('en-US'); } catch(e) { return String(n); }
+            }
+            function rebuildOptions(sel, items, withBalance) {
+                if (!sel) return;
+                var prev = sel.value;
+                while (sel.options.length > 1) sel.remove(1);
+                items.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = String(c.id);
+                    opt.textContent = withBalance
+                        ? (c.name + ' (' + formatNum(c.balance) + " so'm)")
+                        : c.name;
+                    sel.appendChild(opt);
+                });
+                if (prev) sel.value = prev;
+            }
+            function refreshBalances() {
+                if (!dateInp || !dateInp.value) return;
+                fetch('/cash/balance-on-date?date=' + encodeURIComponent(dateInp.value), {credentials: 'same-origin'})
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        if (!data || !data.cash_registers) return;
+                        rebuildOptions(fromSel, data.cash_registers, true);
+                        rebuildOptions(toSel, data.cash_registers, false);
+                        checkSame();
+                    })
+                    .catch(function() {});
+            }
             if (fromSel) fromSel.addEventListener('change', checkSame);
             if (toSel) toSel.addEventListener('change', checkSame);
+            if (dateInp) dateInp.addEventListener('change', refreshBalances);
             if (form) form.addEventListener('submit', function(e) {
                 if (!checkSame()) {
                     e.preventDefault();
                     return false;
                 }
+            });
+            checkSame();
+        })();
+        </script>
+        {% elif transfer.status == 'pending' and current_user and (current_user.role or '')|lower in ['admin', 'manager', 'menejer'] %}
+        <form method="post" action="/cash/transfers/{{ transfer.id }}/edit" id="cashTransferEditForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <div class="alert alert-info py-2 px-3 mb-3 small">
+                <strong>{{ transfer.number }}</strong> — Tahrirlash rejimi (faqat <span class="badge-draft">pending</span> statusda mumkin)
+            </div>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Qayerdan (kassa) *</label>
+                    <select name="from_cash_id" id="from_cash_id" class="form-select" required>
+                        <option value="">— Tanlang —</option>
+                        {% for c in cash_registers %}
+                        <option value="{{ c.id }}" {% if transfer.from_cash_id == c.id %}selected{% endif %}>{{ c.name }} ({{ "{:,.0f}".format(c.balance or 0) }} so'm)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Qayerga (kassa) *</label>
+                    <select name="to_cash_id" id="to_cash_id" class="form-select" required>
+                        <option value="">— Tanlang —</option>
+                        {% for c in cash_registers %}
+                        <option value="{{ c.id }}" {% if transfer.to_cash_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <div id="sameCashWarn" class="text-danger small mt-1" style="display: none;"><i class="bi bi-exclamation-triangle"></i> Qayerdan va qayerga bir xil bo'lmasin.</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Summa (so'm) *</label>
+                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required value="{{ "%.2f"|format(transfer.amount or 0) }}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Sana <span class="text-muted small">(YYYY-MM-DD)</span></label>
+                    <input type="date" name="date" class="form-control" value="{{ transfer.date.strftime('%Y-%m-%d') if transfer.date else today_str }}" max="{{ today_str }}">
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Izoh</label>
+                    <input type="text" name="note" class="form-control" placeholder="Izoh" value="{{ transfer.note or '' }}">
+                </div>
+                <div class="col-12 d-flex gap-2">
+                    <button type="submit" class="btn btn-success" id="btnEditTransfer"><i class="bi bi-check-lg me-1"></i>Saqlash</button>
+                    <a href="/cash/transfers" class="btn btn-outline-secondary">Bekor</a>
+                    <form method="post" action="/cash/transfers/{{ transfer.id }}/delete" class="d-inline ms-auto" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                    </form>
+                </div>
+            </div>
+        </form>
+        <hr class="my-3">
+        <div class="d-flex flex-wrap gap-2">
+            <form method="post" action="/cash/transfers/{{ transfer.id }}/sotuvchi-confirm" class="d-inline" onsubmit="return confirm('Yuborish — jo\'natuvchi kassadan pul ayriladi va yo\'lga jo\'natiladi. Davom etasizmi?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                <button type="submit" class="btn btn-primary"><i class="bi bi-send me-1"></i>Yuborish</button>
+            </form>
+            <a href="/cash/transfers" class="btn btn-outline-secondary">Ro'yxatga</a>
+        </div>
+        <script>
+        (function() {
+            var form = document.getElementById('cashTransferEditForm');
+            var fromSel = document.getElementById('from_cash_id');
+            var toSel = document.getElementById('to_cash_id');
+            var warn = document.getElementById('sameCashWarn');
+            var btn = document.getElementById('btnEditTransfer');
+            var dateInp = form ? form.querySelector('input[name="date"]') : null;
+            function checkSame() {
+                var from = (fromSel && fromSel.value) || '';
+                var to = (toSel && toSel.value) || '';
+                var same = from && to && from === to;
+                if (warn) warn.style.display = same ? 'block' : 'none';
+                if (btn) btn.disabled = !!same;
+                return !same;
+            }
+            function formatNum(n) {
+                try { return Math.round(n).toLocaleString('en-US'); } catch(e) { return String(n); }
+            }
+            function rebuildOptions(sel, items, withBalance) {
+                if (!sel) return;
+                var prev = sel.value;
+                while (sel.options.length > 1) sel.remove(1);
+                items.forEach(function(c) {
+                    var opt = document.createElement('option');
+                    opt.value = String(c.id);
+                    opt.textContent = withBalance
+                        ? (c.name + ' (' + formatNum(c.balance) + " so'm)")
+                        : c.name;
+                    sel.appendChild(opt);
+                });
+                if (prev) sel.value = prev;
+            }
+            function refreshBalances() {
+                if (!dateInp || !dateInp.value) return;
+                fetch('/cash/balance-on-date?date=' + encodeURIComponent(dateInp.value), {credentials: 'same-origin'})
+                    .then(function(r) { return r.ok ? r.json() : null; })
+                    .then(function(data) {
+                        if (!data || !data.cash_registers) return;
+                        rebuildOptions(fromSel, data.cash_registers, true);
+                        rebuildOptions(toSel, data.cash_registers, false);
+                        checkSame();
+                    })
+                    .catch(function() {});
+            }
+            if (fromSel) fromSel.addEventListener('change', checkSame);
+            if (toSel) toSel.addEventListener('change', checkSame);
+            if (dateInp) {
+                dateInp.addEventListener('change', refreshBalances);
+                refreshBalances();
+            }
+            if (form) form.addEventListener('submit', function(e) {
+                if (!checkSame()) { e.preventDefault(); return false; }
             });
             checkSame();
         })();
@@ -156,6 +312,12 @@
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                 <button type="submit" class="btn btn-success"><i class="bi bi-check-lg me-1"></i>Tasdiqlash (qabul qilish)</button>
             </form>
+            {% if current_user and (current_user.role or '')|lower in ['admin', 'manager', 'menejer'] %}
+            <form method="post" action="/cash/transfers/{{ transfer.id }}/revert" class="d-inline" onsubmit="return confirm('Bekor qilish — pul jo\'natuvchi kassaga qaytadi, hujjat pending statusga qaytadi (keyin tahrirlash mumkin). Davom etasizmi?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                <button type="submit" class="btn-act warning" title="Bekor qilish (pending ga qaytarish)"><i class="bi bi-arrow-counterclockwise me-1"></i> Bekor qilish</button>
+            </form>
+            {% endif %}
             {% elif transfer.status == 'completed' and current_user and current_user.role == 'admin' %}
             <form method="post" action="/cash/transfers/{{ transfer.id }}/revert" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish — balanslar qaytadi. Faqat admin. Davom etasizmi?');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">

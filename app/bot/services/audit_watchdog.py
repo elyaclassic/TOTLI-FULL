@@ -647,6 +647,12 @@ def audit_digest():
             ExpenseDoc.status == "draft",
             ExpenseDoc.created_at < stale_cutoff,
         ).count()
+        # Bug 5 — waiting_production 24 soatdan ko'p kutgan orderlar
+        stale_wp_cutoff = now - timedelta(hours=24)
+        stale_wp = db.query(Order).filter(
+            Order.status == "waiting_production",
+            Order.created_at < stale_wp_cutoff,
+        ).count()
         stale_parts = []
         if stale_orders:
             stale_parts.append(f"sotuv: {stale_orders}")
@@ -658,6 +664,11 @@ def audit_digest():
             sections.append(
                 f"<b>📄 {STALE_DRAFT_HOURS} soat+ tasdiqlanmagan draft:</b>\n• "
                 + ", ".join(stale_parts)
+            )
+        if stale_wp:
+            sections.append(
+                f"<b>⏳ 24 soat+ ishlab chiqarish kutmoqda:</b> {stale_wp} ta sotuv\n"
+                f"  • Operator unutgan yoki recipe yo'q. /supervisor/agent-orders?status=waiting_production"
             )
 
         # --- Manfiy kassa balanslari ---

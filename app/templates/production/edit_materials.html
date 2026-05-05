@@ -84,7 +84,8 @@
                             {% else %}
                             <input type="number" name="qty_{{ pi.id }}" class="form-control form-control-sm qty-input"
                                    value="{{ "%.3f"|format(pi.quantity) }}" step="0.001" min="0" required style="max-width:120px;"
-                                   data-cost="{{ (pi.product.purchase_price or 0)|float }}">
+                                   data-cost="{{ (pi.product.purchase_price or 0)|float }}"
+                                   data-unit="{{ (_unit or '')|lower }}">
                             <span class="muted-cell ms-1">{{ _unit }}</span>
                             {% endif %}
                         </td>
@@ -142,12 +143,18 @@
 <script>
 (function() {
     var inputs = document.querySelectorAll('input.qty-input');
+    var KG_UNITS = ['kg', 'gr', 'l', 'kilogramm', 'litr'];
     function recalc() {
         var totalQty = 0, totalCost = 0;
         inputs.forEach(function(inp) {
             var q = parseFloat(inp.value) || 0;
             var c = parseFloat(inp.dataset.cost) || 0;
-            totalQty += q;
+            var u = (inp.dataset.unit || '').toLowerCase();
+            // Faqat kg/gr/litr xom ashyolar Jami kg ga qo'shiladi
+            if (KG_UNITS.indexOf(u) !== -1) {
+                var qKg = u === 'gr' ? q / 1000.0 : q;
+                totalQty += qKg;
+            }
             totalCost += q * c;
             // Summa cell yangilash
             var row = inp.closest('tr');

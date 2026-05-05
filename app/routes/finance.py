@@ -19,6 +19,7 @@ from app.models.database import (
 )
 import re as _re
 from app.deps import require_auth, require_admin
+from app.routes.period_close import is_period_closed
 from app.utils.db_schema import ensure_payments_status_column, ensure_cash_opening_balance_column
 from app.utils.audit import log_action
 from app.constants import QUERY_LIMIT_DEFAULT
@@ -674,10 +675,17 @@ async def finance_payment_confirm(
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="To'lov topilmadi")
-    status = getattr(payment, "status", "confirmed")
-    if status == "confirmed":
+    if is_period_closed(db, payment.date):
+        return RedirectResponse(url="/finance?error=period_closed", status_code=303)
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE payments SET status='confirmed' WHERE id=:id AND (status IS NULL OR status != 'confirmed')"),
+        {"id": payment_id}
+    )
+    if claim.rowcount == 0:
         return RedirectResponse(url="/finance?msg=already_confirmed", status_code=303)
-    payment.status = "confirmed"
+    db.refresh(payment)  # status atributini yangilash (Python obyekt eskiriksiz qoladi)
     _payment_apply_balance(db, payment, 1)
     db.commit()
     try:
@@ -715,15 +723,17 @@ async def finance_payment_cancel(
 async def finance_payment_edit_page(
     payment_id: int,
     request: Request,
+    view: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     payment = db.query(Payment).filter(Payment.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="To'lov topilmadi")
-    if getattr(payment, "status", "confirmed") == "confirmed":
+    is_confirmed = getattr(payment, "status", "confirmed") == "confirmed"
+    if is_confirmed and not view:
         return RedirectResponse(
-            url="/finance?error=" + quote("Tasdiqlangan to'lovni tahrirlash mumkin emas. Avval tasdiqni bekor qiling."),
+            url="/finance?error=" + quote("Tasdiqlangan to'lovni tahrirlash mumkin emas. Avval tasdiqni bekor qiling. Ko'rish uchun ko'z tugmasini bosing."),
             status_code=303,
         )
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
@@ -734,7 +744,8 @@ async def finance_payment_edit_page(
         "partners": partners,
         "cash_registers": cash_registers,
         "current_user": current_user,
-        "page_title": "To'lovni tahrirlash",
+        "read_only": is_confirmed,
+        "page_title": "To'lovni ko'rish" if is_confirmed else "To'lovni tahrirlash",
     })
 
 
@@ -1382,8 +1393,34 @@ async def cash_transfer_new(
         "transfer": None,
         "cash_registers": cash_registers,
         "current_user": current_user,
+        "today_str": datetime.now().strftime("%Y-%m-%d"),
         "page_title": "Inkasatsiya yaratish",
     })
+
+
+@cash_router.get("/balance-on-date")
+async def cash_balance_on_date(
+    request: Request,
+    date: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """AJAX — tanlangan sana oxirigacha barcha kassalar balansini qaytarish."""
+    try:
+        as_of = datetime.strptime(date[:10], "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return JSONResponse({"error": "Sana noto'g'ri"}, status_code=400)
+    cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
+    result = []
+    for c in cash_registers:
+        bal, _, _ = _cash_balance_formula_at(db, c.id, as_of)
+        result.append({"id": c.id, "name": c.name, "balance": bal})
+    return JSONResponse({"date": date[:10], "cash_registers": result})
+
+
+def _cash_balance_formula_at(db: Session, cash_id: int, as_of_date) -> tuple:
+    from app.services.finance_service import cash_balance_formula
+    return cash_balance_formula(db, cash_id, as_of_date=as_of_date)
 
 
 @cash_router.post("/transfers/create")
@@ -1393,18 +1430,36 @@ async def cash_transfer_create(
     to_cash_id: int = Form(...),
     amount: float = Form(...),
     note: str = Form(""),
+    date: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin inkasatsiya hujjat yaratadi — status: pending"""
+    """Admin inkasatsiya hujjat yaratadi — status: pending.
+
+    date — retroaktiv kiritish uchun (YYYY-MM-DD). Agar bo'sh bo'lsa, bugungi sana.
+    """
     if from_cash_id == to_cash_id:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Qayerdan va qayerga kassa bir xil bolmasin."), status_code=303)
     if amount <= 0:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
+
+    op_date = datetime.now()
+    if date:
+        try:
+            parsed = datetime.strptime(date[:10], "%Y-%m-%d")
+            if parsed.date() > datetime.now().date():
+                return RedirectResponse(url="/cash/transfers/new?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
+            if is_period_closed(db, parsed):
+                return RedirectResponse(url="/cash/transfers/new?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan — retroaktiv kiritish mumkin emas."), status_code=303)
+            op_date = parsed.replace(hour=datetime.now().hour, minute=datetime.now().minute, second=datetime.now().second)
+        except ValueError:
+            return RedirectResponse(url="/cash/transfers/new?error=" + quote("Sana formati notogri."), status_code=303)
+
     last_t = db.query(CashTransfer).order_by(CashTransfer.id.desc()).first()
-    num = f"KK-{datetime.now().strftime('%Y%m%d')}-{(last_t.id + 1) if last_t else 1:04d}"
+    num = f"KK-{op_date.strftime('%Y%m%d')}-{(last_t.id + 1) if last_t else 1:04d}"
     t = CashTransfer(
         number=num,
+        date=op_date,
         from_cash_id=from_cash_id,
         to_cash_id=to_cash_id,
         amount=amount,
@@ -1415,6 +1470,56 @@ async def cash_transfer_create(
     db.add(t)
     db.commit()
     return RedirectResponse(url=f"/cash/transfers/{t.id}", status_code=303)
+
+
+@cash_router.post("/transfers/{transfer_id}/edit")
+async def cash_transfer_edit(
+    transfer_id: int,
+    request: Request,
+    from_cash_id: int = Form(...),
+    to_cash_id: int = Form(...),
+    amount: float = Form(...),
+    note: str = Form(""),
+    date: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin pending statusdagi inkasatsiya hujjatini tahrirlaydi.
+
+    in_transit/completed statusda — avval revert qilish kerak.
+    """
+    t = db.query(CashTransfer).filter(CashTransfer.id == transfer_id).first()
+    if not t:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if t.status != "pending":
+        return RedirectResponse(
+            url=f"/cash/transfers/{transfer_id}?error=" + quote("Faqat 'pending' statusdagi hujjatni tahrirlash mumkin. Avval 'Bekor qilish' bosib pending ga qaytaring."),
+            status_code=303,
+        )
+    if from_cash_id == to_cash_id:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qayerdan va qayerga kassa bir xil bolmasin."), status_code=303)
+    if amount <= 0:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
+
+    new_date = t.date
+    if date:
+        try:
+            parsed = datetime.strptime(date[:10], "%Y-%m-%d")
+            if parsed.date() > datetime.now().date():
+                return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
+            if is_period_closed(db, parsed):
+                return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan."), status_code=303)
+            new_date = parsed.replace(hour=(t.date.hour if t.date else 0), minute=(t.date.minute if t.date else 0), second=(t.date.second if t.date else 0))
+        except ValueError:
+            return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Sana formati notogri."), status_code=303)
+
+    t.from_cash_id = from_cash_id
+    t.to_cash_id = to_cash_id
+    t.amount = amount
+    t.date = new_date
+    t.note = note or None
+    db.commit()
+    return RedirectResponse(url=f"/cash/transfers/{transfer_id}?edited=1", status_code=303)
 
 
 @cash_router.post("/transfers/sotuvchi-send")
@@ -1634,6 +1739,7 @@ async def cash_transfer_view(
         "transfer": transfer,
         "cash_registers": cash_registers,
         "current_user": current_user,
+        "today_str": datetime.now().strftime("%Y-%m-%d"),
         "page_title": f"Inkasatsiya {transfer.number}",
     })
 
@@ -1663,15 +1769,22 @@ async def cash_transfer_sotuvchi_confirm(
     amount = t.amount or 0
     if (from_cash.balance or 0) < amount:
         return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kassada yetarli mablag yoq."), status_code=303)
-    # Inkasator ma'lumotini saqlash (note ga qo'shish)
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE cash_transfers SET status='in_transit', sent_by_user_id=:uid, sent_at=:at "
+              "WHERE id=:id AND status='pending'"),
+        {"id": transfer_id, "uid": current_user.id, "at": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Hujjat allaqachon yuborilgan."), status_code=303)
+    # Inkasator ma'lumotini saqlash (note ga qo'shish) — atomik UPDATE muvaffaqiyatli bo'lgandan keyin
     if inkasator_id:
         inkasator = db.query(Partner).filter(Partner.id == inkasator_id).first()
         if inkasator:
+            db.refresh(t)
             ink_note = f"Inkasator: {inkasator.name}"
             t.note = (t.note + " | " + ink_note) if t.note else ink_note
-    t.status = "in_transit"
-    t.sent_by_user_id = current_user.id
-    t.sent_at = datetime.now()
     db.flush()
     _sync_cash_balance(db, t.from_cash_id)
     db.commit()
@@ -1772,9 +1885,15 @@ async def cash_transfer_admin_confirm(
     to_cash = db.query(CashRegister).filter(CashRegister.id == t.to_cash_id).first()
     if not to_cash:
         return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Qabul kassasi topilmadi."), status_code=303)
-    t.status = "completed"
-    t.approved_by_user_id = current_user.id
-    t.approved_at = datetime.now()
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    from sqlalchemy import text as _text
+    claim = db.execute(
+        _text("UPDATE cash_transfers SET status='completed', approved_by_user_id=:uid, approved_at=:at "
+              "WHERE id=:id AND status='in_transit'"),
+        {"id": transfer_id, "uid": current_user.id, "at": datetime.now()}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Hujjat allaqachon tasdiqlangan."), status_code=303)
     db.flush()
     _sync_cash_balance(db, t.to_cash_id)
     db.commit()

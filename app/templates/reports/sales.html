@@ -4,19 +4,37 @@
 <!-- Filter card -->
 <div class="filter-card">
     <form method="GET" class="row g-3 align-items-end">
-        <div class="col-md-4">
+        <div class="col-6 col-md-2">
             <label class="form-label">Boshlanish sanasi</label>
             <input type="date" class="form-control" name="start_date" value="{{ start_date }}">
         </div>
-        <div class="col-md-4">
+        <div class="col-6 col-md-2">
             <label class="form-label">Tugash sanasi</label>
             <input type="date" class="form-control" name="end_date" value="{{ end_date }}">
         </div>
-        <div class="col-md-4 d-flex gap-2">
+        <div class="col-6 col-md-3">
+            <label class="form-label">Ombor</label>
+            <select class="form-select" name="warehouse_id">
+                <option value="">Barchasi</option>
+                {% for w in warehouses %}
+                <option value="{{ w.id }}" {% if warehouse_id and warehouse_id == w.id %}selected{% endif %}>{{ w.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-6 col-md-3">
+            <label class="form-label">Mijoz</label>
+            <select class="form-select" name="partner_id">
+                <option value="">Barchasi</option>
+                {% for p in partners %}
+                <option value="{{ p.id }}" {% if partner_id and partner_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-12 col-md-2 d-flex gap-2">
             <button type="submit" class="top-btn btn btn-primary flex-grow-1">
                 <i class="bi bi-search"></i> Ko'rsatish
             </button>
-            <a href="/reports/sales/export?start_date={{ start_date }}&end_date={{ end_date }}"
+            <a href="/reports/sales/export?start_date={{ start_date }}&end_date={{ end_date }}{% if warehouse_id %}&warehouse_id={{ warehouse_id }}{% endif %}{% if partner_id %}&partner_id={{ partner_id }}{% endif %}"
                class="top-btn btn btn-success">
                 <i class="bi bi-file-earmark-excel"></i> Excel
             </a>

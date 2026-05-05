@@ -807,16 +807,62 @@
                 </a>
             </li>
             <li class="nav-item">
-                <a class="nav-link {% if 'Buyurtma' in (page_title or '') or 'Yetkazib' in (page_title or '') or 'Yetkazish' in (page_title or '') %}active{% endif %}" href="/delivery">
-                    <i class="bi bi-truck"></i> Buyurtmalar
-                </a>
-            </li>
-            <li class="nav-item">
                 <a class="nav-link {% if page_title and 'Ishlab chiqarish' in page_title and 'buyurtma' in page_title|lower %}active{% endif %}" href="/production/orders">
                     <i class="bi bi-gear-wide-connected"></i> Ishlab chiqarish buyurtmalari
                 </a>
             </li>
+
+            <!-- MONITORING -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">MONITORING</small>
+            </li>
             <li class="nav-item">
+                <a class="nav-link {% if 'Agent' in (page_title or '') and 'reja' not in (page_title or '')|lower and 'to\'lov' not in (page_title or '')|lower and 'buyurtma' not in (page_title or '')|lower %}active{% endif %}" href="/agents">
+                    <i class="bi bi-person-walking"></i> Agentlar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'savdo rejasi' in (page_title or '')|lower %}active{% endif %}" href="/admin/sales-plans">
+                    <i class="bi bi-bullseye"></i> Agent savdo rejasi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Buyurtma' in (page_title or '') or 'Yetkazib' in (page_title or '') or 'Yetkazish' in (page_title or '') %}active{% endif %}" href="/delivery">
+                    <i class="bi bi-truck"></i> Yetkazish
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Xarita' in (page_title or '') %}active{% endif %}" href="/map">
+                    <i class="bi bi-geo-alt"></i> Xarita
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Supervayzer' %}active{% endif %}" href="/supervisor">
+                    <i class="bi bi-binoculars"></i> Supervayzer
+                </a>
+                {% if page_title and 'Agent buyurtmalari' in page_title %}
+                <a class="nav-link active ps-4 small" href="/supervisor/agent-orders">
+                    <i class="bi bi-cart-check"></i> Agent buyurtmalari
+                </a>
+                {% endif %}
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Agent to\'lov' in (page_title or '') %}active{% endif %}" href="/supervisor/agent-payments">
+                    <i class="bi bi-cash-stack"></i> Agent to'lovlari
+                </a>
+            </li>
+
+            <!-- HISOBOTLAR -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">HISOBOTLAR</small>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'svertka' in (page_title or '')|lower or 'Kontragent svertka' in (page_title or '') %}active{% endif %}" href="/reports/partner-reconciliation">
+                    <i class="bi bi-arrow-left-right"></i> Kontragent svertka
+                </a>
+            </li>
+
+            <li class="nav-item mt-2">
                 <a class="nav-link {% if page_title == 'Chat' or 'Support chat' in (page_title or '') %}active{% endif %}" href="/chat">
                     <i class="bi bi-chat-dots"></i> Chat
                     <span id="chatUnreadBadge" class="badge bg-danger ms-auto d-none"></span>
@@ -1299,6 +1345,9 @@
                     <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
                         <li><a class="dropdown-item" href="#"><i class="bi bi-person"></i> Profil</a></li>
                         <li><a class="dropdown-item" href="#"><i class="bi bi-gear"></i> Sozlamalar</a></li>
+                        {% if current_user.role == 'admin' %}
+                        <li><a class="dropdown-item" href="/admin/periods"><i class="bi bi-calendar-check"></i> Oy yopish</a></li>
+                        {% endif %}
                         <li>
                             <hr class="dropdown-divider">
                         </li>

@@ -81,8 +81,8 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
     await _load();
   }
 
-  String _sLabel(String s) { switch (s) { case 'in_progress': return 'Yo\'lda'; case 'delivered': return 'Yetkazildi'; case 'failed': return 'Qaytdi'; default: return 'Kutilmoqda'; } }
-  Color _sColor(String s) { switch (s) { case 'in_progress': return Colors.blue; case 'delivered': return Colors.green; case 'failed': return Colors.red; default: return Colors.orange; } }
+  String _sLabel(String s) { switch (s) { case 'in_progress': return 'Yo\'lda'; case 'delivered': return 'Yetkazildi'; case 'failed': return 'Qaytdi'; case 'cancelled': return 'Bekor qilingan'; default: return 'Kutilmoqda'; } }
+  Color _sColor(String s) { switch (s) { case 'in_progress': return Colors.blue; case 'delivered': return Colors.green; case 'failed': return Colors.red; case 'cancelled': return Colors.grey; default: return Colors.orange; } }
   String _fmt(double v) { if (v <= 0) return '0'; final s = v.toInt().toString(); final b = StringBuffer(); for (int i = 0; i < s.length; i++) { if (i > 0 && (s.length - i) % 3 == 0) b.write(' '); b.write(s[i]); } return b.toString(); }
 
   bool get _isToday {
@@ -178,8 +178,8 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final active = _deliveries.where((d) => !['delivered', 'failed'].contains(d['status'])).toList();
-    final done = _deliveries.where((d) => ['delivered', 'failed'].contains(d['status'])).toList();
+    final active = _deliveries.where((d) => !['delivered', 'failed', 'cancelled'].contains(d['status'])).toList();
+    final done = _deliveries.where((d) => ['delivered', 'failed', 'cancelled'].contains(d['status'])).toList();
     return Column(
       children: [
         _buildDateBar(),
@@ -241,7 +241,7 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
   Widget _tile(Map<String, dynamic> d) {
     final status = d['status'] ?? 'pending';
     final color = _sColor(status);
-    final isActive = !['delivered', 'failed'].contains(status);
+    final isActive = !['delivered', 'failed', 'cancelled'].contains(status);
     final items = List<Map<String, dynamic>>.from(d['items'] ?? []);
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -560,7 +560,7 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
   Widget build(BuildContext context) {
     final items = List<Map<String, dynamic>>.from(_d['items'] ?? []);
     final status = _d['status'] ?? 'pending';
-    final isActive = !['delivered', 'failed'].contains(status);
+    final isActive = !['delivered', 'failed', 'cancelled'].contains(status);
     final hasGps = _d['latitude'] != null && _d['longitude'] != null;
 
     return Scaffold(

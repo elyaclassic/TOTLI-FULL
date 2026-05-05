@@ -11,35 +11,48 @@ from app.models.database import CashRegister, CashTransfer, Payment
 from app.services.document_service import DocumentError
 
 
-def cash_balance_formula(db: Session, cash_id: int) -> tuple:
-    """Kassa balansini formuladan hisoblash: opening + income - expense + transfers_in - transfers_out."""
+def cash_balance_formula(db: Session, cash_id: int, as_of_date=None) -> tuple:
+    """Kassa balansini formuladan hisoblash: opening + income - expense + transfers_in - transfers_out.
+
+    as_of_date — agar berilsa, shu sana oxirigacha (23:59:59) bo'lgan operatsiyalarni hisoblaydi.
+    None bo'lsa — joriy balans.
+    """
+    from datetime import datetime, time, timedelta
     cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
     if not cash:
         return (0.0, 0.0, 0.0)
     opening = float(getattr(cash, "opening_balance", None) or 0)
     confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
-    income_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "income", confirmed)
-        .scalar()
-    ) or 0
-    expense_sum = float(
-        db.query(func.coalesce(func.sum(Payment.amount), 0))
-        .filter(Payment.cash_register_id == cash_id, Payment.type == "expense", confirmed)
-        .scalar()
-    ) or 0
-    # CashTransfer: pul chiqdi (in_transit yoki completed bo'lsa)
-    transfer_out = float(
-        db.query(func.coalesce(func.sum(CashTransfer.amount), 0))
-        .filter(CashTransfer.from_cash_id == cash_id, CashTransfer.status.in_(("in_transit", "completed")))
-        .scalar()
-    ) or 0
-    # CashTransfer: pul kirdi (faqat completed bo'lsa)
-    transfer_in = float(
-        db.query(func.coalesce(func.sum(CashTransfer.amount), 0))
-        .filter(CashTransfer.to_cash_id == cash_id, CashTransfer.status == "completed")
-        .scalar()
-    ) or 0
+
+    cutoff = None
+    if as_of_date is not None:
+        if hasattr(as_of_date, "date"):
+            cutoff = datetime.combine(as_of_date.date(), time.max)
+        else:
+            cutoff = datetime.combine(as_of_date, time.max)
+
+    income_q = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.cash_register_id == cash_id, Payment.type == "income", confirmed
+    )
+    expense_q = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.cash_register_id == cash_id, Payment.type == "expense", confirmed
+    )
+    transfer_out_q = db.query(func.coalesce(func.sum(CashTransfer.amount), 0)).filter(
+        CashTransfer.from_cash_id == cash_id, CashTransfer.status.in_(("in_transit", "completed"))
+    )
+    transfer_in_q = db.query(func.coalesce(func.sum(CashTransfer.amount), 0)).filter(
+        CashTransfer.to_cash_id == cash_id, CashTransfer.status == "completed"
+    )
+    if cutoff is not None:
+        income_q = income_q.filter(Payment.date <= cutoff)
+        expense_q = expense_q.filter(Payment.date <= cutoff)
+        transfer_out_q = transfer_out_q.filter(CashTransfer.date <= cutoff)
+        transfer_in_q = transfer_in_q.filter(CashTransfer.date <= cutoff)
+
+    income_sum = float(income_q.scalar()) or 0
+    expense_sum = float(expense_q.scalar()) or 0
+    transfer_out = float(transfer_out_q.scalar()) or 0
+    transfer_in = float(transfer_in_q.scalar()) or 0
     return (opening + income_sum - expense_sum + transfer_in - transfer_out, income_sum, expense_sum)
 
 
