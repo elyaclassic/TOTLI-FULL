@@ -13,11 +13,24 @@ router = APIRouter(prefix="/api", tags=["api-system"])
 
 
 def _is_local_request(request: Request) -> bool:
-    """Faqat lokal so'rovlar (localhost / 127.0.0.1 / ::1)."""
+    """Lokal tarmoqdan so'rovlar (localhost yoki internal LAN)."""
     client = request.client
     if not client:
         return False
-    return client.host in ("127.0.0.1", "::1", "localhost")
+    host = client.host
+    if host in ("127.0.0.1", "::1", "localhost"):
+        return True
+    # Internal LAN (10.x.x.x, 192.168.x.x, 172.16-31.x.x)
+    if host.startswith("10.") or host.startswith("192.168.") or host.startswith("169.254."):
+        return True
+    if host.startswith("172."):
+        try:
+            second = int(host.split(".")[1])
+            if 16 <= second <= 31:
+                return True
+        except (ValueError, IndexError):
+            pass
+    return False
 
 
 @router.get("/pwa/config")
