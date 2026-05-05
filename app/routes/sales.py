@@ -1482,6 +1482,7 @@ async def sales_pos_x_report(
 
     cash_balances: list = []
     inkasatsiya_today = {"count": 0, "sum": 0.0}
+    inkasatsiya_naqd_today = {"count": 0, "sum": 0.0}
     expense_to_partner = {"count": 0, "sum": 0.0}
     expense_other = {"count": 0, "sum": 0.0}
     expense_non_cash: dict = {}
@@ -1511,6 +1512,11 @@ async def sales_pos_x_report(
                 }
 
                 naqd_cash_ids = [c.id for c in shop_cashes if (c.payment_type or "").strip().lower() == "naqd"]
+                naqd_transfers = [t for t in transfers if t.from_cash_id in naqd_cash_ids]
+                inkasatsiya_naqd_today = {
+                    "count": len(naqd_transfers),
+                    "sum": sum(float(t.amount or 0) for t in naqd_transfers),
+                }
                 cash_pt_lookup = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in shop_cashes}
                 if cash_ids:
                     expenses_q = db.query(Payment).filter(
@@ -1540,7 +1546,7 @@ async def sales_pos_x_report(
         pass
 
     naqd_income_today = float(by_type.get("naqd", {}).get("sum", 0) or 0)
-    qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"]
+    qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"] - inkasatsiya_naqd_today["sum"]
 
     return JSONResponse({
         "date": target_date.strftime("%d.%m.%Y"),
@@ -1558,6 +1564,7 @@ async def sales_pos_x_report(
         "by_user": by_user,
         "cash_balances": cash_balances,
         "inkasatsiya_today": inkasatsiya_today,
+        "inkasatsiya_naqd_today": inkasatsiya_naqd_today,
         "expense_to_partner": expense_to_partner,
         "expense_other": expense_other,
         "expense_non_cash": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in sorted(expense_non_cash.items(), key=lambda x: -x[1]["sum"])],
@@ -2527,9 +2534,10 @@ async def pos_pay_supplier(
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
-    pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{(pay_count + 1):04d}"
+    today_str = datetime.now().strftime('%Y%m%d')
+    last_pay = db.query(Payment).filter(Payment.number.like(f"PAY-{today_str}-%")).order_by(Payment.number.desc()).first()
+    next_seq = int(last_pay.number.split("-")[-1]) + 1 if last_pay else 1
+    pay_number = f"PAY-{today_str}-{next_seq:04d}"
     db.add(Payment(
         number=pay_number,
         type="expense",
@@ -2581,9 +2589,10 @@ async def pos_expense(
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
     # To'lov yaratish (chiqim — harajat)
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    pay_count = db.query(Payment).filter(Payment.created_at >= today_start).count()
-    pay_number = f"PAY-{datetime.now().strftime('%Y%m%d')}-{(pay_count + 1):04d}"
+    today_str = datetime.now().strftime('%Y%m%d')
+    last_pay = db.query(Payment).filter(Payment.number.like(f"PAY-{today_str}-%")).order_by(Payment.number.desc()).first()
+    next_seq = int(last_pay.number.split("-")[-1]) + 1 if last_pay else 1
+    pay_number = f"PAY-{today_str}-{next_seq:04d}"
     description = f"Harajat: {expense_type_name}"
     if note:
         description += f" — {note}"

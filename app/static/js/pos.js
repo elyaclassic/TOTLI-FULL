@@ -787,6 +787,12 @@
                             '−' + _xrFmt(d.expense_other.sum)
                         ));
                     }
+                    if (d.inkasatsiya_naqd_today && d.inkasatsiya_naqd_today.count > 0) {
+                        xReportBody.appendChild(_xrRow(
+                            'Inkasatsiya naqd (' + d.inkasatsiya_naqd_today.count + ' ta):',
+                            '−' + _xrFmt(d.inkasatsiya_naqd_today.sum)
+                        ));
+                    }
                     if (typeof d.qoldiq !== 'undefined') {
                         var qRow = _xrRow('NAQD QOLDIQ (kassada bo\'lishi kerak):', _xrFmt(d.qoldiq), true);
                         qRow.style.background = '#e3f2fd';
