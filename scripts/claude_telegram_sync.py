@@ -25,7 +25,7 @@ from pathlib import Path
 
 NOTIFY_URL = os.environ.get("CLAUDE_NOTIFY_URL", "http://127.0.0.1:8080/api/internal/notify-owner")
 INBOX_DIR = Path(__file__).resolve().parent.parent / "app" / "bot" / "data"
-INBOX_FILE = INBOX_DIR / "telegram_inbox.json"
+INBOX_FILE = INBOX_DIR / "inbox.jsonl"
 INBOX_LAST_SEEN = INBOX_DIR / "claude_last_seen.txt"
 
 
@@ -104,12 +104,19 @@ def cmd_prompt():
     """UserPromptSubmit event - inbox da yangi Telegram xabarlar bo'lsa, contextga qo'sh."""
     if not INBOX_FILE.exists():
         return 0
+    messages = []
     try:
         with open(INBOX_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    messages.append(json.loads(line))
+                except Exception:
+                    continue
     except Exception:
         return 0
-    messages = data.get("messages", []) if isinstance(data, dict) else []
     if not messages:
         return 0
     last_seen = ""
@@ -124,7 +131,7 @@ def cmd_prompt():
     new_msgs.sort(key=lambda m: str(m.get("id", "")))
     parts = []
     for m in new_msgs[-10:]:
-        ts = m.get("created_at", "")
+        ts = m.get("ts", "")
         kind = m.get("kind", "text")
         text = m.get("text", "") or ""
         if kind == "photo":
