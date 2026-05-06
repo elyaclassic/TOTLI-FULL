@@ -126,6 +126,32 @@ def delete_stock_movements_for_document(db: Session, document_type: str, documen
     return deleted
 
 
+def apply_return_stock_addition(db: Session, order, current_user, note_prefix: str = "Qaytarish") -> None:
+    """Return order itemlari uchun "return_sale" StockMovementlarini yaratadi (stock kirim).
+
+    Vozvrat omborga (yoki order.warehouse_id ga) qaytgan tovar kiradi. Stock check
+    kerak emas — bu kirim hujjati."""
+    from datetime import datetime as _dt
+    valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
+    for it in valid_items:
+        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+        if not wh_id:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=it.product_id,
+            quantity_change=+float(it.quantity or 0),
+            operation_type="return_sale",
+            document_type="Sale",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"{note_prefix}: {order.number}",
+            created_at=order.date or _dt.now(),
+        )
+
+
 def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: str = "Sotuv") -> None:
     """Order itemlari uchun "sale" StockMovementlarini yaratadi (stock chiqim).
     sales.py va delivery_routes.py:supervisor_confirm_agent_order o'rtasidagi DRY uchun.

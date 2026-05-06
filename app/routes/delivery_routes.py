@@ -479,6 +479,20 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
     db.refresh(order)
 
+    # Obmen qaytarish (return_sale) — Vozvrat omborga kirim, Stock check shartsiz.
+    # Va parent_order_id bor sale (child) — bu obmen yangi tovar qismi, oddiy sale logika.
+    if order.type == "return_sale":
+        from app.services.stock_service import apply_return_stock_addition
+        apply_return_stock_addition(db, order, current_user, note_prefix="Obmen qaytarish (Vozvrat kirim)")
+        order.user_id = current_user.id
+        # Agar obmen pari child sale bor bo'lsa, uni ham birga tasdiqlash uchun
+        # foydalanuvchi alohida tugma bilan bossan kifoya — bu yerda parent faqat
+        db.commit()
+        return RedirectResponse(
+            url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish) tasdiqlandi"),
+            status_code=303,
+        )
+
     # Order itemlari uchun batch load (Stock + Product) — N+1 oldini olish
     valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
     pairs = [(it.warehouse_id if it.warehouse_id else order.warehouse_id, it.product_id) for it in valid_items]
