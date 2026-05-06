@@ -1164,7 +1164,12 @@ async def production_orders(
     can_view_all = role in ("admin", "rahbar", "raxbar", "manager", "menejer")
     if current_user and not can_view_all:
         if is_operator_role and current_user_employee and (operator_id is None or int(operator_id or 0) == 0):
-            q = q.filter(Production.operator_id == current_user_employee.id)
+            # Operator o'zining + umumiy navbat (NULL operator) ni ko'radi
+            from sqlalchemy import or_ as _or
+            q = q.filter(_or(
+                Production.operator_id == current_user_employee.id,
+                Production.operator_id.is_(None),
+            ))
         elif not is_operator_role:
             q = q.filter(Production.user_id == current_user.id)
     if operator_id is not None and int(operator_id) > 0:
