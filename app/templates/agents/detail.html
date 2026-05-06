@@ -20,16 +20,16 @@
 
 <!-- Stat cards (3 vertikal qator) + Oxirgi joylashuv (kengaytirilgan xarita) -->
 <div class="row g-3 mb-3">
-    <div class="col-md-4 d-flex flex-column gap-3" style="min-height: 480px;">
-        <div class="mini-stat d-flex flex-column justify-content-center" style="border-left: 4px solid #ffc107; flex: 1;">
+    <div class="col-md-4 d-flex flex-column gap-3">
+        <div class="mini-stat" style="border-left: 4px solid #ffc107;">
             <div class="num text-warning">{{ visits|selectattr('visit_date', 'ge', today)|list|length if today is defined else visits|length }}</div>
             <div class="lbl"><i class="bi bi-calendar-day"></i> Bugungi tashriflar</div>
         </div>
-        <div class="mini-stat d-flex flex-column justify-content-center" style="border-left: 4px solid #1a73e8; flex: 1;">
+        <div class="mini-stat" style="border-left: 4px solid #1a73e8;">
             <div class="num text-primary">{{ visits|length }}</div>
             <div class="lbl"><i class="bi bi-calendar-check"></i> Jami tashriflar</div>
         </div>
-        <div class="mini-stat d-flex flex-column justify-content-center" style="border-left: 4px solid #2e7d32; flex: 1;">
+        <div class="mini-stat" style="border-left: 4px solid #2e7d32;">
             <div class="num text-success">
                 {% if locations %}
                     {{ locations[0].recorded_at.strftime('%H:%M') }}
@@ -48,7 +48,7 @@
             </div>
             <div class="card-body p-0 d-flex flex-column flex-grow-1">
                 {% if locations %}
-                <div id="miniMap" style="flex: 1; min-height: 420px;"></div>
+                <div id="miniMap" style="flex: 1; min-height: 320px;"></div>
                 {% else %}
                 <div class="text-center text-muted py-5 my-auto">
                     <i class="bi bi-geo-alt fs-1"></i><br>
