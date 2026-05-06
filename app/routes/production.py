@@ -421,7 +421,8 @@ async def production_index_page(
             pending_sql = "SELECT COUNT(*) as count FROM productions WHERE status = :status"
             pending_params = {"status": "draft"}
             if filter_by_operator:
-                pending_sql += " AND operator_id = :operator_id"
+                # Operator o'zining + umumiy navbat (NULL operator) ni ko'radi
+                pending_sql += " AND (operator_id = :operator_id OR operator_id IS NULL)"
                 pending_params["operator_id"] = current_user_employee.id
             pending_count = db.execute(text(pending_sql), pending_params).scalar()
             pending_productions = pending_count or 0
@@ -446,7 +447,8 @@ async def production_index_page(
             """
             recent_params = {"limit": 10}
             if filter_by_operator:
-                recent_sql += " AND p.operator_id = :operator_id"
+                # Operator o'zining + umumiy navbat (NULL operator)
+                recent_sql += " AND (p.operator_id = :operator_id OR p.operator_id IS NULL)"
                 recent_params["operator_id"] = current_user_employee.id
             recent_sql += " ORDER BY p.date DESC LIMIT :limit"
             recent_productions_result = db.execute(text(recent_sql), recent_params).fetchall()
@@ -1401,11 +1403,15 @@ async def production_orders_bulk_complete(
                 status_code=303,
             )
         # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+        # operator_id NULL bo'lsa (auto-yaratilgan) yakunlovchi operatorga yoziladi (piecework kg)
         max_st = _recipe_max_stage(recipe)
+        complete_emp = db.query(Employee).filter(Employee.user_id == current_user.id).first()
+        emp_id = complete_emp.id if complete_emp else None
         claim = db.execute(
-            text("UPDATE productions SET status='completed', current_stage=:max "
+            text("UPDATE productions SET status='completed', current_stage=:max, "
+                 "operator_id=COALESCE(operator_id, :emp_id) "
                  "WHERE id=:pid AND status IN ('draft','in_progress')"),
-            {"pid": pid, "max": max_st}
+            {"pid": pid, "max": max_st, "emp_id": emp_id}
         )
         if claim.rowcount == 0:
             continue  # boshqa request allaqachon tasdiqlagan
