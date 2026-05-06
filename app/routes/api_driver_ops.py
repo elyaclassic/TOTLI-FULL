@@ -53,7 +53,18 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
         if date:
             try:
                 d = datetime.strptime(date, "%Y-%m-%d").date()
-                q = q.filter(sa_func.date(Delivery.created_at) == d)
+                # Yetkazilmagan (pending/picked_up/in_progress) — har doim ko'rinadi.
+                # Tugatilgan/bekor qilingan — faqat tanlangan kun ichida bo'lsa.
+                from sqlalchemy import or_, and_
+                q = q.filter(
+                    or_(
+                        Delivery.status.in_(["pending", "picked_up", "in_progress"]),
+                        and_(
+                            Delivery.status.in_(["delivered", "cancelled"]),
+                            sa_func.date(Delivery.created_at) == d,
+                        ),
+                    )
+                )
             except ValueError:
                 pass
         deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
