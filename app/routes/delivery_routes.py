@@ -519,7 +519,7 @@ async def supervisor_confirm_agent_order(
             prod = products_map.get(it.product_id)
             name = prod.name if prod else f"#{it.product_id}"
             shortage.append(f"{name} (kerak: {need}, bor: {have})")
-            shortage_items.append({"name": name, "need": need, "have": have})
+            shortage_items.append({"product_id": it.product_id, "name": name, "need": need, "have": have})
 
     if shortage:
         # Stock yetmasa: vaqtincha 'confirmed' status'ni 'waiting_production' ga qaytarish
@@ -528,14 +528,30 @@ async def supervisor_confirm_agent_order(
         order.pending_driver_id = driver_id_int
         order.user_id = current_user.id
         order.note = (order.note or "") + f"\n[Production kutilmoqda] {', '.join(shortage)}"
+
+        # Avtomatik Production hujjat yaratish (Stock=0 trigger)
+        created_productions = []
+        try:
+            from app.services.auto_production_service import auto_create_productions_for_order
+            created_productions = auto_create_productions_for_order(db, order, shortage_items)
+        except Exception as e:
+            import traceback
+            print(f"[auto_production] xato: {e}", flush=True)
+            traceback.print_exc()
+
         db.commit()
         try:
             from app.bot.services.notifier import notify_production_needed
             notify_production_needed(order.number, shortage_items)
         except Exception:
             pass
+
+        info_msg = "Buyurtma production kutilmoqda — operatorlar xabardor qilindi"
+        if created_productions:
+            pr_nums = ", ".join(p["number"] for p in created_productions)
+            info_msg = f"Buyurtma production kutilmoqda. Avtomat yaratildi: {pr_nums}"
         return RedirectResponse(
-            url="/supervisor/agent-orders?info=" + quote("Buyurtma production kutilmoqda — operatorlar xabardor qilindi"),
+            url="/supervisor/agent-orders?info=" + quote(info_msg),
             status_code=303,
         )
     # Stock chiqarish (DRY: stock_service.apply_sale_stock_deduction)
