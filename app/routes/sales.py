@@ -1058,10 +1058,10 @@ async def sales_nakladnoy_excel_bulk(
                 row += 1
 
         # Imzo joylari (har Накладная oxirida bir marta)
-        ws.cell(row=row, column=1, value="Otpustil:").font = Font(bold=True)
+        ws.cell(row=row, column=1, value="Topshirdi:").font = Font(bold=True)
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
         ws.cell(row=row, column=2, value="_______________________")
-        ws.cell(row=row, column=5, value="Prinyal:").font = Font(bold=True)
+        ws.cell(row=row, column=5, value="Qabul qildi:").font = Font(bold=True)
         ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
         ws.cell(row=row, column=6, value="_______________________")
         row += 2
@@ -1215,10 +1215,10 @@ async def sales_exchange_excel(
 
     # Imzo joylari
     sig_row = next_row + 2
-    ws.cell(row=sig_row, column=1, value="Отпустил:").font = bold
+    ws.cell(row=sig_row, column=1, value="Topshirdi:").font = bold
     ws.merge_cells(start_row=sig_row, start_column=2, end_row=sig_row, end_column=3)
     ws.cell(row=sig_row, column=2, value="_______________________").alignment = left
-    ws.cell(row=sig_row, column=5, value="Принял:").font = bold
+    ws.cell(row=sig_row, column=5, value="Qabul qildi:").font = bold
     ws.merge_cells(start_row=sig_row, start_column=6, end_row=sig_row, end_column=7)
     ws.cell(row=sig_row, column=6, value="_______________________").alignment = left
 
