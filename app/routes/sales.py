@@ -990,12 +990,8 @@ async def sales_nakladnoy_excel_bulk(
         sum_cell.number_format = '#,##0" so\'m"'
         return r + 1
 
-    partner_count = 0
     for partner_id, partner_orders in by_partner.items():
-        partner_count += 1
-        # Page break har partner uchun (birinchidan tashqari)
-        if partner_count > 1:
-            ws.row_breaks.append(Break(id=row - 1))
+        # Page break yo'q — hammasi ketma-ket sig'sin (Excel avtomat sahifalashadi)
 
         # Bir vakil order'dan partner ma'lumotlarini olamiz
         first_order = partner_orders[0]
