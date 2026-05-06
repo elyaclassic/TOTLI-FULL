@@ -871,6 +871,7 @@ async def sales_nakladnoy_excel_bulk(
             joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit),
             joinedload(Order.partner),
             joinedload(Order.warehouse),
+            joinedload(Order.agent),
         )
         .filter(Order.id.in_(order_ids), Order.type.in_(("sale", "return_sale")))
         .order_by(Order.id)
@@ -879,12 +880,28 @@ async def sales_nakladnoy_excel_bulk(
     if not orders:
         raise HTTPException(status_code=404, detail="Buyurtmalar topilmadi")
 
-    # Order turi → hujjat sarlavhasi (Sales Doctor uslubida)
-    def _doc_label(o):
-        if o.type == "return_sale":
-            return "QAYTARISH"
-        # exchange uchun kelajakda: o.type == "exchange_in" -> "OBMEN (otgruz)", "exchange_out" -> "OBMEN (vozvrat)"
-        return "BUYURTMA"
+    # Obmen parentlari uchun child sale ni avtomatik qo'shish
+    parent_return_ids = [o.id for o in orders if o.type == "return_sale" and o.parent_order_id is None]
+    exchange_children: dict[int, Order] = {}
+    if parent_return_ids:
+        children = (
+            db.query(Order)
+            .options(joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit))
+            .filter(Order.parent_order_id.in_(parent_return_ids))
+            .all()
+        )
+        for ch in children:
+            exchange_children[ch.parent_order_id] = ch
+
+    # Partner bo'yicha gruhlash (kontragent → orderlar)
+    from collections import OrderedDict
+    by_partner: OrderedDict = OrderedDict()
+    for o in orders:
+        # Child sale (parent_order_id) — exchange_children orqali avtomatik kiradi, ro'yxatda alohida ko'rsatmaymiz
+        if o.parent_order_id and o.type == "sale":
+            continue
+        key = o.partner_id or 0
+        by_partner.setdefault(key, []).append(o)
 
     wb = Workbook()
     ws = wb.active
@@ -910,126 +927,144 @@ async def sales_nakladnoy_excel_bulk(
 
     row = 1
     today_str = datetime.now().strftime("%d.%m.%Y")
-    # A4 portrait da bitta sahifaga taxminan 68-72 qator sig'adi (default 11pt font, kichik margin)
-    # Har Yuk xati: 1 (sarlavha) + 3 (info) + 1 (bo'sh) + 1 (BUYURTMA) + 1 (jadval header) + N (items) + 1 (Jami) + 1 (bo'sh) + 1 (imzo) + 1 (bo'sh) = 11 + items
-    ROWS_PER_PAGE = 68
-    current_page_used = 0  # joriy sahifada ishlatilgan qatorlar
 
-    for idx, order in enumerate(orders, 1):
-        # Hujjat o'lchamini oldindan aniq hisoblash
-        items_count = len(order.items)
-        order_rows = 11 + items_count
+    section_send_fill = PatternFill(start_color="C8E6C9", end_color="C8E6C9", fill_type="solid")
+    section_ret_fill = PatternFill(start_color="FFE0B2", end_color="FFE0B2", fill_type="solid")
+    section_buyurtma_fill = PatternFill(start_color="E8F5E9", end_color="E8F5E9", fill_type="solid")
 
-        # Agar joriy sahifaga sig'masa va birinchi hujjat emas — page break qo'yish
-        if idx > 1 and current_page_used + order_rows > ROWS_PER_PAGE:
-            ws.row_breaks.append(Break(id=row - 1))
-            current_page_used = 0
+    HEADERS = ["№", "Kodi", "Nomi", "O'lchov birligi", "Soni", "Narxi", "Summa"]
 
-        # Yuk xati sarlavhasi
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
-        cell = ws.cell(row=row, column=1, value=f"Yuk xati № {order.number}    sana: {order.date.strftime('%d.%m.%Y') if order.date else today_str}")
-        cell.font = Font(bold=True, size=13)
-        cell.fill = section_fill
-        cell.alignment = center
-        cell.border = border
-        row += 1
+    def render_section(start_row: int, title: str, fill, items: list, doc_number: str) -> int:
+        # Section banner (1 satr — title)
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=7)
+        ban = ws.cell(row=start_row, column=1, value=f"{title} ({doc_number})")
+        ban.font = Font(bold=True, size=11)
+        ban.fill = fill
+        ban.alignment = left
+        ban.border = border
 
-        # Kimga/Manzil/Telefon | Narx turi/Ombor/Sana
-        partner_name = order.partner.name if order.partner else "Naqd mijoz"
-        partner_addr = order.partner.address if (order.partner and order.partner.address) else ""
-        partner_phone = order.partner.phone if (order.partner and order.partner.phone) else ""
-        wh_name = order.warehouse.name if order.warehouse else "-"
-        price_type_name = order.price_type.name if (hasattr(order, 'price_type') and order.price_type) else "Sotuv narxi"
-
-        ws.cell(row=row, column=1, value="Kimga:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
-        ws.cell(row=row, column=2, value=partner_name)
-        ws.cell(row=row, column=5, value="Narx turi:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
-        ws.cell(row=row, column=6, value=price_type_name)
-        row += 1
-        ws.cell(row=row, column=1, value="Manzil:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
-        ws.cell(row=row, column=2, value=partner_addr)
-        ws.cell(row=row, column=5, value="Ombor:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
-        ws.cell(row=row, column=6, value=wh_name)
-        row += 1
-        ws.cell(row=row, column=1, value="Telefon:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
-        ws.cell(row=row, column=2, value=partner_phone)
-        ws.cell(row=row, column=5, value="Sana:").font = Font(bold=True)
-        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
-        ws.cell(row=row, column=6, value=order.date.strftime("%d.%m.%Y %H:%M") if order.date else "-")
-        row += 2
-
-        # Hujjat turi sarlavhasi (BUYURTMA / QAYTARISH / OBMEN)
-        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
-        doc_label = _doc_label(order)
-        zakaz_cell = ws.cell(row=row, column=1, value=f"{doc_label} ({order.number})")
-        zakaz_cell.font = Font(bold=True, size=11, color="C62828" if order.type == "return_sale" else "000000")
-        zakaz_cell.alignment = left
-        row += 1
-
-        # Jadval sarlavhasi (7 ustun: №, Kod, Nomi, O'lchov birligi, Soni, Narxi, Summa)
-        for col, h in enumerate(["№", "Kodi", "Nomi", "O'lchov birligi", "Soni", "Narxi", "Summa"], 1):
-            cell = ws.cell(row=row, column=col, value=h)
+        # Headers
+        hr = start_row + 1
+        for c, h in enumerate(HEADERS, 1):
+            cell = ws.cell(row=hr, column=c, value=h)
             cell.font = bold_white
             cell.fill = header_fill
             cell.alignment = center
             cell.border = border
+
+        r = hr + 1
+        total_qty = 0.0
+        total_sum = 0.0
+        for i, it in enumerate(items, 1):
+            prod = it.product
+            prod_name = prod.name if prod else f"#{it.product_id}"
+            prod_code = (prod.code if prod and prod.code else "") or ""
+            unit = prod.unit.name if (prod and prod.unit) else ""
+            qty = float(it.quantity or 0)
+            price = float(it.price or 0)
+            summa = float(it.total or (qty * price))
+            total_qty += qty
+            total_sum += summa
+            ws.cell(row=r, column=1, value=i).alignment = center
+            ws.cell(row=r, column=2, value=prod_code).alignment = center
+            ws.cell(row=r, column=3, value=prod_name).alignment = left
+            ws.cell(row=r, column=4, value=unit).alignment = center
+            ws.cell(row=r, column=5, value=qty).alignment = right
+            ws.cell(row=r, column=6, value=price).alignment = right
+            ws.cell(row=r, column=7, value=summa).alignment = right
+            for c in range(1, 8):
+                ws.cell(row=r, column=c).border = border
+            ws.cell(row=r, column=6).number_format = '#,##0'
+            ws.cell(row=r, column=7).number_format = '#,##0'
+            r += 1
+        # Itog
+        ws.cell(row=r, column=1, value="Jami").font = Font(bold=True)
+        ws.cell(row=r, column=1).alignment = left
+        for c in range(1, 8):
+            ws.cell(row=r, column=c).border = border
+        ws.cell(row=r, column=5, value=total_qty).alignment = right
+        ws.cell(row=r, column=5).font = Font(bold=True)
+        sum_cell = ws.cell(row=r, column=7, value=total_sum)
+        sum_cell.font = Font(bold=True, color="2E7D32")
+        sum_cell.alignment = right
+        sum_cell.number_format = '#,##0" so\'m"'
+        return r + 1
+
+    partner_count = 0
+    for partner_id, partner_orders in by_partner.items():
+        partner_count += 1
+        # Page break har partner uchun (birinchidan tashqari)
+        if partner_count > 1:
+            ws.row_breaks.append(Break(id=row - 1))
+
+        # Bir vakil order'dan partner ma'lumotlarini olamiz
+        first_order = partner_orders[0]
+        partner = first_order.partner
+        agent = first_order.agent
+        partner_name = partner.name if partner else "Naqd mijoz"
+        partner_addr = partner.address if (partner and partner.address) else ""
+        partner_phone = partner.phone if (partner and partner.phone) else ""
+
+        # Накладная sarlavhasi
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=7)
+        cell = ws.cell(row=row, column=1, value=f"Накладная № {first_order.number}    от {first_order.date.strftime('%d.%m.%Y') if first_order.date else today_str}")
+        cell.font = Font(bold=True, size=14)
+        cell.alignment = center
         row += 1
 
-        # Items
-        order_total = 0.0
-        order_qty_sum = 0.0
-        for i, item in enumerate(order.items, 1):
-            prod_name = item.product.name if item.product else f"#{item.product_id}"
-            prod_code = item.product.code if (item.product and item.product.code) else ""
-            unit = item.product.unit.name if (item.product and item.product.unit) else ""
-            qty = float(item.quantity or 0)
-            price = float(item.price or 0)
-            summa = float(item.total or (qty * price))
-            order_total += summa
-            order_qty_sum += qty
-
-            ws.cell(row=row, column=1, value=i).alignment = center
-            ws.cell(row=row, column=2, value=prod_code).alignment = center
-            ws.cell(row=row, column=3, value=prod_name).alignment = left
-            ws.cell(row=row, column=4, value=unit).alignment = center
-            ws.cell(row=row, column=5, value=qty).alignment = right
-            ws.cell(row=row, column=6, value=price).alignment = right
-            ws.cell(row=row, column=7, value=summa).alignment = right
-            for col in range(1, 8):
-                ws.cell(row=row, column=col).border = border
-                if col in (6, 7):
-                    ws.cell(row=row, column=col).number_format = '#,##0'
-            row += 1
-
-        # Jami
-        ws.cell(row=row, column=1, value="Jami").font = Font(bold=True)
-        ws.cell(row=row, column=1).alignment = left
-        ws.cell(row=row, column=1).border = border
-        for col in range(2, 8):
-            ws.cell(row=row, column=col).border = border
-        ws.cell(row=row, column=5, value=order_qty_sum).alignment = right
-        ws.cell(row=row, column=5).font = Font(bold=True)
-        ws.cell(row=row, column=7, value=order_total).alignment = right
-        ws.cell(row=row, column=7).font = Font(bold=True, color="2E7D32")
-        ws.cell(row=row, column=7).number_format = '#,##0" so\'m"'
+        # Kontragent va agent ma'lumotlari (2 ustunli)
+        ws.cell(row=row, column=1, value="Kimga:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_name)
+        ws.cell(row=row, column=5, value="ТП:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=agent.full_name if agent else "")
+        row += 1
+        ws.cell(row=row, column=1, value="Manzil:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_addr)
+        ws.cell(row=row, column=5, value="Тел(тп):").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=agent.phone if agent else "")
+        row += 1
+        ws.cell(row=row, column=1, value="Telefon:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
+        ws.cell(row=row, column=2, value=partner_phone)
+        ws.cell(row=row, column=5, value="Kod agenta:").font = Font(bold=True)
+        ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
+        ws.cell(row=row, column=6, value=agent.code if agent else "")
         row += 2
 
-        # Imzo joylari (har yuk xatidan keyin)
-        ws.cell(row=row, column=1, value="Topshirdi:").font = Font(bold=True)
+        # Sub-jadvallar tartibi: BUYURTMA → ОБМЕН (отгруз) → ОБМЕН (возврат)
+        # Avval oddiy buyurtma (sale, parent_order_id=None) larni chiqaramiz
+        for o in partner_orders:
+            if o.type == "sale" and not o.parent_order_id:
+                row = render_section(row, "BUYURTMA", section_buyurtma_fill, list(o.items), o.number)
+                row += 1
+
+        # Keyin obmen lar (return_sale parent + child sale juftligi)
+        for o in partner_orders:
+            if o.type != "return_sale":
+                continue
+            child = exchange_children.get(o.id)
+            if child:
+                row = render_section(row, "ОБМЕН (отгруз)", section_send_fill, list(child.items), child.number)
+                row += 1
+                row = render_section(row, "ОБМЕН (возврат)", section_ret_fill, list(o.items), o.number)
+                row += 1
+            else:
+                # Yarim/oddiy qaytarish (child yo'q)
+                row = render_section(row, "QAYTARISH", section_ret_fill, list(o.items), o.number)
+                row += 1
+
+        # Imzo joylari (har Накладная oxirida bir marta)
+        ws.cell(row=row, column=1, value="Otpustil:").font = Font(bold=True)
         ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=4)
         ws.cell(row=row, column=2, value="_______________________")
-        ws.cell(row=row, column=5, value="Qabul qildi:").font = Font(bold=True)
+        ws.cell(row=row, column=5, value="Prinyal:").font = Font(bold=True)
         ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
         ws.cell(row=row, column=6, value="_______________________")
-        row += 2  # imzo qatori + 1 ta bo'sh qator (ajratish uchun)
-
-        # Joriy sahifada ishlatilgan qator sonini yangilash
-        current_page_used += order_rows
+        row += 2
 
     # Ustun kengligi — 7 ustun
     widths = [12, 12, 38, 14, 10, 14, 18]
