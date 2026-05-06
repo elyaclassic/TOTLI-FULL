@@ -169,16 +169,25 @@ async def agent_detail(
     drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
 
     # Har order uchun haydovchi nomini olish (Delivery.driver_id orqali)
+    # Obmen parent uchun ham child sale ning haydovchisini ko'rsatish
     order_drivers = {}
     if orders:
+        # Parent ID lar + child sale ID lar (obmen uchun)
         order_ids = [o.id for o in orders]
+        child_to_parent = {}  # child.id -> parent.id (obmen pari uchun)
+        for parent_id, ch in exchange_children.items():
+            order_ids.append(ch.id)
+            child_to_parent[ch.id] = parent_id
         deliveries = db.query(Delivery).filter(Delivery.order_id.in_(order_ids)).all()
         driver_map = {d.id: d.full_name for d in db.query(Driver).filter(Driver.id.in_([dl.driver_id for dl in deliveries if dl.driver_id])).all()}
         for dl in deliveries:
             if dl.driver_id and dl.driver_id in driver_map:
-                # Faqat birinchi (oxirgi yaratilgan) delivery — ko'p delivery bo'lsa eng yangisi
                 if dl.order_id not in order_drivers:
                     order_drivers[dl.order_id] = driver_map[dl.driver_id]
+                # Obmen child uchun parent ID ga ham yozish (panelda parent ko'rinadi)
+                parent_id = child_to_parent.get(dl.order_id)
+                if parent_id and parent_id not in order_drivers:
+                    order_drivers[parent_id] = driver_map[dl.driver_id]
 
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
