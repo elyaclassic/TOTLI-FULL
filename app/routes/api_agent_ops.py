@@ -1670,6 +1670,13 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
         if not new_warehouse_id:
             new_warehouse_id = getattr(agent, "warehouse_id", None)
         if not new_warehouse_id:
+            wh = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
+            if not wh:
+                wh = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
+            if not wh:
+                wh = db.query(Warehouse).filter(Warehouse.is_active == True).first()
+            new_warehouse_id = wh.id if wh else None
+        if not new_warehouse_id:
             return {"success": False, "error": "Yangi mahsulot uchun ombor topilmadi"}
 
         partner_discount = float(partner.discount_percent or 0)
