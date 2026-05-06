@@ -367,6 +367,39 @@ async def sales_create(
     return RedirectResponse(url=f"/sales/edit/{order.id}", status_code=303)
 
 
+@router.get("/exchange/{order_id}", response_class=HTMLResponse)
+async def sales_exchange_detail(
+    request: Request,
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Obmen hujjati ko'rinishi — bir parent (return_sale) va child (sale) ni birga ko'rsatadi."""
+    parent = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product),
+        joinedload(Order.partner),
+        joinedload(Order.agent),
+    ).filter(Order.id == order_id).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Obmen topilmadi")
+    if parent.parent_order_id:
+        # Child sahifaga kirilsa, parent ga redirect
+        return RedirectResponse(url=f"/sales/exchange/{parent.parent_order_id}", status_code=303)
+    child = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product),
+    ).filter(Order.parent_order_id == parent.id).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Obmen ning sale qismi topilmadi (yarim hujjat)")
+    _check_order_access(parent, current_user)
+    return templates.TemplateResponse("sales/exchange_detail.html", {
+        "request": request,
+        "parent": parent,        # qaytgan tovar (return_sale)
+        "child": child,          # yangi tovar (sale)
+        "current_user": current_user,
+        "page_title": f"Обмен: {parent.number} ↔ {child.number}",
+    })
+
+
 @router.get("/edit/{order_id}", response_class=HTMLResponse)
 async def sales_edit(
     request: Request,
@@ -377,8 +410,20 @@ async def sales_edit(
     from urllib.parse import unquote
     order = db.query(Order).options(
         joinedload(Order.items).joinedload(OrderItem.product),
-    ).filter(Order.id == order_id, Order.type == "sale").first()
+    ).filter(Order.id == order_id).first()
     if not order:
+        raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    # Obmen orderlar uchun maxsus sahifaga redirect
+    if order.type == "return_sale":
+        if order.parent_order_id:
+            return RedirectResponse(url=f"/sales/exchange/{order.parent_order_id}", status_code=303)
+        has_child = db.query(Order.id).filter(Order.parent_order_id == order.id).first()
+        if has_child:
+            return RedirectResponse(url=f"/sales/exchange/{order.id}", status_code=303)
+        raise HTTPException(status_code=404, detail="Yarim obmen hujjati — qaytadan obmen urilishi kerak")
+    if order.parent_order_id and order.type == "sale":
+        return RedirectResponse(url=f"/sales/exchange/{order.parent_order_id}", status_code=303)
+    if order.type != "sale":
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     _check_order_access(order, current_user)
     products = db.query(Product).filter(
@@ -1002,6 +1047,161 @@ async def sales_nakladnoy_excel_bulk(
     )
 
 
+@router.get("/exchange/{order_id}/excel")
+async def sales_exchange_excel(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Obmen yuk xatini yagona Excel: ichida ОБМЕН (отгруз) + ОБМЕН (возврат) jadvallari."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from fastapi.responses import StreamingResponse
+
+    parent = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit),
+        joinedload(Order.partner),
+        joinedload(Order.agent),
+    ).filter(Order.id == order_id).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Obmen topilmadi")
+    if parent.parent_order_id:
+        return RedirectResponse(url=f"/sales/exchange/{parent.parent_order_id}/excel", status_code=303)
+    child = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.unit),
+    ).filter(Order.parent_order_id == parent.id).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Obmen ning sale qismi topilmadi")
+    _check_order_access(parent, current_user)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Obmen"
+
+    thin = Side(border_style="thin", color="000000")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    bold = Font(bold=True)
+    bold_lg = Font(bold=True, size=12)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right", vertical="center")
+    fill_send = PatternFill("solid", fgColor="C8E6C9")
+    fill_ret = PatternFill("solid", fgColor="FFE0B2")
+    fill_head_row = PatternFill("solid", fgColor="EEEEEE")
+
+    partner = parent.partner
+    agent = parent.agent
+
+    # 1-qator: Накладная № sarlavha
+    ws.merge_cells("A1:G1")
+    ws["A1"] = f"Накладная № {parent.number}    от {parent.date.strftime('%d.%m.%Y') if parent.date else ''}"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = center
+
+    # Kontragent (chap) va agent (o'ng) bloklari
+    ws["A2"] = "Кому:"; ws["A2"].font = bold
+    ws.merge_cells("B2:D2"); ws["B2"] = partner.name if partner else ""
+    ws["E2"] = "ТП:"; ws["E2"].font = bold
+    ws.merge_cells("F2:G2"); ws["F2"] = agent.full_name if agent else ""
+
+    ws["A3"] = "Адрес:"; ws["A3"].font = bold
+    ws.merge_cells("B3:D3"); ws["B3"] = partner.address if partner else ""
+    ws["E3"] = "Тел(тп):"; ws["E3"].font = bold
+    ws.merge_cells("F3:G3"); ws["F3"] = agent.phone if agent else ""
+
+    ws["A4"] = "Тел:"; ws["A4"].font = bold
+    ws.merge_cells("B4:D4"); ws["B4"] = partner.phone if partner else ""
+    ws["E4"] = "Код агента:"; ws["E4"].font = bold
+    ws.merge_cells("F4:G4"); ws["F4"] = agent.code if agent else ""
+
+    headers = ["№", "Код", "Наименование", "ЕИ", "Кол-во", "Цена", "Сумма"]
+
+    def render_section(start_row: int, title: str, fill, items, doc_number: str) -> int:
+        # Section banner
+        ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=7)
+        ban = ws.cell(row=start_row, column=1, value=f"{title} ({doc_number})")
+        ban.font = bold_lg
+        ban.fill = fill
+        ban.alignment = left
+        ban.border = border
+
+        # Headers
+        hr = start_row + 1
+        for c, h in enumerate(headers, 1):
+            cell = ws.cell(row=hr, column=c, value=h)
+            cell.font = bold
+            cell.fill = fill_head_row
+            cell.alignment = center
+            cell.border = border
+
+        # Rows
+        r = hr + 1
+        total_qty = 0.0
+        total_sum = 0.0
+        for i, it in enumerate(items, 1):
+            prod = it.product
+            prod_name = prod.name if prod else f"#{it.product_id}"
+            prod_code = (prod.code if prod and prod.code else "") or ""
+            unit = prod.unit.name if (prod and prod.unit) else ""
+            qty = float(it.quantity or 0)
+            price = float(it.price or 0)
+            summa = float(it.total or (qty * price))
+            total_qty += qty
+            total_sum += summa
+            ws.cell(row=r, column=1, value=i).alignment = center
+            ws.cell(row=r, column=2, value=prod_code).alignment = center
+            ws.cell(row=r, column=3, value=prod_name).alignment = left
+            ws.cell(row=r, column=4, value=unit).alignment = center
+            ws.cell(row=r, column=5, value=qty).alignment = right
+            ws.cell(row=r, column=6, value=price).alignment = right
+            ws.cell(row=r, column=7, value=summa).alignment = right
+            for c in range(1, 8):
+                ws.cell(row=r, column=c).border = border
+            ws.cell(row=r, column=6).number_format = '#,##0'
+            ws.cell(row=r, column=7).number_format = '#,##0'
+            r += 1
+
+        # Footer (Итог)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        f1 = ws.cell(row=r, column=1, value="Итог")
+        f1.font = bold; f1.alignment = right; f1.border = border
+        ws.cell(row=r, column=5, value=total_qty).alignment = right
+        ws.cell(row=r, column=5).font = bold; ws.cell(row=r, column=5).border = border
+        ws.cell(row=r, column=6).border = border
+        sf = ws.cell(row=r, column=7, value=total_sum)
+        sf.font = bold; sf.alignment = right; sf.number_format = '#,##0'; sf.border = border
+        return r + 1
+
+    # Section 1: ОБМЕН (отгруз) — yangi tovar (child sale)
+    next_row = render_section(6, "ОБМЕН (отгруз)", fill_send, list(child.items), child.number)
+    next_row += 1
+    # Section 2: ОБМЕН (возврат) — qaytgan (parent return_sale)
+    next_row = render_section(next_row, "ОБМЕН (возврат)", fill_ret, list(parent.items), parent.number)
+
+    # Imzo joylari
+    sig_row = next_row + 2
+    ws.cell(row=sig_row, column=1, value="Отпустил:").font = bold
+    ws.merge_cells(start_row=sig_row, start_column=2, end_row=sig_row, end_column=3)
+    ws.cell(row=sig_row, column=2, value="_______________________").alignment = left
+    ws.cell(row=sig_row, column=5, value="Принял:").font = bold
+    ws.merge_cells(start_row=sig_row, start_column=6, end_row=sig_row, end_column=7)
+    ws.cell(row=sig_row, column=6, value="_______________________").alignment = left
+
+    widths = [5, 10, 38, 8, 12, 14, 16]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"obmen_{parent.number}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
 @router.get("/{order_id}/nakladnoy/excel")
 async def sales_nakladnoy_excel(
     order_id: int,
@@ -1020,7 +1220,7 @@ async def sales_nakladnoy_excel(
             joinedload(Order.partner),
             joinedload(Order.warehouse),
         )
-        .filter(Order.id == order_id, Order.type == "sale")
+        .filter(Order.id == order_id, Order.type.in_(["sale", "return_sale"]))
         .first()
     )
     if not order:

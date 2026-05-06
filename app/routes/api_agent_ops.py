@@ -1753,6 +1753,7 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
             total=new_total, paid=0, debt=new_total,
             status="draft", payment_type="naqd",
             note=f"OBMEN chiqarish (tarixsiz, sales doctor): {note_user}. return={ret_order.number}. Agent: {agent.code}",
+            parent_order_id=ret_order.id,
         )
         db.add(new_order)
         db.flush()

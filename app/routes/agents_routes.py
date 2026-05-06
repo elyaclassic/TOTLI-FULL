@@ -134,10 +134,22 @@ async def agent_detail(
     )
     orders = (
         db.query(Order)
-        .filter(Order.agent_id == agent_id, Order.date >= d_from, Order.date <= d_to)
+        .filter(
+            Order.agent_id == agent_id,
+            Order.date >= d_from,
+            Order.date <= d_to,
+            Order.parent_order_id.is_(None),  # Obmen child (sale) yashirilgan, parent ko'rsatiladi
+        )
         .order_by(Order.id.desc())
         .all()
     )
+    # Har parent uchun child sale (obmen) topish: order.id -> child Order
+    exchange_children: dict[int, Order] = {}
+    if orders:
+        parent_ids = [o.id for o in orders if o.type == "return_sale"]
+        if parent_ids:
+            for ch in db.query(Order).filter(Order.parent_order_id.in_(parent_ids)).all():
+                exchange_children[ch.parent_order_id] = ch
     calls = (
         db.query(AgentCall)
         .filter(AgentCall.agent_id == agent_id)
@@ -174,6 +186,7 @@ async def agent_detail(
         "locations": locations,
         "visits": visits,
         "orders": orders,
+        "exchange_children": exchange_children,
         "calls": calls,
         "sms_list": sms_list,
         "drivers": drivers,

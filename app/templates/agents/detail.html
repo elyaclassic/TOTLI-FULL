@@ -147,16 +147,34 @@
                     </thead>
                     <tbody>
                         {% for order in orders %}
+                        {% set ex_child = exchange_children.get(order.id) if exchange_children else None %}
+                        {% set is_exchange = ex_child is not none and order.type == 'return_sale' %}
+                        {% set ex_diff = (ex_child.total or 0) - (order.total or 0) if is_exchange else 0 %}
                         <tr>
                             <td>
                                 {% if order.status in ('confirmed', 'completed', 'draft', 'waiting_production') %}
                                 <input type="checkbox" class="order-cb" data-id="{{ order.id }}" data-status="{{ order.status }}" data-num="{{ order.number }}" onclick="updateBulkBtn()">
                                 {% endif %}
                             </td>
-                            <td><a href="/sales/edit/{{ order.id }}">{{ order.number }}</a></td>
+                            <td>
+                                {% if is_exchange %}
+                                <a href="/sales/exchange/{{ order.id }}">{{ order.number }}</a>
+                                <span class="badge bg-warning text-dark ms-1" title="Obmen: {{ order.number }} (qaytgan) + {{ ex_child.number }} (yangi)">Обмен</span>
+                                {% else %}
+                                <a href="/sales/edit/{{ order.id }}">{{ order.number }}</a>
+                                {% endif %}
+                            </td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
                             <td>{{ order.partner.name if order.partner else '-' }}</td>
-                            <td class="fw-bold">{{ "{:,.0f}".format(order.total or 0) }}</td>
+                            <td class="fw-bold">
+                                {% if is_exchange %}
+                                <span title="Qaytgan: {{ '{:,.0f}'.format(order.total or 0) }} / Yangi: {{ '{:,.0f}'.format(ex_child.total or 0) }}">
+                                    {{ "{:+,.0f}".format(ex_diff) if ex_diff else "0" }}
+                                </span>
+                                {% else %}
+                                {{ "{:,.0f}".format(order.total or 0) }}
+                                {% endif %}
+                            </td>
                             <td>
                                 {% if order.status == 'draft' %}
                                 <span class="badge-waiting">Draft</span>
@@ -181,10 +199,16 @@
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% endif %}
-                                {% if order.status in ('confirmed', 'completed', 'waiting_production') %}
+                                {% if order.status in ('confirmed', 'completed', 'waiting_production') or is_exchange %}
+                                {% if is_exchange %}
+                                <a href="/sales/exchange/{{ order.id }}/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Obmen yuk xati (Excel)">
+                                    <i class="bi bi-file-earmark-excel"></i>
+                                </a>
+                                {% else %}
                                 <a href="/sales/{{ order.id }}/nakladnoy/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Yuk xati (Excel)">
                                     <i class="bi bi-file-earmark-excel"></i>
                                 </a>
+                                {% endif %}
                                 {% endif %}
                                 {% if order.status in ('confirmed', 'completed', 'waiting_production') %}
                                 <form action="/sales/{{ order.id }}/revert" method="POST" style="display:inline" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi? Draft ga qaytadi, ombor va yetkazish ham qaytariladi.')">

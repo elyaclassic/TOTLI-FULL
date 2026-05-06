@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+.exch-page { max-width: 1100px; margin: 0 auto; }
+.exch-head { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; padding: 14px 18px; background: #fff; border: 1px solid #e3e6ef; border-radius: 10px; margin-bottom: 14px; }
+.exch-head .lab { color: #6c757d; font-size: 12px; text-transform: uppercase; letter-spacing: 0.4px; }
+.exch-head .val { font-weight: 600; }
+.exch-section { background: #fff; border: 1px solid #e3e6ef; border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.exch-bar { padding: 10px 16px; font-weight: 700; color: #fff; }
+.exch-bar.send { background: #2d8a4f; }
+.exch-bar.ret { background: #d97a2a; }
+.exch-table { width: 100%; border-collapse: collapse; }
+.exch-table th, .exch-table td { padding: 8px 12px; border-bottom: 1px solid #f0f2f7; text-align: left; }
+.exch-table th { background: #f7f9fc; font-weight: 600; font-size: 13px; color: #4a5360; }
+.exch-table td.num, .exch-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.exch-foot { background: #f7f9fc; font-weight: 700; }
+.exch-actions { display: flex; gap: 8px; margin-top: 6px; }
+.exch-diff { padding: 12px 16px; background: #fff; border: 1px solid #e3e6ef; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; }
+.exch-diff .pos { color: #d63031; }
+.exch-diff .neg { color: #00b894; }
+.exch-diff .zero { color: #636e72; }
+@media print {
+    .exch-actions, .navbar, .sidebar, footer { display: none !important; }
+}
+</style>
+
+<div class="exch-page">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4 class="mb-0">
+            <i class="bi bi-arrow-left-right"></i> Обмен
+            <small class="text-muted">№ {{ parent.number }} ↔ {{ child.number }}</small>
+        </h4>
+        <div class="exch-actions">
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+                <i class="bi bi-printer"></i> Chop etish
+            </button>
+            <a href="/sales/exchange/{{ parent.id }}/excel" class="btn btn-outline-success btn-sm" title="Obmen yuk xati (yagona Excel)">
+                <i class="bi bi-file-earmark-excel"></i> Excel (Накладная)
+            </a>
+            <button class="btn btn-outline-secondary btn-sm" onclick="history.back()">
+                <i class="bi bi-arrow-left"></i> Orqaga
+            </button>
+        </div>
+    </div>
+
+    <div class="exch-head">
+        <div>
+            <div class="lab">Sana</div>
+            <div class="val">{{ parent.date.strftime('%d.%m.%Y %H:%M') if parent.date else '-' }}</div>
+        </div>
+        <div>
+            <div class="lab">Mijoz</div>
+            <div class="val">{{ parent.partner.name if parent.partner else '-' }}</div>
+            <div class="text-muted small">{{ parent.partner.phone if parent.partner else '' }}</div>
+        </div>
+        <div>
+            <div class="lab">Agent</div>
+            <div class="val">{{ parent.agent.full_name if parent.agent else '-' }}</div>
+            <div class="text-muted small">{{ parent.agent.code if parent.agent else '' }}</div>
+        </div>
+    </div>
+
+    {# Yangi tovar (chiqarish) — yashil #}
+    <div class="exch-section">
+        <div class="exch-bar send">ОБМЕН (отгруз) — {{ child.number }}</div>
+        <table class="exch-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px">#</th>
+                    <th>Mahsulot</th>
+                    <th class="num" style="width: 90px">Miqdor</th>
+                    <th class="num" style="width: 110px">Narx</th>
+                    <th class="num" style="width: 130px">Summa</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in child.items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ it.product.name if it.product else ('#' ~ it.product_id) }}</td>
+                    <td class="num">{{ "{:g}".format(it.quantity or 0) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(it.price or 0) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(it.total or 0) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="exch-foot">
+                    <td colspan="2">Jami</td>
+                    <td class="num">{{ "{:g}".format(child.items|sum(attribute='quantity')) }}</td>
+                    <td></td>
+                    <td class="num">{{ "{:,.0f}".format(child.total or 0) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {# Qaytgan tovar (return) — to'q sariq #}
+    <div class="exch-section">
+        <div class="exch-bar ret">ОБМЕН (возврат) — {{ parent.number }}</div>
+        <table class="exch-table">
+            <thead>
+                <tr>
+                    <th style="width: 50px">#</th>
+                    <th>Mahsulot</th>
+                    <th class="num" style="width: 90px">Miqdor</th>
+                    <th class="num" style="width: 110px">Narx</th>
+                    <th class="num" style="width: 130px">Summa</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for it in parent.items %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td>{{ it.product.name if it.product else ('#' ~ it.product_id) }}</td>
+                    <td class="num">{{ "{:g}".format(it.quantity or 0) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(it.price or 0) }}</td>
+                    <td class="num">{{ "{:,.0f}".format(it.total or 0) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="exch-foot">
+                    <td colspan="2">Jami</td>
+                    <td class="num">{{ "{:g}".format(parent.items|sum(attribute='quantity')) }}</td>
+                    <td></td>
+                    <td class="num">{{ "{:,.0f}".format(parent.total or 0) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% set diff = (child.total or 0) - (parent.total or 0) %}
+    <div class="exch-diff">
+        <div>
+            <span class="text-muted">Mijoz balansiga ta'siri</span>
+        </div>
+        <div>
+            {% if diff > 0 %}
+                <span class="pos fs-5 fw-bold">+{{ "{:,.0f}".format(diff) }}</span>
+                <small class="text-muted ms-2">(mijoz qarz oladi yoki to'laydi)</small>
+            {% elif diff < 0 %}
+                <span class="neg fs-5 fw-bold">{{ "{:,.0f}".format(diff) }}</span>
+                <small class="text-muted ms-2">(mijozga qaytariladi)</small>
+            {% else %}
+                <span class="zero fs-5 fw-bold">0</span>
+                <small class="text-muted ms-2">(teng almashish)</small>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if parent.note %}
+    <div class="text-muted small mt-3">
+        <i class="bi bi-sticky"></i> {{ parent.note }}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
