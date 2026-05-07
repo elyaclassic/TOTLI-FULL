@@ -82,7 +82,7 @@ async def employee_salary_page(
     prev_credit_by_emp = {}
     for s in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         prev_total = float(s.total or 0)
-        prev_paid = float(s.paid or 0)
+        prev_paid = max(0.0, float(s.paid or 0))
         prev_status = (getattr(s, "status", "") or "").strip().lower()
         if prev_total < 0:
             outstanding = -prev_total - prev_paid if prev_status == "paid" else -prev_total
@@ -456,7 +456,7 @@ async def employee_salary_save(
     prev_credit_by_emp = {}
     for ps in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         pt = float(ps.total or 0)
-        pp = float(ps.paid or 0)
+        pp = max(0.0, float(ps.paid or 0))
         ps_status = (getattr(ps, "status", "") or "").strip().lower()
         if pt < 0:
             outstanding = -pt - pp if ps_status == "paid" else -pt
