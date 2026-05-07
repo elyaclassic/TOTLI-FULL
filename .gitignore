@@ -105,3 +105,15 @@ claude-skills-main/
 # Claude Code local state (har bir kompyuterga xos)
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Runtime ma'lumotlar (har machinaga xos, gitga kirmaydi)
+/backups/
+/data/
+app/bot/data/
+
+# APK backup nusxalari (avtomatik yaratiladi, audit/rollback uchun)
+app/static/totli-agent.apk.bak-*
+
+# Telegram bot log va generated hisobotlar
+external/telegram_sheets_bot/bot.err
+external/telegram_sheets_bot/templates/hisobot_summary_all_*.xlsx
