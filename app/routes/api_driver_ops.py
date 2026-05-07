@@ -199,7 +199,7 @@ async def driver_delivery_status(
                                         document_type="Sale",
                                         document_id=order.id,
                                         document_number=order.number,
-                                        user_id=driver.user_id if hasattr(driver, 'user_id') else None,
+                                        user_id=getattr(driver, 'employee_id', None),
                                         note=f"Yetkazilmagan qoldiq qaytarish: {target_oi.product.name if target_oi.product else ''} ({diff:.0f} dona)",
                                         created_at=datetime.now(),
                                     )
@@ -225,7 +225,7 @@ async def driver_delivery_status(
                         document_type="Sale",
                         document_id=order.id,
                         document_number=order.number,
-                        user_id=driver.user_id if hasattr(driver, 'user_id') else None,
+                        user_id=getattr(driver, 'employee_id', None),
                         note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
                         created_at=datetime.now(),
                     )
@@ -267,7 +267,7 @@ async def driver_delivery_status(
                         payment_type=pay_type,
                         category="delivery",
                         description=f"Yetkazish to'lovi ({pay_type}): {partner_name}, #{delivery.number or delivery.id}",
-                        user_id=driver.user_id if hasattr(driver, 'user_id') else None,
+                        user_id=getattr(driver, 'employee_id', None),
                         status="pending",  # Haydovchi mijozdan oldi, admin tasdiqlashi kerak (inkassatsiya)
                     )
                     db.add(payment)
