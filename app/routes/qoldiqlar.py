@@ -1039,15 +1039,16 @@ async def qoldiqlar_tovar_hujjat_new(
     """Yangi tovar qoldiq hujjati (qoralama)"""
     warehouses = get_warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    is_admin = (getattr(current_user, "role", None) if current_user else None) == "admin"
     return templates.TemplateResponse("qoldiqlar/hujjat_form.html", {
         "request": request,
         "doc": None,
         "warehouses": warehouses,
         "products": products,
-        "last_prices": _get_last_purchase_prices(db),
+        "last_prices": _get_last_purchase_prices(db) if is_admin else {},
         "current_user": current_user,
         "page_title": "Tovar qoldiqlari — yangi hujjat",
-        "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
+        "show_tannarx": is_admin,
         "now": datetime.now(),
     })
 
@@ -1244,15 +1245,16 @@ async def qoldiqlar_tovar_hujjat_view(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     warehouses = get_warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    is_admin = (getattr(current_user, "role", None) if current_user else None) == "admin"
     return templates.TemplateResponse("qoldiqlar/hujjat_form.html", {
         "request": request,
         "doc": doc,
         "warehouses": warehouses,
         "products": products,
-        "last_prices": _get_last_purchase_prices(db),
+        "last_prices": _get_last_purchase_prices(db) if is_admin else {},
         "current_user": current_user,
         "page_title": f"Tovar qoldiqlari {doc.number}",
-        "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
+        "show_tannarx": is_admin,
     })
 
 
