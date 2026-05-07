@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "totli-telegram-inbox": {
+      "type": "stdio",
+      "command": "python",
+      "args": [
+        "app/bot/mcp_inbox_server.py"
+      ]
+    }
+  }
+}
