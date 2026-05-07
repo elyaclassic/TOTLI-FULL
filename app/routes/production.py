@@ -421,8 +421,8 @@ async def production_index_page(
             pending_sql = "SELECT COUNT(*) as count FROM productions WHERE status = :status"
             pending_params = {"status": "draft"}
             if filter_by_operator:
-                # Operator o'zining + umumiy navbat (NULL operator) ni ko'radi
-                pending_sql += " AND (operator_id = :operator_id OR operator_id IS NULL)"
+                # Operator o'zining + agent buyurtmadan auto-yaratilgan (operator_id NULL VA order_id bor)
+                pending_sql += " AND (operator_id = :operator_id OR (operator_id IS NULL AND order_id IS NOT NULL))"
                 pending_params["operator_id"] = current_user_employee.id
             pending_count = db.execute(text(pending_sql), pending_params).scalar()
             pending_productions = pending_count or 0
@@ -447,8 +447,8 @@ async def production_index_page(
             """
             recent_params = {"limit": 10}
             if filter_by_operator:
-                # Operator o'zining + umumiy navbat (NULL operator)
-                recent_sql += " AND (p.operator_id = :operator_id OR p.operator_id IS NULL)"
+                # Operator o'zining + agent buyurtmadan auto-yaratilgan (operator_id NULL VA order_id bor)
+                recent_sql += " AND (p.operator_id = :operator_id OR (p.operator_id IS NULL AND p.order_id IS NOT NULL))"
                 recent_params["operator_id"] = current_user_employee.id
             recent_sql += " ORDER BY p.date DESC LIMIT :limit"
             recent_productions_result = db.execute(text(recent_sql), recent_params).fetchall()
@@ -1164,11 +1164,14 @@ async def production_orders(
     can_view_all = role in ("admin", "rahbar", "raxbar", "manager", "menejer")
     if current_user and not can_view_all:
         if is_operator_role and current_user_employee and (operator_id is None or int(operator_id or 0) == 0):
-            # Operator o'zining + umumiy navbat (NULL operator) ni ko'radi
-            from sqlalchemy import or_ as _or
+            # Operator o'zining + agent buyurtmadan auto-yaratilgan (operator_id NULL VA order_id bor)
+            from sqlalchemy import or_ as _or, and_ as _and
             q = q.filter(_or(
                 Production.operator_id == current_user_employee.id,
-                Production.operator_id.is_(None),
+                _and(
+                    Production.operator_id.is_(None),
+                    Production.order_id.is_not(None),
+                ),
             ))
         elif not is_operator_role:
             q = q.filter(Production.user_id == current_user.id)
