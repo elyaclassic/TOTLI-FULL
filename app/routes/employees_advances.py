@@ -197,6 +197,7 @@ async def employee_advance_add(
     emp_name = (emp.full_name or f"Xodim {employee_id}")[:100]
     db.add(Payment(
         number=pay_number,
+        date=datetime.combine(adv_date, today.time()),
         type="expense",
         cash_register_id=cash.id,
         partner_id=None,
