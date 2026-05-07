@@ -36,7 +36,7 @@ from app.models.database import (
     ExpenseDocItem,
     ExpenseType,
 )
-from app.deps import require_auth
+from app.deps import require_auth, require_admin
 from app.utils.production_order import is_qiyom_recipe, recipe_kg_per_unit
 
 router = APIRouter(prefix="/employees", tags=["employees-salary"])
@@ -567,4 +567,26 @@ async def employee_salary_mark_paid(
     s.paid = paid_amount
     s.status = "paid" if paid_amount >= (s.total or 0) else "pending"
     db.commit()
+    return RedirectResponse(url=f"/employees/salary?year={year}&month={month}", status_code=303)
+
+
+@router.post("/salary/unmark-paid/{employee_id}")
+async def employee_salary_unmark_paid(
+    request: Request,
+    employee_id: int,
+    year: int = Form(...),
+    month: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Oylik 'To'langan' belgisini bekor qilish (faqat admin, status flag — pul harakatlamaydi)."""
+    s = db.query(Salary).filter(
+        Salary.employee_id == employee_id,
+        Salary.year == year,
+        Salary.month == month,
+    ).first()
+    if s:
+        s.paid = 0
+        s.status = "pending"
+        db.commit()
     return RedirectResponse(url=f"/employees/salary?year={year}&month={month}", status_code=303)
