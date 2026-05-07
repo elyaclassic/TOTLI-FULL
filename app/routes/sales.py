@@ -2123,6 +2123,16 @@ async def sales_pos_complete(
     else:
         order.paid = 0
         order.debt = order.total
+        # D4 audit fix: kredit limit tekshiruvi qarz mijozlar uchun
+        from app.services.partner_credit import check_credit_limit
+        ok, err = check_credit_limit(partner, float(order.debt or 0))
+        if not ok:
+            db.rollback()
+            from urllib.parse import quote
+            return RedirectResponse(
+                url="/sales/pos?error=" + quote(err),
+                status_code=303,
+            )
         due_str = (form.get("payment_due_date") or "").strip()
         if due_str:
             try:

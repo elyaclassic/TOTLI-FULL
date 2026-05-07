@@ -470,6 +470,17 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     if order.status not in ("draft",):
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
+    # D4 audit fix: agent buyurtma tasdiqlashda kredit limit tekshiruvi
+    if order.type != "return_sale" and order.partner_id and float(order.debt or 0) > 0:
+        from app.services.partner_credit import check_credit_limit
+        from urllib.parse import quote
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+        ok, err = check_credit_limit(partner, float(order.debt or 0))
+        if not ok:
+            return RedirectResponse(
+                url="/supervisor/agent-orders?error=" + quote(err),
+                status_code=303,
+            )
     # Atomik UPDATE WHERE — double-confirm xavfini oldini olish (with_for_update SQLite da no-op)
     from sqlalchemy import text as _text
     claim = db.execute(
