@@ -34,6 +34,7 @@ from app.models.database import (
     EmployeeBalanceDocItem,
     Order,
     Purchase,
+    PurchaseItem,
     Payment,
     Employee,
     Salary,
@@ -43,6 +44,21 @@ from app.services.stock_service import create_stock_movement, delete_stock_movem
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY, QUERY_LIMIT_LIST
 
 router = APIRouter(prefix="/qoldiqlar", tags=["qoldiqlar"])
+
+
+def _get_last_purchase_prices(db: Session) -> dict:
+    """Har bir mahsulot uchun oxirgi tasdiqlangan xarid narxini {product_id: price} dict sifatida qaytaradi."""
+    rows = db.query(
+        PurchaseItem.product_id, PurchaseItem.price
+    ).join(Purchase, PurchaseItem.purchase_id == Purchase.id).filter(
+        Purchase.status == "confirmed",
+        PurchaseItem.price > 0,
+    ).order_by(Purchase.date.desc(), Purchase.id.desc()).all()
+    out = {}
+    for pid, price in rows:
+        if pid not in out and price:
+            out[pid] = float(price)
+    return out
 
 
 def _tarix_doc_type_label(doc_type: str) -> str:
@@ -1028,6 +1044,7 @@ async def qoldiqlar_tovar_hujjat_new(
         "doc": None,
         "warehouses": warehouses,
         "products": products,
+        "last_prices": _get_last_purchase_prices(db),
         "current_user": current_user,
         "page_title": "Tovar qoldiqlari — yangi hujjat",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
@@ -1232,6 +1249,7 @@ async def qoldiqlar_tovar_hujjat_view(
         "doc": doc,
         "warehouses": warehouses,
         "products": products,
+        "last_prices": _get_last_purchase_prices(db),
         "current_user": current_user,
         "page_title": f"Tovar qoldiqlari {doc.number}",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",

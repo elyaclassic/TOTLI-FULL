@@ -214,7 +214,7 @@
         </form>
         <select id="add_row_product_list" style="display:none;" aria-hidden="true">
             {% for p in products %}
-            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}" data-cost="{{ (last_prices.get(p.id, 0) if last_prices else 0) }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
             {% endfor %}
         </select>
         {% endif %}
@@ -272,7 +272,7 @@
         </form>
         <select id="product_list" style="display:none;" aria-hidden="true">
             {% for p in products %}
-            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+            <option value="{{ p.id }}" data-name="{{ p.name|e }}" data-code="{{ (p.code or '')|e }}" data-barcode="{{ (p.barcode or '')|e }}" data-cost="{{ (last_prices.get(p.id, 0) if last_prices else 0) }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
             {% endfor %}
         </select>
         {% endif %}
@@ -281,7 +281,9 @@
 
 <script>
 (function() {
-    // Raqam maydonida: 0 bo'lsa va 1-9 yozilsa 0 o'rniga raqam; . yozilsa "0." bo'lsin
+    // Raqam maydonida: 0 bo'lsa va 1-9 yozilsa 0 o'rniga raqam.
+    // "." (nuqta) — brauzer o'zi to'g'ri ishlaydi, JS aralashishi <input type=number> da
+    // qiymatni "0" ga normallashtirib yuboradi (HTML spec: trailing-dot invalid).
     document.addEventListener('keydown', function(e) {
         var el = e.target;
         if (el.tagName !== 'INPUT' || (el.getAttribute('type') || '').toLowerCase() !== 'number') return;
@@ -290,10 +292,6 @@
             if (e.key >= '1' && e.key <= '9') {
                 e.preventDefault();
                 el.value = e.key;
-                el.dispatchEvent(new Event('input', { bubbles: true }));
-            } else if (e.key === '.') {
-                e.preventDefault();
-                el.value = '0.';
                 el.dispatchEvent(new Event('input', { bubbles: true }));
             }
         }
@@ -452,6 +450,11 @@
                         const hid = row.querySelector('.row-product-id');
                         if (inp) inp.value = opt.dataset.name + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
                         if (hid) hid.value = opt.value;
+                        const costInp = row.querySelector('input[name="cost_price"]');
+                        const lastCost = parseFloat(opt.dataset.cost || '0');
+                        if (costInp && lastCost > 0 && (!costInp.value || costInp.value === '0')) {
+                            costInp.value = lastCost;
+                        }
                         resultsDiv.style.display = 'none';
                     });
                     resultsDiv.appendChild(a);
@@ -521,6 +524,12 @@
                         e.preventDefault();
                         addProductSearch.value = opt.dataset.name + (opt.dataset.code ? ' (' + opt.dataset.code + ')' : '');
                         addRowProductId.value = opt.value;
+                        const addRowForm = addProductSearch.closest('form');
+                        const costInp = addRowForm ? addRowForm.querySelector('input[name="cost_price"]') : null;
+                        const lastCost = parseFloat(opt.dataset.cost || '0');
+                        if (costInp && lastCost > 0 && (!costInp.value || costInp.value === '0')) {
+                            costInp.value = lastCost;
+                        }
                         addProductResults.style.display = 'none';
                     });
                     addProductResults.appendChild(a);
