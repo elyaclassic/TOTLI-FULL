@@ -693,6 +693,7 @@ class Production(Base):
     user_id = Column(Integer, ForeignKey("users.id"))
     machine_id = Column(Integer, ForeignKey("machines.id"), nullable=True)  # Qaysi uskunda (oxirgi bosqich)
     operator_id = Column(Integer, ForeignKey("employees.id"), nullable=True)  # Operator (xodim)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True, index=True)  # Agent buyurtmasiga bog'lanish (auto-flow)
     note = Column(Text)
     created_at = Column(DateTime, default=datetime.now)
 
