@@ -25,7 +25,16 @@ class ApiService {
       final sep = path.contains('?') ? '&' : '?';
       final url = '$_baseUrl$path${token != null ? "${sep}token=${Uri.encodeComponent(token)}" : ""}';
       final r = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 15));
-      return jsonDecode(r.body) as Map<String, dynamic>;
+      // Token expire — 401 yoki body'da Invalid token
+      if (r.statusCode == 401) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final err = (j['error']?.toString() ?? '').toLowerCase();
+      if (j['success'] == false && (err.contains('invalid token') || err.contains('token noto\'g\'ri'))) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
+      return j;
     } catch (e) {
       return {'success': false, 'error': 'Ulanish xatosi: $e'};
     }
@@ -43,7 +52,12 @@ class ApiService {
       if (r.statusCode == 401) {
         return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
       }
-      return jsonDecode(r.body) as Map<String, dynamic>;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final err = (j['error']?.toString() ?? '').toLowerCase();
+      if (j['success'] == false && (err.contains('invalid token') || err.contains('token noto\'g\'ri'))) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
+      return j;
     } catch (e) {
       return {'success': false, 'error': 'Ulanish xatosi: $e'};
     }
@@ -62,7 +76,12 @@ class ApiService {
       if (r.statusCode == 401) {
         return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
       }
-      return jsonDecode(r.body) as Map<String, dynamic>;
+      final j = jsonDecode(r.body) as Map<String, dynamic>;
+      final err = (j['error']?.toString() ?? '').toLowerCase();
+      if (j['success'] == false && (err.contains('invalid token') || err.contains('token noto\'g\'ri'))) {
+        return {'success': false, 'auth_failed': true, 'error': 'Sessiya tugadi'};
+      }
+      return j;
     } catch (e) {
       return {'success': false, 'error': 'Ulanish xatosi: $e'};
     }

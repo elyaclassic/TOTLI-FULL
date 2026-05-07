@@ -102,6 +102,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       } else if (_role == 'driver') {
         final stats = await ApiService.getDriverStats(token);
+        if (stats['auth_failed'] == true && mounted) {
+          await _handleAuthFailed();
+          return;
+        }
         if (stats['success'] == true && mounted) {
           final s = stats['stats'] as Map<String, dynamic>? ?? {};
           setState(() {
@@ -115,6 +119,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     await _loadPendingCount();
     if (mounted) setState(() => _isLoading = false);
+  }
+
+  Future<void> _handleAuthFailed() async {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Sessiya tugadi — qayta kiring'),
+        backgroundColor: Colors.orange,
+      ),
+    );
+    await SessionService().logout();
+    if (mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (r) => false,
+      );
+    }
   }
 
   Future<void> _loadPendingCount() async {
