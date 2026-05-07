@@ -82,10 +82,16 @@ async def employee_salary_page(
     prev_credit_by_emp = {}
     for s in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         prev_total = float(s.total or 0)
+        prev_paid = float(s.paid or 0)
+        prev_status = (getattr(s, "status", "") or "").strip().lower()
         if prev_total < 0:
-            prev_debt_by_emp[s.employee_id] = -prev_total
+            outstanding = -prev_total - prev_paid if prev_status == "paid" else -prev_total
+            if outstanding > 0:
+                prev_debt_by_emp[s.employee_id] = outstanding
         elif prev_total > 0 and getattr(s, "is_balance_entry", False):
-            prev_credit_by_emp[s.employee_id] = prev_total
+            remaining = prev_total - prev_paid if prev_status == "paid" else prev_total
+            if remaining > 0:
+                prev_credit_by_emp[s.employee_id] = remaining
     emp_ids = [e.id for e in employees]
     latest_doc_salary = {}
     if emp_ids:
@@ -450,10 +456,16 @@ async def employee_salary_save(
     prev_credit_by_emp = {}
     for ps in db.query(Salary).filter(Salary.year == prev_year, Salary.month == prev_month).all():
         pt = float(ps.total or 0)
+        pp = float(ps.paid or 0)
+        ps_status = (getattr(ps, "status", "") or "").strip().lower()
         if pt < 0:
-            prev_debt_by_emp[ps.employee_id] = -pt
+            outstanding = -pt - pp if ps_status == "paid" else -pt
+            if outstanding > 0:
+                prev_debt_by_emp[ps.employee_id] = outstanding
         elif pt > 0 and getattr(ps, "is_balance_entry", False):
-            prev_credit_by_emp[ps.employee_id] = pt
+            remaining = pt - pp if ps_status == "paid" else pt
+            if remaining > 0:
+                prev_credit_by_emp[ps.employee_id] = remaining
     total_payroll = 0.0
     for emp in employees:
         base = float(form.get(f"base_{emp.id}", 0) or 0)
