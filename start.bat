@@ -3,7 +3,10 @@ setlocal enabledelayedexpansion
 title TOTLI HOLVA Business System
 
 :: ========== IP VA PORT ==========
-set BIND_HOST=10.243.165.156
+:: BIND_HOST=0.0.0.0 — barcha tarmoq interfeyslarida listening (127.0.0.1 ham, tarmoq IP ham)
+:: DISPLAY_HOST — foydalanuvchiga ko'rsatiladigan asosiy URL
+set BIND_HOST=0.0.0.0
+set DISPLAY_HOST=10.243.165.156
 set PORT=8080
 :: ========== TELEGRAM BOT ==========
 :: BotFather dan olingan token (@BotFather -> /newbot)
@@ -97,7 +100,7 @@ if "%STARTED%"=="1" (
     echo.
     echo ========================================
     echo   [OK] Server ishga tushdi (orqa fonda)
-    echo   Brauzer: http://%BIND_HOST%:%PORT%
+    echo   Brauzer: http://%DISPLAY_HOST%:%PORT%
     echo   Loglar:  %LOG_FILE%
     if "!BOT_STARTED_NOW!"=="1" echo   [OK] Telegram Sheets Bot ham ishga tushdi
     if "!BOT_ALREADY!"=="1"     echo   [!] Telegram Sheets Bot allaqachon ishlayapti
@@ -122,7 +125,7 @@ call :start_bot_if_needed
 echo.
 echo ========================================
 echo   [!] Server allaqachon ishlayapti
-echo       http://%BIND_HOST%:%PORT%
+echo       http://%DISPLAY_HOST%:%PORT%
 if "!BOT_STARTED_NOW!"=="1" echo   [OK] Telegram Sheets Bot endi ishga tushdi
 if "!BOT_ALREADY!"=="1"     echo   [OK] Telegram Sheets Bot ham ishlayapti
 if "!BOT_FAILED!"=="1"      echo   [X] Telegram Sheets Bot ishga tushmadi
