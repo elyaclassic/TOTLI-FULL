@@ -743,10 +743,41 @@ async def supervisor_agent_payments(
                 .first()
             )
 
+    # Haydovchi qarz balansi: har haydovchi qo'lida qancha pul (pending)
+    from sqlalchemy import func as _func
+    from app.models.database import Driver as _Driver
+    pending_q = (
+        db.query(
+            _Payment.user_id,
+            _func.sum(_Payment.amount).label("total"),
+            _func.count(_Payment.id).label("cnt"),
+        )
+        .filter(_Payment.category == "delivery", _Payment.status == "pending", _Payment.user_id != None)
+        .group_by(_Payment.user_id)
+        .all()
+    )
+    driver_balances = []
+    for user_id, total, cnt in pending_q:
+        drv = (
+            db.query(_Driver)
+            .filter((_Driver.employee_id == user_id) | (_Driver.id == user_id))
+            .first()
+        )
+        driver_balances.append({
+            "driver_name": drv.full_name if drv else f"user#{user_id}",
+            "driver_code": drv.code if drv else "",
+            "amount": float(total or 0),
+            "count": int(cnt or 0),
+        })
+    driver_balances.sort(key=lambda x: -x["amount"])
+    total_pending = sum(d["amount"] for d in driver_balances)
+
     return templates.TemplateResponse("supervisor/agent_payments.html", {
         "request": request,
         "payments": payments,
         "driver_payments": driver_payments,
+        "driver_balances": driver_balances,
+        "total_pending": total_pending,
         "status_filter": status,
         "current_user": current_user,
     })
