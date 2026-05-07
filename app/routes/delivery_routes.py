@@ -858,6 +858,64 @@ async def supervisor_reject_agent_payment(
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
 
+@router.post("/supervisor/agent-payments/confirm-driver/{payment_id}")
+async def supervisor_confirm_driver_payment(
+    request: Request,
+    payment_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Haydovchi yetkazish to'lovini tasdiqlash (inkassatsiya).
+
+    Haydovchi mijozdan pul olib pending status bilan yaratgan. Admin tasdiqlasa:
+    - Payment.status='confirmed'
+    - Order.paid += amount, Order.debt -= amount (mijoz balansi kamayadi)
+    """
+    from sqlalchemy import text as _text
+    p = db.query(Payment).filter(Payment.id == payment_id, Payment.category == "delivery").first()
+    if not p:
+        return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
+    if p.status != "pending":
+        return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
+
+    # Atomik UPDATE WHERE
+    claim = db.execute(
+        _text("UPDATE payments SET status='confirmed' WHERE id=:id AND status='pending' AND category='delivery'"),
+        {"id": payment_id},
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
+    db.refresh(p)
+
+    # Order.paid yangilash — description'dan delivery raqamini chiqarib olib, undan order.id ga
+    # Yoki sodda: shu partner uchun eng yangi delivery (driver to'lagan) uchun bog'lash kerak
+    # Soddaroq: FIFO — eng eski qarz buyurtmasidan boshlab.
+    remaining = float(p.amount or 0)
+    if remaining > 0 and p.partner_id:
+        debt_orders = (
+            db.query(Order)
+            .filter(Order.partner_id == p.partner_id, Order.debt > 0, Order.type == "sale")
+            .order_by(Order.date.asc())
+            .all()
+        )
+        for order in debt_orders:
+            if remaining <= 0:
+                break
+            order_debt = float(order.debt or 0)
+            applied = min(order_debt, remaining)
+            order.paid = float(order.paid or 0) + applied
+            order.debt = order_debt - applied
+            remaining -= applied
+
+    # Partner balansi kamayadi
+    partner = db.query(Partner).filter(Partner.id == p.partner_id).first() if p.partner_id else None
+    if partner:
+        partner.balance = float(partner.balance or 0) - float(p.amount or 0)
+
+    db.commit()
+    return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("Haydovchi to'lovi tasdiqlandi"), status_code=303)
+
+
 @router.post("/supervisor/agent-payments/revert/{payment_id}")
 async def supervisor_revert_agent_payment(
     request: Request,

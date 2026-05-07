@@ -268,14 +268,13 @@ async def driver_delivery_status(
                         category="delivery",
                         description=f"Yetkazish to'lovi ({pay_type}): {partner_name}, #{delivery.number or delivery.id}",
                         user_id=driver.user_id if hasattr(driver, 'user_id') else None,
-                        status="confirmed",
+                        status="pending",  # Haydovchi mijozdan oldi, admin tasdiqlashi kerak (inkassatsiya)
                     )
                     db.add(payment)
 
-            # Buyurtma qarzini yangilash
-            if order and total_paid > 0:
-                order.paid = float(order.paid or 0) + total_paid
-                order.debt = max(float(order.total or 0) - float(order.paid or 0), 0)
+            # Buyurtma qarzini YANGILAMAYMIZ — Payment 'pending' status'da, admin tasdiqlaganidan
+            # keyin (/supervisor/agent-payments/confirm-driver/{id}) order.paid yangilanadi.
+            # Demak hozir mijoz hisobida qarz qoladi, haydovchida pul.
             # Order yetkazildi → "completed" statusga o'tkazish
             if order and order.status not in ("completed", "cancelled"):
                 order.status = "completed"

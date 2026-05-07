@@ -145,7 +145,8 @@
                         <th>Mijoz</th>
                         <th>Summa</th>
                         <th>Tur</th>
-                        <th>Izoh</th>
+                        <th>Status</th>
+                        <th>Amal</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -161,7 +162,26 @@
                             {% elif p.payment_type == 'plastik' %}<span class="badge bg-info">Plastik</span>
                             {% else %}<span class="badge bg-secondary">{{ p.payment_type }}</span>{% endif %}
                         </td>
-                        <td><small class="muted-cell">{{ (p.description or '')[:60] }}</small></td>
+                        <td>
+                            {% if p.status == 'pending' %}
+                                <span class="badge bg-warning text-dark">Kutilmoqda</span>
+                            {% elif p.status == 'confirmed' %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ p.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if p.status == 'pending' %}
+                            <form method="post" action="/supervisor/agent-payments/confirm-driver/{{ p.id }}" style="display:inline;" onsubmit="return confirm('Pulni qabul qildingizmi? Mijoz hisobidan o`chiriladi.')">
+                                <button type="submit" class="btn btn-sm btn-success py-0 px-2" title="Pulni qabul qildim — tasdiqlash">
+                                    <i class="bi bi-check-lg"></i> Qabul
+                                </button>
+                            </form>
+                            {% else %}
+                                <small class="muted-cell">—</small>
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
