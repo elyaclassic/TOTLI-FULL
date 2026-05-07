@@ -55,7 +55,18 @@ def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
             apply_sale_stock_deduction(db, order, None, note_prefix="Agent sotuv (auto-confirm production after)")
             order.status = "confirmed"
             db.flush()
-            # Driver tanlangan bo'lsa delivery yaratish
+            # Driver tanlanmagan bo'lsa default — birinchi active driver
+            if not order.pending_driver_id:
+                from app.models.database import Driver as _Driver
+                default_driver = (
+                    db.query(_Driver)
+                    .filter(_Driver.is_active == True)
+                    .order_by(_Driver.id)
+                    .first()
+                )
+                if default_driver:
+                    order.pending_driver_id = default_driver.id
+            # Driver bor bo'lsa delivery yaratish
             if order.pending_driver_id:
                 partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
                 today = datetime.now()
