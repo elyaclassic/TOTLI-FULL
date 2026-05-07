@@ -393,7 +393,8 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
         sold = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
             Order.agent_id == agent.id,
             Order.source == "agent",
-            Order.status.in_(("confirmed", "completed")),
+            Order.type == "sale",  # return_sale (obmen qaytarish) rejaga kirmasin
+            Order.status.in_(("confirmed", "completed", "waiting_production")),
             Order.date >= month_start,
         ).scalar() or 0.0
         sold = float(sold)

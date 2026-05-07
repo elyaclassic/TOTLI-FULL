@@ -373,13 +373,16 @@ async def agent_kpi(
         # Rejalashtirilgan tashriflar — agent kontragentlari soni
         visits_planned = db.query(Partner).filter(Partner.agent_id == agent.id, Partner.is_active == True).count()
 
-        # Buyurtmalar
+        # Buyurtmalar — faqat tasdiqlangan/yetkazilgan/production kutmoqdagilar
+        # (draft hali tasdiqlanmagan, cancelled bekor qilingan — rejaga kirmaydi)
         orders = (
             db.query(Order)
             .filter(
                 Order.agent_id == agent.id,
                 sa_func.date(Order.date) >= d_from,
                 sa_func.date(Order.date) <= today,
+                Order.status.notin_(["draft", "cancelled"]),
+                Order.type == "sale",
             )
             .all()
         )
