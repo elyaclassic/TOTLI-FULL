@@ -712,7 +712,7 @@ async def supervisor_agent_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
+    """Agent va Haydovchi to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
     q = db.query(AgentPayment).order_by(AgentPayment.id.desc())
     if status == "pending":
         q = q.filter(AgentPayment.status == "pending")
@@ -721,13 +721,32 @@ async def supervisor_agent_payments(
     elif status == "cancelled":
         q = q.filter(AgentPayment.status == "cancelled")
     payments = q.limit(QUERY_LIMIT_DEFAULT).all()
-    # Agent va partner ma'lumotlarini biriktirish
     for p in payments:
         p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
         p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
+
+    # Haydovchi to'lovlari (Payment.category='delivery')
+    from app.models.database import Payment as _Payment
+    dq = db.query(_Payment).filter(_Payment.category == "delivery").order_by(_Payment.id.desc())
+    if status == "confirmed":
+        dq = dq.filter(_Payment.status == "confirmed")
+    driver_payments = dq.limit(QUERY_LIMIT_DEFAULT).all()
+    for p in driver_payments:
+        p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first() if p.partner_id else None
+        # Description'dan delivery raqamini chiqarib olish va Driver topish
+        p._driver = None
+        if p.user_id:
+            from app.models.database import Driver as _Driver
+            p._driver = (
+                db.query(_Driver)
+                .filter((_Driver.employee_id == p.user_id) | (_Driver.id == p.user_id))
+                .first()
+            )
+
     return templates.TemplateResponse("supervisor/agent_payments.html", {
         "request": request,
         "payments": payments,
+        "driver_payments": driver_payments,
         "status_filter": status,
         "current_user": current_user,
     })

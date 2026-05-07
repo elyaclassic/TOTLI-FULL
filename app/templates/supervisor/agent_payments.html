@@ -121,9 +121,53 @@
     </div>
 </div>
 {% else %}
-<div class="text-center text-muted py-5">
-    <i class="bi bi-inbox" style="font-size: 3rem;"></i>
-    <p class="mt-2">To'lovlar yo'q</p>
+<div class="text-center text-muted py-4">
+    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+    <p class="mt-2">Agent to'lovlari yo'q</p>
+</div>
+{% endif %}
+
+{# === Haydovchi to'lovlari (yetkazish davomida olingan) === #}
+{% if driver_payments %}
+<div class="row g-3 mt-3">
+    <div class="col-12">
+        <div class="data-table">
+            <div class="card-header">
+                <span><i class="bi bi-truck"></i> Haydovchi to'lovlari (yetkazish davomida)</span>
+                <span class="badge bg-primary ms-2">{{ driver_payments|length }}</span>
+            </div>
+            <table class="table table-sm mb-0">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Sana</th>
+                        <th>Haydovchi</th>
+                        <th>Mijoz</th>
+                        <th>Summa</th>
+                        <th>Tur</th>
+                        <th>Izoh</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in driver_payments %}
+                    <tr>
+                        <td><small>{{ p.number }}</small></td>
+                        <td class="muted-cell">{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '—' }}</td>
+                        <td>{{ p._driver.full_name if p._driver else '—' }}</td>
+                        <td>{{ p._partner.name if p._partner else '—' }}</td>
+                        <td class="fw-bold text-success">{{ "{:,.0f}".format(p.amount or 0) }}</td>
+                        <td>
+                            {% if p.payment_type == 'naqd' %}<span class="badge bg-success">Naqd</span>
+                            {% elif p.payment_type == 'plastik' %}<span class="badge bg-info">Plastik</span>
+                            {% else %}<span class="badge bg-secondary">{{ p.payment_type }}</span>{% endif %}
+                        </td>
+                        <td><small class="muted-cell">{{ (p.description or '')[:60] }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 {% endif %}
 {% endblock %}
