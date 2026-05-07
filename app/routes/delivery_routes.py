@@ -570,6 +570,13 @@ async def supervisor_confirm_agent_order(
     apply_sale_stock_deduction(db, order, current_user, note_prefix="Agent sotuv (supervisor tasdiq)")
     # Status allaqachon atomik UPDATE WHERE bilan 'confirmed' ga o'tkazildi
     order.user_id = current_user.id
+    # D1 audit fix: partner.balance ga qarz qo'shish (snapshot revert uchun)
+    if order.partner_id and float(order.debt or 0) > 0:
+        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
+        if partner_obj:
+            if order.previous_partner_balance is None:
+                order.previous_partner_balance = float(partner_obj.balance or 0)
+            partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
     db.flush()
     # Haydovchiga yetkazish yaratish
     if driver_id_raw and driver_id_raw.isdigit():
@@ -635,6 +642,15 @@ async def supervisor_reject_agent_order(
         )
     # Agar tasdiqlangan bo'lsa — stock qaytarish + yetkazishni ham bekor qilish
     if order.status == "confirmed":
+        # D1 audit fix: partner.balance ni qaytarish (snapshot dan)
+        if order.partner_id and float(order.debt or 0) > 0:
+            partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
+            if partner_obj:
+                if order.previous_partner_balance is not None:
+                    partner_obj.balance = float(order.previous_partner_balance)
+                else:
+                    # Eski yozuvlar uchun fallback: hozirgi balansdan order.debt ayrish
+                    partner_obj.balance = float(partner_obj.balance or 0) - float(order.debt or 0)
         for it in order.items:
             if not it.product_id or not (it.quantity or 0) > 0:
                 continue

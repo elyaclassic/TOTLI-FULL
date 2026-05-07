@@ -54,6 +54,13 @@ def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
             # Stok yetadi — confirm qilamiz
             apply_sale_stock_deduction(db, order, None, note_prefix="Agent sotuv (auto-confirm production after)")
             order.status = "confirmed"
+            # D1 audit fix: partner.balance ga qarz qo'shish (snapshot)
+            if order.partner_id and float(order.debt or 0) > 0:
+                partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
+                if partner_obj:
+                    if order.previous_partner_balance is None:
+                        order.previous_partner_balance = float(partner_obj.balance or 0)
+                    partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
             db.flush()
             # Driver tanlanmagan bo'lsa default — birinchi active driver
             if not order.pending_driver_id:
