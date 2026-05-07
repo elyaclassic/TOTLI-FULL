@@ -946,25 +946,36 @@ async def supervisor_confirm_driver_payment(
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
     db.refresh(p)
 
-    # Order.paid yangilash — description'dan delivery raqamini chiqarib olib, undan order.id ga
-    # Yoki sodda: shu partner uchun eng yangi delivery (driver to'lagan) uchun bog'lash kerak
-    # Soddaroq: FIFO — eng eski qarz buyurtmasidan boshlab.
+    # Order.paid yangilash — D3 audit fix: avval Payment.order_id (aniq order),
+    # so'ng FIFO fallback (eski yozuvlar yoki order_id NULL bo'lsa)
     remaining = float(p.amount or 0)
     if remaining > 0 and p.partner_id:
-        debt_orders = (
-            db.query(Order)
-            .filter(Order.partner_id == p.partner_id, Order.debt > 0, Order.type == "sale")
-            .order_by(Order.date.asc())
-            .all()
-        )
-        for order in debt_orders:
-            if remaining <= 0:
-                break
-            order_debt = float(order.debt or 0)
-            applied = min(order_debt, remaining)
-            order.paid = float(order.paid or 0) + applied
-            order.debt = order_debt - applied
-            remaining -= applied
+        # 1) Payment.order_id bor bo'lsa, avval shu orderga qo'llash
+        if p.order_id:
+            target = db.query(Order).filter(Order.id == p.order_id).first()
+            if target and float(target.debt or 0) > 0:
+                target_debt = float(target.debt or 0)
+                applied = min(target_debt, remaining)
+                target.paid = float(target.paid or 0) + applied
+                target.debt = target_debt - applied
+                remaining -= applied
+        # 2) Qoldiq bo'lsa FIFO bilan boshqa qarz orderlariga
+        if remaining > 0:
+            debt_orders = (
+                db.query(Order)
+                .filter(Order.partner_id == p.partner_id, Order.debt > 0, Order.type == "sale")
+                .filter(Order.id != (p.order_id or 0))  # asosiy order ikki marta hisoblanmasin
+                .order_by(Order.date.asc())
+                .all()
+            )
+            for order in debt_orders:
+                if remaining <= 0:
+                    break
+                order_debt = float(order.debt or 0)
+                applied = min(order_debt, remaining)
+                order.paid = float(order.paid or 0) + applied
+                order.debt = order_debt - applied
+                remaining -= applied
 
     # Partner balansi kamayadi
     partner = db.query(Partner).filter(Partner.id == p.partner_id).first() if p.partner_id else None

@@ -263,6 +263,7 @@ async def driver_delivery_status(
                         type="income",
                         cash_register_id=cash_register.id,
                         partner_id=partner_id,
+                        order_id=delivery.order_id,  # D3 audit fix: order link saqlanadi (FIFO o'rniga aniq order)
                         amount=pay_amount,
                         payment_type=pay_type,
                         category="delivery",
