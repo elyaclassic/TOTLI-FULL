@@ -36,7 +36,7 @@ from app.models.database import (
     ExpenseDocItem,
     ExpenseType,
 )
-from app.deps import require_auth
+from app.deps import require_auth, require_admin
 from app.utils.production_order import is_qiyom_recipe, recipe_kg_per_unit
 
 router = APIRouter(prefix="/employees", tags=["employees-salary"])
@@ -553,9 +553,9 @@ async def employee_salary_mark_paid(
     month: int = Form(...),
     paid_amount: float = Form(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
-    """Oylik to'langanligini belgilash"""
+    """Oylik to'langanligini belgilash (faqat admin)."""
     s = db.query(Salary).filter(
         Salary.employee_id == employee_id,
         Salary.year == year,
