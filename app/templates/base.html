@@ -812,6 +812,21 @@
                 </a>
             </li>
 
+            <!-- MA'LUMOTNOMALAR -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">MA'LUMOTNOMALAR</small>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Tovarlar' in (page_title or '') %}active{% endif %}" href="/products">
+                    <i class="bi bi-box-seam"></i> Tovarlar
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Kontragent' in (page_title or '') %}active{% endif %}" href="/partners">
+                    <i class="bi bi-people"></i> Kontragentlar
+                </a>
+            </li>
+
             <!-- MONITORING -->
             <li class="nav-item mt-3">
                 <small class="text-light opacity-50 px-3">MONITORING</small>
@@ -1102,21 +1117,6 @@
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Harajat turlari' %}active{% endif %}" href="/finance/expense-types">
                     <i class="bi bi-tags"></i> Harajat turlari
-                </a>
-            </li>
-
-            <!-- MA'LUMOTNOMALAR -->
-            <li class="nav-item mt-3">
-                <small class="text-light opacity-50 px-3">MA'LUMOTNOMALAR</small>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'Tovarlar' in page_title %}active{% endif %}" href="/products">
-                    <i class="bi bi-box-seam"></i> Tovarlar
-                </a>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'Kontragent' in page_title %}active{% endif %}" href="/partners">
-                    <i class="bi bi-people"></i> Kontragentlar
                 </a>
             </li>
 
