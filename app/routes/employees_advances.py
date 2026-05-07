@@ -371,16 +371,41 @@ async def employee_advance_confirm(
     return RedirectResponse(url="/employees/advances?confirmed=1", status_code=303)
 
 
+def _cancel_linked_advance_payment(db: Session, adv: EmployeeAdvance) -> bool:
+    """Avansga bog'liq Payment yozuvini status='cancelled' qiladi va kassa balansini sinxronizatsiya qiladi.
+    Topilsa True, topilmasa False qaytaradi (orphan holatda silent skip)."""
+    emp = db.query(Employee).filter(Employee.id == adv.employee_id).first()
+    if not emp or not adv.cash_register_id:
+        return False
+    emp_name = (emp.full_name or f"Xodim {adv.employee_id}")[:100]
+    pay = db.query(Payment).filter(
+        Payment.cash_register_id == adv.cash_register_id,
+        Payment.description == f"Avans: {emp_name}",
+        Payment.amount == float(adv.amount or 0),
+        func.date(Payment.date) == adv.advance_date,
+        Payment.status == "confirmed",
+        Payment.type == "expense",
+    ).order_by(Payment.id.desc()).first()
+    if not pay:
+        return False
+    pay.status = "cancelled"
+    from app.routes.finance import _sync_cash_balance
+    _sync_cash_balance(db, pay.cash_register_id)
+    return True
+
+
 @router.post("/advances/unconfirm/{advance_id}")
 async def employee_advance_unconfirm(
     advance_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Avans tasdiqini bekor qilish"""
+    """Avans tasdiqini bekor qilish — bog'liq Payment ham 'cancelled' bo'ladi"""
     adv = db.query(EmployeeAdvance).filter(EmployeeAdvance.id == advance_id).first()
     if not adv:
         return RedirectResponse(url="/employees/advances?error=Avans topilmadi", status_code=303)
+    if adv.confirmed_at is not None:
+        _cancel_linked_advance_payment(db, adv)
     adv.confirmed_at = None
     db.commit()
     return RedirectResponse(url="/employees/advances?unconfirmed=1", status_code=303)
@@ -458,7 +483,14 @@ async def employee_advances_bulk_unconfirm(
             pass
     if not ids:
         return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
-    updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.isnot(None)).update({EmployeeAdvance.confirmed_at: None}, synchronize_session=False)
+    confirmed_advs = db.query(EmployeeAdvance).filter(
+        EmployeeAdvance.id.in_(ids),
+        EmployeeAdvance.confirmed_at.isnot(None),
+    ).all()
+    for adv in confirmed_advs:
+        _cancel_linked_advance_payment(db, adv)
+        adv.confirmed_at = None
+    updated = len(confirmed_advs)
     db.commit()
     base = "/employees/advances?bulk_unconfirmed=" + str(updated)
     extra = _advances_list_redirect_params(form)
