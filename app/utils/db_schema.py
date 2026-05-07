@@ -181,3 +181,28 @@ def ensure_audit_cooldowns_table(db: Session) -> None:
         db.commit()
     except Exception:
         db.rollback()
+
+
+def ensure_perf_indexes_20260507(db: Session) -> None:
+    """Audit P4 (2026-05-07) — hot path query'lar uchun 9 ta index.
+
+    Hammasi additive (CREATE INDEX IF NOT EXISTS), mavjud ma'lumotni
+    o'zgartirmaydi, jonli foydalanuvchilarga ta'sir qilmaydi.
+    """
+    indexes = [
+        ("idx_agent_locations_agent_recorded", "agent_locations", "agent_id, recorded_at"),
+        ("idx_driver_locations_driver_recorded", "driver_locations", "driver_id, recorded_at"),
+        ("idx_visits_agent_date", "visits", "agent_id, visit_date"),
+        ("idx_payments_date", "payments", "date"),
+        ("idx_payments_partner_id", "payments", "partner_id"),
+        ("idx_orders_agent_date", "orders", "agent_id, date"),
+        ("idx_orders_partner_status", "orders", "partner_id, status"),
+        ("idx_stocks_product_id", "stocks", "product_id"),
+        ("idx_attendances_date", "attendances", "date"),
+    ]
+    for name, table, cols in indexes:
+        try:
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table}({cols})"))
+            db.commit()
+        except Exception:
+            db.rollback()
