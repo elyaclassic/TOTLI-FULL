@@ -568,6 +568,11 @@ async def employee_salary_mark_paid(
     current_user: User = Depends(require_admin),
 ):
     """Oylik to'langanligini belgilash (faqat admin)."""
+    if paid_amount < 0:
+        return RedirectResponse(
+            url=f"/employees/salary?year={year}&month={month}&error=paid_amount_negative",
+            status_code=303,
+        )
     s = db.query(Salary).filter(
         Salary.employee_id == employee_id,
         Salary.year == year,
@@ -576,8 +581,8 @@ async def employee_salary_mark_paid(
     if not s:
         s = Salary(employee_id=employee_id, year=year, month=month, base_salary=0, total=0, paid=0)
         db.add(s)
-    s.paid = paid_amount
-    s.status = "paid" if paid_amount >= (s.total or 0) else "pending"
+    s.paid = max(0.0, float(paid_amount))
+    s.status = "paid" if s.paid >= (s.total or 0) else "pending"
     db.commit()
     return RedirectResponse(url=f"/employees/salary?year={year}&month={month}", status_code=303)
 
