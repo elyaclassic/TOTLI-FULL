@@ -155,29 +155,6 @@ def ensure_sales_plans_table(db: Session) -> None:
         db.rollback()
 
 
-def ensure_closed_periods_table(db: Session) -> None:
-    """closed_periods jadvali — oy yopish (davr boshqaruvi)."""
-    try:
-        db.execute(text("""
-            CREATE TABLE IF NOT EXISTS closed_periods (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                year INTEGER NOT NULL,
-                month INTEGER NOT NULL,
-                closed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                closed_by_id INTEGER NOT NULL REFERENCES users(id),
-                snapshot TEXT,
-                reopen_reason TEXT,
-                reopened_at DATETIME,
-                reopened_by_id INTEGER REFERENCES users(id),
-                is_closed BOOLEAN DEFAULT 1,
-                UNIQUE(year, month)
-            )
-        """))
-        db.commit()
-    except Exception:
-        db.rollback()
-
-
 def ensure_product_is_for_agent_column(db: Session) -> None:
     """products.is_for_agent — Agent katalogida ko'rinish flagi."""
     try:
@@ -204,3 +181,28 @@ def ensure_audit_cooldowns_table(db: Session) -> None:
         db.commit()
     except Exception:
         db.rollback()
+
+
+def ensure_perf_indexes_20260507(db: Session) -> None:
+    """Audit P4 (2026-05-07) — hot path query'lar uchun 9 ta index.
+
+    Hammasi additive (CREATE INDEX IF NOT EXISTS), mavjud ma'lumotni
+    o'zgartirmaydi, jonli foydalanuvchilarga ta'sir qilmaydi.
+    """
+    indexes = [
+        ("idx_agent_locations_agent_recorded", "agent_locations", "agent_id, recorded_at"),
+        ("idx_driver_locations_driver_recorded", "driver_locations", "driver_id, recorded_at"),
+        ("idx_visits_agent_date", "visits", "agent_id, visit_date"),
+        ("idx_payments_date", "payments", "date"),
+        ("idx_payments_partner_id", "payments", "partner_id"),
+        ("idx_orders_agent_date", "orders", "agent_id, date"),
+        ("idx_orders_partner_status", "orders", "partner_id, status"),
+        ("idx_stocks_product_id", "stocks", "product_id"),
+        ("idx_attendances_date", "attendances", "date"),
+    ]
+    for name, table, cols in indexes:
+        try:
+            db.execute(text(f"CREATE INDEX IF NOT EXISTS {name} ON {table}({cols})"))
+            db.commit()
+        except Exception:
+            db.rollback()

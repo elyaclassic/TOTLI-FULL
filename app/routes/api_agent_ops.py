@@ -83,18 +83,18 @@ async def agent_orders(token: str, db: Session = Depends(get_db)):
 
 
 @router.get("/agent/partners")
-async def agent_partners(token: str = None, db: Session = Depends(get_db)):
-    """Agent uchun mijozlar ro'yxati"""
+async def agent_partners(request: Request, token: str = None, db: Session = Depends(get_db)):
+    """Agent uchun mijozlar ro'yxati — faqat shu agentga biriktirilganlari."""
     try:
-        # Token query parameter yoki FormData dan olish
-        if not token:
-            return {"success": False, "error": "Token talab qilinadi"}
-        
-        user_data = get_user_from_token(token)
-        if not user_data or user_data.get("user_type") != "agent":
+        tk = _extract_token(request, token)
+        agent = _agent_from_token(tk, db)
+        if not agent:
             return {"success": False, "error": "Invalid token"}
-        
-        partners = db.query(Partner).filter(Partner.is_active == True).all()
+
+        partners = db.query(Partner).filter(
+            Partner.agent_id == agent.id,
+            Partner.is_active == True,
+        ).all()
         return {
             "success": True,
             "partners": [

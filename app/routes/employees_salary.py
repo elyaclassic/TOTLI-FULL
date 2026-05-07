@@ -565,9 +565,9 @@ async def employee_salary_mark_paid(
     month: int = Form(...),
     paid_amount: float = Form(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
-    """Oylik to'langanligini belgilash"""
+    """Oylik to'langanligini belgilash (faqat admin)."""
     s = db.query(Salary).filter(
         Salary.employee_id == employee_id,
         Salary.year == year,

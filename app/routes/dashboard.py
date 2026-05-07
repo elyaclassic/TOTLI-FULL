@@ -202,21 +202,21 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
     
     # Top 5 agentlar
     top_agents_query = db.query(
-        Agent.name,
+        Agent.full_name.label('agent_name'),
         func.sum(Order.total).label('total_sales'),
         func.count(Order.id).label('order_count')
     ).join(
-        Order, Agent.id == Order.partner_id  # Assuming agent is partner
+        Order, Order.agent_id == Agent.id
     ).filter(
         func.date(Order.created_at) >= week_ago,
         Order.status == 'completed'
-    ).group_by(Agent.id, Agent.name).order_by(
+    ).group_by(Agent.id, Agent.full_name).order_by(
         func.sum(Order.total).desc()
     ).limit(5).all()
-    
+
     top_agents = [
         {
-            'name': a.name,
+            'name': a.agent_name or 'Nomalum',
             'sales': float(a.total_sales or 0),
             'orders': a.order_count
         }
