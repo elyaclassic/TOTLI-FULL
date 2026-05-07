@@ -2250,6 +2250,9 @@ async def sales_pos_complete(
                     _sync_cash_balance(db, cash_register.id)
             db.commit()
     else:
+        # Revert (sales/revert) uchun snapshot — order.previous_partner_balance dan to'g'ri qaytarish uchun
+        if order.previous_partner_balance is None:
+            order.previous_partner_balance = float(partner.balance or 0)
         partner.balance = (partner.balance or 0) + (order.total or 0)
         db.commit()
     log_action(db, user=current_user, action="create", entity_type="sale",
