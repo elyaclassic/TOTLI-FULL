@@ -13,7 +13,8 @@ Bu skript Claude Code hooklari tomonidan chaqiriladi:
    Inbox dan yangi xabarlar bo'lsa, ular ham promptga qo'shilishi uchun stdout'ga chiqaradi
    (Claude o'qib biladi).
 
-Server URL env: CLAUDE_NOTIFY_URL (default http://127.0.0.1:8080/api/internal/notify-owner)
+Server URL env: CLAUDE_NOTIFY_URL (default http://10.243.165.156:8080/api/internal/notify-owner)
+                — uvicorn faqat shu IP ga bind qilingan (start.bat BIND_HOST), shuning uchun 127.0.0.1 ishlamaydi
 """
 import argparse
 import json
@@ -23,7 +24,7 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
-NOTIFY_URL = os.environ.get("CLAUDE_NOTIFY_URL", "http://127.0.0.1:8080/api/internal/notify-owner")
+NOTIFY_URL = os.environ.get("CLAUDE_NOTIFY_URL", "http://10.243.165.156:8080/api/internal/notify-owner")
 INBOX_DIR = Path(__file__).resolve().parent.parent / "app" / "bot" / "data"
 INBOX_FILE = INBOX_DIR / "inbox.jsonl"
 INBOX_LAST_SEEN = INBOX_DIR / "claude_last_seen.txt"

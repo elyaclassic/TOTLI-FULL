@@ -34,7 +34,7 @@ LOG = ROOT / "watchdog.log"
 
 NOTIFY_URL = os.environ.get(
     "CLAUDE_NOTIFY_URL",
-    "http://127.0.0.1:8080/api/internal/notify-owner",
+    "http://10.243.165.156:8080/api/internal/notify-owner",
 )
 CLAUDE_TIMEOUT = int(os.environ.get("CLAUDE_TIMEOUT", "180"))
 CLAUDE_MODEL = os.environ.get("CLAUDE_BOT_MODEL", "claude-opus-4-7[1m]")
