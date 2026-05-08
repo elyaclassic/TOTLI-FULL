@@ -4,6 +4,22 @@ from sqlalchemy.orm import Session
 
 from app.models.database import Stock, StockMovement
 
+
+class NegativeStockError(Exception):
+    """Sale/Production movement stock'ni manfiy qildi — operatsiya bekor."""
+
+    def __init__(self, warehouse_id, product_id, current_qty, change, new_qty):
+        self.warehouse_id = warehouse_id
+        self.product_id = product_id
+        self.current_qty = current_qty
+        self.change = change
+        self.new_qty = new_qty
+        super().__init__(
+            f"Stock manfiy bo'lardi: wh={warehouse_id} prod={product_id} "
+            f"{current_qty} + {change} = {new_qty}"
+        )
+
+
 # Float noise chegarasi — shu qiymatdan kichik absolute qiymatlar 0 ga tushadi
 _STOCK_EPSILON = 1e-6
 
@@ -42,10 +58,16 @@ def create_stock_movement(
     user_id: int = None,
     note: str = None,
     created_at=None,
+    strict_negative: bool = False,
 ):
     """Har bir operatsiya uchun StockMovement yozuvini yaratish.
     Bitta (warehouse, product) uchun bir nechta Stock row bo'lsa — birlashtiradi
-    va eski rowlar bilan bog'liq StockMovement larni yangi row.id ga ko'chiradi."""
+    va eski rowlar bilan bog'liq StockMovement larni yangi row.id ga ko'chiradi.
+
+    strict_negative=True bo'lsa: agar movement stock.quantity'ni manfiy qilsa
+    NegativeStockError raise qilinadi (sale, production_consumption uchun).
+    Default False — revert/adjustment/initial_balance uchun manfiy ruxsat etiladi.
+    """
     rows = db.query(Stock).filter(
         Stock.warehouse_id == warehouse_id,
         Stock.product_id == product_id
@@ -72,9 +94,14 @@ def create_stock_movement(
 
     if stock:
         new_qty = (stock.quantity or 0) + quantity_change
-        # Manfiy bo'lsa loglash (audit trail uchun), lekin clamp QILINMAYDI —
-        # manfiy qoldiq ma'lumot buzilishini yashirmasligi va revert+reconfirm
-        # oqimi to'g'ri ishlashi uchun saqlanadi.
+        # D5 audit fix: strict_negative=True bo'lsa va stock manfiy bo'lardi → REJECT
+        # (sale, production_consumption uchun ishlatiladi)
+        if strict_negative and new_qty < -_STOCK_EPSILON:
+            raise NegativeStockError(
+                warehouse_id, product_id,
+                float(stock.quantity or 0), float(quantity_change), new_qty,
+            )
+        # Manfiy bo'lsa loglash (audit trail uchun), revert/adjustment ruxsat
         if new_qty < -0.001:
             try:
                 print(f"[Stock NEGATIVE] wh={warehouse_id} prod={product_id} "
@@ -176,4 +203,5 @@ def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: st
             user_id=current_user.id if current_user else None,
             note=f"{note_prefix}: {order.number}",
             created_at=order.date or _dt.now(),
+            strict_negative=True,  # D5 audit fix: sale stock'ni manfiy qilolmaydi
         )
