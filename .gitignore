@@ -117,3 +117,22 @@ app/static/totli-agent.apk.bak-*
 # Telegram bot log va generated hisobotlar
 external/telegram_sheets_bot/bot.err
 external/telegram_sheets_bot/templates/hisobot_summary_all_*.xlsx
+
+# L1 audit fix: log fayllar (har machinaga xos, audit-trail server'da)
+backup_offsite.log
+stale_cleanup.log
+claude_telegram_sync.log
+integrity_check.log
+watchdog.log
+server.log
+server_error.log
+*.log
+
+# Lock fayllar (runtime)
+*.lock
+
+# Bot photos (foydalanuvchi yuborgan rasmlar — Git emas)
+app/bot/data/photos/
+
+# Sentry SDK cache (kelajakda)
+.sentry-native/
