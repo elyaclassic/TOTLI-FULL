@@ -1238,6 +1238,60 @@ async def inventory_save_draft(
         )
 
 
+@inventory_router.post("/{doc_id}/save-item")
+async def inventory_save_item(
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Bitta itemni AJAX bilan saqlash (Enter bosilganda real-time)."""
+    from fastapi.responses import JSONResponse
+    if not current_user:
+        return JSONResponse({"ok": False, "error": "Login kerak"}, status_code=401)
+    doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
+    if not doc:
+        return JSONResponse({"ok": False, "error": "Hujjat topilmadi"}, status_code=404)
+    if doc.status != "draft":
+        return JSONResponse({"ok": False, "error": "Hujjat tasdiqlangan, o'zgartirib bo'lmaydi"}, status_code=400)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "JSON xato"}, status_code=400)
+    item_id_raw = body.get("item_id")
+    qty_raw = body.get("actual_quantity")
+    try:
+        item_id = int(item_id_raw)
+    except (TypeError, ValueError):
+        return JSONResponse({"ok": False, "error": "item_id noto'g'ri"}, status_code=400)
+    item = db.query(StockAdjustmentDocItem).filter(
+        StockAdjustmentDocItem.id == item_id,
+        StockAdjustmentDocItem.doc_id == doc_id,
+    ).first()
+    if not item:
+        return JSONResponse({"ok": False, "error": "Item topilmadi"}, status_code=404)
+    qty = _parse_quantity(qty_raw) if (qty_raw is not None and str(qty_raw).strip() != "") else 0.0
+    item.quantity = qty
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return JSONResponse({"ok": False, "error": f"Saqlash xatosi: {e}"}, status_code=500)
+    # Joriy hisobiy qoldiq (Stock dan)
+    stock_qty = db.query(func.coalesce(func.sum(Stock.quantity), 0)).filter(
+        Stock.warehouse_id == doc.warehouse_id,
+        Stock.product_id == item.product_id,
+    ).scalar() or 0
+    diff = qty - float(stock_qty)
+    return JSONResponse({
+        "ok": True,
+        "item_id": item.id,
+        "actual_quantity": qty,
+        "current_quantity": float(stock_qty),
+        "diff": diff,
+    })
+
+
 @inventory_router.get("/{doc_id}", response_class=HTMLResponse)
 async def inventory_view_page(
     doc_id: int,

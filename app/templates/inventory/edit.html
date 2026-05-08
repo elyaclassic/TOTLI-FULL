@@ -243,5 +243,103 @@ function removeInventoryRow(btn, itemId) {
     highlighted = -1;
   }
 })();
+
+/* Excel-style data entry: Enter→next row + auto-save on blur/Enter */
+(function() {
+    var docId = {{ doc.id }};
+    var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+    var csrfToken = csrfMeta ? csrfMeta.getAttribute('content') : '';
+    var inputs = Array.from(document.querySelectorAll('.inventory-table input[name="actual_quantity"]'));
+    if (!inputs.length) return;
+
+    function findDiffCell(tr) {
+        // Diff cell: 5-td (№, Tovar, Hisobiy, Haqiqiy, Farq)
+        var tds = tr.querySelectorAll('td');
+        return tds.length >= 5 ? tds[4] : null;
+    }
+
+    function fmt3(n) {
+        var sign = n >= 0 ? '+' : '';
+        return sign + Number(n).toLocaleString('ru-RU', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    }
+
+    function saveItem(input, onDone) {
+        var tr = input.closest('tr');
+        if (!tr) { if (onDone) onDone(); return; }
+        var itemIdInput = tr.querySelector('input[name="item_id"]');
+        if (!itemIdInput) { if (onDone) onDone(); return; }
+        var itemId = itemIdInput.value;
+        var qty = (input.value || '').toString().replace(',', '.').trim();
+        if (qty === input.dataset.lastSaved) { if (onDone) onDone(); return; }
+
+        input.style.transition = 'background-color .3s';
+        input.style.backgroundColor = '#fff9c4';
+
+        var headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+        if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
+
+        fetch('/inventory/' + docId + '/save-item', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: JSON.stringify({ item_id: itemId, actual_quantity: qty })
+        })
+        .then(function(r) { return r.json().catch(function() { return { ok: false, error: 'JSON xato' }; }); })
+        .then(function(d) {
+            if (d && d.ok) {
+                input.style.backgroundColor = '#d4edda';
+                setTimeout(function() { input.style.backgroundColor = ''; }, 700);
+                input.dataset.lastSaved = qty;
+                var diffCell = findDiffCell(tr);
+                if (diffCell && typeof d.diff === 'number') {
+                    diffCell.textContent = fmt3(d.diff);
+                    diffCell.classList.remove('text-success', 'text-danger', 'text-muted');
+                    if (d.diff > 0) diffCell.classList.add('text-success');
+                    else if (d.diff < 0) diffCell.classList.add('text-danger');
+                    else diffCell.classList.add('text-muted');
+                }
+            } else {
+                input.style.backgroundColor = '#f8d7da';
+                var msg = d && (d.error || d.detail) || 'noma\'lum';
+                console.error('Save item error:', msg);
+            }
+            if (onDone) onDone();
+        })
+        .catch(function(err) {
+            input.style.backgroundColor = '#f8d7da';
+            console.error('Network error:', err);
+            if (onDone) onDone();
+        });
+    }
+
+    inputs.forEach(function(input, idx) {
+        input.dataset.lastSaved = (input.value || '').toString();
+
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveItem(input, function() {
+                    var next = inputs[idx + 1];
+                    if (next) {
+                        next.focus();
+                        next.select();
+                        next.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                    } else {
+                        input.blur();
+                    }
+                });
+            } else if (e.key === 'Escape') {
+                input.value = input.dataset.lastSaved || '';
+                input.blur();
+            }
+        });
+
+        input.addEventListener('blur', function() { saveItem(input); });
+    });
+
+    // Visual hint: focus first empty input
+    var firstEmpty = inputs.find(function(i) { return !i.value || parseFloat(i.value) === 0; });
+    if (firstEmpty) firstEmpty.focus();
+})();
 </script>
 {% endblock %}
