@@ -203,6 +203,13 @@ async def unified_login(
             if not agent.is_active:
                 return {"success": False, "error": f"Agent '{username}' faol emas"}
 
+            # S11 audit fix: legacy phone-as-password disable env flag
+            # AGENT_LEGACY_LOGIN_DISABLED=1 bo'lsa faqat PIN orqali login (driver_login bilan teng)
+            import os as _os_env
+            legacy_disabled = _os_env.environ.get("AGENT_LEGACY_LOGIN_DISABLED", "").lower() in ("1", "true", "yes")
+            if legacy_disabled and not getattr(agent, "pin_hash", None):
+                return {"success": False, "error": "Agent uchun PIN o'rnatilmagan. Admin bilan bog'laning."}
+
             agent_phone_variants = _get_phone_variants(agent.phone)
             password_variants = _get_phone_variants(password) if password else []
 
@@ -214,6 +221,9 @@ async def unified_login(
                 any(pv in agent_phone_variants for pv in password_variants) or
                 any(apv in password_variants for apv in agent_phone_variants)
             )
+            # S11 audit fix: legacy disabled bo'lsa phone-as-password rad
+            if legacy_disabled:
+                password_match = False
 
             if password_match:
                 record_success(request)
