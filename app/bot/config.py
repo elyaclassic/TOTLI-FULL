@@ -29,8 +29,15 @@ REALTIME_CHAT_IDS = [1340383182]  # @elya_classic — ELYA CLASSIC
 # Faqat shu Telegram ID'lar ma'lumot kirityish huquqiga ega
 OPS_CHAT_IDS = [1340383182, 1057546370]  # @elya_classic + @RD2197 (rahbar)
 
-# PIN kod (.env da BOT_ADMIN_PIN o'rnating, default 1234)
-BOT_ADMIN_PIN = os.environ.get("BOT_ADMIN_PIN", "1234")
+# PIN kod — H6 audit fix: default qoldirilmadi (zaif "1234" xavfli edi).
+# .env'da BOT_ADMIN_PIN majburiy, aks holda /ops buyruqlari o'chiriladi.
+BOT_ADMIN_PIN = os.environ.get("BOT_ADMIN_PIN", "")
+if not BOT_ADMIN_PIN:
+    import logging
+    logging.getLogger(__name__).warning(
+        "BOT_ADMIN_PIN env o'rnatilmagan — bot /ops buyruqlari o'chiriladi. "
+        ".env'da BOT_ADMIN_PIN=<8+ raqam> qo'shing."
+    )
 
 # PIN muvaffaqiyatli kiritilgandan keyin qancha soat faol (shundan keyin qayta PIN)
 BOT_PIN_SESSION_HOURS = int(os.environ.get("BOT_PIN_SESSION_HOURS", "12"))
