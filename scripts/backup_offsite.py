@@ -35,7 +35,7 @@ except Exception:
     pass
 
 ROOT = Path(__file__).resolve().parent.parent
-LIVE_BACKUP_DIR = ROOT / "backups" / "live"
+LIVE_BACKUP_DIR = Path(r"D:\TOTLI_BI_BACKUPS\live")
 LOG_PATH = ROOT / "backup_offsite.log"
 ENV_PATH = ROOT / ".env"
 OWNER_ID = "1340383182"
