@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from typing import Optional
 from fastapi import APIRouter, Request, Depends, File, Form, UploadFile, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, or_, and_
 from openpyxl import Workbook, load_workbook
@@ -14,7 +14,7 @@ from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
 from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category
-from app.deps import get_current_user, require_auth, require_admin
+from app.deps import get_current_user, require_auth, require_admin, require_admin_or_manager
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
 
@@ -33,7 +33,7 @@ def get_allowed_report_types(user: User) -> list:
         return []
     # Admin va manager uchun barcha hisobotlar
     if user.role in ("admin", "manager", "menejer"):
-        return ["sales", "stock", "debts", "production", "employees", "profit", "partner_reconciliation"]
+        return ["sales", "stock", "debts", "production", "employees", "profit", "partner_reconciliation", "z_reports"]
     # allowed_sections bo'sh yoki None bo'lsa, hech narsa ko'rsatilmaydi
     if not getattr(user, "allowed_sections", None):
         return []
@@ -46,7 +46,7 @@ def get_allowed_report_types(user: User) -> list:
         for s in sections:
             if isinstance(s, str) and s.startswith("reports_"):
                 report_type = s.replace("reports_", "")
-                if report_type in ["sales", "stock", "debts", "production", "employees", "profit", "partner_reconciliation"]:
+                if report_type in ["sales", "stock", "debts", "production", "employees", "profit", "partner_reconciliation", "z_reports"]:
                     report_types.append(report_type)
         return report_types
     except (json.JSONDecodeError, TypeError, AttributeError):
@@ -2525,4 +2525,305 @@ async def sold_products_report(
         "name_query": name_query or "",
         "grand_qty": grand_qty,
         "grand_sum": grand_sum,
+    })
+
+
+# ============================================================
+# Z-hisobotlar tarixi (admin/manager)
+# JSON snapshotlardan o'qiydi — DB jadvali yo'q
+# ============================================================
+
+import os as _z_os
+import re as _z_re
+from datetime import date as _z_date
+
+_Z_REPORTS_DIR = _z_os.path.join("data", "z_reports")
+_Z_ID_RE = _z_re.compile(r"^Z-(\d{8})-U(\d+)-(\d{6})$")
+
+
+def _z_parse_filename(name: str):
+    if not name.endswith(".json"):
+        return None
+    base = name[:-5]
+    m = _Z_ID_RE.match(base)
+    if not m:
+        return None
+    try:
+        d = datetime.strptime(m.group(1), "%Y%m%d").date()
+    except ValueError:
+        return None
+    return {"date": d, "user_id": int(m.group(2)), "time": m.group(3), "z_id": base}
+
+
+def _z_load_snapshot(z_id: str):
+    """Path traversal himoyasi bilan bitta Z-snapshot o'qish."""
+    parsed = _z_parse_filename(z_id + ".json")
+    if not parsed:
+        return None
+    folder = parsed["date"].strftime("%Y-%m-%d")
+    fpath = _z_os.path.join(_Z_REPORTS_DIR, folder, z_id + ".json")
+    safe_root = _z_os.path.realpath(_Z_REPORTS_DIR)
+    real_path = _z_os.path.realpath(fpath)
+    if not (real_path == safe_root or real_path.startswith(safe_root + _z_os.sep)):
+        return None
+    if not _z_os.path.isfile(real_path):
+        return None
+    try:
+        with open(real_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = None):
+    """Sana orali bo'yicha barcha snapshotlarni o'qiydi (yangi -> eski)."""
+    items: list = []
+    if not _z_os.path.isdir(_Z_REPORTS_DIR):
+        return items
+    try:
+        folders = sorted(_z_os.listdir(_Z_REPORTS_DIR), reverse=True)
+    except OSError:
+        return items
+    for folder in folders:
+        try:
+            d = datetime.strptime(folder, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if d < date_from or d > date_to:
+            continue
+        folder_path = _z_os.path.join(_Z_REPORTS_DIR, folder)
+        try:
+            files = _z_os.listdir(folder_path)
+        except OSError:
+            continue
+        for fname in files:
+            parsed = _z_parse_filename(fname)
+            if not parsed:
+                continue
+            if user_filter and parsed["user_id"] != user_filter:
+                continue
+            try:
+                with open(_z_os.path.join(folder_path, fname), "r", encoding="utf-8") as f:
+                    items.append(json.load(f))
+            except (OSError, json.JSONDecodeError):
+                continue
+    items.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+    return items
+
+
+@router.get("/z-reports", response_class=HTMLResponse)
+async def report_z_reports(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    user_id: str = None,
+    page: int = 1,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Z-hisobotlar tarixi (admin/manager only)."""
+    from app.utils.pagination import pagination_query_string
+
+    today = _z_date.today()
+    if not start_date:
+        start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = today.strftime("%Y-%m-%d")
+    try:
+        d_from = datetime.strptime(start_date, "%Y-%m-%d").date()
+        d_to = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        d_from = today - timedelta(days=30)
+        d_to = today
+        start_date = d_from.strftime("%Y-%m-%d")
+        end_date = d_to.strftime("%Y-%m-%d")
+
+    user_filter = None
+    if user_id and str(user_id).strip().isdigit():
+        try:
+            user_filter = int(user_id)
+        except (ValueError, TypeError):
+            user_filter = None
+
+    all_items = _z_scan(d_from, d_to, user_filter)
+
+    totals = {
+        "count": len(all_items),
+        "sales": sum(float(x.get("sales_total") or 0) for x in all_items),
+        "returns": sum(float(x.get("returns_total") or 0) for x in all_items),
+        "net": sum(float(x.get("net_total") or 0) for x in all_items),
+    }
+
+    chart_by_date: dict = {}
+    for x in all_items:
+        d = x.get("date") or ""
+        if not d:
+            continue
+        if d not in chart_by_date:
+            chart_by_date[d] = {"sales": 0.0, "net": 0.0, "count": 0}
+        chart_by_date[d]["sales"] += float(x.get("sales_total") or 0)
+        chart_by_date[d]["net"] += float(x.get("net_total") or 0)
+        chart_by_date[d]["count"] += 1
+    chart_data = sorted(
+        [{"date": k, **v} for k, v in chart_by_date.items()],
+        key=lambda r: r["date"],
+    )
+
+    per_page = 50
+    total_count = len(all_items)
+    total_pages = max(1, (total_count + per_page - 1) // per_page)
+    page = max(1, min(int(page or 1), total_pages))
+    items = all_items[(page - 1) * per_page : page * per_page]
+
+    sotuvchilar = (
+        db.query(User)
+        .filter(User.role.in_(("sotuvchi", "admin", "manager")))
+        .order_by(User.full_name)
+        .all()
+    )
+
+    pq_str = pagination_query_string({
+        "start_date": start_date,
+        "end_date": end_date,
+        "user_id": user_id or "",
+    })
+
+    return templates.TemplateResponse("reports/z_reports.html", {
+        "request": request,
+        "page_title": "Z-hisobotlar tarixi",
+        "current_user": current_user,
+        "items": items,
+        "page": page,
+        "per_page": per_page,
+        "total_count": total_count,
+        "total_pages": total_pages,
+        "items_count": len(items),
+        "pagination_query": pq_str,
+        "base_url": "/reports/z-reports",
+        "start_date": start_date,
+        "end_date": end_date,
+        "selected_user_id": user_filter,
+        "sotuvchilar": sotuvchilar,
+        "totals": totals,
+        "chart_data": chart_data,
+    })
+
+
+@router.get("/z-reports/export")
+async def report_z_reports_export(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    user_id: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Z-hisobotlar Excel eksport."""
+    _check_export_rate_limit(request)
+    today = _z_date.today()
+    if not start_date:
+        start_date = (today - timedelta(days=30)).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = today.strftime("%Y-%m-%d")
+    try:
+        d_from = datetime.strptime(start_date, "%Y-%m-%d").date()
+        d_to = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        return JSONResponse({"error": "Sana formati xato"}, status_code=400)
+
+    user_filter = None
+    if user_id and str(user_id).strip().isdigit():
+        user_filter = int(user_id)
+
+    items = _z_scan(d_from, d_to, user_filter)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Z-hisobotlar"
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    ws["A1"] = "Z-hisobotlar tarixi"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = f"Davr: {start_date} — {end_date}"
+    headers = [
+        "№", "Sana", "Yopilgan vaqt", "Z-ID", "Sotuvchi", "Ombor",
+        "Sotuv soni", "Sotuv summa", "Qaytarish", "NET",
+        "Naqd", "Plastik", "Click", "Terminal",
+    ]
+    ws.append(headers)
+    for c in range(1, len(headers) + 1):
+        ws.cell(row=4, column=c).fill = header_fill
+        ws.cell(row=4, column=c).font = Font(bold=True, color="FFFFFF")
+
+    sum_count = 0
+    sum_sales = 0.0
+    sum_returns = 0.0
+    sum_net = 0.0
+    for i, x in enumerate(items, 1):
+        pb = {b["type"]: b["sum"] for b in (x.get("payment_breakdown") or [])}
+        sales = float(x.get("sales_total") or 0)
+        returns_v = float(x.get("returns_total") or 0)
+        net_v = float(x.get("net_total") or 0)
+        cnt = int(x.get("sales_count") or 0)
+        sum_count += cnt
+        sum_sales += sales
+        sum_returns += returns_v
+        sum_net += net_v
+        ws.append([
+            i,
+            x.get("date") or "",
+            (x.get("closed_at") or "")[:19].replace("T", " "),
+            x.get("z_id") or "",
+            x.get("user") or "",
+            x.get("warehouse") or "",
+            cnt,
+            sales,
+            returns_v,
+            net_v,
+            float(pb.get("naqd") or 0),
+            float(pb.get("plastik") or 0),
+            float(pb.get("click") or 0),
+            float(pb.get("terminal") or 0),
+        ])
+    if items:
+        ws.append([
+            "", "", "", "", "", "JAMI:",
+            sum_count, sum_sales, sum_returns, sum_net,
+            "", "", "", "",
+        ])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=z_hisobotlar_{start_date}_{end_date}.xlsx"},
+    )
+
+
+@router.get("/z-reports/{z_id}")
+async def report_z_report_detail(
+    z_id: str,
+    request: Request,
+    fmt: str = "html",
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Print uchun alohida sahifa (default) yoki JSON snapshot (?fmt=json)."""
+    snap = _z_load_snapshot(z_id)
+    if not snap:
+        if fmt == "json":
+            return JSONResponse({"ok": False, "error": "Topilmadi"}, status_code=404)
+        return HTMLResponse(
+            "<div style='padding:40px;text-align:center;font-family:sans-serif;'>"
+            "<h2>Z-hisobot topilmadi</h2>"
+            "<p><a href='/reports/z-reports'>← Ro'yxatga qaytish</a></p></div>",
+            status_code=404,
+        )
+    if fmt == "json":
+        return JSONResponse({"ok": True, "snapshot": snap})
+    return templates.TemplateResponse("reports/z_report_detail.html", {
+        "request": request,
+        "page_title": snap.get("z_id") or z_id,
+        "current_user": current_user,
+        "snap": snap,
     })

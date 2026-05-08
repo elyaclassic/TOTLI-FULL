@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .z-stat-num { font-variant-numeric: tabular-nums; font-weight: 700; }
+    .z-table td { vertical-align: middle; font-variant-numeric: tabular-nums; }
+    .z-table th { white-space: nowrap; }
+    .z-id-cell { font-family: ui-monospace, Menlo, monospace; font-size: .8rem; color:#1a73e8; }
+    .z-amount.plus  { color:#2e7d32; font-weight: 600; }
+    .z-amount.minus { color:#c62828; font-weight: 600; }
+    .z-amount.net   { font-weight: 700; }
+    #zChartWrap { position: relative; height: 220px; }
+    @media print {
+        body * { visibility: hidden !important; }
+        #zReportDetailModal, #zReportDetailModal * { visibility: visible !important; }
+        #zReportDetailModal { position: absolute !important; left: 0; top: 0; width: 100%; }
+        #zReportDetailModal .modal-header,
+        #zReportDetailModal .modal-footer,
+        #zReportDetailModal .btn-close { display: none !important; }
+    }
+</style>
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-lock text-warning"></i> Z-hisobotlar tarixi</h4>
+    <div class="d-flex gap-2">
+        <a href="/reports/z-reports/export?start_date={{ start_date }}&end_date={{ end_date }}{% if selected_user_id %}&user_id={{ selected_user_id }}{% endif %}"
+           class="btn btn-outline-success top-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+        <a href="/reports" class="btn btn-outline-secondary top-btn"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+    </div>
+</div>
+
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/z-reports" class="row g-3 align-items-end">
+        <div class="col-md-2">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="col-md-4">
+            <label class="form-label">Sotuvchi</label>
+            <select name="user_id" class="form-select">
+                <option value="">— Barchasi —</option>
+                {% for u in sotuvchilar %}
+                <option value="{{ u.id }}" {% if selected_user_id == u.id %}selected{% endif %}>
+                    {{ u.full_name or u.username }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Ko'rsatish</button>
+            <a href="/reports/z-reports" class="btn btn-outline-secondary">Tozalash</a>
+        </div>
+    </form>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-primary z-stat-num">{{ "{:,}".format(totals.count) }}</div>
+            <div class="lbl"><i class="bi bi-list-ul me-1"></i>Smenalar soni</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-success z-stat-num">{{ "{:,.0f}".format(totals.sales) }}</div>
+            <div class="lbl"><i class="bi bi-cart-check me-1"></i>Sotuv jami (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num text-danger z-stat-num">{{ "{:,.0f}".format(totals.returns) }}</div>
+            <div class="lbl"><i class="bi bi-arrow-return-left me-1"></i>Qaytarish (so'm)</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat">
+            <div class="num {% if totals.net >= 0 %}text-success{% else %}text-danger{% endif %} z-stat-num">
+                {{ "{:+,.0f}".format(totals.net) }}
+            </div>
+            <div class="lbl"><i class="bi bi-graph-up me-1"></i>NET (so'm)</div>
+        </div>
+    </div>
+</div>
+
+{% if chart_data %}
+<div class="card mb-3">
+    <div class="card-header">
+        <span class="fw-600 d-flex align-items-center gap-2">
+            <i class="bi bi-bar-chart-line text-primary"></i> Kun bo'yicha NET (so'm)
+        </span>
+    </div>
+    <div class="card-body">
+        <div id="zChartWrap"><canvas id="zChart"></canvas></div>
+    </div>
+</div>
+{% endif %}
+
+<div class="card data-table">
+    <div class="card-header">
+        <span class="fw-600 d-flex align-items-center gap-2">
+            <i class="bi bi-lock text-warning"></i> Yopilgan smenalar
+        </span>
+        <small class="text-muted">Yangidan eskigacha</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 z-table">
+                <thead>
+                    <tr>
+                        <th style="width:52px">#</th>
+                        <th style="width:110px">Sana</th>
+                        <th style="width:160px">Yopilgan vaqt</th>
+                        <th>Z-ID</th>
+                        <th>Sotuvchi</th>
+                        <th>Ombor</th>
+                        <th class="text-center" style="width:60px">Sot.</th>
+                        <th class="text-end">Sotuv</th>
+                        <th class="text-end">Qaytarish</th>
+                        <th class="text-end">NET</th>
+                        <th style="width:120px"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% if items %}
+                        {% for x in items %}
+                        <tr>
+                            <td class="muted-cell">{{ (page - 1) * per_page + loop.index }}</td>
+                            <td class="muted-cell">{{ x.date }}</td>
+                            <td class="muted-cell">{{ (x.closed_at or '')[:19] | replace('T', ' ') }}</td>
+                            <td><span class="z-id-cell">{{ x.z_id }}</span></td>
+                            <td>{{ x.user or '—' }}</td>
+                            <td class="muted-cell">{{ x.warehouse or '—' }}</td>
+                            <td class="text-center">{{ x.sales_count or 0 }}</td>
+                            <td class="text-end z-amount plus">{{ "{:,.0f}".format(x.sales_total or 0) }}</td>
+                            <td class="text-end z-amount minus">
+                                {% if (x.returns_total or 0) > 0 %}−{{ "{:,.0f}".format(x.returns_total) }}{% else %}—{% endif %}
+                            </td>
+                            <td class="text-end z-amount net {% if (x.net_total or 0) >= 0 %}plus{% else %}minus{% endif %}">
+                                {{ "{:+,.0f}".format(x.net_total or 0) }}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary z-view-btn" data-zid="{{ x.z_id }}" title="Ko'rish">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                                <a href="/reports/z-reports/{{ x.z_id }}" class="btn btn-sm btn-outline-secondary" title="To'liq sahifa" target="_blank">
+                                    <i class="bi bi-box-arrow-up-right"></i>
+                                </a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% else %}
+                        <tr>
+                            <td colspan="11" class="text-center muted-cell py-5">
+                                <i class="bi bi-inbox fs-2 d-block mb-2 opacity-40"></i>
+                                Tanlangan davr bo'yicha Z-hisobot topilmadi
+                            </td>
+                        </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+        {% include "components/pagination.html" %}
+    </div>
+</div>
+
+<!-- Detail modal -->
+<div class="modal fade" id="zReportDetailModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title"><i class="bi bi-lock me-2"></i>Z-hisobot — Yopilgan smena</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="zDetailBody">
+                <div class="text-center py-5 text-muted">Yuklanmoqda...</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="zDetailPrintBtn"><i class="bi bi-printer"></i> Chop etish</button>
+                <a href="#" class="btn btn-outline-primary" id="zDetailFullBtn" target="_blank"><i class="bi bi-box-arrow-up-right"></i> To'liq sahifa</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Yopish</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    var chartData = {{ chart_data | tojson }};
+    if (chartData && chartData.length && document.getElementById('zChart')) {
+        var ctx = document.getElementById('zChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartData.map(function(r) { return r.date; }),
+                datasets: [{
+                    label: 'NET (so\'m)',
+                    data: chartData.map(function(r) { return r.net; }),
+                    backgroundColor: chartData.map(function(r) { return r.net >= 0 ? 'rgba(46,125,50,0.7)' : 'rgba(198,40,40,0.7)'; }),
+                    borderColor: chartData.map(function(r) { return r.net >= 0 ? '#2e7d32' : '#c62828'; }),
+                    borderWidth: 1,
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { ticks: { callback: function(v) { return new Intl.NumberFormat('ru-RU').format(v); } } }
+                }
+            }
+        });
+    }
+
+    function fmt(n) { return new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)); }
+
+    function makeEl(tag, opts) {
+        var el = document.createElement(tag);
+        if (opts) {
+            if (opts.cls) el.className = opts.cls;
+            if (opts.text != null) el.textContent = String(opts.text);
+            if (opts.html) opts.html.forEach(function(c) { el.appendChild(c); });
+            if (opts.attrs) Object.keys(opts.attrs).forEach(function(k) { el.setAttribute(k, opts.attrs[k]); });
+        }
+        return el;
+    }
+
+    function tr(cells) {
+        var row = document.createElement('tr');
+        cells.forEach(function(c) {
+            var td = document.createElement('td');
+            if (c.cls) td.className = c.cls;
+            if (c.colspan) td.colSpan = c.colspan;
+            if (c.node) td.appendChild(c.node);
+            else td.textContent = c.text != null ? String(c.text) : '';
+            row.appendChild(td);
+        });
+        return row;
+    }
+
+    function renderDetail(s) {
+        var frag = document.createDocumentFragment();
+
+        var hdr = makeEl('div', { cls: 'mb-3 pb-2 border-bottom' });
+        hdr.appendChild(makeEl('div', { cls: 'fw-bold fs-5', text: (s.user || '—') + ' — ' + (s.warehouse || '—') }));
+        hdr.appendChild(makeEl('div', { cls: 'text-muted small', text: 'Sana: ' + (s.date || '—') + ' • Yopilgan: ' + ((s.closed_at || '').slice(0, 19).replace('T', ' ')) }));
+        var zline = makeEl('div', { cls: 'text-muted small' });
+        zline.appendChild(document.createTextNode('Z-ID: '));
+        zline.appendChild(makeEl('code', { text: s.z_id || '—' }));
+        hdr.appendChild(zline);
+        frag.appendChild(hdr);
+
+        var summary = makeEl('table', { cls: 'table table-sm mb-3' });
+        var sb = makeEl('tbody');
+        sb.appendChild(tr([{ text: 'Sotuvlar soni' }, { cls: 'text-end fw-bold', text: s.sales_count || 0 }]));
+        sb.appendChild(tr([{ text: 'Sotuvlar summasi' }, { cls: 'text-end fw-bold text-success', text: fmt(s.sales_total) + " so'm" }]));
+        if ((s.returns_total || 0) > 0) {
+            sb.appendChild(tr([
+                { text: 'Qaytarishlar (' + (s.returns_count || 0) + ' ta)' },
+                { cls: 'text-end fw-bold text-danger', text: '−' + fmt(s.returns_total) + " so'm" },
+            ]));
+        }
+        if ((s.cancelled_count || 0) > 0) {
+            var cTr = tr([
+                { text: 'Bekor qilingan (' + s.cancelled_count + ' ta)' },
+                { cls: 'text-end', text: fmt(s.cancelled_total) + " so'm" },
+            ]);
+            cTr.className = 'text-muted';
+            sb.appendChild(cTr);
+        }
+        var netTr = tr([
+            { cls: 'fw-bold', text: 'NET' },
+            { cls: 'text-end fw-bold ' + ((s.net_total || 0) >= 0 ? 'text-success' : 'text-danger'), text: fmt(s.net_total) + " so'm" },
+        ]);
+        netTr.className = 'table-light';
+        sb.appendChild(netTr);
+        summary.appendChild(sb);
+        frag.appendChild(summary);
+
+        frag.appendChild(makeEl('div', { cls: 'fw-bold mb-2 text-muted small text-uppercase', text: "To'lov turi bo'yicha" }));
+        var pb = (s.payment_breakdown || []);
+        var pbTbl = makeEl('table', { cls: 'table table-sm mb-3' });
+        var pbody = makeEl('tbody');
+        if (pb.length) {
+            pb.forEach(function(b) {
+                pbody.appendChild(tr([
+                    { text: ((b.type || '—') + '').toUpperCase() + ' (' + (b.count || 0) + ' ta)' },
+                    { cls: 'text-end', text: fmt(b.sum) + " so'm" },
+                ]));
+            });
+        } else {
+            pbody.appendChild(tr([{ colspan: 2, cls: 'text-muted text-center', text: "Ma'lumot yo'q" }]));
+        }
+        pbTbl.appendChild(pbody);
+        frag.appendChild(pbTbl);
+
+        frag.appendChild(makeEl('div', { cls: 'fw-bold mb-2 text-muted small text-uppercase', text: "Kassa qoldig'i (snapshot)" }));
+        var cs = (s.cash_snapshot || []);
+        var csTbl = makeEl('table', { cls: 'table table-sm mb-0' });
+        var cbody = makeEl('tbody');
+        if (cs.length) {
+            cs.forEach(function(c) {
+                cbody.appendChild(tr([
+                    { text: c.name || '—' },
+                    { cls: 'text-end', text: fmt(c.balance) + " so'm" },
+                ]));
+            });
+        } else {
+            cbody.appendChild(tr([{ colspan: 2, cls: 'text-muted text-center', text: "Kassa snapshot yo'q" }]));
+        }
+        csTbl.appendChild(cbody);
+        frag.appendChild(csTbl);
+
+        return frag;
+    }
+
+    document.querySelectorAll('.z-view-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            var zid = btn.getAttribute('data-zid');
+            var modal = new bootstrap.Modal(document.getElementById('zReportDetailModal'));
+            var body = document.getElementById('zDetailBody');
+            var fullBtn = document.getElementById('zDetailFullBtn');
+            body.textContent = '';
+            var loading = document.createElement('div');
+            loading.className = 'text-center py-5 text-muted';
+            loading.textContent = 'Yuklanmoqda...';
+            body.appendChild(loading);
+            fullBtn.href = '/reports/z-reports/' + encodeURIComponent(zid);
+            modal.show();
+            var __status = 0;
+            fetch('/reports/z-reports/' + encodeURIComponent(zid) + '?fmt=json', { credentials: 'same-origin' })
+                .then(function(r) {
+                    __status = r.status;
+                    return r.text().then(function(t) {
+                        try { return JSON.parse(t); }
+                        catch (e) { return { __raw: t.slice(0, 200) }; }
+                    });
+                })
+                .then(function(d) {
+                    body.textContent = '';
+                    if (d && d.ok) {
+                        body.appendChild(renderDetail(d.snapshot));
+                    } else {
+                        var err = document.createElement('div');
+                        err.className = 'text-danger text-center py-4';
+                        var msg = (d && (d.error || d.detail)) || "noma'lum";
+                        err.textContent = 'Xato: ' + msg;
+                        body.appendChild(err);
+                    }
+                })
+                .catch(function(e) {
+                    body.textContent = '';
+                    var err = document.createElement('div');
+                    err.className = 'text-danger text-center py-4';
+                    err.textContent = 'Tarmoq xatosi: ' + (e && e.message ? e.message : 'noma\'lum');
+                    body.appendChild(err);
+                });
+        });
+    });
+
+    var printBtn = document.getElementById('zDetailPrintBtn');
+    if (printBtn) printBtn.addEventListener('click', function() { window.print(); });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .z-detail-card {
+        max-width: 720px; margin: 0 auto; background: #fff;
+        border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.06);
+        padding: 28px 32px;
+    }
+    .z-detail-card h4 { margin-bottom: .25rem; }
+    .z-detail-meta { color:#64748b; font-size: .9rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 1px solid #e5e7eb; }
+    .z-detail-table { width: 100%; margin-bottom: 1.25rem; }
+    .z-detail-table td { padding: .5rem .25rem; border-bottom: 1px solid #f1f5f9; font-variant-numeric: tabular-nums; }
+    .z-detail-table tr:last-child td { border-bottom: none; }
+    .z-detail-table .right { text-align: right; }
+    .z-detail-table .label { color:#475569; }
+    .z-detail-table .total-row td { font-weight: 700; background: #f8fafc; padding: .65rem .25rem; }
+    .z-section-title { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color:#64748b; margin: 1.5rem 0 .5rem; }
+    .z-id-line { font-family: ui-monospace, Menlo, monospace; font-size: .85rem; }
+
+    @media print {
+        body * { visibility: hidden !important; }
+        .z-detail-card, .z-detail-card * { visibility: visible !important; }
+        .z-detail-card {
+            position: absolute !important; left: 0; top: 0;
+            box-shadow: none; padding: 8mm 10mm; max-width: none; width: 100%;
+        }
+        .z-no-print { display: none !important; }
+    }
+</style>
+
+<div class="d-flex gap-2 mb-3 z-no-print">
+    <button onclick="window.print()" class="btn btn-warning"><i class="bi bi-printer"></i> Chop etish</button>
+    <a href="/reports/z-reports" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+</div>
+
+<div class="z-detail-card">
+    <div class="d-flex justify-content-between align-items-start">
+        <div>
+            <h4><i class="bi bi-lock text-warning"></i> Z-hisobot</h4>
+            <div class="text-muted">{{ snap.user or '—' }} — {{ snap.warehouse or '—' }}</div>
+        </div>
+        <div class="text-end">
+            <div class="text-muted small">TOTLI HOLVA</div>
+            <div class="text-muted small">{{ snap.date or '—' }}</div>
+        </div>
+    </div>
+
+    <div class="z-detail-meta">
+        <div>Yopilgan: <strong>{{ (snap.closed_at or '')[:19] | replace('T', ' ') }}</strong></div>
+        <div>Z-ID: <span class="z-id-line">{{ snap.z_id or '—' }}</span></div>
+    </div>
+
+    <div class="z-section-title">Smena yakuni</div>
+    <table class="z-detail-table">
+        <tr>
+            <td class="label">Sotuvlar soni</td>
+            <td class="right"><strong>{{ snap.sales_count or 0 }} ta</strong></td>
+        </tr>
+        <tr>
+            <td class="label">Sotuvlar summasi</td>
+            <td class="right text-success"><strong>{{ "{:,.0f}".format(snap.sales_total or 0) }} so'm</strong></td>
+        </tr>
+        {% if (snap.returns_total or 0) > 0 %}
+        <tr>
+            <td class="label">Qaytarishlar ({{ snap.returns_count or 0 }} ta)</td>
+            <td class="right text-danger"><strong>−{{ "{:,.0f}".format(snap.returns_total) }} so'm</strong></td>
+        </tr>
+        {% endif %}
+        {% if (snap.cancelled_count or 0) > 0 %}
+        <tr class="text-muted">
+            <td class="label">Bekor qilingan ({{ snap.cancelled_count }} ta)</td>
+            <td class="right">{{ "{:,.0f}".format(snap.cancelled_total or 0) }} so'm</td>
+        </tr>
+        {% endif %}
+        <tr class="total-row">
+            <td>NET (sotuv − qaytarish)</td>
+            <td class="right {% if (snap.net_total or 0) >= 0 %}text-success{% else %}text-danger{% endif %}">
+                {{ "{:+,.0f}".format(snap.net_total or 0) }} so'm
+            </td>
+        </tr>
+    </table>
+
+    <div class="z-section-title">To'lov turi bo'yicha</div>
+    <table class="z-detail-table">
+        {% if snap.payment_breakdown %}
+            {% for b in snap.payment_breakdown %}
+            <tr>
+                <td class="label">{{ (b.type or '—').upper() }} ({{ b.count or 0 }} ta)</td>
+                <td class="right">{{ "{:,.0f}".format(b.sum or 0) }} so'm</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr><td colspan="2" class="text-center text-muted">Ma'lumot yo'q</td></tr>
+        {% endif %}
+    </table>
+
+    <div class="z-section-title">Kassa qoldig'i (snapshot)</div>
+    <table class="z-detail-table">
+        {% if snap.cash_snapshot %}
+            {% for c in snap.cash_snapshot %}
+            <tr>
+                <td class="label">{{ c.name or '—' }}</td>
+                <td class="right"><strong>{{ "{:,.0f}".format(c.balance or 0) }} so'm</strong></td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr><td colspan="2" class="text-center text-muted">Kassa snapshot yo'q</td></tr>
+        {% endif %}
+    </table>
+
+    {% if snap.order_numbers %}
+    <div class="z-section-title">Buyurtmalar ({{ snap.order_numbers | length }} ta)</div>
+    <div style="font-family: ui-monospace, Menlo, monospace; font-size: .8rem; color:#475569; line-height: 1.6;">
+        {{ snap.order_numbers | join(', ') }}
+    </div>
+    {% endif %}
+
+    <div class="text-center text-muted small mt-4 pt-3 border-top">
+        Z-hisobot smenani yopish vaqtida saqlangan • Snapshot o'zgartirib bo'lmaydi
+    </div>
+</div>
+{% endblock %}
