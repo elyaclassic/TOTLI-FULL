@@ -41,6 +41,21 @@ async def global_safe_middleware_impl(request: Request, call_next):
             response.headers["X-Frame-Options"] = "SAMEORIGIN"
             response.headers["X-XSS-Protection"] = "1; mode=block"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            # S7 audit fix: Content-Security-Policy — XSS hujum yuzasini kamaytiradi
+            # 'unsafe-inline' inline JS uchun (89 templateda bor — refactor Tier C)
+            # Tashqi CDN: cdn.jsdelivr.net (Bootstrap), unpkg.com (Leaflet/Chart.js)
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+                "https://cdn.jsdelivr.net https://unpkg.com https://api-maps.yandex.ru; "
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com "
+                "https://fonts.googleapis.com; "
+                "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+                "img-src 'self' data: blob: https:; "
+                "connect-src 'self' https://api-maps.yandex.ru wss: ws:; "
+                "frame-ancestors 'self'; "
+                "base-uri 'self'"
+            )
         except Exception:
             pass
         return response
