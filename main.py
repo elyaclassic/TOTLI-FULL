@@ -3,6 +3,31 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+# --- O3 audit fix: Sentry SDK (optional, faqat SENTRY_DSN o'rnatilgan bo'lsa)
+# pip install sentry-sdk[fastapi]  (requirements.txt'ga qo'shildi)
+# .env: SENTRY_DSN=https://xxx@sentry.io/yyy
+import os as _os_init
+_sentry_dsn = _os_init.environ.get("SENTRY_DSN", "").strip()
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            integrations=[FastApiIntegration(), StarletteIntegration()],
+            traces_sample_rate=0.0,  # tracing yo'q (5k events/oy free tier saqlash)
+            send_default_pii=False,  # foydalanuvchi ma'lumoti yuborilmaydi
+            environment=_os_init.environ.get("SENTRY_ENV", "production"),
+            release=_os_init.environ.get("SENTRY_RELEASE", ""),
+        )
+    except ImportError:
+        import logging
+        logging.getLogger(__name__).warning(
+            "SENTRY_DSN bor lekin sentry-sdk o'rnatilmagan. "
+            "pip install sentry-sdk[fastapi] yoki SENTRY_DSN olib tashlang."
+        )
+
 # --- Importlar ---
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
