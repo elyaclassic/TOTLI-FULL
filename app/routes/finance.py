@@ -19,7 +19,7 @@ from app.models.database import (
 )
 import re as _re
 from app.deps import require_auth, require_admin
-from app.routes.period_close import is_period_closed
+from app.services.period_service import is_period_closed
 from app.utils.db_schema import ensure_payments_status_column, ensure_cash_opening_balance_column
 from app.utils.audit import log_action
 from app.constants import QUERY_LIMIT_DEFAULT

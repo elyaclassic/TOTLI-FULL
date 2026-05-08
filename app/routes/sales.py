@@ -44,7 +44,7 @@ def _check_order_access(order: Order, current_user: User):
         return
     if order.user_id and order.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
-from app.routes.period_close import is_period_closed
+from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.audit import log_action

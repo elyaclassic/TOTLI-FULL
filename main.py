@@ -60,7 +60,7 @@ from app.routes import delivery_routes
 from app.routes import admin as admin_routes
 from app.routes import admin_sales_plans as admin_sales_plans_routes
 from app.routes import audit_routes
-from app.routes import period_close as period_close_routes
+# C3 audit cleanup: period_close.py routes admin.py bilan kollizyada → o'chirildi (commit 057c1b0+)
 
 app = FastAPI(title="TOTLI HOLVA", description="Biznes boshqaruv tizimi", version="1.0")
 
@@ -117,7 +117,7 @@ app.include_router(delivery_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(admin_sales_plans_routes.router)
 app.include_router(audit_routes.router)
-app.include_router(period_close_routes.router)
+# period_close_routes — C3 cleanup, helper -> services/period_service.py
 
 
 # ==========================================

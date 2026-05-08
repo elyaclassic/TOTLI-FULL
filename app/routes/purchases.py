@@ -26,7 +26,7 @@ from app.models.database import (
     Department,
 )
 from app.deps import require_auth, require_admin
-from app.routes.period_close import is_period_closed
+from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.audit import log_action
 from app.utils.user_scope import get_warehouses_for_user
