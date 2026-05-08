@@ -102,7 +102,22 @@ if _cors_origins:
         max_age=3600,
     )
 
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+# P13 audit fix: StaticFiles + Cache-Control max-age 30 kun (bandwidth -80%)
+class _CachedStaticFiles(StaticFiles):
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        try:
+            # APK fayllar uchun cache yo'q (yangi versiyalar darhol kelishi uchun)
+            if path.endswith((".apk", ".html")):
+                response.headers["Cache-Control"] = "no-cache"
+            else:
+                response.headers["Cache-Control"] = "public, max-age=2592000, immutable"
+        except Exception:
+            pass
+        return response
+
+
+app.mount("/static", _CachedStaticFiles(directory="app/static"), name="static")
 
 # Routerlar (auth, dashboard, home, reports, info, sales, qoldiqlar, finance, products)
 app.include_router(auth_routes.router)

@@ -36,6 +36,8 @@ def _set_sqlite_pragma(conn, _):
     cursor.execute("PRAGMA cache_size=-64000")
     cursor.execute("PRAGMA temp_store=MEMORY")
     cursor.execute("PRAGMA foreign_keys=ON")
+    # P12 audit fix: 256MB memory-mapped I/O — DB to'liq RAM da, read 20-40% tezroq
+    cursor.execute("PRAGMA mmap_size=268435456")
     cursor.close()
 
 
