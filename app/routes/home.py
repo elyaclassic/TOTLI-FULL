@@ -207,6 +207,7 @@ async def home(
             print(f"[Premium] Qo'shimcha ma'lumot xatosi: {e}")
 
     # Bugungi ishda turgan hodimlar (kelgan, lekin hali ketmagan)
+    # P17 audit fix: Employee batch query (avval har attendance uchun N+1 edi)
     today_staff = []
     try:
         now_dt = datetime.now()
@@ -214,21 +215,29 @@ async def home(
             Attendance.date == today,
             Attendance.status == "present",
         ).all()
+        # Filter qatlami: 19:00 dan keyin yoki check_out >5 daq → o'tib yuborish
+        present_att = []
         for a in today_att:
             if not a.check_in:
                 continue
-            # Ishdan ketgan deb hisoblanadi:
-            # 1. check_out bor va check_in dan kamida 5 daqiqa keyin
-            # 2. YOKI hozirgi vaqt 19:00 dan keyin (kun tugagan)
             if a.check_out and a.check_in:
                 diff_min = (a.check_out - a.check_in).total_seconds() / 60.0
                 if diff_min >= 5:
                     continue
-            # 19:00 dan keyin avtomatik "ketgan" deb hisoblash
             if now_dt.hour >= 19:
                 continue
-            emp = db.query(Employee).filter(Employee.id == a.employee_id).first()
-            if emp and emp.is_active:
+            present_att.append(a)
+        # Batch load Employees — bitta query har bir attendance o'rniga
+        emp_ids = list({a.employee_id for a in present_att if a.employee_id})
+        emp_map = {}
+        if emp_ids:
+            for emp in db.query(Employee).filter(
+                Employee.id.in_(emp_ids), Employee.is_active == True
+            ).all():
+                emp_map[emp.id] = emp
+        for a in present_att:
+            emp = emp_map.get(a.employee_id)
+            if emp:
                 today_staff.append({
                     "id": emp.id,
                     "name": emp.full_name or emp.code or "",
