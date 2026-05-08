@@ -26,15 +26,23 @@ def delete_production_atomic(db: Session, production: Production) -> dict:
             "Tasdiqlangan buyurtmani o'chirish uchun avval «Tasdiqni bekor qilish» bosing."
         )
 
+    # Drift xavfsizligi: net stok ta'siri ≠ 0 movementlar bor bo'lsa rad etish.
+    # Reverted completed da net=0 (consumption + output + revert pair) — xavfsiz.
+    movements = db.query(StockMovement).filter(
+        StockMovement.document_type == "Production",
+        StockMovement.document_id == production.id,
+    ).all()
+    if movements:
+        net = sum(float(m.quantity_change or 0) for m in movements)
+        if abs(net) > 1e-6:
+            raise DocumentError(
+                f"Bu buyurtmaning stock harakatlari net={net:+.2f} (≠ 0). "
+                f"Avval «Tasdiqni bekor qilish» orqali revert qiling, keyin o'chiring."
+            )
+
     try:
-        # Stock movementlarni teskari qaytarish
-        movements = db.query(StockMovement).filter(
-            StockMovement.document_type == "Production",
-            StockMovement.document_id == production.id,
-        ).all()
+        # Net=0 movementlarni o'chirish xavfsiz (revert juftligi bilan teng)
         for m in movements:
-            # Draft/cancelled buyurtma uchun orphan movements bo'lsa — faqat o'chirish.
-            # stock.quantity to'g'ridan-to'g'ri o'zgartirish TAQIQLANADI.
             db.delete(m)
 
         db.delete(production)

@@ -334,13 +334,27 @@ async def warehouse_import(
                     missing_products.append(prod_key)
                 skipped += 1
                 continue
+            from app.services.stock_service import create_stock_movement
             stock = db.query(Stock).filter(
                 Stock.warehouse_id == warehouse.id,
                 Stock.product_id == product.id,
             ).first()
-            if stock:
-                stock.quantity = qty
-            else:
+            old_qty = float(stock.quantity or 0) if stock else 0.0
+            delta = qty - old_qty
+            if abs(delta) > 1e-9:
+                create_stock_movement(
+                    db=db,
+                    warehouse_id=warehouse.id,
+                    product_id=product.id,
+                    quantity_change=delta,
+                    operation_type="initial_balance",
+                    document_type="WarehouseImport",
+                    document_id=0,
+                    document_number=f"IMPORT-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
+                    user_id=current_user.id if current_user else None,
+                    note=f"Excel import: {wh_key} / {prod_key}",
+                )
+            elif not stock:
                 db.add(Stock(warehouse_id=warehouse.id, product_id=product.id, quantity=qty))
             if tannarx is not None:
                 product.purchase_price = tannarx
