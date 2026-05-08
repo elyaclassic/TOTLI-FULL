@@ -88,6 +88,10 @@ class Purchase(Base):
     expense_direction = relationship("Direction", foreign_keys=[expense_direction_id], lazy="select")
     expense_department = relationship("Department", foreign_keys=[expense_department_id], lazy="select")
 
+    __table_args__ = (
+        Index("idx_purchases_user_status", "user_id", "status"),
+    )
+
 class PurchaseItem(Base):
     """Kirim qatorlari"""
     __tablename__ = "purchase_items"
@@ -451,6 +455,10 @@ class StockAdjustmentDoc(Base):
     user = relationship("User")
     items = relationship("StockAdjustmentDocItem", back_populates="doc", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index("idx_stock_adj_user_status", "user_id", "status", "warehouse_id"),
+    )
+
 
 class StockAdjustmentDocItem(Base):
     """Tovar qoldiq hujjati qatori"""
@@ -525,6 +533,10 @@ class CashBalanceDoc(Base):
     user = relationship("User")
     items = relationship("CashBalanceDocItem", back_populates="doc", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index("idx_cash_balance_user_status", "user_id", "status"),
+    )
+
 
 class CashBalanceDocItem(Base):
     """Kassa qoldiq hujjati qatori — bitta kassa, yangi balans"""
@@ -581,6 +593,10 @@ class PartnerBalanceDoc(Base):
     user = relationship("User")
     items = relationship("PartnerBalanceDocItem", back_populates="doc", cascade="all, delete-orphan")
 
+    __table_args__ = (
+        Index("idx_partner_balance_user_status", "user_id", "status"),
+    )
+
 
 class PartnerBalanceDocItem(Base):
     """Kontragent balans hujjati qatori"""
@@ -611,6 +627,10 @@ class EmployeeBalanceDoc(Base):
 
     user = relationship("User")
     items = relationship("EmployeeBalanceDocItem", back_populates="doc", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_employee_balance_user_status", "user_id", "status"),
+    )
 
 
 class EmployeeBalanceDocItem(Base):
@@ -1060,6 +1080,10 @@ class ExpenseDoc(Base):
     payment = relationship("Payment", foreign_keys=[payment_id])
     user = relationship("User")
     items = relationship("ExpenseDocItem", back_populates="expense_doc", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_expense_docs_user_status", "user_id", "status"),
+    )
 
 
 class ExpenseDocItem(Base):

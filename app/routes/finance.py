@@ -896,9 +896,22 @@ async def finance_expense_type_delete(
 @router.get("/harajat/hujjat/new", response_class=HTMLResponse)
 async def finance_harajat_hujjat_new(
     request: Request,
+    force_new: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    # Draft cheklov: bitta foydalanuvchi 1 ta ochiq HD draft
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, ExpenseDoc,
+        edit_url_template="/finance/harajat/hujjat/{id}",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message="Sizda ochiq harajat hujjati qoralamasi bor — avval uni tugating yoki bekor qiling.",
+        user_id=current_user.id,
+    )
+    if redirect:
+        return redirect
     cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
     directions = db.query(Direction).filter(Direction.is_active == True).order_by(Direction.name).all() if hasattr(Direction, "is_active") else db.query(Direction).order_by(Direction.name).all()
     departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
@@ -1164,6 +1177,17 @@ async def finance_harajat_hujjat_save(
         if doc.status == "confirmed":
             return RedirectResponse(url="/finance/harajatlar?error=confirmed", status_code=303)
     else:
+        # Draft cheklov: yangi HD yaratish oldidan tekshiruv (defense in depth)
+        from app.utils.draft_check import redirect_to_draft
+        _redirect = redirect_to_draft(
+            db, ExpenseDoc,
+            edit_url_template="/finance/harajat/hujjat/{id}",
+            user_role=getattr(current_user, "role", "") or "",
+            message="Sizda ochiq harajat hujjati qoralamasi bor.",
+            user_id=current_user.id,
+        )
+        if _redirect:
+            return _redirect
         doc = ExpenseDoc(
             number=_next_expense_doc_number(db),
             date=doc_date,

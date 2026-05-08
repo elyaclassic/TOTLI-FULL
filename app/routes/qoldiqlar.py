@@ -275,10 +275,22 @@ async def qoldiqlar_kassa_save(
 @router.get("/kassa/hujjat/new", response_class=HTMLResponse)
 async def qoldiqlar_kassa_hujjat_new(
     request: Request,
+    force_new: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Yangi kassa qoldiq hujjati"""
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, CashBalanceDoc,
+        edit_url_template="/qoldiqlar/kassa/hujjat/{id}",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message="Sizda ochiq kassa qoldiqlari qoralamasi bor — avval uni tugating yoki bekor qiling.",
+        user_id=current_user.id,
+    )
+    if redirect:
+        return redirect
     cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).all()
     return templates.TemplateResponse("qoldiqlar/kassa_hujjat_form.html", {
         "request": request,
@@ -443,10 +455,22 @@ async def qoldiqlar_kassa_hujjat_delete(
 @router.get("/kontragent/hujjat/new", response_class=HTMLResponse)
 async def qoldiqlar_kontragent_hujjat_new(
     request: Request,
+    force_new: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Yangi kontragent balans hujjati"""
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, PartnerBalanceDoc,
+        edit_url_template="/qoldiqlar/kontragent/hujjat/{id}",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message="Sizda ochiq kontragent qoldiqlari qoralamasi bor — avval uni tugating yoki bekor qiling.",
+        user_id=current_user.id,
+    )
+    if redirect:
+        return redirect
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     today_str = datetime.now().strftime("%Y-%m-%d")
     return templates.TemplateResponse("qoldiqlar/kontragent_hujjat_form.html", {
@@ -643,10 +667,22 @@ async def qoldiqlar_tovar_save(
 @router.get("/xodim/hujjat/new", response_class=HTMLResponse)
 async def qoldiqlar_xodim_hujjat_new(
     request: Request,
+    force_new: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Yangi xodim balans hujjati"""
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, EmployeeBalanceDoc,
+        edit_url_template="/qoldiqlar/xodim/hujjat/{id}",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message="Sizda ochiq xodim qoldiqlari qoralamasi bor — avval uni tugating yoki bekor qiling.",
+        user_id=current_user.id,
+    )
+    if redirect:
+        return redirect
     employees = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
     today_str = datetime.now().strftime("%Y-%m-%d")
     return templates.TemplateResponse("qoldiqlar/xodim_hujjat_form.html", {

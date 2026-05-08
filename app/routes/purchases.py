@@ -105,9 +105,22 @@ async def purchases_list(
 @router.get("/new", response_class=HTMLResponse)
 async def purchase_new(
     request: Request,
+    force_new: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    # Draft cheklov: bitta foydalanuvchi 1 ta ochiq PUR draft
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, Purchase,
+        edit_url_template="/purchases/{id}",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message="Sizda ochiq tovar kirimi qoralamasi bor — avval uni tasdiqlang yoki bekor qiling.",
+        user_id=current_user.id,
+    )
+    if redirect:
+        return redirect
     products = db.query(Product).filter(Product.is_active == True).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     warehouses = get_warehouses_for_user(db, current_user)
@@ -202,6 +215,7 @@ async def purchase_create(
         total=total,
         total_expenses=total_expenses,
         status="draft",
+        user_id=current_user.id if current_user else None,
     )
     db.add(purchase)
     db.flush()

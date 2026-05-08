@@ -919,6 +919,7 @@ async def inventory_new_page(
 @inventory_router.post("/create-draft")
 async def inventory_create_draft(
     warehouse_id: int = Form(...),
+    force_new: int = Form(0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -927,6 +928,19 @@ async def inventory_create_draft(
     wh = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if not wh:
         return RedirectResponse(url="/inventory/new?message=Ombor topilmadi.", status_code=303)
+    # Draft cheklov: bitta foydalanuvchi shu omborga 1 ta ochiq INV
+    from app.utils.draft_check import redirect_to_draft
+    redirect = redirect_to_draft(
+        db, StockAdjustmentDoc,
+        edit_url_template="/inventory/{id}/edit",
+        user_role=getattr(current_user, "role", "") or "",
+        force_new=bool(force_new),
+        message=f"Sizda ushbu omborga ({wh.name}) ochiq qoralama bor — avval uni tugating yoki bekor qiling.",
+        user_id=current_user.id,
+        warehouse_id=warehouse_id,
+    )
+    if redirect:
+        return redirect
     today = datetime.now()
     doc = StockAdjustmentDoc(
         number="INV-PENDING",
