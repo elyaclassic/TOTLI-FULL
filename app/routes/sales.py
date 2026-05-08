@@ -934,6 +934,30 @@ async def sales_nakladnoy_excel_bulk(
 
     HEADERS = ["№", "Kodi", "Nomi", "O'lchov birligi", "Soni", "Narxi", "Summa"]
 
+    # A4 portrait amalda ~62-65 row sig'adi (banner/title rowlar balandroq).
+    # Har yuk xati uchun kerakli qator sonini oldindan hisoblab, joy yetmasa
+    # manual page break qo'yamiz — yuk xati butunligicha ko'chadi.
+    ROWS_PER_PAGE = 62
+
+    def calc_partner_rows(p_orders: list) -> int:
+        # Header bloki: 1 sarlavha + 3 info + 1 spacer = 5
+        n = 5
+        for o in p_orders:
+            if o.type == "sale" and not o.parent_order_id:
+                # section: banner(1) + headers(1) + items(N) + jami(1) + spacer(1) = N + 4
+                n += len(o.items) + 4
+        for o in p_orders:
+            if o.type != "return_sale":
+                continue
+            ch = exchange_children.get(o.id)
+            if ch:
+                n += len(ch.items) + 4
+                n += len(o.items) + 4
+            else:
+                n += len(o.items) + 4
+        n += 2  # imzo + spacer
+        return n
+
     def render_section(start_row: int, title: str, fill, items: list, doc_number: str) -> int:
         # Section banner (1 satr — title)
         ws.merge_cells(start_row=start_row, start_column=1, end_row=start_row, end_column=7)
@@ -990,8 +1014,18 @@ async def sales_nakladnoy_excel_bulk(
         sum_cell.number_format = '#,##0" so\'m"'
         return r + 1
 
+    current_page_used = 0
+    is_first_partner = True
+
     for partner_id, partner_orders in by_partner.items():
-        # Page break yo'q — hammasi ketma-ket sig'sin (Excel avtomat sahifalashadi)
+        # Yuk xati joriy sahifaga sig'maydigan bo'lsa — page break qo'yamiz,
+        # yangi sahifaga butun yuk xati o'tadi
+        needed_rows = calc_partner_rows(partner_orders)
+        if not is_first_partner and current_page_used + needed_rows > ROWS_PER_PAGE:
+            ws.row_breaks.append(Break(id=row - 1, man=True, max=16383))
+            current_page_used = 0
+        is_first_partner = False
+        partner_start_row = row
 
         # Bir vakil order'dan partner ma'lumotlarini olamiz
         first_order = partner_orders[0]
@@ -1061,6 +1095,9 @@ async def sales_nakladnoy_excel_bulk(
         ws.merge_cells(start_row=row, start_column=6, end_row=row, end_column=7)
         ws.cell(row=row, column=6, value="_______________________")
         row += 2
+
+        # Joriy sahifa hisobini yangilash
+        current_page_used += (row - partner_start_row)
 
     # Ustun kengligi — 7 ustun
     widths = [12, 12, 38, 14, 10, 14, 18]
