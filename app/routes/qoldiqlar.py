@@ -11,7 +11,7 @@ import openpyxl
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 
 from app.core import templates
 from app.utils.user_scope import get_warehouses_for_user
@@ -47,17 +47,28 @@ router = APIRouter(prefix="/qoldiqlar", tags=["qoldiqlar"])
 
 
 def _get_last_purchase_prices(db: Session) -> dict:
-    """Har bir mahsulot uchun oxirgi tasdiqlangan xarid narxini {product_id: price} dict sifatida qaytaradi."""
-    rows = db.query(
-        PurchaseItem.product_id, PurchaseItem.price
-    ).join(Purchase, PurchaseItem.purchase_id == Purchase.id).filter(
-        Purchase.status == "confirmed",
-        PurchaseItem.price > 0,
-    ).order_by(Purchase.date.desc(), Purchase.id.desc()).all()
+    """Har bir mahsulot uchun oxirgi tasdiqlangan xarid narxini {product_id: price} dict.
+
+    P7 audit fix: SQL window function bilan har product_id uchun MAX(purchase_id) topiladi —
+    avval barcha rowlarni Pythonga olardi (full scan). Endi DB tomonida agregatsiya +
+    idx_purchases_status_date (P9 yangi index) ishlatadi.
+    """
+    # SQLite 3.25+ window function qo'llab-quvvatlaydi
+    sql = text("""
+        SELECT pi.product_id, pi.price
+        FROM purchase_items pi
+        JOIN (
+            SELECT pi2.product_id, MAX(p2.id) AS max_pid
+            FROM purchase_items pi2
+            JOIN purchases p2 ON p2.id = pi2.purchase_id
+            WHERE p2.status = 'confirmed' AND pi2.price > 0
+            GROUP BY pi2.product_id
+        ) latest ON latest.product_id = pi.product_id AND latest.max_pid = pi.purchase_id
+        WHERE pi.price > 0
+    """)
     out = {}
-    for pid, price in rows:
-        if pid not in out and price:
-            out[pid] = float(price)
+    for row in db.execute(sql).fetchall():
+        out[int(row[0])] = float(row[1] or 0)
     return out
 
 

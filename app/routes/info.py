@@ -1761,7 +1761,7 @@ def _create_production_group_doc(db, gr, member_ids, doc_type, current_user):
     db.flush()
     # .docx faylni serverga saqlash
     buf = _build_production_group_docx(doc)
-    safe_name = number.replace("/", "_")
+    safe_name = __import__("re").sub(r"[^A-Za-z0-9_-]", "_", number or "doc")  # S10 audit: qattiqroq filename sanitizatsiya
     file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
     with open(file_path, "wb") as f:
         f.write(buf.read())
@@ -1836,7 +1836,7 @@ async def production_group_doc_export_word(
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
-    safe_name = (doc.number or "doc").replace("/", "_")
+    safe_name = __import__("re").sub(r"[^A-Za-z0-9_-]", "_", doc.number or "doc")  # S10 audit
     file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
     # Agar fayl mavjud bo'lsa — uni qaytarish, aks holda generatsiya
     if not os.path.exists(file_path):
@@ -1921,7 +1921,7 @@ async def production_group_doc_delete(
     if not doc:
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     # Faylni ham o'chirish
-    safe_name = (doc.number or "doc").replace("/", "_")
+    safe_name = __import__("re").sub(r"[^A-Za-z0-9_-]", "_", doc.number or "doc")  # S10 audit
     file_path = os.path.join(DOCS_DIR, f"{safe_name}.docx")
     if os.path.exists(file_path):
         os.remove(file_path)

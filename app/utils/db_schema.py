@@ -185,11 +185,13 @@ def ensure_audit_cooldowns_table(db: Session) -> None:
 
 def ensure_perf_indexes_20260507(db: Session) -> None:
     """Audit P4 (2026-05-07) — hot path query'lar uchun 9 ta index.
+    Audit P8/P9 (2026-05-08) — qo'shimcha 5 ta index.
 
     Hammasi additive (CREATE INDEX IF NOT EXISTS), mavjud ma'lumotni
     o'zgartirmaydi, jonli foydalanuvchilarga ta'sir qilmaydi.
     """
     indexes = [
+        # P4 (2026-05-07)
         ("idx_agent_locations_agent_recorded", "agent_locations", "agent_id, recorded_at"),
         ("idx_driver_locations_driver_recorded", "driver_locations", "driver_id, recorded_at"),
         ("idx_visits_agent_date", "visits", "agent_id, visit_date"),
@@ -199,6 +201,12 @@ def ensure_perf_indexes_20260507(db: Session) -> None:
         ("idx_orders_partner_status", "orders", "partner_id, status"),
         ("idx_stocks_product_id", "stocks", "product_id"),
         ("idx_attendances_date", "attendances", "date"),
+        # P8/P9 (2026-05-08) — Performance audit qoldiqlari
+        ("idx_cash_transfers_from_status", "cash_transfers", "from_cash_id, status"),
+        ("idx_cash_transfers_to_status", "cash_transfers", "to_cash_id, status"),
+        ("idx_productions_recipe_id", "productions", "recipe_id"),
+        ("idx_productions_output_wh_status", "productions", "output_warehouse_id, status"),
+        ("idx_purchases_status_date", "purchases", "status, date"),
     ]
     for name, table, cols in indexes:
         try:
