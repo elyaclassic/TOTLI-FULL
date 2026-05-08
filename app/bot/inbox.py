@@ -11,8 +11,10 @@ ID — UNIX timestamp + counter, monotonik o'sadi.
 """
 from __future__ import annotations
 
+import gzip
 import json
 import os
+import shutil
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -24,6 +26,31 @@ INBOX_JSONL = DATA_DIR / "inbox.jsonl"
 INBOX_MD = DATA_DIR / "inbox.md"
 READ_MARKER = DATA_DIR / "inbox.read_id"
 
+# M2 audit fix: rotation chegarasi (10 MB)
+ROTATE_THRESHOLD_BYTES = 10 * 1024 * 1024
+
+
+def _rotate_if_needed() -> None:
+    """Inbox fayllar 10 MB dan oshganda gzip arxivga ko'chirib, originalni tozalaydi.
+    Arxiv nomi: inbox.YYYY-MM-DD_HH-MM-SS.jsonl.gz / .md.gz
+    """
+    try:
+        if INBOX_JSONL.exists() and INBOX_JSONL.stat().st_size > ROTATE_THRESHOLD_BYTES:
+            stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+            archive = DATA_DIR / f"inbox.{stamp}.jsonl.gz"
+            with INBOX_JSONL.open("rb") as src, gzip.open(str(archive), "wb") as dst:
+                shutil.copyfileobj(src, dst)
+            INBOX_JSONL.unlink()
+            # MD arxivlash (mavjud bo'lsa)
+            if INBOX_MD.exists():
+                md_archive = DATA_DIR / f"inbox.{stamp}.md.gz"
+                with INBOX_MD.open("rb") as src, gzip.open(str(md_archive), "wb") as dst:
+                    shutil.copyfileobj(src, dst)
+                INBOX_MD.unlink()
+    except Exception:
+        # Rotation muvaffaqiyatsiz bo'lsa silent — append davom etadi
+        pass
+
 
 def _next_id() -> str:
     return f"{int(time.time() * 1000)}"
@@ -34,6 +61,8 @@ def append_message(uid: int, kind: str, text: str, photo_path: Optional[str] = N
 
     kind: "text" | "photo"
     """
+    _rotate_if_needed()  # M2 audit fix: 10 MB dan oshsa arxivlash
+
     msg_id = _next_id()
     ts = time.strftime("%Y-%m-%d %H:%M:%S")
     record = {
