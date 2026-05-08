@@ -127,6 +127,7 @@
                                 {% if row.status == 'paid' %}
                                 <span class="badge-done" title="To'langan"><i class="bi bi-check-circle-fill"></i> To'langan</span>
                                 <form method="post" action="/employees/salary/unmark-paid/{{ row.employee.id }}" class="d-inline" onsubmit="return confirm('To\'langan belgisini bekor qilmoqchimisiz? (Pul harakatlamaydi — faqat holat o\'zgaradi)');">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                                     <input type="hidden" name="year" value="{{ year }}">
                                     <input type="hidden" name="month" value="{{ month }}">
                                     <button type="submit" class="btn-act" title="To'langan belgisini bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
@@ -134,6 +135,7 @@
                                 {% else %}
                                 <span class="badge-waiting" title="Kutilmoqda"><i class="bi bi-clock"></i> Kutilmoqda</span>
                                 <form method="post" action="/employees/salary/mark-paid/{{ row.employee.id }}" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
                                     <input type="hidden" name="year" value="{{ year }}">
                                     <input type="hidden" name="month" value="{{ month }}">
                                     <input type="hidden" name="paid_amount" value="{{ row.total }}">
