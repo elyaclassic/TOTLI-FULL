@@ -38,7 +38,7 @@ from app.models.database import (
 )
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.deps import require_auth, require_admin
-from app.routes.period_close import is_period_closed
+from app.services.period_service import is_period_closed
 from app.utils.user_scope import get_warehouses_for_user
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
@@ -1336,14 +1336,22 @@ async def inventory_confirm(
     total_sotuv = sum(float(it.quantity or 0) * float(it.sale_price or 0) for it in doc.items)
     doc.total_tannarx = total_tannarx
     doc.total_sotuv = total_sotuv
-    db.commit()
-    db.refresh(doc)
-    _merge_duplicate_stock_rows(db, doc.items)
-    db.commit()
-    db.refresh(doc)
-    items_count = _apply_inventory_stock_changes(db, doc, is_stock_entry, current_user)
-    # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
-    db.commit()
+    # Audit fix 2026-05-08: ATOMIK tranzaksiya — status='confirmed' (atomik UPDATE WHERE),
+    # form qiymatlari, merge va stock movement yaratishlar BIR commit'da bo'lsin.
+    # Avval middle-da db.commit() bor edi → exception bo'lsa half-success holat (status
+    # confirmed lekin movements yo'q). Bu hozirgi P77/P125 manfiy holatga sabab bo'lgan.
+    try:
+        _merge_duplicate_stock_rows(db, doc.items)
+        db.flush()
+        items_count = _apply_inventory_stock_changes(db, doc, is_stock_entry, current_user)
+        db.commit()  # Yagona commit — hammasi atomik
+    except Exception as e:
+        db.rollback()
+        logger.exception("inventory_confirm xatosi doc_id=%s: %s", doc_id, e)
+        return RedirectResponse(
+            url=f"/inventory/{doc_id}/edit?message=Tasdiqlash xatosi: {type(e).__name__}",
+            status_code=303,
+        )
     logger.info(
         "inventory_confirm: #%s doc_id=%s items=%s user=%s stock_entry=%s",
         doc.number, doc.id, items_count, current_user.id if current_user else None, is_stock_entry,
