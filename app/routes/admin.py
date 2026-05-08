@@ -106,6 +106,10 @@ async def admin_close_period(
     current_user: User = Depends(require_admin),
 ):
     """Oyni yopish — snapshot saqlash va yozuvni bloklash."""
+    # S5 audit fix: period format YYYY-MM bo'lishi kerak (XSS/injection oldini olish)
+    import re
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period or ""):
+        return RedirectResponse(url="/admin/periods?error=invalid_period", status_code=303)
     existing = db.query(ClosedPeriod).filter(ClosedPeriod.period == period).first()
     if existing:
         return RedirectResponse(url="/admin/periods?error=already_closed", status_code=303)
@@ -151,6 +155,10 @@ async def admin_reopen_period(
     current_user: User = Depends(require_admin),
 ):
     """Yopilgan oyni qayta ochish."""
+    # S5 audit fix: period format validation
+    import re
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", period or ""):
+        return RedirectResponse(url="/admin/periods?error=invalid_period", status_code=303)
     cp = db.query(ClosedPeriod).filter(ClosedPeriod.period == period).first()
     if not cp:
         return RedirectResponse(url="/admin/periods?error=not_found", status_code=303)
