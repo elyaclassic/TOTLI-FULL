@@ -267,17 +267,30 @@ async def employee_salary_page(
             .order_by(EmploymentDoc.doc_date.desc())
             .all()
         )
+        # P18 audit fix: barcha kerakli task_id'larni avval to'plab, BITTA batch query
+        # Avval har xodim uchun alohida db.query(PieceworkTask).first() chaqirilardi (N+1)
+        emp_first_task_id: dict[int, int] = {}
         for row in docs_with_tasks:
             eid = row.employee_id
             if piece_rate_sum.get(eid, 0) > 0:
                 continue
+            if eid in emp_first_task_id:
+                continue  # eng so'nggi doc allaqachon yozilgan (order_by doc_date.desc())
             raw = (row.piecework_task_ids or "").strip()
             ids = [int(x) for x in raw.split(",") if x.strip().isdigit()] if raw else []
-            if not ids:
-                continue
-            first_task = db.query(PieceworkTask).filter(PieceworkTask.id == ids[0], PieceworkTask.price_per_unit > 0).first()
-            if first_task:
-                piece_rate_sum[eid] = float(first_task.price_per_unit)
+            if ids:
+                emp_first_task_id[eid] = ids[0]
+        if emp_first_task_id:
+            # Bitta batch query barcha kerakli tasklar uchun
+            task_ids = list(set(emp_first_task_id.values()))
+            tasks_map = {
+                t.id: t for t in db.query(PieceworkTask)
+                .filter(PieceworkTask.id.in_(task_ids), PieceworkTask.price_per_unit > 0).all()
+            }
+            for eid, tid in emp_first_task_id.items():
+                t = tasks_map.get(tid)
+                if t:
+                    piece_rate_sum[eid] = float(t.price_per_unit)
     boalak_employees = [e for e in employees if getattr(e, "salary_type", None) in ("bo'lak", "bo'lak_oylik") and piece_rate_sum.get(e.id, 0) > 0]
     emp_by_id = {e.id: e for e in employees}
     user_to_employee_id = {}
