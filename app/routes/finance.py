@@ -161,16 +161,26 @@ async def finance(
         if dt_parsed:
             stat_q_income = stat_q_income.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
             stat_q_expense = stat_q_expense.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
-        stat_income = sum(float(p.amount or 0) for p in stat_q_income.all())
-        stat_expense = sum(float(p.amount or 0) for p in stat_q_expense.all())
+        # P10 audit fix: SQL func.sum() (avval Python sum() barcha qatorlarni xotiraga olardi)
+        stat_income = float(stat_q_income.with_entities(func.coalesce(func.sum(Payment.amount), 0)).scalar() or 0)
+        stat_expense = float(stat_q_expense.with_entities(func.coalesce(func.sum(Payment.amount), 0)).scalar() or 0)
         stats_label = f"{filter_date_from} — {filter_date_to}" if filter_date_from and filter_date_to else (filter_date_from or filter_date_to)
     else:
+        # P10 audit fix: SQL func.sum() — DB tomonida agregatsiya
         try:
-            stat_income = sum(float(p.amount or 0) for p in db.query(Payment).filter(Payment.type == "income", Payment.date >= today, _status_ok).all())
-            stat_expense = sum(float(p.amount or 0) for p in db.query(Payment).filter(Payment.type == "expense", Payment.date >= today, _status_ok).all())
+            stat_income = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                Payment.type == "income", Payment.date >= today, _status_ok
+            ).scalar() or 0)
+            stat_expense = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                Payment.type == "expense", Payment.date >= today, _status_ok
+            ).scalar() or 0)
         except OperationalError:
-            stat_income = sum(float(p.amount or 0) for p in db.query(Payment).filter(Payment.type == "income", Payment.date >= today).all())
-            stat_expense = sum(float(p.amount or 0) for p in db.query(Payment).filter(Payment.type == "expense", Payment.date >= today).all())
+            stat_income = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                Payment.type == "income", Payment.date >= today
+            ).scalar() or 0)
+            stat_expense = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                Payment.type == "expense", Payment.date >= today
+            ).scalar() or 0)
         stats_label = "Bugungi"
     stats = {
         "income": stat_income,
