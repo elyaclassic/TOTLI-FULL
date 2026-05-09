@@ -1438,6 +1438,16 @@ async def inventory_confirm(
         "inventory_confirm: #%s doc_id=%s items=%s user=%s stock_entry=%s",
         doc.number, doc.id, items_count, current_user.id if current_user else None, is_stock_entry,
     )
+    # INV stock'ni o'zgartirdi → waiting_production agent buyurtmalarni tekshirish
+    # (xuddi Production yakunlangach kabi). Stock yetganlari auto-confirm bo'ladi.
+    try:
+        from app.services.agent_order_service import try_confirm_waiting_orders
+        confirmed_orders = try_confirm_waiting_orders(db)
+        if confirmed_orders:
+            logger.info("inventory_confirm: %s ta waiting_production auto-confirmed: %s",
+                        len(confirmed_orders), [c["order_number"] for c in confirmed_orders])
+    except Exception as e:
+        logger.exception("inventory_confirm: try_confirm_waiting_orders xato: %s", e)
     return RedirectResponse(url=f"/inventory/{doc_id}?message=Tasdiqlandi.", status_code=303)
 
 
