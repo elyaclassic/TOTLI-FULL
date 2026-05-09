@@ -39,7 +39,10 @@ def auto_create_productions_for_order(
     for it in shortage_items:
         product_id = it.get("product_id")
         need = float(it.get("need") or 0)
-        if not product_id or need <= 0:
+        have = float(it.get("have") or 0)
+        # Yetishmaydigan miqdor: kerak − mavjud (0 dan past bo'lmasin)
+        shortage_qty = max(need - have, 0.0)
+        if not product_id or shortage_qty <= 0:
             continue
 
         # Eng yangi active recipe shu mahsulot uchun
@@ -59,9 +62,9 @@ def auto_create_productions_for_order(
             recipe_id=recipe.id,
             warehouse_id=recipe.default_warehouse_id,
             output_warehouse_id=recipe.default_output_warehouse_id,
-            quantity=need,
+            quantity=shortage_qty,
             status="draft",
-            note=f"Auto: {order.number} (Stock=0). Operator yakunlasin.",
+            note=f"Auto: {order.number} (kerak {need:g}, omborda {have:g}, ishlab chiqarish {shortage_qty:g}).",
             order_id=order.id,
             current_stage=0,
             max_stage=0,
@@ -71,7 +74,7 @@ def auto_create_productions_for_order(
         created.append({
             "number": production.number,
             "product_name": it.get("name", f"#{product_id}"),
-            "quantity": need,
+            "quantity": shortage_qty,
         })
         seq += 1
 
