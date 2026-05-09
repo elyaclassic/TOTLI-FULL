@@ -1,0 +1,31 @@
+{# Saralash bilan jadval ustun sarlavhasi.
+   Foydalanish:
+     {% from "components/_sortable_th.html" import sortable_th %}
+     {{ sortable_th("Nomi", "name", current_sort, current_order, base_url, extra_query) }}
+
+   - col_label: ko'rsatiladigan matn ("Nomi", "Telefon")
+   - col_key: ustun nomi ("name", "phone") — backend whitelist'da
+   - current_sort, current_order: hozirgi tanlangan
+   - base_url: "/partners"
+   - extra_query: qo'shimcha parametrlar (filter, type) — saqlanadi
+#}
+{% macro sortable_th(col_label, col_key, current_sort, current_order, base_url, extra_query='', th_class='', th_style='') %}
+{% set is_active = (current_sort == col_key) %}
+{% set new_order = 'desc' if (is_active and current_order == 'asc') else 'asc' %}
+{% set sep = '&' if extra_query else '' %}
+<th class="{{ th_class }} sortable-th" style="cursor:pointer; user-select:none; {{ th_style }}">
+  <a href="{{ base_url }}?{{ extra_query }}{{ sep }}sort={{ col_key }}&order={{ new_order }}"
+     style="color:inherit; text-decoration:none; display:inline-flex; align-items:center; gap:4px;">
+    {{ col_label }}
+    {% if is_active %}
+      {% if current_order == 'asc' %}
+        <i class="bi bi-caret-up-fill" style="font-size:11px;color:#0d6efd;"></i>
+      {% else %}
+        <i class="bi bi-caret-down-fill" style="font-size:11px;color:#0d6efd;"></i>
+      {% endif %}
+    {% else %}
+      <i class="bi bi-chevron-expand" style="font-size:11px;color:#adb5bd;"></i>
+    {% endif %}
+  </a>
+</th>
+{% endmacro %}

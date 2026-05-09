@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/_sortable_th.html" import sortable_th %}
 
 {% block extra_css %}
 <style>
@@ -172,12 +173,13 @@
                         <tr>
                             <th style="width:32px"><input type="checkbox" id="selectAllPartners" title="Hammasini tanlash" onchange="toggleAllPartners(this)"></th>
                             <th style="width:42px">#</th>
-                            <th>Nomi</th>
-                            <th>Turi</th>
+                            {% set _extra = ('type=' ~ current_type) if current_type and current_type != 'all' else '' %}
+                            {{ sortable_th("Nomi", "name", current_sort, current_order, "/partners", _extra) }}
+                            {{ sortable_th("Turi", "type", current_sort, current_order, "/partners", _extra) }}
                             <th>Agent</th>
-                            <th>Telefon</th>
-                            <th>Manzil/Hudud</th>
-                            <th class="text-end">Balans</th>
+                            {{ sortable_th("Telefon", "phone", current_sort, current_order, "/partners", _extra) }}
+                            {{ sortable_th("Manzil/Hudud", "address", current_sort, current_order, "/partners", _extra) }}
+                            {{ sortable_th("Balans", "balance", current_sort, current_order, "/partners", _extra, th_class="text-end") }}
                             <th style="width:120px"></th>
                         </tr>
                     </thead>

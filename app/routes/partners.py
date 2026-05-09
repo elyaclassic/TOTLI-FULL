@@ -31,12 +31,26 @@ def _load_route_partner_ids():
 async def partners_list(
     request: Request,
     type: str = "all",
+    sort: str = None,
+    order: str = "asc",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    from app.utils.sort_helpers import parse_sort, apply_sort
     query = db.query(Partner)
     if type != "all":
         query = query.filter(Partner.type == type)
+    # Saralash (whitelist orqali, SQL injection himoyasi)
+    sort_allowed = {
+        "name": Partner.name,
+        "type": Partner.type,
+        "phone": Partner.phone,
+        "address": Partner.address,
+        "balance": Partner.balance,
+        "id": Partner.id,
+    }
+    sort_col, sort_dir = parse_sort(sort, order, sort_allowed, default_col=Partner.id, default_dir="asc")
+    query = apply_sort(query, sort_col, sort_dir)
     partners = query.all()
     try:
         from app.config.maps_config import YANDEX_MAPS_API_KEY
@@ -55,6 +69,8 @@ async def partners_list(
         "agents": agents,
         "price_types": price_types,
         "current_type": type,
+        "current_sort": sort or "",
+        "current_order": sort_dir,
         "current_user": current_user,
         "page_title": "Kontragentlar",
         "yandex_maps_apikey": yandex_apikey,
