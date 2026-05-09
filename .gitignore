@@ -136,3 +136,7 @@ app/bot/data/photos/
 
 # Sentry SDK cache (kelajakda)
 .sentry-native/
+
+# Bir martalik admin skriptlar (lokal, repo'ga kerak emas)
+scripts/_*.py
+scripts/_*.ps1
