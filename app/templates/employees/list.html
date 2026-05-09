@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/_sortable_th.html" import sortable_th %}
 
 {% block content %}
 <div class="container-fluid">
@@ -127,12 +128,13 @@
                     <thead>
                         <tr>
                             <th width="40">#</th>
-                            <th>Kodi</th>
-                            <th>F.I.O</th>
-                            <th>Lavozimi</th>
-                            <th>Bo'lim</th>
-                            <th>Telefon</th>
-                            <th>Oylik</th>
+                            {% set _ex = ('show_dismissed=1' if show_dismissed else '') %}
+                            {{ sortable_th("Kodi", "code", current_sort, current_order, "/employees", _ex) }}
+                            {{ sortable_th("F.I.O", "name", current_sort, current_order, "/employees", _ex) }}
+                            {{ sortable_th("Lavozimi", "position", current_sort, current_order, "/employees", _ex) }}
+                            {{ sortable_th("Bo'lim", "department", current_sort, current_order, "/employees", _ex) }}
+                            {{ sortable_th("Telefon", "phone", current_sort, current_order, "/employees", _ex) }}
+                            {{ sortable_th("Oylik", "salary", current_sort, current_order, "/employees", _ex) }}
                             <th>Ish haqi turi</th>
                             {% if show_dismissed %}<th>Holat</th>{% endif %}
                             <th width="140"></th>

@@ -37,18 +37,32 @@ async def employees_list(
     current_user: User = Depends(require_auth),
     show_dismissed: bool = False,
     birthday_today: bool = False,
+    sort: str = None,
+    order: str = "asc",
 ):
     """Xodimlar ro'yxati — odatiy holda faqat faol xodimlar."""
-    q = db.query(Employee).order_by(Employee.full_name)
+    q = db.query(Employee)
     if not show_dismissed:
         q = q.filter(Employee.is_active == True)
     if birthday_today:
-        # SQLite: tug'ilgan kunni oy-kun bo'yicha filtrlash
         try:
             md = datetime.now().strftime("%m-%d")
             q = q.filter(func.strftime("%m-%d", Employee.birth_date) == md)
         except Exception:
             pass
+    # Saralash (whitelist)
+    from app.utils.sort_helpers import parse_sort, apply_sort
+    sort_allowed = {
+        "name": Employee.full_name,
+        "code": Employee.code,
+        "position": Employee.position,
+        "department": Employee.department,
+        "phone": Employee.phone,
+        "salary": Employee.salary,
+        "id": Employee.id,
+    }
+    sort_col, sort_dir = parse_sort(sort, order, sort_allowed, default_col=Employee.full_name, default_dir="asc")
+    q = apply_sort(q, sort_col, sort_dir)
     employees = q.all()
     piecework_tasks = db.query(PieceworkTask).filter(PieceworkTask.is_active == True).order_by(PieceworkTask.name).all()
     departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
@@ -59,6 +73,8 @@ async def employees_list(
         "piecework_tasks": piecework_tasks,
         "departments": departments,
         "positions": positions,
+        "current_sort": sort or "",
+        "current_order": sort_dir,
         "current_user": current_user,
         "page_title": "Xodimlar",
         "show_dismissed": show_dismissed,

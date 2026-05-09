@@ -308,6 +308,8 @@ async def products_list(
     type: str = "all",
     q: Optional[str] = None,
     for_agent: Optional[str] = None,
+    sort: Optional[str] = None,
+    order: str = "asc",
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -346,6 +348,18 @@ async def products_list(
         query = query.filter(Product.is_for_agent == True)
     elif for_agent == "0":
         query = query.filter(Product.is_for_agent == False)
+    # Saralash (whitelist)
+    from app.utils.sort_helpers import parse_sort, apply_sort
+    sort_allowed = {
+        "name": Product.name,
+        "code": Product.code,
+        "type": Product.type,
+        "purchase_price": Product.purchase_price,
+        "sale_price": Product.sale_price,
+        "id": Product.id,
+    }
+    sort_col, sort_dir = parse_sort(sort, order, sort_allowed, default_col=Product.name, default_dir="asc")
+    query = apply_sort(query, sort_col, sort_dir)
     products = query.all()
     categories = db.query(Category).all()
     units = db.query(Unit).all()
@@ -362,6 +376,8 @@ async def products_list(
         "current_type": type,
         "search_q": search_q,
         "for_agent_filter": for_agent or "",
+        "current_sort": sort or "",
+        "current_order": sort_dir,
         "current_user": current_user,
         "page_title": "Tovarlar",
         "import_ok": import_ok,

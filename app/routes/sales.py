@@ -592,23 +592,21 @@ async def sales_confirm(
         return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
 
     # Qoldiq tekshiruvi va yetarli bo'lmagan mahsulotlarni yig'ish
-    # Vaqt-aware: order.date eski bo'lsa, shu sanagacha qoldiq tekshiriladi
-    # (retroaktiv buyurtma uchun to'g'ri qoldiq).
-    from app.utils.stock_at_date import get_stock_at_date
-    from datetime import datetime as _dt
-    _now = _dt.now()
-    _cutoff = order.date if (order.date and order.date < _now) else None
-
+    # Hozirgi Stock.quantity ishlatiladi (vaqt-aware kelajakda alohida fix).
     insufficient_items = []
     semi_warehouse = get_semi_finished_warehouse(db)
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        available = get_stock_at_date(db, wh_id, item.product_id, cutoff=_cutoff)
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id,
+            Stock.product_id == item.product_id,
+        ).first()
+        available = stock.quantity if stock else 0.0
         if available < item.quantity:
             # Yarim tayyor omborda shu mahsulot bormi?
             semi_available = 0.0
             if semi_warehouse:
-                semi_available = get_stock_at_date(db, semi_warehouse.id, item.product_id, cutoff=_cutoff)
+                semi_available = get_product_stock_in_warehouse(db, semi_warehouse.id, item.product_id)
             if semi_available >= 1 and semi_available >= item.quantity:
                 # Yarim tayyor omborda yetarli — kesuvchi + qadoqlovchiga bildirish
                 notify_cutting_packing_operators(
