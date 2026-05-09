@@ -133,10 +133,75 @@ async def employee_product_purchases_list(
 @router.get("/mahsulot/products-by-warehouse")
 async def products_by_warehouse(
     warehouse_id: int,
+    date: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Berilgan ombor uchun mavjud mahsulotlarni qaytaradi (qoldiq > 0). AJAX uchun."""
+    """Berilgan ombor uchun mavjud mahsulotlarni qaytaradi (qoldiq > 0).
+
+    `date` parametri berilsa — shu sanagacha bo'lgan qoldiqni hisoblaydi
+    (stock_movement.quantity_after orqali). Aks holda hozirgi Stock ko'rsatadi.
+    """
+    from sqlalchemy import func as sqla_func
+    from app.models.database import StockMovement
+    from datetime import datetime as _dt, timedelta as _td
+
+    # Sana parametri bo'lsa — vaqt-aware qoldiq
+    cutoff = None
+    if date:
+        try:
+            d = _dt.strptime(date[:10], "%Y-%m-%d").date()
+            today = _dt.now().date()
+            if d < today:
+                # Eski sana — kunning oxirigacha (23:59:59)
+                cutoff = _dt.combine(d, _dt.max.time())
+        except ValueError:
+            cutoff = None
+
+    products = (
+        db.query(Product)
+        .filter(Product.is_active == True)
+        .order_by(Product.name)
+        .all()
+    )
+
+    if cutoff:
+        # Vaqt-aware: har mahsulot uchun cutoff'dan oldingi oxirgi movement.quantity_after
+        max_id_rows = (
+            db.query(
+                StockMovement.product_id,
+                sqla_func.max(StockMovement.id).label("mid"),
+            )
+            .filter(
+                StockMovement.warehouse_id == warehouse_id,
+                StockMovement.created_at <= cutoff,
+            )
+            .group_by(StockMovement.product_id)
+            .all()
+        )
+        last_qty: dict = {}
+        max_ids = [r.mid for r in max_id_rows if r.mid]
+        if max_ids:
+            for mv in db.query(StockMovement).filter(StockMovement.id.in_(max_ids)).all():
+                last_qty[mv.product_id] = float(mv.quantity_after or 0)
+        items = []
+        for p in products:
+            avail = last_qty.get(p.id, 0.0)
+            if avail <= 0:
+                continue
+            unit_name = p.unit.name if p.unit else "dona"
+            items.append({
+                "id": p.id,
+                "name": p.name,
+                "code": p.code or "",
+                "sale_price": float(p.sale_price or 0),
+                "available": avail,
+                "unit": unit_name,
+                "as_of_date": date,
+            })
+        return {"items": items, "as_of_date": date}
+
+    # Default: hozirgi Stock
     rows = (
         db.query(Product, Stock)
         .join(Stock, Stock.product_id == Product.id)
