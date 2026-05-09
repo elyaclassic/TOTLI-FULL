@@ -99,9 +99,9 @@
                 <select id="partner_select" style="display: none;">
                     <option value="">Tanlang...</option>
                     {% for partner in partners %}
-                    <option value="{{ partner.id }}" data-name="{{ partner.name }}"
+                    <option value="{{ partner.id }}" data-name="{{ partner.display_name }}"
                         data-phone="{{ partner.phone or '' }}" data-code="{{ partner.code or '' }}">
-                        {{ partner.name }} (#{{ partner.id }}{% if partner.code %} — {{ partner.code }}{% endif %})
+                        {{ partner.display_name }} (#{{ partner.id }}{% if partner.code %} — {{ partner.code }}{% endif %})
                     </option>
                     {% endfor %}
                 </select>

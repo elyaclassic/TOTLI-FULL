@@ -255,7 +255,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="ss-dropdown" id="finPartnerDropdown" style="position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:#fff;border:1px solid #ced4da;border-top:none;border-radius:0 0 10px 10px;z-index:1060;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);">
                   <div class="ss-opt" data-id="" data-name="" style="padding:8px 12px;cursor:pointer;font-size:14px;color:#999;">— Tanlanmagan —</div>
                   {% for p in partners or [] %}
-                  <div class="ss-opt" data-id="{{ p.id }}" data-name="{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}" style="padding:8px 12px;cursor:pointer;font-size:14px;">{{ p.name }}{% if p.code %} <small style="color:#888;">({{ p.code }})</small>{% endif %}</div>
+                  <div class="ss-opt" data-id="{{ p.id }}" data-name="{{ p.display_name }}{% if p.code %} ({{ p.code }}){% endif %}" style="padding:8px 12px;cursor:pointer;font-size:14px;">{{ p.display_name }}{% if p.code %} <small style="color:#888;">({{ p.code }})</small>{% endif %}</div>
                   {% endfor %}
                 </div>
               </div>

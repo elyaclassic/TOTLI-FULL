@@ -869,6 +869,13 @@ class Partner(Base):
     orders = relationship("Order", back_populates="partner")
     payments = relationship("Payment", back_populates="partner")
 
+    @property
+    def display_name(self) -> str:
+        """Nom + telefon (dropdown va qidiruv uchun). Bir xil nomli mijozlarni ajratish."""
+        n = (self.name or "").strip()
+        p = (self.phone or "").strip()
+        return f"{n} {p}".strip() if p else n
+
 
 # ==========================================
 # BUYURTMALAR VA SOTISH

@@ -281,7 +281,7 @@
                             <select class="form-select" name="partner_id">
                                 <option value="">— Kimga (ixtiyoriy) —</option>
                                 {% for p in partners or [] %}
-                                <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                                <option value="{{ p.id }}">{{ p.display_name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
                                 {% endfor %}
                             </select>
                             <small class="text-muted d-block">Oylik to'lovi uchun kontragent tanlanmaydi.</small>
