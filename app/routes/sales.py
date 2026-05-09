@@ -236,7 +236,16 @@ async def sales_new(
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     warehouses = get_warehouses_for_user(db, current_user)
     price_types = db.query(PriceType).filter(PriceType.is_active == True).order_by(PriceType.name).all()
-    current_pt_id = price_type_id or (price_types[0].id if price_types else None)
+    # Manager uchun default — "Chakana" (foydalanuvchi xohlasa boshqa narx turini tanlaydi).
+    # Boshqa rollar uchun avvalgi xulq (birinchi narx turi).
+    current_pt_id = price_type_id
+    if not current_pt_id and price_types:
+        role_l = (current_user.role or "").strip().lower()
+        if role_l in ("manager", "menejer"):
+            chakana = next((pt for pt in price_types if (pt.name or "").strip().lower() == "chakana"), None)
+            current_pt_id = chakana.id if chakana else price_types[0].id
+        else:
+            current_pt_id = price_types[0].id
     product_prices_by_type = {}
     if current_pt_id:
         pps = db.query(ProductPrice).filter(ProductPrice.price_type_id == current_pt_id).all()
