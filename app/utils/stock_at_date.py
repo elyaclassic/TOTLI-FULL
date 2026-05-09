@@ -30,7 +30,9 @@ def get_stock_at_date(
     """Berilgan sanagacha (cutoff inclusive) Stock qoldigi.
 
     cutoff=None bo'lsa hozirgi Stock.quantity qaytariladi (default).
-    Aks holda stock_movement.quantity_after dan oxirgi qiymat olinadi.
+    Aks holda SUM(quantity_change) WHERE created_at <= cutoff hisoblanadi —
+    bu retroaktiv movementlar (InitialBalance, drift fix) bilan ham to'g'ri
+    ishlaydi (quantity_after ishonchsiz, chunki insert vaqtida yoziladi).
 
     Tarix yo'q bo'lsa (movement bo'sh), 0.0 qaytariladi.
     """
@@ -41,8 +43,8 @@ def get_stock_at_date(
         ).all()
         return sum(float(s.quantity or 0) for s in rows)
 
-    last_mv_id = (
-        db.query(sqla_func.max(StockMovement.id))
+    total = (
+        db.query(sqla_func.coalesce(sqla_func.sum(StockMovement.quantity_change), 0))
         .filter(
             StockMovement.warehouse_id == warehouse_id,
             StockMovement.product_id == product_id,
@@ -50,10 +52,7 @@ def get_stock_at_date(
         )
         .scalar()
     )
-    if not last_mv_id:
-        return 0.0
-    mv = db.query(StockMovement).filter(StockMovement.id == last_mv_id).first()
-    return float(mv.quantity_after or 0) if mv else 0.0
+    return float(total or 0)
 
 
 def get_stock_at_date_batch(
@@ -82,10 +81,10 @@ def get_stock_at_date_batch(
         )
         return {pid: float(q or 0) for pid, q in rows}
 
-    max_id_rows = (
+    rows = (
         db.query(
             StockMovement.product_id,
-            sqla_func.max(StockMovement.id).label("mid"),
+            sqla_func.coalesce(sqla_func.sum(StockMovement.quantity_change), 0).label("total"),
         )
         .filter(
             StockMovement.warehouse_id == warehouse_id,
@@ -95,10 +94,4 @@ def get_stock_at_date_batch(
         .group_by(StockMovement.product_id)
         .all()
     )
-    max_ids = [r.mid for r in max_id_rows if r.mid]
-    if not max_ids:
-        return {}
-    result: dict = {}
-    for mv in db.query(StockMovement).filter(StockMovement.id.in_(max_ids)).all():
-        result[mv.product_id] = float(mv.quantity_after or 0)
-    return result
+    return {pid: float(total or 0) for pid, total in rows}
