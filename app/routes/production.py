@@ -168,17 +168,23 @@ def _warehouse_id_for_ingredient(db: Session, product_id: int, production) -> in
 
 
 def _check_production_shortage(db: Session, production, items_to_use: list) -> list:
-    """Xom ashyo yetishmovchilik tekshiruvi. Returns: shortage_lines list (bo'sh bo'lsa OK)."""
+    """Xom ashyo yetishmovchilik tekshiruvi. Returns: shortage_lines list (bo'sh bo'lsa OK).
+
+    Vaqt-aware: production.created_at eski bo'lsa, shu sanagacha qoldiq tekshiriladi
+    (retroaktiv production yakunlash uchun to'g'ri qoldiq).
+    """
+    from app.utils.stock_at_date import get_stock_at_date
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    p_date = production.created_at
+    _cutoff = p_date if (p_date and p_date < _now) else None
+
     shortage_lines = []
     for product_id, required in items_to_use:
         if required is None or required <= 0:
             continue
         wh_id = _warehouse_id_for_ingredient(db, product_id, production)
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == product_id,
-        ).first()
-        available = (stock.quantity if stock else 0) or 0
+        available = get_stock_at_date(db, wh_id, product_id, cutoff=_cutoff)
         if available + 1e-6 < required:
             prod = db.query(Product).filter(Product.id == product_id).first()
             prod_name = prod.name if prod else f"#{product_id}"
