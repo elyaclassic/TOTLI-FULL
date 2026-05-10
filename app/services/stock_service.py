@@ -68,6 +68,21 @@ def create_stock_movement(
     NegativeStockError raise qilinadi (sale, production_consumption uchun).
     Default False — revert/adjustment/initial_balance uchun manfiy ruxsat etiladi.
     """
+    # Donalik mahsulotda kasrli quantity_change ni round qilish (validator)
+    try:
+        from app.models.database import Product, Unit
+        prod_unit = db.query(Unit.code).join(Product, Product.unit_id == Unit.id).filter(Product.id == product_id).scalar()
+        if prod_unit == "ta" and abs(quantity_change - round(quantity_change)) > 0.001:
+            try:
+                print(f"[Stock VALIDATOR] dona-mahsulotda kasr round qilindi: "
+                      f"prod={product_id} chg={quantity_change} -> {round(quantity_change)} "
+                      f"({operation_type}/{document_number})", flush=True)
+            except Exception:
+                pass
+            quantity_change = float(round(quantity_change))
+    except Exception:
+        pass
+
     rows = db.query(Stock).filter(
         Stock.warehouse_id == warehouse_id,
         Stock.product_id == product_id
