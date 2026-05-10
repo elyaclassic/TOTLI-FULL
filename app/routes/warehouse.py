@@ -417,12 +417,16 @@ async def warehouse_transfer_new(
     warehouses = _warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
     stocks = db.query(Stock).filter(Stock.quantity > 0).all()
+    product_purchase_price = {p.id: float(p.purchase_price or 0) for p in products}
     stock_by_warehouse_product = {}
+    stock_cost_by_warehouse_product = {}
     for s in stocks:
         wid, pid = str(s.warehouse_id), str(s.product_id)
         if wid not in stock_by_warehouse_product:
             stock_by_warehouse_product[wid] = {}
+            stock_cost_by_warehouse_product[wid] = {}
         stock_by_warehouse_product[wid][pid] = s.quantity
+        stock_cost_by_warehouse_product[wid][pid] = float(s.cost_price or 0) or product_purchase_price.get(s.product_id, 0)
     products_list = [{"id": p.id, "name": (p.name or ""), "code": (p.code or "")} for p in products]
     return templates.TemplateResponse("warehouse/transfer_form.html", {
         "request": request,
@@ -432,7 +436,9 @@ async def warehouse_transfer_new(
         "products": products,
         "products_list": products_list,
         "stock_by_warehouse_product": stock_by_warehouse_product,
+        "stock_cost_by_warehouse_product": stock_cost_by_warehouse_product,
         "now": datetime.now(),
+        "doc_date_value": datetime.now().strftime("%Y-%m-%dT%H:%M"),
         "from_warehouse_id": from_warehouse_id,
         "page_title": "Ombordan omborga o'tkazish (yaratish)",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
@@ -454,12 +460,21 @@ async def warehouse_transfer_edit(
     warehouses = _warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
     stocks = db.query(Stock).filter(Stock.quantity > 0).all()
+    product_purchase_price = {p.id: float(p.purchase_price or 0) for p in products}
     stock_by_warehouse_product = {}
+    stock_cost_by_warehouse_product = {}
     for s in stocks:
         wid, pid = str(s.warehouse_id), str(s.product_id)
         if wid not in stock_by_warehouse_product:
             stock_by_warehouse_product[wid] = {}
+            stock_cost_by_warehouse_product[wid] = {}
         stock_by_warehouse_product[wid][pid] = s.quantity
+        stock_cost_by_warehouse_product[wid][pid] = float(s.cost_price or 0) or product_purchase_price.get(s.product_id, 0)
+    source_costs = {}
+    if transfer and transfer.from_warehouse_id:
+        wid_str = str(transfer.from_warehouse_id)
+        source_costs = stock_cost_by_warehouse_product.get(wid_str, {})
+        source_costs = {int(pid): cost for pid, cost in source_costs.items()}
     products_list = [{"id": p.id, "name": (p.name or ""), "code": (p.code or "")} for p in products]
     return templates.TemplateResponse("warehouse/transfer_form.html", {
         "request": request,
@@ -469,7 +484,10 @@ async def warehouse_transfer_edit(
         "products": products,
         "products_list": products_list,
         "stock_by_warehouse_product": stock_by_warehouse_product,
+        "stock_cost_by_warehouse_product": stock_cost_by_warehouse_product,
+        "source_costs": source_costs,
         "now": transfer.date or datetime.now(),
+        "doc_date_value": (transfer.date or datetime.now()).strftime("%Y-%m-%dT%H:%M"),
         "page_title": f"O'tkazish {transfer.number}",
         "show_tannarx": (getattr(current_user, "role", None) if current_user else None) == "admin",
     })
@@ -502,6 +520,7 @@ async def warehouse_transfer_create(
     from_warehouse_id: int = Form(...),
     to_warehouse_id: int = Form(...),
     note: str = Form(""),
+    doc_date: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -510,13 +529,25 @@ async def warehouse_transfer_create(
     if from_warehouse_id == to_warehouse_id:
         return RedirectResponse(url="/warehouse/transfers/new?error=" + quote("Qayerdan va qayerga bir xil bo'lmasin."), status_code=303)
     form = await request.form()
-    today = datetime.now()
+    parsed_date = None
+    if doc_date and doc_date.strip():
+        for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                parsed_date = datetime.strptime(doc_date.strip(), fmt)
+                break
+            except ValueError:
+                continue
+    transfer_date = parsed_date or datetime.now()
+    day_start = transfer_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = transfer_date.replace(hour=23, minute=59, second=59, microsecond=999999)
     count = db.query(WarehouseTransfer).filter(
-        WarehouseTransfer.date >= today.replace(hour=0, minute=0, second=0)
+        WarehouseTransfer.date >= day_start,
+        WarehouseTransfer.date <= day_end,
     ).count()
-    number = f"OT-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    number = f"OT-{transfer_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
     transfer = WarehouseTransfer(
         number=number,
+        date=transfer_date,
         from_warehouse_id=from_warehouse_id,
         to_warehouse_id=to_warehouse_id,
         status="draft",
@@ -547,6 +578,7 @@ async def warehouse_transfer_save(
     from_warehouse_id: int = Form(...),
     to_warehouse_id: int = Form(...),
     note: str = Form(""),
+    doc_date: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -560,6 +592,13 @@ async def warehouse_transfer_save(
     transfer.from_warehouse_id = from_warehouse_id
     transfer.to_warehouse_id = to_warehouse_id
     transfer.note = note or None
+    if doc_date and doc_date.strip():
+        for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                transfer.date = datetime.strptime(doc_date.strip(), fmt)
+                break
+            except ValueError:
+                continue
     form = await request.form()
     db.query(WarehouseTransferItem).filter(WarehouseTransferItem.transfer_id == transfer_id).delete()
     for key, value in form.items():
@@ -602,19 +641,21 @@ async def warehouse_transfer_confirm(
     )
     if claim.rowcount == 0:
         return RedirectResponse(url=f"/warehouse/transfers/{transfer_id}?already=1", status_code=303)
+    # Vaqt-aware stock check: transfer.date dagi qoldiq bo'yicha (eski sana bo'lsa)
+    from app.utils.stock_at_date import get_stock_at_date
+    from datetime import datetime as _dt
+    _now = _dt.now()
+    _cutoff = transfer.date if (transfer.date and transfer.date < _now) else None
     for item in items:
-        src = db.query(Stock).filter(
-            Stock.warehouse_id == transfer.from_warehouse_id,
-            Stock.product_id == item.product_id,
-        ).first()
         need = float(item.quantity or 0)
-        have = float(src.quantity or 0) if src else 0
-        if not src or (have + 1e-6 < need):
+        have = get_stock_at_date(db, transfer.from_warehouse_id, item.product_id, cutoff=_cutoff)
+        if have + 1e-6 < need:
             prod = db.query(Product).filter(Product.id == item.product_id).first()
             name = prod.name if prod else f"#{item.product_id}"
             avail_display = "0" if abs(have) < 1e-6 else ("%.6f" % have).rstrip("0").rstrip(".")
+            date_hint = f" ({transfer.date.strftime('%d.%m.%Y')} sanasida)" if _cutoff else ""
             return RedirectResponse(
-                url=f"/warehouse/transfers/{transfer_id}?error=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {item.quantity}, mavjud: {avail_display})"),
+                url=f"/warehouse/transfers/{transfer_id}?error=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {item.quantity}, mavjud: {avail_display}{date_hint})"),
                 status_code=303,
             )
     from app.services.stock_service import create_stock_movement
