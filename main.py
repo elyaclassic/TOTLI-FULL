@@ -301,9 +301,10 @@ async def startup():
     """Dastur ishga tushganda"""
     init_db()
     try:
-        from app.models.database import ensure_attendance_advance_tables, ensure_cash_transfer_inkasatsiya
+        from app.models.database import ensure_attendance_advance_tables, ensure_cash_transfer_inkasatsiya, ensure_orders_delivery_columns
         ensure_attendance_advance_tables()
         ensure_cash_transfer_inkasatsiya()
+        ensure_orders_delivery_columns()
     except Exception as e:
         print("[Startup] ensure_tables:", e)
     try:

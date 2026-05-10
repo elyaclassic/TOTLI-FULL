@@ -912,6 +912,8 @@ class Order(Base):
     previous_partner_balance = Column(Float, nullable=True)  # Tasdiqdan oldingi partner balansi (revert uchun)
     pending_driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)  # waiting_production: production tayyor bo'lganda yetkazadigan haydovchi
     parent_order_id = Column(Integer, ForeignKey("orders.id"), nullable=True, index=True)  # Obmen: child order (sale qismi) parent return_sale ga ishora qiladi
+    delivery_date = Column(Date, nullable=True, index=True)  # Yetkazish kuni (rejalashtirilgan)
+    dispatched_at = Column(DateTime, nullable=True)  # Yo'lga chiqqan vaqt (out_for_delivery bosqichida)
     created_at = Column(DateTime, default=datetime.now)
 
     partner = relationship("Partner", back_populates="orders")
@@ -2096,6 +2098,25 @@ def ensure_cash_transfer_inkasatsiya():
             conn.execute(text("UPDATE cash_transfers SET status='pending' WHERE status='draft'"))
     except Exception as e:
         print(f"ensure_cash_transfer_inkasatsiya: {e}")
+
+
+def ensure_orders_delivery_columns():
+    """orders jadvaliga delivery_date va dispatched_at qo'shadi (mavjud bo'lsa o'tkazib yuboriladi)."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(orders)"))
+            cols = [row[1] for row in r]
+            if "delivery_date" not in cols:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN delivery_date DATE"))
+            if "dispatched_at" not in cols:
+                conn.execute(text("ALTER TABLE orders ADD COLUMN dispatched_at TIMESTAMP"))
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_orders_delivery_date_status "
+                "ON orders(delivery_date, status)"
+            ))
+    except Exception as e:
+        print(f"ensure_orders_delivery_columns: {e}")
 
 
 class AgentTask(Base):
