@@ -889,6 +889,20 @@ class Order(Base):
         Index("idx_orders_type_status_date", "type", "status", "date"),
     )
 
+    STATUS_DRAFT = "draft"
+    STATUS_CONFIRMED = "confirmed"
+    STATUS_WAITING_PRODUCTION = "waiting_production"
+    STATUS_OUT_FOR_DELIVERY = "out_for_delivery"
+    STATUS_DELIVERED = "delivered"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_COMPLETED = "completed"  # legacy, deprecated — delivered ga ko'chiriladi
+
+    VALID_STATUSES = (
+        STATUS_DRAFT, STATUS_CONFIRMED, STATUS_WAITING_PRODUCTION,
+        STATUS_OUT_FOR_DELIVERY, STATUS_DELIVERED, STATUS_CANCELLED,
+        STATUS_COMPLETED,
+    )
+
     id = Column(Integer, primary_key=True, index=True)
     number = Column(String(50), unique=True, index=True)
     date = Column(DateTime, default=datetime.now)
