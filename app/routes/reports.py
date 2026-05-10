@@ -305,13 +305,17 @@ def _document_url(doc_type: str, doc_id: int) -> str:
 @router.get("/stock/no-history", response_class=HTMLResponse)
 async def report_stock_no_history(
     request: Request,
-    warehouse_id: int = None,
+    warehouse_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Faqat qoldigi bor, lekin harakat tarixi yo'q mahsulotlar — tanlangan ombor bo'yicha (qoldiq qayerdandur paydo bo'lib qolganlar)."""
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id = None
     warehouses = db.query(Warehouse).filter(Warehouse.is_active == True).order_by(Warehouse.name).all()
     rows = []
     warehouse = None
@@ -508,14 +512,22 @@ def _check_production_quantity_mismatch(db: Session, rows: list) -> None:
 @router.get("/stock/source", response_class=HTMLResponse)
 async def report_stock_source(
     request: Request,
-    warehouse_id: int = None,
-    product_id: int = None,
+    warehouse_id: Optional[str] = None,
+    product_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Berilgan ombor + mahsulot uchun qoldiq manbai — barcha harakatlar (qaysi hujjatdan kirgan/chiqqan)."""
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id = None
+    try:
+        product_id = int(product_id) if product_id and str(product_id).strip() else None
+    except (ValueError, TypeError):
+        product_id = None
     if not warehouse_id or not product_id:
         return RedirectResponse(url="/reports/stock", status_code=303)
     warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
@@ -2438,13 +2450,22 @@ async def sold_products_report(
     request: Request,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    warehouse_id: Optional[int] = None,
-    category_id: Optional[int] = None,
+    warehouse_id: Optional[str] = None,
+    category_id: Optional[str] = None,
     name_query: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     """Sotilgan mahsulotlar — sana, ombor, kategoriya va nom bo'yicha."""
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id = None
+    try:
+        category_id = int(category_id) if category_id and str(category_id).strip() else None
+    except (ValueError, TypeError):
+        category_id = None
+
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
