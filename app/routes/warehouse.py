@@ -538,13 +538,17 @@ async def warehouse_transfer_create(
             except ValueError:
                 continue
     transfer_date = parsed_date or datetime.now()
-    day_start = transfer_date.replace(hour=0, minute=0, second=0, microsecond=0)
-    day_end = transfer_date.replace(hour=23, minute=59, second=59, microsecond=999999)
-    count = db.query(WarehouseTransfer).filter(
-        WarehouseTransfer.date >= day_start,
-        WarehouseTransfer.date <= day_end,
-    ).count()
-    number = f"OT-{transfer_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    prefix = f"OT-{transfer_date.strftime('%Y%m%d')}-"
+    last = db.query(WarehouseTransfer).filter(
+        WarehouseTransfer.number.like(prefix + "%")
+    ).order_by(WarehouseTransfer.number.desc()).first()
+    next_seq = 1
+    if last and last.number:
+        try:
+            next_seq = int(last.number.split("-")[-1]) + 1
+        except (ValueError, IndexError):
+            next_seq = 1
+    number = f"{prefix}{str(next_seq).zfill(4)}"
     transfer = WarehouseTransfer(
         number=number,
         date=transfer_date,
