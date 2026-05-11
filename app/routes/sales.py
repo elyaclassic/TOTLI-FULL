@@ -1849,6 +1849,74 @@ async def sales_pos_x_report(
     })
 
 
+@router.get("/pos/z-report/check")
+async def sales_pos_z_report_check(
+    request: Request,
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Bugun (yoki tanlangan sanada) shu user shu omborda Z-hisobot mavjudligini tekshiradi.
+
+    Frontend bu endpoint orqali preflight qiladi va dublikat oldini olish uchun
+    foydalanuvchiga ogohlantirish chiqaradi.
+    """
+    import os
+    import json as _json
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+
+    target_date = date_type.today()
+    if date:
+        try:
+            target_date = dt.strptime(date[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Sana formati xato"}, status_code=400)
+
+    pos_wh = None
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+    wh_id = pos_wh.id if pos_wh else None
+
+    folder = os.path.join("data", "z_reports", target_date.strftime("%Y-%m-%d"))
+    existing: list = []
+    if os.path.isdir(folder):
+        try:
+            for fname in os.listdir(folder):
+                if not fname.endswith(".json"):
+                    continue
+                fpath = os.path.join(folder, fname)
+                try:
+                    with open(fpath, "r", encoding="utf-8") as f:
+                        snap = _json.load(f)
+                except (OSError, _json.JSONDecodeError):
+                    continue
+                if int(snap.get("user_id") or 0) != current_user.id:
+                    continue
+                if wh_id is not None and snap.get("warehouse_id") != wh_id:
+                    continue
+                existing.append({
+                    "z_id": snap.get("z_id"),
+                    "closed_at": snap.get("closed_at"),
+                    "sales_total": float(snap.get("sales_total") or 0),
+                    "sales_count": int(snap.get("sales_count") or 0),
+                    "net_total": float(snap.get("net_total") or 0),
+                })
+        except OSError:
+            pass
+
+    existing.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+    return JSONResponse({
+        "ok": True,
+        "exists": len(existing) > 0,
+        "count": len(existing),
+        "last": existing[0] if existing else None,
+        "date": target_date.strftime("%Y-%m-%d"),
+    })
+
+
 @router.post("/pos/z-report")
 async def sales_pos_z_report(
     request: Request,

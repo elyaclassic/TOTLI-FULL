@@ -9,6 +9,11 @@
     .z-amount.plus  { color:#2e7d32; font-weight: 600; }
     .z-amount.minus { color:#c62828; font-weight: 600; }
     .z-amount.net   { font-weight: 700; }
+    .z-row-dup { background-color: #fff8e1; }
+    .z-row-dup td { color: #8a6d3b; }
+    .z-row-dup .z-amount { color: #8a6d3b !important; }
+    .z-row-dup .z-id-cell { color: #8a6d3b !important; }
+    .badge-dup { background:#ffb300; color:#212529; font-weight:600; }
     #zChartWrap { position: relative; height: 220px; }
     @media print {
         body * { visibility: hidden !important; }
@@ -61,7 +66,14 @@
     <div class="col-6 col-md-3">
         <div class="mini-stat">
             <div class="num text-primary z-stat-num">{{ "{:,}".format(totals.count) }}</div>
-            <div class="lbl"><i class="bi bi-list-ul me-1"></i>Smenalar soni</div>
+            <div class="lbl">
+                <i class="bi bi-list-ul me-1"></i>Smenalar soni
+                {% if totals.duplicates and totals.duplicates > 0 %}
+                <span class="badge badge-dup ms-1" title="Bir kun-foydalanuvchi-ombor bo'yicha takroran yopilgan smenalar — jamiga kirmaydi">
+                    +{{ totals.duplicates }} dublikat
+                </span>
+                {% endif %}
+            </div>
         </div>
     </div>
     <div class="col-6 col-md-3">
@@ -127,11 +139,19 @@
                 <tbody>
                     {% if items %}
                         {% for x in items %}
-                        <tr>
+                        <tr {% if x.is_duplicate %}class="z-row-dup"{% endif %}>
                             <td class="muted-cell">{{ (page - 1) * per_page + loop.index }}</td>
                             <td class="muted-cell">{{ x.date }}</td>
                             <td class="muted-cell">{{ (x.closed_at or '')[:19] | replace('T', ' ') }}</td>
-                            <td><span class="z-id-cell">{{ x.z_id }}</span></td>
+                            <td>
+                                <span class="z-id-cell">{{ x.z_id }}</span>
+                                {% if x.is_duplicate %}
+                                <span class="badge badge-dup ms-1"
+                                      title="Bir kun-foydalanuvchi-ombor bo'yicha takroran yopilgan smena — jami summaga kirmaydi">
+                                    DUBLIKAT
+                                </span>
+                                {% endif %}
+                            </td>
                             <td>{{ x.user or '—' }}</td>
                             <td class="muted-cell">{{ x.warehouse or '—' }}</td>
                             <td class="text-center">{{ x.sales_count or 0 }}</td>

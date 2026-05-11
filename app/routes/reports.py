@@ -2597,7 +2597,11 @@ def _z_load_snapshot(z_id: str):
 
 
 def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = None):
-    """Sana orali bo'yicha barcha snapshotlarni o'qiydi (yangi -> eski)."""
+    """Sana orali bo'yicha barcha snapshotlarni o'qiydi (yangi -> eski).
+
+    Dedup: bir (date, user_id, warehouse_id) uchun eng oxirgi snapshot — primary,
+    eski takrorlangan snapshotlar `is_duplicate=True` bilan markirovka qilinadi.
+    """
     items: list = []
     if not _z_os.path.isdir(_Z_REPORTS_DIR):
         return items
@@ -2629,6 +2633,15 @@ def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = N
             except (OSError, json.JSONDecodeError):
                 continue
     items.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
+
+    seen_keys: set = set()
+    for it in items:
+        key = (it.get("date") or "", int(it.get("user_id") or 0), it.get("warehouse_id"))
+        if key in seen_keys:
+            it["is_duplicate"] = True
+        else:
+            it["is_duplicate"] = False
+            seen_keys.add(key)
     return items
 
 
@@ -2667,16 +2680,19 @@ async def report_z_reports(
             user_filter = None
 
     all_items = _z_scan(d_from, d_to, user_filter)
+    primaries = [x for x in all_items if not x.get("is_duplicate")]
+    dup_count = len(all_items) - len(primaries)
 
     totals = {
-        "count": len(all_items),
-        "sales": sum(float(x.get("sales_total") or 0) for x in all_items),
-        "returns": sum(float(x.get("returns_total") or 0) for x in all_items),
-        "net": sum(float(x.get("net_total") or 0) for x in all_items),
+        "count": len(primaries),
+        "sales": sum(float(x.get("sales_total") or 0) for x in primaries),
+        "returns": sum(float(x.get("returns_total") or 0) for x in primaries),
+        "net": sum(float(x.get("net_total") or 0) for x in primaries),
+        "duplicates": dup_count,
     }
 
     chart_by_date: dict = {}
-    for x in all_items:
+    for x in primaries:
         d = x.get("date") or ""
         if not d:
             continue
@@ -2768,7 +2784,7 @@ async def report_z_reports_export(
     headers = [
         "№", "Sana", "Yopilgan vaqt", "Z-ID", "Sotuvchi", "Ombor",
         "Sotuv soni", "Sotuv summa", "Qaytarish", "NET",
-        "Naqd", "Plastik", "Click", "Terminal",
+        "Naqd", "Plastik", "Click", "Terminal", "Status",
     ]
     ws.append(headers)
     for c in range(1, len(headers) + 1):
@@ -2779,16 +2795,19 @@ async def report_z_reports_export(
     sum_sales = 0.0
     sum_returns = 0.0
     sum_net = 0.0
+    dup_fill = PatternFill(start_color="FFF3CD", end_color="FFF3CD", fill_type="solid")
     for i, x in enumerate(items, 1):
         pb = {b["type"]: b["sum"] for b in (x.get("payment_breakdown") or [])}
         sales = float(x.get("sales_total") or 0)
         returns_v = float(x.get("returns_total") or 0)
         net_v = float(x.get("net_total") or 0)
         cnt = int(x.get("sales_count") or 0)
-        sum_count += cnt
-        sum_sales += sales
-        sum_returns += returns_v
-        sum_net += net_v
+        is_dup = bool(x.get("is_duplicate"))
+        if not is_dup:
+            sum_count += cnt
+            sum_sales += sales
+            sum_returns += returns_v
+            sum_net += net_v
         ws.append([
             i,
             x.get("date") or "",
@@ -2804,7 +2823,12 @@ async def report_z_reports_export(
             float(pb.get("plastik") or 0),
             float(pb.get("click") or 0),
             float(pb.get("terminal") or 0),
+            "DUBLIKAT" if is_dup else "",
         ])
+        if is_dup:
+            row_idx = ws.max_row
+            for c in range(1, len(headers) + 1):
+                ws.cell(row=row_idx, column=c).fill = dup_fill
     if items:
         ws.append([
             "", "", "", "", "", "JAMI:",

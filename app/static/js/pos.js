@@ -879,9 +879,11 @@
     }
     var xReportZBtn = document.getElementById('posXReportZBtn');
     if (xReportZBtn) {
-        xReportZBtn.addEventListener('click', function() {
-            if (!confirm('Smenani yopasizmi? Z-hisobot tarixga saqlanadi va keyin o\'zgartirib bo\'lmaydi.')) return;
-            var dateParam = (xReportDateInput && xReportDateInput.value) ? xReportDateInput.value : '';
+        function fmtNum(n) {
+            try { return new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)); }
+            catch (e) { return String(n); }
+        }
+        function submitZReport(dateParam) {
             xReportZBtn.disabled = true;
             var csrfTokenZ = (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute('content') || '';
             var zHeaders = {'Content-Type': 'application/json', 'Accept': 'application/json'};
@@ -905,6 +907,34 @@
                 .catch(function() {
                     xReportZBtn.disabled = false;
                     alert('Tarmoq xatosi');
+                });
+        }
+        xReportZBtn.addEventListener('click', function() {
+            var dateParam = (xReportDateInput && xReportDateInput.value) ? xReportDateInput.value : '';
+            xReportZBtn.disabled = true;
+            var checkUrl = '/sales/pos/z-report/check' + (dateParam ? ('?date=' + encodeURIComponent(dateParam)) : '');
+            fetch(checkUrl, { credentials: 'same-origin', headers: {'Accept': 'application/json'} })
+                .then(function(r) { return r.json().catch(function() { return {ok: false}; }); })
+                .then(function(c) {
+                    xReportZBtn.disabled = false;
+                    if (c && c.ok && c.exists && c.last) {
+                        var t = (c.last.closed_at || '').slice(0, 19).replace('T', ' ');
+                        var msg = 'DIQQAT: Ushbu sana uchun smena allaqachon yopilgan!\n\n' +
+                                  '  • Vaqt: ' + t + '\n' +
+                                  '  • Sotuv: ' + fmtNum(c.last.sales_total) + " so'm (" + (c.last.sales_count || 0) + ' ta)\n' +
+                                  '  • Z-ID: ' + (c.last.z_id || '—') + '\n\n' +
+                                  'Yana bir marta yopsangiz, dublikat yozuv yaratiladi (jami hisobga kirmaydi, lekin tarixda qoladi).\n\n' +
+                                  'Davom etasizmi?';
+                        if (!confirm(msg)) return;
+                    } else {
+                        if (!confirm('Smenani yopasizmi? Z-hisobot tarixga saqlanadi va keyin o\'zgartirib bo\'lmaydi.')) return;
+                    }
+                    submitZReport(dateParam);
+                })
+                .catch(function() {
+                    xReportZBtn.disabled = false;
+                    if (!confirm('Smenani yopasizmi? Z-hisobot tarixga saqlanadi va keyin o\'zgartirib bo\'lmaydi.')) return;
+                    submitZReport(dateParam);
                 });
         });
     }
