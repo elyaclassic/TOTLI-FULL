@@ -97,7 +97,7 @@ def main(execute: bool):
     cur.execute("BEGIN")
     try:
         # 1. Yangi 2 ta kassa
-        now_iso = datetime.now().isoformat()
+        now_iso = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         cur.execute(
             "INSERT INTO cash_registers (name, payment_type, department_id, opening_balance, balance, is_active) VALUES (?, 'click', ?, 0, 0, 1)",
             ("Asosiy kassa Click", DEPT_ASOSIY),

@@ -2596,6 +2596,72 @@ def _z_load_snapshot(z_id: str):
         return None
 
 
+def _z_fill_operations_from_db(db: Session, snap: dict) -> None:
+    """Eski Z-snapshot uchun payments_made va expenses_made ni DB'dan to'ldirish.
+
+    Faqat snapshot ichiga ushbu maydonlar saqlanmagan eski Z fayllar uchun chaqiriladi.
+    Filter: user_id + date + (supplier_payment | expense) kategoriya.
+    """
+    try:
+        target_d = datetime.strptime((snap.get("date") or "")[:10], "%Y-%m-%d").date()
+    except (TypeError, ValueError):
+        snap.setdefault("payments_made", [])
+        snap.setdefault("expenses_made", [])
+        snap.setdefault("payments_made_sum", 0.0)
+        snap.setdefault("expenses_made_sum", 0.0)
+        return
+    user_id = int(snap.get("user_id") or 0)
+    if not user_id:
+        snap.setdefault("payments_made", [])
+        snap.setdefault("expenses_made", [])
+        snap.setdefault("payments_made_sum", 0.0)
+        snap.setdefault("expenses_made_sum", 0.0)
+        return
+
+    from sqlalchemy import func as _func
+    rows = (
+        db.query(Payment)
+        .filter(
+            _func.date(Payment.created_at) == target_d,
+            Payment.user_id == user_id,
+            Payment.type == "expense",
+            Payment.category.in_(("supplier_payment", "expense")),
+        )
+        .order_by(Payment.created_at)
+        .all()
+    )
+
+    payments_made: list = []
+    expenses_made: list = []
+    for p in rows:
+        partner_name = ""
+        if p.partner_id:
+            pn = db.query(Partner.name).filter(Partner.id == p.partner_id).first()
+            partner_name = pn[0] if pn else ""
+        cash_name = ""
+        if p.cash_register_id:
+            cn = db.query(CashRegister.name).filter(CashRegister.id == p.cash_register_id).first()
+            cash_name = cn[0] if cn else ""
+        rec = {
+            "number": p.number or "",
+            "time": p.created_at.strftime("%H:%M") if p.created_at else "",
+            "amount": float(p.amount or 0),
+            "payment_type": (p.payment_type or "naqd"),
+            "cash_name": cash_name,
+            "partner_name": partner_name,
+            "description": p.description or "",
+        }
+        if (p.category or "").strip() == "supplier_payment":
+            payments_made.append(rec)
+        else:
+            expenses_made.append(rec)
+
+    snap["payments_made"] = payments_made
+    snap["expenses_made"] = expenses_made
+    snap["payments_made_sum"] = sum(r["amount"] for r in payments_made)
+    snap["expenses_made_sum"] = sum(r["amount"] for r in expenses_made)
+
+
 def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = None):
     """Sana orali bo'yicha barcha snapshotlarni o'qiydi (yangi -> eski).
 
@@ -2851,9 +2917,14 @@ async def report_z_report_detail(
     z_id: str,
     request: Request,
     fmt: str = "html",
+    db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Print uchun alohida sahifa (default) yoki JSON snapshot (?fmt=json)."""
+    """Print uchun alohida sahifa (default) yoki JSON snapshot (?fmt=json).
+
+    Eski Z-snapshot'larda `payments_made`/`expenses_made` yo'q bo'lsa,
+    DB'dan dinamik to'ldiriladi (faqat shu Z'ning user_id va date bo'yicha).
+    """
     snap = _z_load_snapshot(z_id)
     if not snap:
         if fmt == "json":
@@ -2864,6 +2935,10 @@ async def report_z_report_detail(
             "<p><a href='/reports/z-reports'>← Ro'yxatga qaytish</a></p></div>",
             status_code=404,
         )
+
+    if "payments_made" not in snap or "expenses_made" not in snap:
+        _z_fill_operations_from_db(db, snap)
+
     if fmt == "json":
         return JSONResponse({"ok": True, "snapshot": snap})
     return templates.TemplateResponse("reports/z_report_detail.html", {

@@ -41,6 +41,153 @@
         </div>
     </div>
 
+    <div class="modal fade" id="posEmployeeProductModal" tabindex="-1" aria-labelledby="posEmployeeProductModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title" id="posEmployeeProductModalLabel">
+                        <i class="bi bi-person-badge me-2"></i>Xodim mahsulot xaridi
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Yopish"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="posEmpProdEmpty" class="alert alert-warning d-none">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Savat bo'sh. Avval mahsulotlarni savatga qo'shing.
+                    </div>
+                    <div id="posEmpProdContent">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Xodim:</label>
+                            <select id="posEmpProdSelect" class="form-select form-select-lg">
+                                <option value="">— Xodim tanlang —</option>
+                            </select>
+                            <div class="form-text">Faqat aktiv xodimlar ko'rinadi</div>
+                        </div>
+
+                        <div id="posEmpProdQuotaBox" class="mb-3 d-none">
+                            <div class="card border-info">
+                                <div class="card-body py-2">
+                                    <div class="row g-2 text-center small">
+                                        <div class="col-4">
+                                            <div class="text-muted">Bepul kvota</div>
+                                            <div class="fw-bold text-primary" id="posEmpProdQuotaFree">0</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="text-muted">Bu oy ishlatilgan</div>
+                                            <div class="fw-bold text-warning" id="posEmpProdQuotaUsed">0</div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="text-muted">Bepul qoldiq</div>
+                                            <div class="fw-bold text-success" id="posEmpProdQuotaRemain">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Savatdagi mahsulotlar:</label>
+                            <div class="table-responsive" style="max-height: 280px;">
+                                <table class="table table-sm table-hover mb-0">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th>Mahsulot</th>
+                                            <th class="text-end" style="width:90px;">Miqdor</th>
+                                            <th class="text-end" style="width:110px;">Narx</th>
+                                            <th class="text-end" style="width:130px;">Summa</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="posEmpProdItems"></tbody>
+                                    <tfoot class="table-light">
+                                        <tr>
+                                            <th colspan="3" class="text-end">JAMI:</th>
+                                            <th class="text-end" id="posEmpProdTotal">0 so'm</th>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <div id="posEmpProdBreakdown" class="alert alert-light border d-none">
+                            <div class="d-flex justify-content-between py-1">
+                                <span>Bepul kvotadan:</span>
+                                <span class="fw-bold text-success" id="posEmpProdFromQuota">0 so'm</span>
+                            </div>
+                            <div class="d-flex justify-content-between py-1 border-top pt-2">
+                                <span><i class="bi bi-arrow-right me-1"></i>Oylikdan ushlanadi:</span>
+                                <span class="fw-bold text-warning" id="posEmpProdFromSalary">0 so'm</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted me-auto" id="posEmpProdHint">
+                        <i class="bi bi-info-circle me-1"></i>Order yaratiladi, kassaga pul kirimi yo'q, oylik hisobiga avtomatik ushlanadi
+                    </small>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                    <button type="button" class="btn btn-info" id="posEmpProdSubmit" disabled>
+                        <i class="bi bi-check-circle me-1"></i>Yozish
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="posMyOperationsModal" tabindex="-1" aria-labelledby="posMyOperationsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="posMyOperationsModalLabel">
+                        <i class="bi bi-cash-stack me-2"></i>Mening operatsiyalarim
+                        <small class="opacity-75 ms-2" id="posMyOpsUserHint"></small>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Yopish"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <div class="p-3 border-bottom bg-light d-flex flex-wrap align-items-center gap-2">
+                        <label class="form-label mb-0 me-1"><i class="bi bi-calendar-event me-1"></i>Sana:</label>
+                        <input type="date" id="posMyOpsDate" class="form-control form-control-sm" style="max-width: 180px;">
+                        <div class="ms-auto d-flex gap-2">
+                            <button type="button" class="btn btn-sm pos-myops-tab active" data-tab="payments" id="posMyOpsTabPayments">
+                                <i class="bi bi-cash-coin me-1"></i>To'lovlar (<span id="posMyOpsPayCount">0</span>)
+                            </button>
+                            <button type="button" class="btn btn-sm pos-myops-tab" data-tab="expenses" id="posMyOpsTabExpenses">
+                                <i class="bi bi-wallet2 me-1"></i>Harajatlar (<span id="posMyOpsExpCount">0</span>)
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-responsive" style="max-height: 60vh;">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th style="width: 60px;">Vaqt</th>
+                                    <th style="width: 100px;">Hujjat</th>
+                                    <th id="posMyOpsColParty">Kontragent / Turi</th>
+                                    <th>Izoh</th>
+                                    <th style="width: 90px;">Kassa</th>
+                                    <th class="text-end" style="width: 130px;">Summa</th>
+                                </tr>
+                            </thead>
+                            <tbody id="posMyOpsTableBody">
+                                <tr><td colspan="6" class="text-center text-muted py-4">Yuklanmoqda...</td></tr>
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="5" class="text-end">JAMI:</th>
+                                    <th class="text-end" id="posMyOpsTotal">0 so'm</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <small class="text-muted me-auto"><i class="bi bi-info-circle me-1"></i>Faqat siz qilgan operatsiyalar ko'rsatiladi</small>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Yopish</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="posTodaySalesModal" tabindex="-1" aria-labelledby="posTodaySalesModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
             <div class="modal-content">

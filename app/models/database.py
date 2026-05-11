@@ -922,6 +922,7 @@ class Order(Base):
     payment_due_date = Column(Date, nullable=True)  # Qarz bo'lganda to'lov muddati (boshqa kontragent)
     note = Column(Text)
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True, index=True)  # Xodim mahsulot xaridi (POS "Xodim mahsulot" tugmasi)
     source = Column(String(20), default="web")  # "web" | "agent"
     previous_partner_balance = Column(Float, nullable=True)  # Tasdiqdan oldingi partner balansi (revert uchun)
     pending_driver_id = Column(Integer, ForeignKey("drivers.id"), nullable=True)  # waiting_production: production tayyor bo'lganda yetkazadigan haydovchi

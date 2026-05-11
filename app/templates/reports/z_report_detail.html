@@ -109,6 +109,61 @@
         {% endif %}
     </table>
 
+    {% if snap.payments_made %}
+    <div class="z-section-title">To'lovlar ({{ snap.payments_made | length }} ta — kontragentga)</div>
+    <table class="z-detail-table">
+        <thead>
+            <tr>
+                <td class="label" style="width:55px;">Vaqt</td>
+                <td class="label">Kontragent</td>
+                <td class="label" style="width:80px;">Kassa</td>
+                <td class="label right" style="width:130px;">Summa</td>
+            </tr>
+        </thead>
+        {% for p in snap.payments_made %}
+        <tr>
+            <td>{{ p.time or '—' }}</td>
+            <td>
+                {{ p.partner_name or '—' }}
+                {% if p.description %}<div class="text-muted small">{{ p.description }}</div>{% endif %}
+            </td>
+            <td class="small">{{ p.cash_name or '—' }}{% if p.payment_type and p.payment_type != 'naqd' %} ({{ p.payment_type }}){% endif %}</td>
+            <td class="right"><strong>{{ "{:,.0f}".format(p.amount or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="3" class="right">JAMI to'lovlar:</td>
+            <td class="right">{{ "{:,.0f}".format(snap.payments_made_sum or 0) }} so'm</td>
+        </tr>
+    </table>
+    {% endif %}
+
+    {% if snap.expenses_made %}
+    <div class="z-section-title">Harajatlar ({{ snap.expenses_made | length }} ta)</div>
+    <table class="z-detail-table">
+        <thead>
+            <tr>
+                <td class="label" style="width:55px;">Vaqt</td>
+                <td class="label">Harajat turi / Izoh</td>
+                <td class="label" style="width:80px;">Kassa</td>
+                <td class="label right" style="width:130px;">Summa</td>
+            </tr>
+        </thead>
+        {% for e in snap.expenses_made %}
+        <tr>
+            <td>{{ e.time or '—' }}</td>
+            <td>{{ e.description or '—' }}</td>
+            <td class="small">{{ e.cash_name or '—' }}{% if e.payment_type and e.payment_type != 'naqd' %} ({{ e.payment_type }}){% endif %}</td>
+            <td class="right"><strong>{{ "{:,.0f}".format(e.amount or 0) }}</strong></td>
+        </tr>
+        {% endfor %}
+        <tr class="total-row">
+            <td colspan="3" class="right">JAMI harajatlar:</td>
+            <td class="right">{{ "{:,.0f}".format(snap.expenses_made_sum or 0) }} so'm</td>
+        </tr>
+    </table>
+    {% endif %}
+
     {% if snap.order_numbers %}
     <div class="z-section-title">Buyurtmalar ({{ snap.order_numbers | length }} ta)</div>
     <div style="font-family: ui-monospace, Menlo, monospace; font-size: .8rem; color:#475569; line-height: 1.6;">

@@ -62,7 +62,15 @@
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Bo'lim</label>
-                        <input type="text" class="form-control" name="department" value="{{ emp.department or '' }}">
+                        <select class="form-select" name="department">
+                            <option value="">— Tanlanmagan —</option>
+                            {% for d in departments %}
+                            <option value="{{ d.id }}"
+                                {% if emp.department_id == d.id or (not emp.department_id and emp.department == d.name) %}selected{% endif %}>
+                                {{ d.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label">Telefon</label>

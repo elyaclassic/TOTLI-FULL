@@ -141,10 +141,12 @@ async def employee_edit_page(
     if not emp:
         return RedirectResponse(url="/employees?error=Xodim topilmadi", status_code=303)
     piecework_tasks = db.query(PieceworkTask).filter(PieceworkTask.is_active == True).order_by(PieceworkTask.name).all()
+    departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
     return templates.TemplateResponse("employees/edit.html", {
         "request": request,
         "emp": emp,
         "piecework_tasks": piecework_tasks,
+        "departments": departments,
         "current_user": current_user,
         "page_title": "Xodimni tahrirlash"
     })
@@ -179,7 +181,18 @@ async def employee_update(
     emp.full_name = full_name
     emp.code = code_val
     emp.position = position
-    emp.department = department
+    dept_id_str = (department or "").strip()
+    if dept_id_str.isdigit():
+        dept = db.query(Department).filter(Department.id == int(dept_id_str)).first()
+        if dept:
+            emp.department_id = dept.id
+            emp.department = dept.name
+        else:
+            emp.department_id = None
+            emp.department = ""
+    else:
+        emp.department = dept_id_str
+        emp.department_id = None
     emp.phone = phone
     emp.salary = salary
     st = (salary_type or "").strip() or None

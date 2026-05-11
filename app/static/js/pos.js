@@ -55,6 +55,145 @@
     });
 
 
+    /* Ochiq kunlar banneri — yopilmagan/to'liq emas Z-hisobotlar */
+    var openDaysBanner = document.getElementById('posOpenDaysBanner');
+    var openDaysList = document.getElementById('posOpenDaysList');
+    var openDaysClose = document.getElementById('posOpenDaysClose');
+    var OPEN_DAYS_DISMISS_KEY = 'pos_open_days_dismissed';
+
+    function fmtNum(n) {
+        try { return new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)); }
+        catch (e) { return String(n); }
+    }
+
+    function makeIcon(cls) {
+        var i = document.createElement('i');
+        i.className = cls;
+        return i;
+    }
+
+    function makeBtn(it) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-warning';
+        btn.appendChild(makeIcon('bi bi-lock'));
+        btn.appendChild(document.createTextNode(' ' + it.date_display + " ni yopish"));
+        btn.addEventListener('click', function() { closeOpenDay(it, btn); });
+        return btn;
+    }
+
+    function renderOpenDays(items) {
+        if (!openDaysList) return;
+        while (openDaysList.firstChild) openDaysList.removeChild(openDaysList.firstChild);
+        items.forEach(function(it) {
+            var row = document.createElement('div');
+            row.className = 'd-flex justify-content-between align-items-center gap-2 py-1 border-bottom';
+            var info = document.createElement('div');
+            var dateB = document.createElement('strong');
+            dateB.textContent = it.date_display;
+            info.appendChild(dateB);
+            info.appendChild(document.createTextNode(' — '));
+            if (it.status === 'no_z') {
+                info.appendChild(document.createTextNode(
+                    "Z-hisobot bosilmagan: " + (it.sales_count || 0) + " ta sotuv, " + fmtNum(it.sales_total) + " so'm"
+                ));
+            } else {
+                var lz = it.last_z || {};
+                var t = (lz.closed_at || '').slice(11, 19);
+                info.appendChild(document.createTextNode("Z " + t + " da bosilgan, ammo keyin yana "));
+                var strong = document.createElement('strong');
+                strong.textContent = it.orphan_count + " ta sotuv (" + fmtNum(it.orphan_total) + " so'm)";
+                info.appendChild(strong);
+                info.appendChild(document.createTextNode(" qo'shilgan — Z to'liq emas"));
+            }
+            row.appendChild(info);
+            row.appendChild(makeBtn(it));
+            openDaysList.appendChild(row);
+        });
+    }
+
+    function closeOpenDay(it, btn) {
+        var msg;
+        if (it.status === 'no_z') {
+            msg = it.date_display + " uchun Z-hisobotni yopasizmi?\n\n" +
+                  "  • Sotuvlar: " + (it.sales_count || 0) + " ta\n" +
+                  "  • Summa: " + fmtNum(it.sales_total) + " so'm\n\n" +
+                  "Snapshot fayl tarixga saqlanadi.";
+        } else {
+            msg = it.date_display + " uchun Z-hisobotni QAYTA yopasizmi?\n\n" +
+                  "  • Jami: " + (it.sales_count || 0) + " ta sotuv, " + fmtNum(it.sales_total) + " so'm\n" +
+                  "  • Eski Z'dan keyin yangi: " + it.orphan_count + " ta (" + fmtNum(it.orphan_total) + " so'm)\n\n" +
+                  "Yangi Z to'liq kun bo'yicha jamlanadi. Eski Z fayl saqlanadi (dublikat sifatida).";
+        }
+        if (!confirm(msg)) return;
+        btn.disabled = true;
+        while (btn.firstChild) btn.removeChild(btn.firstChild);
+        btn.appendChild(makeIcon('bi bi-hourglass-split'));
+        btn.appendChild(document.createTextNode(' Saqlanmoqda...'));
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute('content') || '';
+        var headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+        if (csrf) headers['X-CSRF-Token'] = csrf;
+        fetch('/sales/pos/z-report', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: headers,
+            body: JSON.stringify({date: it.date})
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(d) {
+                if (d && d.ok) {
+                    btn.className = 'btn btn-sm btn-success';
+                    while (btn.firstChild) btn.removeChild(btn.firstChild);
+                    btn.appendChild(makeIcon('bi bi-check-circle'));
+                    btn.appendChild(document.createTextNode(' Yopildi'));
+                    setTimeout(loadOpenDays, 800);
+                } else {
+                    btn.disabled = false;
+                    while (btn.firstChild) btn.removeChild(btn.firstChild);
+                    btn.appendChild(makeIcon('bi bi-lock'));
+                    btn.appendChild(document.createTextNode(' ' + it.date_display + " ni yopish"));
+                    alert('Xato: ' + (d && d.error ? d.error : 'noma\'lum'));
+                }
+            })
+            .catch(function() {
+                btn.disabled = false;
+                while (btn.firstChild) btn.removeChild(btn.firstChild);
+                btn.appendChild(makeIcon('bi bi-lock'));
+                btn.appendChild(document.createTextNode(' ' + it.date_display + " ni yopish"));
+                alert('Tarmoq xatosi');
+            });
+    }
+
+    function loadOpenDays() {
+        if (!openDaysBanner) return;
+        try {
+            if (sessionStorage.getItem(OPEN_DAYS_DISMISS_KEY) === '1') return;
+        } catch (e) { /* ignore */ }
+        fetch('/sales/pos/z-report/open-days?days=5', {
+            credentials: 'same-origin',
+            headers: {'Accept': 'application/json'}
+        })
+            .then(function(r) { return r.json().catch(function() { return {ok: false}; }); })
+            .then(function(d) {
+                if (!d || !d.ok || !d.items || !d.items.length) {
+                    openDaysBanner.classList.add('d-none');
+                    return;
+                }
+                renderOpenDays(d.items);
+                openDaysBanner.classList.remove('d-none');
+            })
+            .catch(function() { /* tarmoq xato — banner ko'rsatilmaydi */ });
+    }
+
+    if (openDaysClose) {
+        openDaysClose.addEventListener('click', function() {
+            openDaysBanner.classList.add('d-none');
+            try { sessionStorage.setItem(OPEN_DAYS_DISMISS_KEY, '1'); } catch (e) { /* ignore */ }
+        });
+    }
+    loadOpenDays();
+
+
     /* window._posCanEditPrice — template da o'rnatiladi */
 
     var form = document.getElementById('posForm');
@@ -1227,4 +1366,309 @@
     }
 
     restoreCartFromStorage();
+
+
+    /* Xodim mahsulot xaridi modal — savatdagi mahsulotlarni xodimga yozish */
+    var empProdBtn = document.getElementById('posBtnEmployeeProduct');
+    var empProdModal = document.getElementById('posEmployeeProductModal');
+    if (empProdBtn && empProdModal) {
+        var empSelect = document.getElementById('posEmpProdSelect');
+        var empProdEmpty = document.getElementById('posEmpProdEmpty');
+        var empProdContent = document.getElementById('posEmpProdContent');
+        var empProdItemsBody = document.getElementById('posEmpProdItems');
+        var empProdTotal = document.getElementById('posEmpProdTotal');
+        var empProdQuotaBox = document.getElementById('posEmpProdQuotaBox');
+        var empProdQuotaFree = document.getElementById('posEmpProdQuotaFree');
+        var empProdQuotaUsed = document.getElementById('posEmpProdQuotaUsed');
+        var empProdQuotaRemain = document.getElementById('posEmpProdQuotaRemain');
+        var empProdBreakdown = document.getElementById('posEmpProdBreakdown');
+        var empProdFromQuota = document.getElementById('posEmpProdFromQuota');
+        var empProdFromSalary = document.getElementById('posEmpProdFromSalary');
+        var empProdSubmit = document.getElementById('posEmpProdSubmit');
+        var empProdQuotaRemainNum = 0;
+        var empProdTotalNum = 0;
+        var empsLoaded = false;
+
+        function empFmt(n) {
+            try { return new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)); }
+            catch (e) { return String(n); }
+        }
+
+        function loadEmployees() {
+            if (empsLoaded) return Promise.resolve();
+            return fetch('/sales/pos/employees-active', { credentials: 'same-origin', headers: {'Accept': 'application/json'} })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d || !d.ok || !d.items) return;
+                    while (empSelect.firstChild) empSelect.removeChild(empSelect.firstChild);
+                    var ph = document.createElement('option');
+                    ph.value = '';
+                    ph.textContent = '— Xodim tanlang —';
+                    empSelect.appendChild(ph);
+                    var byDept = {};
+                    d.items.forEach(function(e) {
+                        var dept = e.department || "Bo'lim ko'rsatilmagan";
+                        if (!byDept[dept]) byDept[dept] = [];
+                        byDept[dept].push(e);
+                    });
+                    Object.keys(byDept).sort().forEach(function(dept) {
+                        var g = document.createElement('optgroup');
+                        g.label = dept;
+                        byDept[dept].forEach(function(e) {
+                            var opt = document.createElement('option');
+                            opt.value = e.id;
+                            opt.textContent = e.name + (e.position ? ' — ' + e.position : '');
+                            g.appendChild(opt);
+                        });
+                        empSelect.appendChild(g);
+                    });
+                    empsLoaded = true;
+                });
+        }
+
+        function renderItems() {
+            while (empProdItemsBody.firstChild) empProdItemsBody.removeChild(empProdItemsBody.firstChild);
+            empProdTotalNum = 0;
+            if (!cart.length) {
+                empProdEmpty.classList.remove('d-none');
+                empProdContent.classList.add('d-none');
+                empProdSubmit.disabled = true;
+                return;
+            }
+            empProdEmpty.classList.add('d-none');
+            empProdContent.classList.remove('d-none');
+            cart.forEach(function(it) {
+                var tr = document.createElement('tr');
+                var c1 = document.createElement('td'); c1.textContent = it.productName || ('#' + it.productId);
+                var c2 = document.createElement('td'); c2.className = 'text-end'; c2.textContent = it.quantity;
+                var c3 = document.createElement('td'); c3.className = 'text-end'; c3.textContent = empFmt(it.price);
+                var line = (it.price || 0) * (it.quantity || 0);
+                var c4 = document.createElement('td'); c4.className = 'text-end fw-bold'; c4.textContent = empFmt(line) + " so'm";
+                tr.appendChild(c1); tr.appendChild(c2); tr.appendChild(c3); tr.appendChild(c4);
+                empProdItemsBody.appendChild(tr);
+                empProdTotalNum += line;
+            });
+            empProdTotal.textContent = empFmt(empProdTotalNum) + " so'm";
+            updateBreakdown();
+        }
+
+        function updateBreakdown() {
+            if (!empSelect.value || !cart.length) {
+                empProdBreakdown.classList.add('d-none');
+                empProdSubmit.disabled = true;
+                return;
+            }
+            var fromQuota = Math.min(empProdTotalNum, empProdQuotaRemainNum);
+            var fromSalary = Math.max(0, empProdTotalNum - empProdQuotaRemainNum);
+            empProdFromQuota.textContent = empFmt(fromQuota) + " so'm";
+            empProdFromSalary.textContent = empFmt(fromSalary) + " so'm";
+            empProdBreakdown.classList.remove('d-none');
+            empProdSubmit.disabled = false;
+        }
+
+        function loadQuota(empId) {
+            empProdQuotaBox.classList.add('d-none');
+            empProdQuotaRemainNum = 0;
+            if (!empId) {
+                updateBreakdown();
+                return;
+            }
+            fetch('/sales/pos/employee-quota?employee_id=' + encodeURIComponent(empId), { credentials: 'same-origin', headers: {'Accept': 'application/json'} })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (!d || !d.ok) return;
+                    empProdQuotaFree.textContent = empFmt(d.free_quota) + " so'm";
+                    empProdQuotaUsed.textContent = empFmt(d.used_this_month) + " so'm";
+                    empProdQuotaRemain.textContent = empFmt(d.free_remaining) + " so'm";
+                    empProdQuotaRemainNum = Number(d.free_remaining) || 0;
+                    empProdQuotaBox.classList.remove('d-none');
+                    updateBreakdown();
+                });
+        }
+
+        empProdBtn.addEventListener('click', function() {
+            loadEmployees();
+            empSelect.value = '';
+            empProdQuotaBox.classList.add('d-none');
+            empProdBreakdown.classList.add('d-none');
+            empProdSubmit.disabled = true;
+            renderItems();
+            var m = bootstrap.Modal.getOrCreateInstance(empProdModal);
+            m.show();
+        });
+
+        empSelect.addEventListener('change', function() {
+            loadQuota(empSelect.value);
+        });
+
+        empProdSubmit.addEventListener('click', function() {
+            var empId = empSelect.value;
+            if (!empId || !cart.length) return;
+            var whId = (document.getElementById('posWarehouseId') || {}).value || '';
+            if (!whId) {
+                alert("Ombor aniqlanmadi. Sahifani yangilang.");
+                return;
+            }
+            var empName = empSelect.options[empSelect.selectedIndex].textContent;
+            var msg = empName + " uchun yozasizmi?\n\n" +
+                      "  • Jami: " + empFmt(empProdTotalNum) + " so'm (" + cart.length + " ta tovar)\n" +
+                      "  • Bepul kvotadan: " + empFmt(Math.min(empProdTotalNum, empProdQuotaRemainNum)) + " so'm\n" +
+                      "  • Oylikdan ushlanadi: " + empFmt(Math.max(0, empProdTotalNum - empProdQuotaRemainNum)) + " so'm\n\n" +
+                      "Stock kamayadi, kassaga pul kirim qilinmaydi.";
+            if (!confirm(msg)) return;
+            empProdSubmit.disabled = true;
+            var origText = empProdSubmit.textContent;
+            while (empProdSubmit.firstChild) empProdSubmit.removeChild(empProdSubmit.firstChild);
+            var sp = document.createElement('span');
+            sp.className = 'spinner-border spinner-border-sm me-1';
+            empProdSubmit.appendChild(sp);
+            empProdSubmit.appendChild(document.createTextNode(' Saqlanmoqda...'));
+
+            var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).getAttribute('content') || '';
+            var headers = {'Content-Type': 'application/json', 'Accept': 'application/json'};
+            if (csrf) headers['X-CSRF-Token'] = csrf;
+            var payload = {
+                employee_id: parseInt(empId, 10),
+                warehouse_id: parseInt(whId, 10),
+                items: cart.map(function(c) {
+                    return {product_id: c.productId, quantity: c.quantity, price: c.price};
+                }),
+            };
+            fetch('/sales/pos/employee-product', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: headers,
+                body: JSON.stringify(payload),
+            })
+                .then(function(r) { return r.json().catch(function() { return {ok: false}; }); })
+                .then(function(d) {
+                    if (d && d.ok) {
+                        cart = [];
+                        saveCartToStorage();
+                        var m = bootstrap.Modal.getInstance(empProdModal);
+                        if (m) m.hide();
+                        window.location.href = '/sales/pos?success=1&number=' +
+                            encodeURIComponent("Xodim: " + (d.employee_name || '') + " — " + empFmt(d.total) + " so'm");
+                    } else {
+                        empProdSubmit.disabled = false;
+                        while (empProdSubmit.firstChild) empProdSubmit.removeChild(empProdSubmit.firstChild);
+                        empProdSubmit.appendChild(document.createTextNode(origText));
+                        alert("Xato: " + (d && d.error ? d.error : "noma'lum"));
+                    }
+                })
+                .catch(function() {
+                    empProdSubmit.disabled = false;
+                    while (empProdSubmit.firstChild) empProdSubmit.removeChild(empProdSubmit.firstChild);
+                    empProdSubmit.appendChild(document.createTextNode(origText));
+                    alert("Tarmoq xatosi");
+                });
+        });
+    }
+
+
+    /* Mening operatsiyalarim modal — sotuvchining kunlik to'lov/harajatlari */
+    var myOpsBtn = document.getElementById('posBtnMyOperations');
+    var myOpsModal = document.getElementById('posMyOperationsModal');
+    if (myOpsBtn && myOpsModal) {
+        var myOpsDateInput = document.getElementById('posMyOpsDate');
+        var myOpsTabPayments = document.getElementById('posMyOpsTabPayments');
+        var myOpsTabExpenses = document.getElementById('posMyOpsTabExpenses');
+        var myOpsPayCount = document.getElementById('posMyOpsPayCount');
+        var myOpsExpCount = document.getElementById('posMyOpsExpCount');
+        var myOpsTableBody = document.getElementById('posMyOpsTableBody');
+        var myOpsTotal = document.getElementById('posMyOpsTotal');
+        var myOpsColParty = document.getElementById('posMyOpsColParty');
+        var myOpsActiveTab = 'payments';
+        var myOpsData = { payments: [], expenses: [], totals: {} };
+
+        function myOpsFmt(n) {
+            try { return new Intl.NumberFormat('ru-RU').format(Math.round(Number(n) || 0)); }
+            catch (e) { return String(n); }
+        }
+        function myOpsEmptyRow(text) {
+            var tr = document.createElement('tr');
+            var td = document.createElement('td');
+            td.colSpan = 6;
+            td.className = 'text-center text-muted py-4';
+            td.textContent = text;
+            tr.appendChild(td);
+            return tr;
+        }
+        function myOpsRow(rec) {
+            var tr = document.createElement('tr');
+            var cells = [
+                {text: rec.time || '—', cls: 'text-muted small'},
+                {text: rec.number || '—', cls: 'small font-monospace'},
+                {text: myOpsActiveTab === 'payments' ? (rec.partner_name || '—') : (rec.description.split(' — ')[0] || '—')},
+                {text: rec.description || '', cls: 'small text-muted'},
+                {text: (rec.cash_name || '—') + (rec.payment_type && rec.payment_type !== 'naqd' ? ' (' + rec.payment_type + ')' : ''), cls: 'small'},
+                {text: myOpsFmt(rec.amount) + " so'm", cls: 'text-end fw-bold ' + (myOpsActiveTab === 'payments' ? 'text-primary' : 'text-warning')},
+            ];
+            cells.forEach(function(c) {
+                var td = document.createElement('td');
+                if (c.cls) td.className = c.cls;
+                td.textContent = c.text;
+                tr.appendChild(td);
+            });
+            return tr;
+        }
+        function myOpsRender() {
+            while (myOpsTableBody.firstChild) myOpsTableBody.removeChild(myOpsTableBody.firstChild);
+            var list = myOpsActiveTab === 'payments' ? myOpsData.payments : myOpsData.expenses;
+            var totalSum = myOpsActiveTab === 'payments' ? (myOpsData.totals.payments_sum || 0) : (myOpsData.totals.expenses_sum || 0);
+            if (myOpsColParty) myOpsColParty.textContent = myOpsActiveTab === 'payments' ? 'Kontragent' : 'Harajat turi';
+            if (!list.length) {
+                myOpsTableBody.appendChild(myOpsEmptyRow(myOpsActiveTab === 'payments' ? "Tanlangan sanada to'lov qilmadingiz" : "Tanlangan sanada harajat qilmadingiz"));
+            } else {
+                list.forEach(function(rec) { myOpsTableBody.appendChild(myOpsRow(rec)); });
+            }
+            myOpsTotal.textContent = myOpsFmt(totalSum) + " so'm";
+        }
+        function myOpsLoad() {
+            var d = myOpsDateInput.value;
+            while (myOpsTableBody.firstChild) myOpsTableBody.removeChild(myOpsTableBody.firstChild);
+            myOpsTableBody.appendChild(myOpsEmptyRow('Yuklanmoqda...'));
+            myOpsPayCount.textContent = '0';
+            myOpsExpCount.textContent = '0';
+            myOpsTotal.textContent = "0 so'm";
+            var url = '/sales/pos/my-operations' + (d ? ('?date=' + encodeURIComponent(d)) : '');
+            fetch(url, { credentials: 'same-origin', headers: {'Accept': 'application/json'} })
+                .then(function(r) { return r.json().catch(function() { return {ok: false}; }); })
+                .then(function(data) {
+                    if (!data || !data.ok) {
+                        while (myOpsTableBody.firstChild) myOpsTableBody.removeChild(myOpsTableBody.firstChild);
+                        myOpsTableBody.appendChild(myOpsEmptyRow('Xato: ' + (data && data.error ? data.error : "noma'lum")));
+                        return;
+                    }
+                    myOpsData = data;
+                    myOpsPayCount.textContent = (data.totals.payments_count || 0);
+                    myOpsExpCount.textContent = (data.totals.expenses_count || 0);
+                    myOpsRender();
+                })
+                .catch(function() {
+                    while (myOpsTableBody.firstChild) myOpsTableBody.removeChild(myOpsTableBody.firstChild);
+                    myOpsTableBody.appendChild(myOpsEmptyRow('Tarmoq xatosi'));
+                });
+        }
+        function myOpsSetTab(tab) {
+            myOpsActiveTab = tab;
+            [myOpsTabPayments, myOpsTabExpenses].forEach(function(b) { b.classList.remove('active'); });
+            if (tab === 'payments') myOpsTabPayments.classList.add('active');
+            else myOpsTabExpenses.classList.add('active');
+            myOpsRender();
+        }
+        myOpsBtn.addEventListener('click', function() {
+            if (!myOpsDateInput.value) {
+                var t = new Date();
+                myOpsDateInput.value = t.getFullYear() + '-' + String(t.getMonth()+1).padStart(2,'0') + '-' + String(t.getDate()).padStart(2,'0');
+            }
+            myOpsSetTab('payments');
+            var m = bootstrap.Modal.getOrCreateInstance(myOpsModal);
+            m.show();
+            myOpsLoad();
+        });
+        myOpsDateInput.addEventListener('change', myOpsLoad);
+        myOpsTabPayments.addEventListener('click', function() { myOpsSetTab('payments'); });
+        myOpsTabExpenses.addEventListener('click', function() { myOpsSetTab('expenses'); });
+    }
 })();

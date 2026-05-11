@@ -34,6 +34,8 @@ from app.models.database import (
     CashTransfer,
     ExpenseType,
     StockMovement,
+    Employee,
+    EmployeeAdvance,
 )
 from app.deps import require_auth, require_admin
 
@@ -1849,6 +1851,404 @@ async def sales_pos_x_report(
     })
 
 
+@router.get("/pos/employees-active")
+async def sales_pos_employees_active(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """POS uchun aktiv xodimlar ro'yxati (Xodim mahsulot modal)."""
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+    rows = db.query(Employee).filter(Employee.is_active == True).order_by(Employee.full_name).all()
+    return JSONResponse({
+        "ok": True,
+        "items": [{
+            "id": e.id,
+            "name": e.full_name or "",
+            "position": e.position or "",
+            "department": e.department or "",
+            "free_quota": float(getattr(e, "monthly_free_quota", None) or 0),
+        } for e in rows],
+    })
+
+
+@router.get("/pos/employee-quota")
+async def sales_pos_employee_quota(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Tanlangan xodimning shu oydagi mahsulot xaridi va kvota qoldig'i."""
+    from datetime import date as date_type
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+    emp = db.query(Employee).filter(Employee.id == employee_id, Employee.is_active == True).first()
+    if not emp:
+        return JSONResponse({"ok": False, "error": "Xodim topilmadi"}, status_code=404)
+    today = date_type.today()
+    month_start = today.replace(day=1)
+    used_q = (
+        db.query(func.coalesce(func.sum(EmployeeAdvance.amount), 0))
+        .filter(
+            EmployeeAdvance.employee_id == employee_id,
+            EmployeeAdvance.is_product == True,
+            EmployeeAdvance.advance_date >= month_start,
+            EmployeeAdvance.advance_date <= today,
+        )
+        .scalar()
+    )
+    free_quota = float(getattr(emp, "monthly_free_quota", None) or 0)
+    used = float(used_q or 0)
+    return JSONResponse({
+        "ok": True,
+        "employee": {"id": emp.id, "name": emp.full_name or "", "position": emp.position or ""},
+        "month": today.strftime("%Y-%m"),
+        "free_quota": free_quota,
+        "used_this_month": used,
+        "free_remaining": max(0.0, free_quota - used),
+    })
+
+
+@router.post("/pos/employee-product")
+async def sales_pos_employee_product(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """POS savatdan xodim mahsuloti yozish.
+
+    Body JSON: {employee_id, warehouse_id, items: [{product_id, quantity, price}]}
+    Yaratiladi:
+      - Order (type=sale, employee_id, payment_type='employee_advance', paid=0, debt=0)
+      - OrderItem(lar)
+      - StockMovement(lar) — oddiy sotuv kabi (operation_type='sale')
+      - EmployeeAdvance(is_product=True, amount=order.total, note=order.number)
+    """
+    from datetime import date as date_type
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+    try:
+        body = await request.json()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "Body JSON xato"}, status_code=400)
+
+    employee_id = body.get("employee_id")
+    warehouse_id = body.get("warehouse_id")
+    items_in = body.get("items") or []
+    if not employee_id or not warehouse_id or not items_in:
+        return JSONResponse({"ok": False, "error": "Xodim, ombor va kamida 1 mahsulot kerak"}, status_code=400)
+
+    emp = db.query(Employee).filter(Employee.id == int(employee_id), Employee.is_active == True).first()
+    if not emp:
+        return JSONResponse({"ok": False, "error": "Xodim topilmadi"}, status_code=404)
+    wh = db.query(Warehouse).filter(Warehouse.id == int(warehouse_id)).first()
+    if not wh:
+        return JSONResponse({"ok": False, "error": "Ombor topilmadi"}, status_code=404)
+    if role == "sotuvchi":
+        allowed = _get_pos_warehouses_for_user(db, current_user)
+        if not any(w.id == wh.id for w in allowed):
+            return JSONResponse({"ok": False, "error": "Bu omborga ruxsat yo'q"}, status_code=403)
+
+    parsed_items: list = []
+    for it in items_in:
+        try:
+            pid = int(it.get("product_id"))
+            qty = float(it.get("quantity"))
+            price = float(it.get("price"))
+        except (TypeError, ValueError):
+            continue
+        if pid <= 0 or qty <= 0 or price < 0:
+            continue
+        product = db.query(Product).filter(Product.id == pid).first()
+        if not product:
+            return JSONResponse({"ok": False, "error": f"Mahsulot topilmadi: id={pid}"}, status_code=404)
+        stock = db.query(Stock).filter(Stock.warehouse_id == wh.id, Stock.product_id == pid).with_for_update().first()
+        avail = float(stock.quantity if stock else 0)
+        if avail + 1e-6 < qty:
+            return JSONResponse({
+                "ok": False,
+                "error": f"Qoldiq yetmaydi: {product.name} (omborda {avail:.2f}, kerak {qty:.2f})"
+            }, status_code=400)
+        parsed_items.append({"product": product, "qty": qty, "price": price})
+
+    if not parsed_items:
+        return JSONResponse({"ok": False, "error": "Yaroqli mahsulot topilmadi"}, status_code=400)
+
+    last_order = db.query(Order).filter(Order.type == "sale").order_by(Order.id.desc()).first()
+    new_number = f"S-{datetime.now().strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
+    order = Order(
+        number=new_number,
+        type="sale",
+        partner_id=None,
+        warehouse_id=wh.id,
+        employee_id=emp.id,
+        user_id=current_user.id,
+        status="completed",
+        payment_type="employee_advance",
+        source="pos",
+    )
+    db.add(order)
+    db.flush()
+
+    total = 0.0
+    item_notes = []
+    for it in parsed_items:
+        line_total = it["qty"] * it["price"]
+        db.add(OrderItem(
+            order_id=order.id,
+            product_id=it["product"].id,
+            quantity=it["qty"],
+            price=it["price"],
+            total=line_total,
+        ))
+        total += line_total
+        item_notes.append(f"{it['product'].name} {it['qty']:g}×{it['price']:,.0f}")
+
+    order.subtotal = total
+    order.discount_percent = 0
+    order.discount_amount = 0
+    order.total = total
+    order.paid = 0
+    order.debt = 0
+
+    for it in parsed_items:
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh.id,
+            product_id=it["product"].id,
+            quantity_change=-it["qty"],
+            operation_type="sale",
+            document_type="Sale",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id,
+            note=f"Xodim mahsulot xaridi: {emp.full_name}",
+        )
+
+    advance = EmployeeAdvance(
+        employee_id=emp.id,
+        cash_register_id=None,
+        amount=total,
+        advance_date=date_type.today(),
+        note=f"POS Xodim mahsulot: {order.number} — {', '.join(item_notes)[:400]}",
+        is_product=True,
+        confirmed_at=datetime.now(),
+    )
+    db.add(advance)
+
+    try:
+        log_action(
+            db, user=current_user, action="employee_product_sale",
+            entity_type="order", entity_id=order.id, entity_number=order.number,
+            details=f"Xodim mahsulot: {emp.full_name}, {total:,.0f} so'm, {len(parsed_items)} ta tovar",
+            ip_address=request.client.host if request.client else "",
+        )
+    except Exception:
+        pass
+
+    db.commit()
+
+    return JSONResponse({
+        "ok": True,
+        "order_number": order.number,
+        "total": total,
+        "employee_name": emp.full_name,
+        "items_count": len(parsed_items),
+    })
+
+
+@router.get("/pos/my-operations")
+async def sales_pos_my_operations(
+    request: Request,
+    date: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Sotuvchining tanlangan kundagi to'lovlari va harajatlari.
+
+    Faqat current_user.id'ning yozuvlari ko'rsatiladi (boshqa sotuvchilar aralashmaydi).
+
+    To'lovlar:  category='supplier_payment' (kontragentga to'lov)
+    Harajatlar: category='expense'          (boshqa harajatlar)
+    """
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+
+    target_date = date_type.today()
+    if date:
+        try:
+            target_date = dt.strptime(date[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return JSONResponse({"ok": False, "error": "Sana formati xato"}, status_code=400)
+
+    base = (
+        db.query(Payment)
+        .filter(
+            func.date(Payment.created_at) == target_date,
+            Payment.user_id == current_user.id,
+            Payment.type == "expense",
+        )
+    )
+
+    payments_list = []
+    expenses_list = []
+    for p in base.order_by(Payment.created_at).all():
+        partner_name = ""
+        if p.partner_id:
+            pn = db.query(Partner.name).filter(Partner.id == p.partner_id).first()
+            partner_name = pn[0] if pn else ""
+        cash_name = ""
+        if p.cash_register_id:
+            cn = db.query(CashRegister.name).filter(CashRegister.id == p.cash_register_id).first()
+            cash_name = cn[0] if cn else ""
+        rec = {
+            "id": p.id,
+            "number": p.number or "",
+            "time": p.created_at.strftime("%H:%M") if p.created_at else "",
+            "amount": float(p.amount or 0),
+            "payment_type": (p.payment_type or "naqd"),
+            "cash_name": cash_name,
+            "partner_name": partner_name,
+            "description": p.description or "",
+        }
+        cat = (p.category or "").strip()
+        if cat == "supplier_payment":
+            payments_list.append(rec)
+        elif cat == "expense":
+            expenses_list.append(rec)
+
+    return JSONResponse({
+        "ok": True,
+        "date": target_date.strftime("%Y-%m-%d"),
+        "date_display": target_date.strftime("%d.%m.%Y"),
+        "payments": payments_list,
+        "expenses": expenses_list,
+        "totals": {
+            "payments_count": len(payments_list),
+            "payments_sum": sum(r["amount"] for r in payments_list),
+            "expenses_count": len(expenses_list),
+            "expenses_sum": sum(r["amount"] for r in expenses_list),
+        },
+    })
+
+
+@router.get("/pos/z-report/open-days")
+async def sales_pos_z_report_open_days(
+    request: Request,
+    days: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Oxirgi N kun uchun (bugundan tashqari) sotuv vs Z holatini qaytaradi.
+
+    Status qiymatlari:
+      - "no_z":      DB'da sotuv bor, lekin Z fayl yaratilmagan
+      - "incomplete": Z fayl bor, ammo uning closed_at'dan keyin yangi sotuvlar qo'shilgan
+      - "ok":        Z fayl bor va orphan sotuv yo'q (banner'da ko'rsatilmaydi)
+    """
+    import os
+    import json as _json
+    from datetime import date as date_type, datetime as dt, timedelta
+
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+
+    days = max(1, min(int(days or 5), 14))
+
+    pos_wh = None
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if not pos_wh:
+            return JSONResponse({"ok": True, "items": [], "reason": "no_pos_warehouse"})
+    wh_id = pos_wh.id if pos_wh else None
+
+    today = date_type.today()
+    items: list = []
+
+    for offset in range(1, days + 1):
+        d = today - timedelta(days=offset)
+
+        q = db.query(Order).filter(
+            func.date(Order.created_at) == d,
+            Order.status == "completed",
+        )
+        q = q.filter((Order.type == "sale") | (Order.type.is_(None)))
+        if wh_id is not None:
+            q = q.filter(Order.warehouse_id == wh_id)
+        if role == "sotuvchi":
+            q = q.filter(Order.user_id == current_user.id)
+        rows = q.all()
+
+        sales_count = sum(1 for o in rows if (o.type or "sale") == "sale")
+        sales_total = sum(float(o.total or 0) for o in rows if (o.type or "sale") == "sale")
+        if sales_count == 0:
+            continue
+
+        folder = os.path.join("data", "z_reports", d.strftime("%Y-%m-%d"))
+        last_z = None
+        if os.path.isdir(folder):
+            for fname in os.listdir(folder):
+                if not fname.endswith(".json"):
+                    continue
+                try:
+                    with open(os.path.join(folder, fname), "r", encoding="utf-8") as f:
+                        snap = _json.load(f)
+                except (OSError, _json.JSONDecodeError):
+                    continue
+                if int(snap.get("user_id") or 0) != current_user.id:
+                    continue
+                if wh_id is not None and snap.get("warehouse_id") != wh_id:
+                    continue
+                ca = snap.get("closed_at") or ""
+                if last_z is None or ca > (last_z.get("closed_at") or ""):
+                    last_z = snap
+
+        orphan_count = 0
+        orphan_total = 0.0
+        if last_z is None:
+            status = "no_z"
+        else:
+            try:
+                z_dt = datetime.fromisoformat(last_z.get("closed_at"))
+            except (TypeError, ValueError):
+                z_dt = None
+            if z_dt is not None:
+                for o in rows:
+                    if (o.type or "sale") != "sale":
+                        continue
+                    if o.created_at and o.created_at > z_dt:
+                        orphan_count += 1
+                        orphan_total += float(o.total or 0)
+            status = "incomplete" if orphan_count > 0 else "ok"
+
+        if status == "ok":
+            continue
+
+        items.append({
+            "date": d.strftime("%Y-%m-%d"),
+            "date_display": d.strftime("%d.%m.%Y"),
+            "status": status,
+            "sales_count": sales_count,
+            "sales_total": sales_total,
+            "last_z": {
+                "z_id": last_z.get("z_id"),
+                "closed_at": last_z.get("closed_at"),
+                "sales_total": float(last_z.get("sales_total") or 0),
+                "sales_count": int(last_z.get("sales_count") or 0),
+            } if last_z else None,
+            "orphan_count": orphan_count,
+            "orphan_total": orphan_total,
+        })
+
+    return JSONResponse({"ok": True, "items": items, "days_scanned": days})
+
+
 @router.get("/pos/z-report/check")
 async def sales_pos_z_report_check(
     request: Request,
@@ -1990,6 +2390,45 @@ async def sales_pos_z_report(
     except Exception:
         pass
 
+    payments_made: list = []
+    expenses_made: list = []
+    try:
+        op_rows = (
+            db.query(Payment)
+            .filter(
+                func.date(Payment.created_at) == target_date,
+                Payment.user_id == current_user.id,
+                Payment.type == "expense",
+                Payment.category.in_(("supplier_payment", "expense")),
+            )
+            .order_by(Payment.created_at)
+            .all()
+        )
+        for p in op_rows:
+            partner_name = ""
+            if p.partner_id:
+                pn = db.query(Partner.name).filter(Partner.id == p.partner_id).first()
+                partner_name = pn[0] if pn else ""
+            cash_name = ""
+            if p.cash_register_id:
+                cn = db.query(CashRegister.name).filter(CashRegister.id == p.cash_register_id).first()
+                cash_name = cn[0] if cn else ""
+            rec = {
+                "number": p.number or "",
+                "time": p.created_at.strftime("%H:%M") if p.created_at else "",
+                "amount": float(p.amount or 0),
+                "payment_type": (p.payment_type or "naqd"),
+                "cash_name": cash_name,
+                "partner_name": partner_name,
+                "description": p.description or "",
+            }
+            if (p.category or "").strip() == "supplier_payment":
+                payments_made.append(rec)
+            else:
+                expenses_made.append(rec)
+    except Exception:
+        pass
+
     snapshot = {
         "z_id": f"Z-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}",
         "date": target_date.strftime("%Y-%m-%d"),
@@ -2009,6 +2448,10 @@ async def sales_pos_z_report(
         "payment_breakdown": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in by_type.items()],
         "cash_snapshot": cash_snapshot,
         "order_numbers": [o.number for o in completed],
+        "payments_made": payments_made,
+        "payments_made_sum": sum(r["amount"] for r in payments_made),
+        "expenses_made": expenses_made,
+        "expenses_made_sum": sum(r["amount"] for r in expenses_made),
     }
 
     out_path = None

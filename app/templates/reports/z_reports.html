@@ -319,7 +319,7 @@
 
         frag.appendChild(makeEl('div', { cls: 'fw-bold mb-2 text-muted small text-uppercase', text: "Kassa qoldig'i (snapshot)" }));
         var cs = (s.cash_snapshot || []);
-        var csTbl = makeEl('table', { cls: 'table table-sm mb-0' });
+        var csTbl = makeEl('table', { cls: 'table table-sm mb-3' });
         var cbody = makeEl('tbody');
         if (cs.length) {
             cs.forEach(function(c) {
@@ -333,6 +333,64 @@
         }
         csTbl.appendChild(cbody);
         frag.appendChild(csTbl);
+
+        var pm = (s.payments_made || []);
+        if (pm.length) {
+            frag.appendChild(makeEl('div', { cls: 'fw-bold mb-2 text-muted small text-uppercase', text: "To'lovlar (" + pm.length + " ta — kontragentga)" }));
+            var pmTbl = makeEl('table', { cls: 'table table-sm mb-3' });
+            var pmHead = makeEl('thead');
+            pmHead.appendChild(tr([
+                { cls: 'text-muted small', text: 'Vaqt' },
+                { cls: 'text-muted small', text: 'Kontragent / Izoh' },
+                { cls: 'text-muted small text-end', text: 'Summa' },
+            ]));
+            pmTbl.appendChild(pmHead);
+            var pmBody = makeEl('tbody');
+            pm.forEach(function(p) {
+                pmBody.appendChild(tr([
+                    { cls: 'small', text: p.time || '—' },
+                    { text: (p.partner_name || '—') + (p.description ? ' • ' + p.description : '') },
+                    { cls: 'text-end fw-bold text-primary', text: fmt(p.amount) + " so'm" },
+                ]));
+            });
+            var pmTotal = tr([
+                { cls: 'fw-bold', colspan: 2, text: 'JAMI:' },
+                { cls: 'text-end fw-bold', text: fmt(s.payments_made_sum) + " so'm" },
+            ]);
+            pmTotal.className = 'table-light';
+            pmBody.appendChild(pmTotal);
+            pmTbl.appendChild(pmBody);
+            frag.appendChild(pmTbl);
+        }
+
+        var em = (s.expenses_made || []);
+        if (em.length) {
+            frag.appendChild(makeEl('div', { cls: 'fw-bold mb-2 text-muted small text-uppercase', text: "Harajatlar (" + em.length + " ta)" }));
+            var emTbl = makeEl('table', { cls: 'table table-sm mb-0' });
+            var emHead = makeEl('thead');
+            emHead.appendChild(tr([
+                { cls: 'text-muted small', text: 'Vaqt' },
+                { cls: 'text-muted small', text: 'Harajat turi / Izoh' },
+                { cls: 'text-muted small text-end', text: 'Summa' },
+            ]));
+            emTbl.appendChild(emHead);
+            var emBody = makeEl('tbody');
+            em.forEach(function(e) {
+                emBody.appendChild(tr([
+                    { cls: 'small', text: e.time || '—' },
+                    { text: e.description || '—' },
+                    { cls: 'text-end fw-bold text-warning', text: fmt(e.amount) + " so'm" },
+                ]));
+            });
+            var emTotal = tr([
+                { cls: 'fw-bold', colspan: 2, text: 'JAMI:' },
+                { cls: 'text-end fw-bold', text: fmt(s.expenses_made_sum) + " so'm" },
+            ]);
+            emTotal.className = 'table-light';
+            emBody.appendChild(emTotal);
+            emTbl.appendChild(emBody);
+            frag.appendChild(emTbl);
+        }
 
         return frag;
     }
