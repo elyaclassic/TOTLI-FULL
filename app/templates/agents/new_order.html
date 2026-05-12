@@ -2,7 +2,7 @@
 {% block content %}
 <div class="container-fluid p-3">
   <div class="d-flex justify-content-between align-items-center mb-3">
-    <h4>
+    <h4 class="mb-0">
       <i class="bi bi-plus-circle"></i> Yangi buyurtma —
       <span class="text-success">{{ agent.full_name }}</span>
     </h4>
@@ -28,13 +28,14 @@
 
     <div class="card mb-3">
       <div class="card-body">
-        <div class="row g-3">
-          <div class="col-md-6">
+        <div class="row g-3 align-items-end">
+          <div class="col-md-5">
             <label class="form-label">Mijoz <span class="text-danger">*</span></label>
-            <select name="partner_id" class="form-select" required>
+            <select name="partner_id" id="partnerSelect" class="form-select" required onchange="updatePrices()">
               <option value="">— Tanlang —</option>
               {% for p in partners %}
-                <option value="{{ p.id }}">
+                <option value="{{ p.id }}"
+                        data-price-type-id="{{ partner_price_types.get(p.id, default_price_type_id) }}">
                   {{ p.name }}{% if p.phone %} — {{ p.phone }}{% endif %}
                 </option>
               {% endfor %}
@@ -43,7 +44,11 @@
               <div class="text-warning small mt-1">Bu agentga mijoz biriktirilmagan</div>
             {% endif %}
           </div>
-          <div class="col-md-6">
+          <div class="col-md-3">
+            <label class="form-label">Narx turi</label>
+            <input type="text" id="priceTypeLabel" class="form-control" readonly value="—" style="background:#f8f9fa;">
+          </div>
+          <div class="col-md-4">
             <label class="form-label">Izoh (ixtiyoriy)</label>
             <input type="text" name="note" class="form-control" placeholder="Masalan: zakaz telefon orqali">
           </div>
@@ -60,34 +65,46 @@
         <table class="table table-sm table-striped mb-0 align-middle">
           <thead class="sticky-top bg-light">
             <tr>
-              <th style="width:60px;">#</th>
+              <th style="width:50px;">#</th>
               <th>Mahsulot</th>
-              <th style="width:160px;" class="text-end">Miqdor</th>
+              <th style="width:140px;" class="text-end">Narx (so'm)</th>
+              <th style="width:140px;" class="text-end">Miqdor</th>
+              <th style="width:140px;" class="text-end">Jami</th>
             </tr>
           </thead>
           <tbody>
             {% for p in products %}
-              <tr>
+              <tr data-product-id="{{ p.id }}">
                 <td>{{ loop.index }}</td>
                 <td>
                   <input type="hidden" name="product_id" value="{{ p.id }}">
                   {{ p.name }}
                   {% if p.code %}<span class="text-muted small">({{ p.code }})</span>{% endif %}
                 </td>
+                <td class="text-end product-price text-muted" data-product-id="{{ p.id }}">—</td>
                 <td>
                   <input type="number"
                          name="quantity"
-                         class="form-control form-control-sm text-end"
+                         class="form-control form-control-sm text-end product-qty"
+                         data-product-id="{{ p.id }}"
                          step="0.001"
                          min="0"
                          value="0"
-                         inputmode="decimal">
+                         inputmode="decimal"
+                         oninput="recalcLine(this)">
                 </td>
+                <td class="text-end product-line-total fw-bold" data-product-id="{{ p.id }}">0</td>
               </tr>
             {% else %}
-              <tr><td colspan="3" class="text-center text-muted py-3">Agent uchun mahsulot ro'yxati bo'sh (Product.is_for_agent=False)</td></tr>
+              <tr><td colspan="5" class="text-center text-muted py-3">Agent uchun mahsulot ro'yxati bo'sh</td></tr>
             {% endfor %}
           </tbody>
+          <tfoot class="bg-light">
+            <tr>
+              <td colspan="4" class="text-end fw-bold">JAMI:</td>
+              <td class="text-end fw-bold fs-5 text-success" id="grandTotal">0</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -100,4 +117,63 @@
     </div>
   </form>
 </div>
+
+<script>
+  // product_id -> {price_type_id: sale_price}
+  const PRICES = {{ prices | tojson }};
+  // price_type_id -> name
+  const PT_NAMES = {{ price_types_map | tojson }};
+  const DEFAULT_PT = {{ default_price_type_id }};
+
+  function fmt(n) {
+    if (!n) return '0';
+    return Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' ');
+  }
+
+  function currentPriceTypeId() {
+    const sel = document.getElementById('partnerSelect');
+    if (!sel || !sel.value) return null;
+    const opt = sel.options[sel.selectedIndex];
+    return parseInt(opt.dataset.priceTypeId || DEFAULT_PT, 10);
+  }
+
+  function updatePrices() {
+    const ptId = currentPriceTypeId();
+    const label = ptId ? (PT_NAMES[ptId] || ('#' + ptId)) : '—';
+    document.getElementById('priceTypeLabel').value = label;
+
+    document.querySelectorAll('.product-price').forEach(el => {
+      const pid = el.dataset.productId;
+      const priceMap = PRICES[pid] || {};
+      const price = ptId ? (priceMap[ptId] || 0) : 0;
+      el.textContent = price ? fmt(price) : '—';
+      el.dataset.price = price;
+      el.classList.toggle('text-muted', !price);
+      el.classList.toggle('text-danger', ptId && !price);
+    });
+    document.querySelectorAll('.product-qty').forEach(input => recalcLine(input));
+  }
+
+  function recalcLine(input) {
+    const pid = input.dataset.productId;
+    const qty = parseFloat(input.value) || 0;
+    const priceEl = document.querySelector(`.product-price[data-product-id="${pid}"]`);
+    const price = parseFloat(priceEl.dataset.price || 0);
+    const line = qty * price;
+    const lineEl = document.querySelector(`.product-line-total[data-product-id="${pid}"]`);
+    lineEl.textContent = fmt(line);
+    recalcGrandTotal();
+  }
+
+  function recalcGrandTotal() {
+    let total = 0;
+    document.querySelectorAll('.product-qty').forEach(input => {
+      const qty = parseFloat(input.value) || 0;
+      const pid = input.dataset.productId;
+      const priceEl = document.querySelector(`.product-price[data-product-id="${pid}"]`);
+      total += qty * (parseFloat(priceEl.dataset.price || 0));
+    });
+    document.getElementById('grandTotal').textContent = fmt(total);
+  }
+</script>
 {% endblock %}

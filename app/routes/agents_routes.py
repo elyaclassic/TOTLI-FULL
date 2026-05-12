@@ -246,6 +246,7 @@ async def agent_order_new_form(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
+    from app.models.database import PriceType
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent topilmadi")
@@ -265,11 +266,26 @@ async def agent_order_new_form(
         .order_by(Product.name)
         .all()
     )
+    # Mijoz narx turlari: partner.id -> price_type_id (NULL bo'lsa default Agent #4)
+    partner_price_types = {p.id: int(p.price_type_id or DEFAULT_AGENT_PRICE_TYPE_ID) for p in partners}
+    # Narx turlari nomi (UI label uchun)
+    price_types_map = {pt.id: pt.name for pt in db.query(PriceType).all()}
+    # Narx jadvali: product_id -> {price_type_id: sale_price}
+    product_id_list = [p.id for p in products]
+    prices: dict[int, dict[int, float]] = {}
+    if product_id_list:
+        for pp in db.query(ProductPrice).filter(ProductPrice.product_id.in_(product_id_list)).all():
+            prices.setdefault(pp.product_id, {})[int(pp.price_type_id)] = float(pp.sale_price or 0)
+
     return templates.TemplateResponse("agents/new_order.html", {
         "request": request,
         "agent": agent,
         "partners": partners,
         "products": products,
+        "partner_price_types": partner_price_types,
+        "price_types_map": price_types_map,
+        "prices": prices,
+        "default_price_type_id": DEFAULT_AGENT_PRICE_TYPE_ID,
         "current_user": current_user,
         "page_title": f"Yangi buyurtma — {agent.full_name}",
     })
