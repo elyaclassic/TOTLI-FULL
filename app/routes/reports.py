@@ -1632,11 +1632,11 @@ async def report_production(
         .order_by(Production.date.desc())
     )
     productions = q.all()
-    # 3 ta kategoriya: donalik tayyor / kg tayyor / LIST yarim_tayyor (QIYOM excluded)
+    # 3 ta kategoriya: donalik tayyor / qiyom (stage 1) / LIST yarim_tayyor (stage 2)
     dona_count = 0.0
     dona_kg_eq = 0.0      # production_items dan yarim_tayyor sarfi
-    tayyor_kg = 0.0
-    list_kg = 0.0
+    qiyom_kg = 0.0        # Stage 1 — sof QIYOM (informativ, jamiga qo'shilmaydi)
+    list_kg = 0.0         # Stage 2 — LIST (qiyom + ingredient)
     for p in productions:
         p.qty_kg = _production_kg(p)
         _prod = getattr(getattr(p, "recipe", None), "product", None)
@@ -1647,25 +1647,22 @@ async def report_production(
             continue
         _type = (_prod.type or "").strip().lower()
         _name_upper = (_prod.name or "").upper()
-        if _type == "tayyor":
-            if p.unit_code in ("ta", "dona"):
-                dona_count += float(p.quantity or 0)
-                dona_kg_eq += float(p.qty_kg or 0)
-            elif p.unit_code in ("kg", "kilogramm"):
-                tayyor_kg += float(p.quantity or 0)
+        if _type == "tayyor" and p.unit_code in ("ta", "dona"):
+            dona_count += float(p.quantity or 0)
+            dona_kg_eq += float(p.qty_kg or 0)
         elif _type == "yarim_tayyor" and p.unit_code in ("kg", "kilogramm"):
-            # QIYOM (stage 1) chiqarib tashlanadi — hisob qilinmaydi
-            if "QIYOM" not in _name_upper:
+            if "QIYOM" in _name_upper:
+                qiyom_kg += float(p.quantity or 0)
+            else:
                 list_kg += float(p.quantity or 0)
-    # Legacy summa (eski card uchun, agar kerak bo'lsa) — endi ishlatilmaydi
-    total_qty = list_kg + tayyor_kg
+    total_qty = list_kg  # asosiy metrika
     return templates.TemplateResponse("reports/production.html", {
         "request": request,
         "productions": productions,
         "total_qty": total_qty,
         "dona_count": dona_count,
         "dona_kg_eq": dona_kg_eq,
-        "tayyor_kg": tayyor_kg,
+        "qiyom_kg": qiyom_kg,
         "list_kg": list_kg,
         "start_date": start_date,
         "end_date": end_date,
