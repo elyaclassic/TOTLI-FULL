@@ -625,6 +625,222 @@ async def sales_confirm(
     return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
 
 
+@router.post("/{order_id}/dispatch")
+async def sales_dispatch(
+    order_id: int,
+    delivery_date: str = Form(...),
+    driver_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Buyurtmani yo'lga chiqarish: confirmed -> out_for_delivery (yoki waiting_production).
+
+    Stock yetarli bo'lsa: stock kamayadi, Delivery yaratiladi, status=out_for_delivery.
+    Stock yetmasa: Production buyurtmasi yaratiladi, status=waiting_production,
+    delivery_date + pending_driver_id saqlanadi (production tugagach auto-dispatch).
+    """
+    from datetime import date as _date, datetime as _dt
+    from sqlalchemy import text as _text
+    from app.models.database import Driver, Delivery
+
+    if not current_user or getattr(current_user, "role", None) not in ("admin", "manager"):
+        raise HTTPException(status_code=403, detail="Ruxsat yo'q")
+
+    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    _check_order_access(order, current_user)
+    if is_period_closed(db, order.date):
+        return RedirectResponse(url=f"/sales/edit/{order_id}?error=period_closed", status_code=303)
+    if order.status != "confirmed":
+        return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+
+    try:
+        delivery_d = _date.fromisoformat(delivery_date.strip())
+    except ValueError:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=date_format",
+            status_code=303,
+        )
+
+    drv = db.query(Driver).filter(Driver.id == driver_id, Driver.is_active == True).first()
+    if not drv:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=driver_not_found",
+            status_code=303,
+        )
+
+    items = list(order.items or [])
+    if not items:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=no_items",
+            status_code=303,
+        )
+
+    # Stock yetarli yoki yo'qligini tekshirish (semi-finished fallback bilan)
+    semi_warehouse = get_semi_finished_warehouse(db)
+    insufficient_items = []
+    for item in items:
+        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id,
+            Stock.product_id == item.product_id,
+        ).first()
+        available = float(stock.quantity) if stock and stock.quantity else 0.0
+        if available + 1e-6 < float(item.quantity):
+            # Semi-finished omborda yetarli mahsulot bormi?
+            semi_avail = 0.0
+            if semi_warehouse:
+                semi_avail = get_product_stock_in_warehouse(db, semi_warehouse.id, item.product_id)
+            if semi_avail >= 1 and semi_avail >= float(item.quantity):
+                notify_cutting_packing_operators(
+                    db=db, order_number=order.number, order_id=order.id,
+                    product_name=(item.product.name if item.product else "Mahsulot"),
+                )
+                continue
+            notify_qiyom_operators(
+                db=db, order_number=order.number, order_id=order.id,
+                product_name=(item.product.name if item.product else "Mahsulot"),
+            )
+            insufficient_items.append({
+                "product": item.product,
+                "required": float(item.quantity),
+                "available": available,
+            })
+
+    # Yetishmaydigan mahsulot bo'lsa — Production yaratish, status=waiting_production
+    if insufficient_items:
+        try:
+            productions, missing = create_production_from_order(
+                db=db, order=order,
+                insufficient_items=insufficient_items, current_user=current_user,
+            )
+            if not productions:
+                db.rollback()
+                msg = "Ishlab chiqarish buyurtmasi yaratilmadi."
+                if missing:
+                    msg += " Retsept topilmadi: " + ", ".join(missing[:10]) + ("…" if len(missing) > 10 else "")
+                return RedirectResponse(
+                    url=f"/sales/edit/{order_id}?error=production&detail=" + quote(msg),
+                    status_code=303,
+                )
+
+            # waiting_production'ga atomik o'tkazish, delivery_date va driver saqlanadi
+            r = db.execute(
+                _text("UPDATE orders SET status='waiting_production', "
+                      "delivery_date=:dd, pending_driver_id=:drv "
+                      "WHERE id=:id AND status='confirmed'"),
+                {"id": order_id, "dd": delivery_d, "drv": driver_id},
+            )
+            if r.rowcount == 0:
+                db.rollback()
+                return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+            db.commit()
+
+            production_numbers = ", ".join([p.number for p in productions])
+            parts = []
+            for it in insufficient_items:
+                p = it.get("product")
+                name = (getattr(p, "name", None) or "Mahsulot")
+                req = float(it.get("required") or 0)
+                avail = float(it.get("available") or 0)
+                lack = max(req - avail, 0.0)
+                parts.append(f"{name}: kerak {req:g}, mavjud {avail:g}, yetmaydi {lack:g}")
+            detail_list = "; ".join(parts[:12]) + ("; ..." if len(parts) > 12 else "")
+            return RedirectResponse(
+                url=f"/sales/edit/{order_id}?info=production&detail=" + quote(
+                    f"Yetmayotganlar: {detail_list}. "
+                    f"Ishlab chiqarish: {production_numbers}. "
+                    f"Tayyor bo'lgach yo'lga chiqariladi."
+                ),
+                status_code=303,
+            )
+        except Exception as e:
+            db.rollback()
+            import traceback
+            traceback.print_exc()
+            return RedirectResponse(
+                url=f"/sales/edit/{order_id}?error=production&detail=" + quote(f"Ishlab chiqarish xato: {str(e)[:200]}"),
+                status_code=303,
+            )
+
+    # Stock yetarli — atomik out_for_delivery + stock decrement + Delivery yaratish
+    r = db.execute(
+        _text("UPDATE orders SET status='out_for_delivery', delivery_date=:dd, "
+              "dispatched_at=:now, pending_driver_id=:drv "
+              "WHERE id=:id AND status='confirmed'"),
+        {"id": order_id, "dd": delivery_d, "now": _dt.now(), "drv": driver_id},
+    )
+    if r.rowcount == 0:
+        return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+
+    for item in items:
+        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+        if not wh_id or not item.product_id:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=item.product_id,
+            quantity_change=-float(item.quantity or 0),
+            operation_type="sale",
+            document_type="Sale",
+            document_id=order.id,
+            document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"Sotuv yo'lga chiqarildi: {order.number}",
+            created_at=order.date or _dt.now(),
+        )
+
+    # Delivery hujjatini yaratish (DLV-YYYYMMDD-NNNN ketma-ket raqam bilan)
+    prefix = f"DLV-{delivery_d.strftime('%Y%m%d')}"
+    last = (
+        db.query(Delivery)
+        .filter(Delivery.number.like(f"{prefix}%"))
+        .order_by(Delivery.id.desc())
+        .first()
+    )
+    try:
+        seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+    except Exception:
+        seq = 1
+    partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+    delivery = Delivery(
+        number=f"{prefix}-{seq:04d}",
+        order_id=order.id,
+        order_number=order.number,
+        driver_id=driver_id,
+        delivery_address=(partner_obj.address or "") if partner_obj else "",
+        latitude=partner_obj.latitude if partner_obj else None,
+        longitude=partner_obj.longitude if partner_obj else None,
+        planned_date=delivery_d,
+        notes=f"Mijoz: {partner_obj.name if partner_obj else ''}, Tel: {partner_obj.phone if partner_obj else ''}",
+        status="pending",
+    )
+    db.add(delivery)
+    db.commit()
+
+    check_low_stock_and_notify(db)
+
+    # Telegram bildirish
+    try:
+        from app.bot.services.notifier import notify_new_sale, notify_big_sale
+        p_name = partner_obj.name if partner_obj else "Naqd"
+        notify_new_sale(order.number, p_name, order.total or 0, order.paid or 0)
+        if (order.total or 0) >= 10_000_000:
+            notify_big_sale(order.number, p_name, order.total)
+    except Exception:
+        pass
+
+    try:
+        from app.bot.services.audit_watchdog import audit_sale
+        audit_sale(order.id)
+    except Exception:
+        pass
+
+    return RedirectResponse(url=f"/sales/edit/{order_id}?dispatched=1", status_code=303)
+
+
 @router.post("/{order_id}/delete-item/{item_id}")
 async def sales_delete_item(
     order_id: int,
