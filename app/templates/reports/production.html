@@ -65,7 +65,7 @@
                     <th>Raqam</th>
                     <th>Sana</th>
                     <th>Retsept</th>
-                    <th>Miqdor (kg)</th>
+                    <th>Miqdor</th>
                     <th>Holat</th>
                     <th></th>
                 </tr>
@@ -78,7 +78,14 @@
                         <td><code class="muted-cell">{{ p.number }}</code></td>
                         <td class="muted-cell">{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '-' }}</td>
                         <td>{{ p.recipe.name if p.recipe else '-' }}</td>
-                        <td class="num-cell">{{ "{:,.2f}".format(p.quantity or 0) }}</td>
+                        <td class="num-cell">
+                          {% if p.unit_code in ('ta', 'dona') %}
+                            {{ "{:,.0f}".format(p.quantity or 0) }} ta
+                            <small class="text-muted">({{ "{:,.2f}".format(p.qty_kg or 0) }} kg)</small>
+                          {% else %}
+                            {{ "{:,.2f}".format(p.quantity or 0) }} kg
+                          {% endif %}
+                        </td>
                         <td>
                             {% if p.status == 'completed' %}
                                 <span class="badge-done">Yakunlangan</span>

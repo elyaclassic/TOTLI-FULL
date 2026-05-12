@@ -1553,6 +1553,39 @@ async def report_cash_ledger(
     })
 
 
+_PRODUCTION_WEIGHT_RE = __import__("re").compile(
+    r"(\d+(?:[.,]\d+)?)\s*(kg|gr|g)\b", __import__("re").IGNORECASE
+)
+
+
+def _piece_weight_kg(product_name: str) -> float:
+    """Mahsulot nomidan donaning vazni (kg)ni chiqaradi. Misol: 'BARGELIK 400gr' -> 0.4."""
+    if not product_name:
+        return 0.0
+    m = _PRODUCTION_WEIGHT_RE.search(product_name)
+    if not m:
+        return 0.0
+    val = float(m.group(1).replace(",", "."))
+    unit = m.group(2).lower()
+    return val if unit == "kg" else val / 1000.0
+
+
+def _production_kg(production) -> float:
+    """Production quantity'sini kg ga aylantiradi (donalik bo'lsa nomdan vazn)."""
+    qty = float(production.quantity or 0)
+    rec = getattr(production, "recipe", None)
+    prod = getattr(rec, "product", None) if rec else None
+    if not prod:
+        return qty
+    unit_code = ((prod.unit.code if prod.unit else "") or "").strip().lower()
+    if unit_code in ("kg", "kilogramm"):
+        return qty
+    if unit_code in ("ta", "dona"):
+        w = _piece_weight_kg(prod.name or "")
+        return qty * w if w > 0 else 0.0
+    return qty
+
+
 @router.get("/production", response_class=HTMLResponse)
 async def report_production(
     request: Request,
@@ -1570,6 +1603,7 @@ async def report_production(
         end_date = datetime.now().strftime("%Y-%m-%d")
     q = (
         db.query(Production)
+        .options(joinedload(Production.recipe).joinedload(Recipe.product).joinedload(Product.unit))
         .filter(
             Production.date >= start_date,
             Production.date <= end_date + " 23:59:59",
@@ -1577,7 +1611,13 @@ async def report_production(
         .order_by(Production.date.desc())
     )
     productions = q.all()
-    total_qty = sum(p.quantity for p in productions if p.status == "completed")
+    # Donalik mahsulotlarni kg ga aylantirish (nomdan vazn)
+    for p in productions:
+        p.qty_kg = _production_kg(p)
+        # Birlik kodi template uchun (ko'rsatish: "3 ta" yoki "2.56 kg")
+        _prod = getattr(getattr(p, "recipe", None), "product", None)
+        p.unit_code = ((_prod.unit.code if _prod and _prod.unit else "") or "kg").lower()
+    total_qty = sum(p.qty_kg for p in productions if p.status == "completed")
     return templates.TemplateResponse("reports/production.html", {
         "request": request,
         "productions": productions,
