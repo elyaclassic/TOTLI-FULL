@@ -496,3 +496,45 @@ def test_sales_deliveries_categorization(db):
     assert len(tomorrow_q) == 1 and tomorrow_q[0].number == "DD-TM"
     assert len(overdue_q) == 1 and overdue_q[0].number == "DD-OV"
     assert len(waiting_q) == 1 and waiting_q[0].number == "DD-WT"
+
+
+def test_revert_out_for_delivery_returns_stock_and_no_balance(db):
+    """out_for_delivery revert: stock qaytariladi, balance o'zgarmaydi (yozilmagandi)."""
+    from app.models.database import Order, OrderItem, Stock, Product, Warehouse, Partner, Delivery
+    from sqlalchemy import text as _text
+    from app.services.stock_service import create_stock_movement
+
+    p = Partner(name="P", balance=0, code="P_OFD1")
+    w = Warehouse(name="W", is_active=True)
+    pr = Product(name="P", is_active=True, sale_price=10000)
+    db.add_all([p, w, pr]); db.flush()
+    s = Stock(warehouse_id=w.id, product_id=pr.id, quantity=95)  # already decremented by /dispatch
+    db.add(s); db.flush()
+    o = Order(
+        number="O_OFD1", date=datetime.now(), type="sale",
+        partner_id=p.id, warehouse_id=w.id,
+        total=50000, debt=50000, paid=0, status="out_for_delivery",
+    )
+    db.add(o); db.flush()
+    db.add(OrderItem(order_id=o.id, product_id=pr.id, quantity=5, price=10000, total=50000, warehouse_id=w.id))
+    d = Delivery(number="DLV-OFD1", driver_id=None, order_id=o.id, status="pending")
+    db.add(d); db.commit()
+
+    # Simulate revert
+    for item in o.items:
+        create_stock_movement(
+            db=db, warehouse_id=item.warehouse_id, product_id=item.product_id,
+            quantity_change=float(item.quantity), operation_type="dispatch_revert",
+            document_type="Sale", document_id=o.id, document_number=o.number,
+            user_id=None, note="Test revert",
+        )
+    d.status = "cancelled"
+    o.status = "draft"
+    o.delivery_date = None
+    db.commit()
+    db.refresh(o); db.refresh(s); db.refresh(p); db.refresh(d)
+
+    assert o.status == "draft"
+    assert s.quantity == 100, "Stock back to 100 after revert"
+    assert p.balance == 0, "Balance unchanged"
+    assert d.status == "cancelled"

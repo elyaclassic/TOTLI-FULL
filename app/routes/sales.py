@@ -50,16 +50,20 @@ def _check_order_access(order: Order, current_user: User):
 
 
 def _revert_balance_if_needed(db, order, partner):
-    """Faqat 'delivered' (yangi) yoki 'completed' (legacy) bo'lgan orderda balance qaytariladi.
+    """delivered/completed bo'lgan orderda balance qaytariladi.
 
-    Yangi flow'da boshqa statuslarda balance hech yozilmaydi (faqat driver
-    'Yetkazdim' bosgach yoziladi), shuning uchun qaytarish kerak emas.
+    - previous_partner_balance bor bo'lsa: snapshot'ga qaytariladi (yangi flow)
+    - previous_partner_balance NULL bo'lsa: legacy/migrated order — debt ayiriladi (eski flow fallback)
     """
     if order.status not in ("delivered", "completed"):
         return
-    if not partner or order.previous_partner_balance is None:
+    if not partner:
         return
-    partner.balance = order.previous_partner_balance
+    if order.previous_partner_balance is not None:
+        partner.balance = order.previous_partner_balance
+    elif (order.debt or 0) > 0:
+        # Legacy migrated order — snapshot yo'q, debt'ni ayirish
+        partner.balance = float(partner.balance or 0) - float(order.debt or 0)
 from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
@@ -899,9 +903,43 @@ async def sales_revert(
         db.commit()
         referer = "/sales/edit/" + str(order_id)
         return RedirectResponse(url=referer, status_code=303)
+    if status == "out_for_delivery":
+        # /dispatch stock kamaytirgan — qaytarish kerak (balance YO'Q, hali yozilmagan)
+        from app.services.stock_service import create_stock_movement
+        for item in order.items:
+            wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+            if not wh_id or not item.product_id:
+                continue
+            create_stock_movement(
+                db=db,
+                warehouse_id=wh_id,
+                product_id=item.product_id,
+                quantity_change=float(item.quantity or 0),
+                operation_type="dispatch_revert",
+                document_type="Sale",
+                document_id=order.id,
+                document_number=order.number,
+                user_id=current_user.id if current_user else None,
+                note=f"Yo'lga chiqarishni bekor qilish: {order.number}",
+                created_at=order.date or datetime.now(),
+            )
+        # Yetkazilmagan delivery'larni cancel qilish
+        from app.models.database import Delivery as DeliveryModel
+        for delivery in db.query(DeliveryModel).filter(
+            DeliveryModel.order_id == order.id,
+            DeliveryModel.status.in_(["pending", "in_progress", "failed", "picked_up"]),
+        ).all():
+            delivery.status = "cancelled"
+        # delivery_date va pending_driver_id'ni NULL qilamiz (qayta dispatch uchun toza holat)
+        order.delivery_date = None
+        order.dispatched_at = None
+        order.pending_driver_id = None
+        order.status = "draft"
+        db.commit()
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
     if status not in ("completed", "delivered"):
         return RedirectResponse(
-            url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),
+            url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat yo'lga chiqqan yoki yetkazilgan sotuvning tasdiqini bekor qilish mumkin."),
             status_code=303,
         )
     from app.services.stock_service import create_stock_movement
