@@ -2526,6 +2526,28 @@ async def sold_products_report(
 
     rows = q.group_by(Product.id, Product.name, Product.purchase_price).order_by(func.sum(OrderItem.total).desc()).all()
 
+    # Jami chegirma — filterlangan order'larning discount yig'indisi (subtotal − total)
+    discount_q = (
+        db.query(func.coalesce(func.sum(Order.subtotal - Order.total), 0))
+        .filter(
+            Order.type == "sale",
+            Order.status.in_(("completed", "delivered")),
+            Order.created_at >= d_from,
+            Order.created_at <= d_to,
+        )
+    )
+    if warehouse_id:
+        discount_q = discount_q.filter(Order.warehouse_id == warehouse_id)
+    if category_id:
+        discount_q = discount_q.filter(
+            Order.id.in_(
+                db.query(OrderItem.order_id)
+                .join(Product, Product.id == OrderItem.product_id)
+                .filter(Product.category_id == category_id)
+            )
+        )
+    grand_discount = float(discount_q.scalar() or 0)
+
     items = []
     grand_qty = 0
     grand_sum = 0
@@ -2570,6 +2592,7 @@ async def sold_products_report(
         "grand_cost": grand_cost,
         "grand_profit": grand_profit,
         "grand_margin_pct": (grand_profit / grand_sum * 100) if grand_sum else 0,
+        "grand_discount": grand_discount,
         "show_profit": show_profit,
     })
 

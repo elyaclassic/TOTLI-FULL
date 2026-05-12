@@ -46,40 +46,50 @@
     </form>
 </div>
 
-<!-- Statistika -->
+<!-- Statistika (asosiy qator — barchaga ko'rinadi) -->
 <div class="row g-3 mb-3">
-    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
+    <div class="col-6 col-md-3">
         <div class="mini-stat">
             <div class="num">{{ items|length }}</div>
             <div class="lbl"><i class="bi bi-box-seam"></i> Mahsulot turi</div>
         </div>
     </div>
-    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
+    <div class="col-6 col-md-3">
         <div class="mini-stat">
             <div class="num">{{ "{:,.0f}".format(grand_qty) }}</div>
             <div class="lbl"><i class="bi bi-boxes"></i> Jami miqdor</div>
         </div>
     </div>
-    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
+    <div class="col-6 col-md-3">
         <div class="mini-stat">
             <div class="num" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</div>
             <div class="lbl"><i class="bi bi-cash"></i> Jami summa</div>
         </div>
     </div>
-    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
+    <div class="col-6 col-md-3">
         <div class="mini-stat">
             <div class="num">{{ "{:,.0f}".format(grand_sum / grand_qty if grand_qty else 0) }}</div>
             <div class="lbl"><i class="bi bi-tag"></i> O'rtacha narx</div>
         </div>
     </div>
-    {% if show_profit %}
-    <div class="col-6 col-md-2">
+</div>
+
+{% if show_profit %}
+<!-- Statistika (admin/manager qatori — chegirma, tannarx, foyda) -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-4">
+        <div class="mini-stat" style="border-left:4px solid #ec4899;">
+            <div class="num" style="color:#9d174d;">{{ "{:,.0f}".format(grand_discount) }}</div>
+            <div class="lbl"><i class="bi bi-percent"></i> Chegirma</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-4">
         <div class="mini-stat" style="border-left:4px solid #f59e0b;">
             <div class="num" style="color:#92400e;">{{ "{:,.0f}".format(grand_cost) }}</div>
             <div class="lbl"><i class="bi bi-wallet2"></i> Tannarx</div>
         </div>
     </div>
-    <div class="col-6 col-md-2">
+    <div class="col-12 col-md-4">
         <div class="mini-stat" style="border-left:4px solid {% if grand_profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
             <div class="num" style="color:{% if grand_profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
                 {{ "{:,.0f}".format(grand_profit) }}
@@ -87,8 +97,8 @@
             <div class="lbl"><i class="bi bi-graph-up-arrow"></i> Foyda ({{ "{:.1f}".format(grand_margin_pct) }}%)</div>
         </div>
     </div>
-    {% endif %}
 </div>
+{% endif %}
 
 <!-- Jadval -->
 <div class="data-table">
