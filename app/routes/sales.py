@@ -645,13 +645,12 @@ async def sales_confirm(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Buyurtmani tasdiqlash: draft -> confirmed.
+    """Buyurtmani tasdiqlash. 2 xil flow:
 
-    Yangi flow'da bu yerda hech qanday stock harakati, balance yangilash
-    yoki Delivery yaratish bo'lmaydi. Faqat status o'zgaradi.
-
-    Stock va Production trigger keyingi qadamga ko'chdi (/dispatch).
-    Balance esa faqat driver "Yetkazdim" tasdig'idan keyin yoziladi.
+    - POS (source != 'agent'): mijoz do'konda turibdi, darrov yetkaziladi.
+      → status='delivered', stock kamayadi, balance += debt. Yetkazib berish yo'q.
+    - Agent (source='agent'): keyinroq haydovchi yetkazib beradi.
+      → faqat status='confirmed'. Stock va balance keyingi bosqichlarda.
     """
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
@@ -662,24 +661,100 @@ async def sales_confirm(
     if order.status != "draft":
         return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
-    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish
+    is_agent = (order.source or "").strip().lower() == "agent"
     from sqlalchemy import text as _text
+
+    if is_agent:
+        # Agent flow — faqat status (dispatch keyinroq)
+        claim = db.execute(
+            _text("UPDATE orders SET status='confirmed' WHERE id=:id AND type='sale' AND status='draft'"),
+            {"id": order_id},
+        )
+        if claim.rowcount == 0:
+            return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+        db.commit()
+        try:
+            from app.bot.services.audit_watchdog import audit_sale
+            audit_sale(order.id)
+        except Exception:
+            pass
+        return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
+
+    # POS flow — stock yetadimi tekshir, yetsa darrov yetkaziladi
+    insufficient = []
+    for item in order.items:
+        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id,
+            Stock.product_id == item.product_id,
+        ).first()
+        have = float(stock.quantity or 0) if stock else 0.0
+        need = float(item.quantity or 0)
+        if have + 1e-6 < need:
+            pname = item.product.name if item.product else f"#{item.product_id}"
+            insufficient.append(f"{pname}: kerak {need:g}, bor {have:g}")
+
+    if insufficient:
+        # POS sotuvida ishlab chiqarish AVTOMAT yaratilmaydi — manager hal qiladi
+        detail = "; ".join(insufficient[:5]) + ("; ..." if len(insufficient) > 5 else "")
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=shortage&detail=" + quote(
+                f"Ombor yetmaydi: {detail}. Buyurtmani tahrirlang yoki ishlab chiqarishni kuting."
+            ),
+            status_code=303,
+        )
+
+    # Atomik UPDATE — status'ni delivered'ga o'tkazish
     claim = db.execute(
-        _text("UPDATE orders SET status='confirmed' WHERE id=:id AND type='sale' AND status='draft'"),
+        _text("UPDATE orders SET status='delivered' WHERE id=:id AND type='sale' AND status='draft'"),
         {"id": order_id},
     )
     if claim.rowcount == 0:
         return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
-    db.commit()
 
-    # Audit watchdog — confirm hodisasini yozish
+    # Stock kamaytirish
+    for item in order.items:
+        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+        if not wh_id or not item.product_id:
+            continue
+        create_stock_movement(
+            db=db, warehouse_id=wh_id, product_id=item.product_id,
+            quantity_change=-float(item.quantity or 0),
+            operation_type="sale", document_type="Sale",
+            document_id=order.id, document_number=order.number,
+            user_id=current_user.id if current_user else None,
+            note=f"POS sotuvi: {order.number}",
+            created_at=order.date or datetime.now(),
+        )
+
+    # Qarz va balans
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))
+    if order.partner_id and order.debt > 0:
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
+        if partner:
+            if order.previous_partner_balance is None:
+                order.previous_partner_balance = float(partner.balance or 0)
+            partner.balance = float(partner.balance or 0) + float(order.debt)
+
+    db.commit()
+    check_low_stock_and_notify(db)
+
+    try:
+        from app.bot.services.notifier import notify_new_sale, notify_big_sale
+        partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+        p_name = partner.name if partner else "Naqd"
+        notify_new_sale(order.number, p_name, order.total or 0, order.paid or 0)
+        if (order.total or 0) >= 10_000_000:
+            notify_big_sale(order.number, p_name, order.total)
+    except Exception:
+        pass
     try:
         from app.bot.services.audit_watchdog import audit_sale
         audit_sale(order.id)
     except Exception:
         pass
 
-    return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
+    return RedirectResponse(url=f"/sales/edit/{order_id}?delivered=1", status_code=303)
 
 
 @router.post("/{order_id}/dispatch")
@@ -709,6 +784,14 @@ async def sales_dispatch(
     _check_order_access(order, current_user)
     if is_period_closed(db, order.date):
         return RedirectResponse(url=f"/sales/edit/{order_id}?error=period_closed", status_code=303)
+    # Faqat agent buyurtmalari yetkazib berishni talab qiladi (POS — darrov)
+    if (order.source or "").strip().lower() != "agent":
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=non_agent_dispatch&detail=" + quote(
+                "POS sotuvi yetkazib berishni talab qilmaydi. Buyurtmani tasdiqlash darrov yetkazib beradi."
+            ),
+            status_code=303,
+        )
     if order.status != "confirmed":
         return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
 

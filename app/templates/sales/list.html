@@ -178,7 +178,7 @@
               {% if order.status == 'completed' %}
               <a href="/sales/return/{{ order.id }}" class="btn-act" title="Qaytarish"><i class="bi bi-arrow-return-left"></i></a>
               {% endif %}
-              {% if order.status == 'confirmed' %}
+              {% if order.status == 'confirmed' and order.source == 'agent' %}
               {% if current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
               <button type="button"
                       class="btn-act"
@@ -209,7 +209,7 @@
             </div>
           </td>
         </tr>
-        {% if order.status == 'confirmed' and current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
+        {% if order.status == 'confirmed' and order.source == 'agent' and current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
         {% include 'sales/dispatch_modal.html' ignore missing %}
         {% endif %}
         {% else %}
