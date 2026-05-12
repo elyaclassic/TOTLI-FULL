@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
-from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category
+from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, ProductionItem, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category
 from app.deps import get_current_user, require_auth, require_admin, require_admin_or_manager
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
@@ -1571,7 +1571,14 @@ def _piece_weight_kg(product_name: str) -> float:
 
 
 def _production_kg(production) -> float:
-    """Production quantity'sini kg ga aylantiradi (donalik bo'lsa nomdan vazn)."""
+    """Production quantity'sini kg ga aylantiradi.
+
+    Mantiq:
+      1. Output mahsulot 'kg' birlikda — to'g'ridan-to'g'ri quantity
+      2. Output mahsulot 'ta'/'dona' — production_items'dan yarim_tayyor (unit=kg) ishlatilgan
+         miqdorni qaytaradi (haqiqiy chiqim, oddiy ko'paytirilmaydi)
+      3. Yarim_tayyor item topilmasa — nomdan vazn × dona (fallback)
+    """
     qty = float(production.quantity or 0)
     rec = getattr(production, "recipe", None)
     prod = getattr(rec, "product", None) if rec else None
@@ -1581,6 +1588,17 @@ def _production_kg(production) -> float:
     if unit_code in ("kg", "kilogramm"):
         return qty
     if unit_code in ("ta", "dona"):
+        # Production_items ichidan yarim_tayyor (unit=kg) topish
+        for it in (production.production_items or []):
+            ip = getattr(it, "product", None)
+            if not ip:
+                continue
+            if (ip.type or "").strip().lower() != "yarim_tayyor":
+                continue
+            iu = ((ip.unit.code if ip.unit else "") or "").strip().lower()
+            if iu in ("kg", "kilogramm") and float(it.quantity or 0) > 0:
+                return float(it.quantity)
+        # Fallback: nomdan vazn
         w = _piece_weight_kg(prod.name or "")
         return qty * w if w > 0 else 0.0
     return qty
@@ -1603,7 +1621,10 @@ async def report_production(
         end_date = datetime.now().strftime("%Y-%m-%d")
     q = (
         db.query(Production)
-        .options(joinedload(Production.recipe).joinedload(Recipe.product).joinedload(Product.unit))
+        .options(
+            joinedload(Production.recipe).joinedload(Recipe.product).joinedload(Product.unit),
+            joinedload(Production.production_items).joinedload(ProductionItem.product).joinedload(Product.unit),
+        )
         .filter(
             Production.date >= start_date,
             Production.date <= end_date + " 23:59:59",
