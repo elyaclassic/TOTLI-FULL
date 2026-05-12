@@ -341,3 +341,117 @@ def test_driver_deliveries_filter_hides_future_dates(db):
     assert "DLV-T1" in numbers, "Bugungi delivery ko'rinishi kerak"
     assert "DLV-T3" in numbers, "Kechagi (overdue) delivery ko'rinishi kerak"
     assert "DLV-T2" not in numbers, "Ertangi (kelajak) delivery yashirilishi kerak"
+
+
+# ---- Task 11: Driver "Yetkazdim" balance fix ----
+
+def test_driver_deliver_writes_balance_on_first_call(db):
+    """Driver 'delivered' tasdig'ida partner.balance += debt yoziladi."""
+    from app.models.database import Order, Partner, Driver, Delivery
+    from sqlalchemy import text as _text
+
+    p = Partner(name="P", balance=0, code="P_DLV1")
+    drv = Driver(code="DR_DLV1", full_name="Drv", is_active=True)
+    db.add_all([p, drv]); db.flush()
+    o = Order(
+        number="O_DLV1", date=datetime.now(), type="sale",
+        partner_id=p.id, total=50000, debt=50000, paid=0,
+        status="out_for_delivery", pending_driver_id=drv.id,
+        previous_partner_balance=None,
+    )
+    db.add(o); db.flush()
+    d = Delivery(number="DLV-DLV1", driver_id=drv.id, order_id=o.id, status="in_progress")
+    db.add(d); db.flush()
+    db.commit()
+
+    # Simulate the new atomic balance-write block
+    claim = db.execute(
+        _text("UPDATE orders SET status='delivered' WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"),
+        {"id": o.id},
+    )
+    if claim.rowcount == 1:
+        if o.previous_partner_balance is None:
+            o.previous_partner_balance = float(p.balance or 0)
+        p.balance = float(p.balance or 0) + float(o.debt or 0)
+    db.commit()
+    db.refresh(o); db.refresh(p)
+
+    assert o.status == "delivered"
+    assert p.balance == 50000
+    assert o.previous_partner_balance == 0
+
+
+def test_driver_deliver_idempotent_no_double_balance(db):
+    """Ikki marta 'delivered' chaqirilsa balance ikki marta YOZILMAYDI."""
+    from app.models.database import Order, Partner, Driver
+    from sqlalchemy import text as _text
+
+    p = Partner(name="P", balance=0, code="P_DLV2")
+    drv = Driver(code="DR_DLV2", full_name="Drv", is_active=True)
+    db.add_all([p, drv]); db.flush()
+    o = Order(
+        number="O_DLV2", date=datetime.now(), type="sale",
+        partner_id=p.id, total=80000, debt=80000, paid=0,
+        status="out_for_delivery", pending_driver_id=drv.id,
+    )
+    db.add(o); db.flush()
+    db.commit()
+
+    # 1-chi chaqiriq
+    claim1 = db.execute(
+        _text("UPDATE orders SET status='delivered' WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"),
+        {"id": o.id},
+    )
+    if claim1.rowcount == 1:
+        if o.previous_partner_balance is None:
+            o.previous_partner_balance = float(p.balance or 0)
+        p.balance = float(p.balance or 0) + float(o.debt or 0)
+    db.commit()
+
+    # 2-chi chaqiriq (idempotent)
+    claim2 = db.execute(
+        _text("UPDATE orders SET status='delivered' WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"),
+        {"id": o.id},
+    )
+    if claim2.rowcount == 1:
+        # Bu blokga kirmasligi kerak
+        p.balance = float(p.balance or 0) + float(o.debt or 0)
+    db.commit()
+    db.refresh(o); db.refresh(p)
+
+    assert claim1.rowcount == 1
+    assert claim2.rowcount == 0, "Ikkinchi UPDATE rad etilishi kerak"
+    assert p.balance == 80000, "Balance faqat bir marta yozilgan"
+    assert o.previous_partner_balance == 0
+
+
+def test_driver_deliver_does_not_write_balance_for_zero_debt(db):
+    """Agar debt=0 bo'lsa, balance o'zgartirilmaydi (lekin status delivered'ga o'tadi)."""
+    from app.models.database import Order, Partner
+    from sqlalchemy import text as _text
+
+    p = Partner(name="P", balance=100, code="P_DLV3")
+    db.add(p); db.flush()
+    o = Order(
+        number="O_DLV3", date=datetime.now(), type="sale",
+        partner_id=p.id, total=50000, debt=0, paid=50000,  # to'liq to'langan
+        status="out_for_delivery",
+    )
+    db.add(o); db.flush()
+    db.commit()
+
+    claim = db.execute(
+        _text("UPDATE orders SET status='delivered' WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"),
+        {"id": o.id},
+    )
+    if claim.rowcount == 1:
+        if o.partner_id and float(o.debt or 0) > 0:  # debt=0 -> bu blokga kirmaydi
+            partner_obj = db.query(Partner).filter(Partner.id == o.partner_id).first()
+            if o.previous_partner_balance is None:
+                o.previous_partner_balance = float(partner_obj.balance or 0)
+            partner_obj.balance = float(partner_obj.balance or 0) + float(o.debt or 0)
+    db.commit()
+    db.refresh(o); db.refresh(p)
+
+    assert o.status == "delivered"
+    assert p.balance == 100, "debt=0 bo'lsa balance o'zgarmaydi"

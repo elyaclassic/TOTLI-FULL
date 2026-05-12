@@ -288,9 +288,27 @@ async def driver_delivery_status(
             # Buyurtma qarzini YANGILAMAYMIZ — Payment 'pending' status'da, admin tasdiqlaganidan
             # keyin (/supervisor/agent-payments/confirm-driver/{id}) order.paid yangilanadi.
             # Demak hozir mijoz hisobida qarz qoladi, haydovchida pul.
-            # Order yetkazildi → "completed" statusga o'tkazish
-            if order and order.status not in ("completed", "cancelled"):
-                order.status = "completed"
+            # Order yetkazildi → "delivered" statusga atomik o'tkazish (idempotent).
+            # Balance shu yerda yoziladi (oldingi flow'da confirm paytida edi).
+            from sqlalchemy import text as _text
+            if order:
+                claim = db.execute(
+                    _text(
+                        "UPDATE orders SET status='delivered' "
+                        "WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"
+                    ),
+                    {"id": order.id},
+                )
+                if claim.rowcount == 1:
+                    # Status atomik o'zgardi — endi balance yozish (faqat bir marta)
+                    if order.partner_id and float(order.debt or 0) > 0:
+                        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
+                        if partner_obj:
+                            if order.previous_partner_balance is None:
+                                order.previous_partner_balance = float(partner_obj.balance or 0)
+                            partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
+                    # SQLAlchemy obyektini refresh — yangi status ko'rinsin
+                    db.refresh(order)
 
         db.commit()
         try:
