@@ -2108,7 +2108,9 @@ async def sales_pos_x_report(
     naqd_income_today = float(by_type.get("naqd", {}).get("sum", 0) or 0)
     qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"] - inkasatsiya_naqd_today["sum"]
 
-    # Oldingi Z-hisobot bo'lsa farqni hisoblash (majburiy keyingi yopilish uchun)
+    # Oldingi Z-hisobot bo'lsa farqni hisoblash (majburiy keyingi yopilish uchun).
+    # Birinchi (eng eski) Z bilan solishtirish — chunki eng yangi Z hozirgi live state
+    # bilan teng bo'ladi (uning ustiga yangi sotuv qo'shilmagan bo'lsa).
     last_z_info = None
     diff_sales_count = None
     diff_sales_total = None
@@ -2118,7 +2120,7 @@ async def sales_pos_x_report(
         folder = _xos.path.join("data", "z_reports", target_date.strftime("%Y-%m-%d"))
         wh_id = pos_wh.id if pos_wh else None
         if _xos.path.isdir(folder):
-            last_snap = None
+            all_snaps = []
             for fname in _xos.listdir(folder):
                 if not fname.endswith(".json"):
                     continue
@@ -2131,20 +2133,26 @@ async def sales_pos_x_report(
                     continue
                 if wh_id is not None and snap.get("warehouse_id") != wh_id:
                     continue
-                ca = snap.get("closed_at") or ""
-                if last_snap is None or ca > (last_snap.get("closed_at") or ""):
-                    last_snap = snap
-            if last_snap:
-                prev_count = int(last_snap.get("sales_count") or 0)
-                prev_total = float(last_snap.get("sales_total") or 0)
-                last_z_info = {
-                    "z_id": last_snap.get("z_id"),
-                    "closed_at": last_snap.get("closed_at"),
-                    "sales_count": prev_count,
-                    "sales_total": prev_total,
-                }
-                diff_sales_count = len(sales) - prev_count
-                diff_sales_total = sales_total - prev_total
+                all_snaps.append(snap)
+            if all_snaps:
+                # closed_at bo'yicha sort — eng eski birinchi
+                all_snaps.sort(key=lambda s: s.get("closed_at") or "")
+                first_snap = all_snaps[0]
+                prev_count = int(first_snap.get("sales_count") or 0)
+                prev_total = float(first_snap.get("sales_total") or 0)
+                d_count = len(sales) - prev_count
+                d_total = sales_total - prev_total
+                # Faqat farq mavjud bo'lsa ko'rsatish (live > birinchi Z)
+                if d_count != 0 or abs(d_total) > 0.01:
+                    last_z_info = {
+                        "z_id": first_snap.get("z_id"),
+                        "closed_at": first_snap.get("closed_at"),
+                        "sales_count": prev_count,
+                        "sales_total": prev_total,
+                        "total_closes": len(all_snaps),  # info: nechta Z bor
+                    }
+                    diff_sales_count = d_count
+                    diff_sales_total = d_total
     except Exception:
         pass
 

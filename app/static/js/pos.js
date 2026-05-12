@@ -889,27 +889,34 @@
 
                 xReportBody.appendChild(_xrRow('Sotuvlar soni:', d.sales_count));
                 xReportBody.appendChild(_xrRow('Sotuvlar summasi:', _xrFmt(d.sales_total), true));
-                // Oldingi Z bo'lsa — farqni alohida ko'rsatish (majburiy keyingi yopilish)
+                // Oldingi Z bo'lsa — birinchi yopilish vs hozirgi farqi
                 if (d.last_z && (d.diff_sales_count || d.diff_sales_total)) {
                     var lz = d.last_z;
                     var prevTime = (lz.closed_at || '').slice(11, 19);
-                    var sec = _xrSection('OLDINGI Z-HISOBOT (' + prevTime + '):');
+                    var prevDate = (lz.closed_at || '').slice(0, 10);
+                    var sec = _xrSection('BIRINCHI Z-HISOBOT (' + prevDate + ' ' + prevTime + '):');
                     xReportBody.appendChild(sec);
                     var prevRow = _xrRow(
-                        'Oldingi Z (' + lz.z_id + '):',
+                        'Birinchi yopilish (' + lz.z_id + '):',
                         lz.sales_count + ' ta · ' + _xrFmt(lz.sales_total)
                     );
                     prevRow.style.color = '#6b7280';
                     xReportBody.appendChild(prevRow);
                     var sign = (d.diff_sales_total >= 0) ? '+' : '';
                     var diffRow = _xrRow(
-                        'Keyin qo\'shildi:',
+                        'Keyin qo\'shildi (majburiy yopilish):',
                         sign + (d.diff_sales_count || 0) + ' ta · ' + sign + _xrFmt(d.diff_sales_total || 0),
                         true
                     );
                     diffRow.style.background = '#fffbeb';
                     diffRow.style.color = '#92400e';
                     xReportBody.appendChild(diffRow);
+                    if (lz.total_closes && lz.total_closes > 2) {
+                        var info = document.createElement('div');
+                        info.className = 'small text-muted mt-1';
+                        info.textContent = '(' + lz.total_closes + ' marta yopilgan)';
+                        xReportBody.appendChild(info);
+                    }
                 }
                 if (d.returns_count > 0) {
                     xReportBody.appendChild(_xrRow('Qaytarishlar soni:', d.returns_count));
