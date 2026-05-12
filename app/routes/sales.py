@@ -2114,45 +2114,78 @@ async def sales_pos_x_report(
     last_z_info = None
     diff_sales_count = None
     diff_sales_total = None
+
+    def _z_snaps_for_date(d):
+        """Tanlangan sana uchun current_user + pos_wh bo'yicha Z snapshotlar (eski->yangi)."""
+        import os as _xos2
+        import json as _xjson2
+        folder2 = _xos2.path.join("data", "z_reports", d.strftime("%Y-%m-%d"))
+        if not _xos2.path.isdir(folder2):
+            return []
+        wid = pos_wh.id if pos_wh else None
+        snaps = []
+        for fname in _xos2.listdir(folder2):
+            if not fname.endswith(".json"):
+                continue
+            try:
+                with open(_xos2.path.join(folder2, fname), "r", encoding="utf-8") as f:
+                    snap = _xjson2.load(f)
+            except (OSError, _xjson2.JSONDecodeError):
+                continue
+            if int(snap.get("user_id") or 0) != current_user.id:
+                continue
+            if wid is not None and snap.get("warehouse_id") != wid:
+                continue
+            snaps.append(snap)
+        snaps.sort(key=lambda s: s.get("closed_at") or "")
+        return snaps
+
     try:
-        import os as _xos
-        import json as _xjson
-        folder = _xos.path.join("data", "z_reports", target_date.strftime("%Y-%m-%d"))
-        wh_id = pos_wh.id if pos_wh else None
-        if _xos.path.isdir(folder):
-            all_snaps = []
-            for fname in _xos.listdir(folder):
-                if not fname.endswith(".json"):
-                    continue
-                try:
-                    with open(_xos.path.join(folder, fname), "r", encoding="utf-8") as f:
-                        snap = _xjson.load(f)
-                except (OSError, _xjson.JSONDecodeError):
-                    continue
-                if int(snap.get("user_id") or 0) != current_user.id:
-                    continue
-                if wh_id is not None and snap.get("warehouse_id") != wh_id:
-                    continue
-                all_snaps.append(snap)
-            if all_snaps:
-                # closed_at bo'yicha sort — eng eski birinchi
-                all_snaps.sort(key=lambda s: s.get("closed_at") or "")
-                first_snap = all_snaps[0]
-                prev_count = int(first_snap.get("sales_count") or 0)
-                prev_total = float(first_snap.get("sales_total") or 0)
-                d_count = len(sales) - prev_count
-                d_total = sales_total - prev_total
-                # Faqat farq mavjud bo'lsa ko'rsatish (live > birinchi Z)
-                if d_count != 0 or abs(d_total) > 0.01:
-                    last_z_info = {
-                        "z_id": first_snap.get("z_id"),
-                        "closed_at": first_snap.get("closed_at"),
-                        "sales_count": prev_count,
-                        "sales_total": prev_total,
-                        "total_closes": len(all_snaps),  # info: nechta Z bor
-                    }
-                    diff_sales_count = d_count
-                    diff_sales_total = d_total
+        all_snaps = _z_snaps_for_date(target_date)
+        if all_snaps:
+            first_snap = all_snaps[0]
+            prev_count = int(first_snap.get("sales_count") or 0)
+            prev_total = float(first_snap.get("sales_total") or 0)
+            d_count = len(sales) - prev_count
+            d_total = sales_total - prev_total
+            if d_count != 0 or abs(d_total) > 0.01:
+                last_z_info = {
+                    "z_id": first_snap.get("z_id"),
+                    "closed_at": first_snap.get("closed_at"),
+                    "sales_count": prev_count,
+                    "sales_total": prev_total,
+                    "total_closes": len(all_snaps),
+                }
+                diff_sales_count = d_count
+                diff_sales_total = d_total
+    except Exception:
+        pass
+
+    # OLDINGI KUNLARDAN HALI KELMAGAN PUL: oxirgi 7 kun ichida 2+ Z bo'lgan kunlar
+    # uchun (voluntary close + forced close) → farq = topshirilmagan naqd
+    pending_prev_days = []
+    try:
+        from datetime import timedelta as _td
+        for offset in range(1, 8):
+            prev_d = target_date - _td(days=offset)
+            snaps = _z_snaps_for_date(prev_d)
+            if len(snaps) < 2:
+                continue
+            first = snaps[0]
+            last = snaps[-1]
+            d_c = int(last.get("sales_count") or 0) - int(first.get("sales_count") or 0)
+            d_t = float(last.get("sales_total") or 0) - float(first.get("sales_total") or 0)
+            if d_c == 0 and abs(d_t) <= 0.01:
+                continue
+            pending_prev_days.append({
+                "date": prev_d.strftime("%Y-%m-%d"),
+                "date_display": prev_d.strftime("%d.%m.%Y"),
+                "first_z_id": first.get("z_id"),
+                "first_closed_at": first.get("closed_at"),
+                "first_sales_total": float(first.get("sales_total") or 0),
+                "diff_sales_count": d_c,
+                "diff_sales_total": d_t,
+            })
     except Exception:
         pass
 
@@ -2166,6 +2199,7 @@ async def sales_pos_x_report(
         "last_z": last_z_info,
         "diff_sales_count": diff_sales_count,
         "diff_sales_total": diff_sales_total,
+        "pending_prev_days": pending_prev_days,
         "returns_count": len(returns),
         "returns_total": returns_total,
         "cancelled_count": len(cancelled_orders),

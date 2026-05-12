@@ -889,6 +889,32 @@
 
                 xReportBody.appendChild(_xrRow('Sotuvlar soni:', d.sales_count));
                 xReportBody.appendChild(_xrRow('Sotuvlar summasi:', _xrFmt(d.sales_total), true));
+
+                // OLDINGI KUNLARDAN HALI KELMAGAN PUL — sotuvchi shu pulni bugun olib kelishi kerak
+                if (d.pending_prev_days && d.pending_prev_days.length) {
+                    var pendSec = _xrSection('⚠ OLDINGI KUNLARDAN HALI KELMAGAN PUL:');
+                    pendSec.style.color = '#b45309';
+                    xReportBody.appendChild(pendSec);
+                    var totalPending = 0;
+                    d.pending_prev_days.forEach(function(p) {
+                        var sign = (p.diff_sales_total >= 0) ? '+' : '';
+                        var row = _xrRow(
+                            p.date_display + ' (' + p.first_z_id + '):',
+                            sign + p.diff_sales_count + ' ta · ' + sign + _xrFmt(p.diff_sales_total),
+                            true
+                        );
+                        row.style.background = '#fef3c7';
+                        row.style.color = '#92400e';
+                        xReportBody.appendChild(row);
+                        totalPending += (p.diff_sales_total || 0);
+                    });
+                    if (d.pending_prev_days.length > 1) {
+                        var sumRow = _xrRow('Jami kelmagan:', _xrFmt(totalPending), true);
+                        sumRow.style.background = '#fde68a';
+                        sumRow.style.color = '#78350f';
+                        xReportBody.appendChild(sumRow);
+                    }
+                }
                 // Oldingi Z bo'lsa — birinchi yopilish vs hozirgi farqi
                 if (d.last_z && (d.diff_sales_count || d.diff_sales_total)) {
                     var lz = d.last_z;
