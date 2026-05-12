@@ -2108,6 +2108,46 @@ async def sales_pos_x_report(
     naqd_income_today = float(by_type.get("naqd", {}).get("sum", 0) or 0)
     qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"] - inkasatsiya_naqd_today["sum"]
 
+    # Oldingi Z-hisobot bo'lsa farqni hisoblash (majburiy keyingi yopilish uchun)
+    last_z_info = None
+    diff_sales_count = None
+    diff_sales_total = None
+    try:
+        import os as _xos
+        import json as _xjson
+        folder = _xos.path.join("data", "z_reports", target_date.strftime("%Y-%m-%d"))
+        wh_id = pos_wh.id if pos_wh else None
+        if _xos.path.isdir(folder):
+            last_snap = None
+            for fname in _xos.listdir(folder):
+                if not fname.endswith(".json"):
+                    continue
+                try:
+                    with open(_xos.path.join(folder, fname), "r", encoding="utf-8") as f:
+                        snap = _xjson.load(f)
+                except (OSError, _xjson.JSONDecodeError):
+                    continue
+                if int(snap.get("user_id") or 0) != current_user.id:
+                    continue
+                if wh_id is not None and snap.get("warehouse_id") != wh_id:
+                    continue
+                ca = snap.get("closed_at") or ""
+                if last_snap is None or ca > (last_snap.get("closed_at") or ""):
+                    last_snap = snap
+            if last_snap:
+                prev_count = int(last_snap.get("sales_count") or 0)
+                prev_total = float(last_snap.get("sales_total") or 0)
+                last_z_info = {
+                    "z_id": last_snap.get("z_id"),
+                    "closed_at": last_snap.get("closed_at"),
+                    "sales_count": prev_count,
+                    "sales_total": prev_total,
+                }
+                diff_sales_count = len(sales) - prev_count
+                diff_sales_total = sales_total - prev_total
+    except Exception:
+        pass
+
     return JSONResponse({
         "date": target_date.strftime("%d.%m.%Y"),
         "date_iso": target_date.strftime("%Y-%m-%d"),
@@ -2115,6 +2155,9 @@ async def sales_pos_x_report(
         "warehouse": pos_wh.name if pos_wh else "Barcha",
         "sales_count": len(sales),
         "sales_total": sales_total,
+        "last_z": last_z_info,
+        "diff_sales_count": diff_sales_count,
+        "diff_sales_total": diff_sales_total,
         "returns_count": len(returns),
         "returns_total": returns_total,
         "cancelled_count": len(cancelled_orders),

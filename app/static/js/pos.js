@@ -889,6 +889,28 @@
 
                 xReportBody.appendChild(_xrRow('Sotuvlar soni:', d.sales_count));
                 xReportBody.appendChild(_xrRow('Sotuvlar summasi:', _xrFmt(d.sales_total), true));
+                // Oldingi Z bo'lsa — farqni alohida ko'rsatish (majburiy keyingi yopilish)
+                if (d.last_z && (d.diff_sales_count || d.diff_sales_total)) {
+                    var lz = d.last_z;
+                    var prevTime = (lz.closed_at || '').slice(11, 19);
+                    var sec = _xrSection('OLDINGI Z-HISOBOT (' + prevTime + '):');
+                    xReportBody.appendChild(sec);
+                    var prevRow = _xrRow(
+                        'Oldingi Z (' + lz.z_id + '):',
+                        lz.sales_count + ' ta · ' + _xrFmt(lz.sales_total)
+                    );
+                    prevRow.style.color = '#6b7280';
+                    xReportBody.appendChild(prevRow);
+                    var sign = (d.diff_sales_total >= 0) ? '+' : '';
+                    var diffRow = _xrRow(
+                        'Keyin qo\'shildi:',
+                        sign + (d.diff_sales_count || 0) + ' ta · ' + sign + _xrFmt(d.diff_sales_total || 0),
+                        true
+                    );
+                    diffRow.style.background = '#fffbeb';
+                    diffRow.style.color = '#92400e';
+                    xReportBody.appendChild(diffRow);
+                }
                 if (d.returns_count > 0) {
                     xReportBody.appendChild(_xrRow('Qaytarishlar soni:', d.returns_count));
                     xReportBody.appendChild(_xrRow('Qaytarishlar summasi:', '−' + _xrFmt(d.returns_total)));
