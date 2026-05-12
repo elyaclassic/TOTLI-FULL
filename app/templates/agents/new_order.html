@@ -142,6 +142,7 @@
     const label = ptId ? (PT_NAMES[ptId] || ('#' + ptId)) : '—';
     document.getElementById('priceTypeLabel').value = label;
 
+    let visibleCount = 0;
     document.querySelectorAll('.product-price').forEach(el => {
       const pid = el.dataset.productId;
       const priceMap = PRICES[pid] || {};
@@ -149,7 +150,27 @@
       el.textContent = price ? fmt(price) : '—';
       el.dataset.price = price;
       el.classList.toggle('text-muted', !price);
-      el.classList.toggle('text-danger', ptId && !price);
+      // Mijoz tanlangan bo'lsa va narx yo'q bo'lsa — qatorni yashirish
+      const row = el.closest('tr');
+      if (row) {
+        const hide = !!ptId && !price;
+        row.style.display = hide ? 'none' : '';
+        if (hide) {
+          // Yashirilgan qatorda miqdorni 0 ga tushirish (submit qilinmasligi uchun)
+          const qtyInput = row.querySelector('.product-qty');
+          if (qtyInput) qtyInput.value = 0;
+        } else {
+          visibleCount++;
+        }
+      }
+    });
+    // Hisoblagichni yangilash (UI'da emas, faqat ichki) — qator raqamlari qayta tartibga keladi
+    let n = 1;
+    document.querySelectorAll('table tbody tr').forEach(tr => {
+      if (tr.style.display !== 'none') {
+        const cell = tr.querySelector('td:first-child');
+        if (cell) cell.textContent = n++;
+      }
     });
     document.querySelectorAll('.product-qty').forEach(input => recalcLine(input));
   }

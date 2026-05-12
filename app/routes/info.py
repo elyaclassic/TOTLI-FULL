@@ -599,9 +599,18 @@ async def info_prices(
             "filter_price_status": "all",
         })
     current_pt_id = price_type_id or (price_types[0].id if price_types else None)
-    products = db.query(Product).options(joinedload(Product.unit)).filter(
+    # Agent narx turi (price_type_id=4 yoki nomi "Agent") tanlanganda — faqat
+    # agentga ruxsat etilgan mahsulotlar (is_for_agent=True) ko'rsatiladi.
+    current_pt = next((pt for pt in price_types if pt.id == current_pt_id), None)
+    is_agent_pt = bool(current_pt and (
+        current_pt.id == 4 or (current_pt.name or "").strip().lower() == "agent"
+    ))
+    product_q = db.query(Product).options(joinedload(Product.unit)).filter(
         Product.is_active == True
-    ).order_by(Product.name).all()
+    )
+    if is_agent_pt:
+        product_q = product_q.filter(Product.is_for_agent == True)
+    products = product_q.order_by(Product.name).all()
     product_prices = db.query(ProductPrice).filter(ProductPrice.price_type_id == current_pt_id).all()
     product_prices_by_type = {pp.product_id: pp.sale_price for pp in product_prices}
     product_tannarx = {p.id: float(p.purchase_price or 0) for p in products}
