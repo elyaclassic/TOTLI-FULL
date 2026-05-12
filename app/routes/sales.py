@@ -588,6 +588,14 @@ async def sales_confirm(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    """Buyurtmani tasdiqlash: draft -> confirmed.
+
+    Yangi flow'da bu yerda hech qanday stock harakati, balance yangilash
+    yoki Delivery yaratish bo'lmaydi. Faqat status o'zgaradi.
+
+    Stock va Production trigger keyingi qadamga ko'chdi (/dispatch).
+    Balance esa faqat driver "Yetkazdim" tasdig'idan keyin yoziladi.
+    """
     order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
@@ -601,147 +609,20 @@ async def sales_confirm(
     from sqlalchemy import text as _text
     claim = db.execute(
         _text("UPDATE orders SET status='confirmed' WHERE id=:id AND type='sale' AND status='draft'"),
-        {"id": order_id}
+        {"id": order_id},
     )
     if claim.rowcount == 0:
         return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
-
-    # Qoldiq tekshiruvi va yetarli bo'lmagan mahsulotlarni yig'ish
-    # Hozirgi Stock.quantity ishlatiladi (vaqt-aware kelajakda alohida fix).
-    insufficient_items = []
-    semi_warehouse = get_semi_finished_warehouse(db)
-    for item in order.items:
-        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        available = stock.quantity if stock else 0.0
-        if available < item.quantity:
-            # Yarim tayyor omborda shu mahsulot bormi?
-            semi_available = 0.0
-            if semi_warehouse:
-                semi_available = get_product_stock_in_warehouse(db, semi_warehouse.id, item.product_id)
-            if semi_available >= 1 and semi_available >= item.quantity:
-                # Yarim tayyor omborda yetarli — kesuvchi + qadoqlovchiga bildirish
-                notify_cutting_packing_operators(
-                    db=db,
-                    order_number=order.number,
-                    order_id=order.id,
-                    product_name=(item.product.name if item.product else "Mahsulot"),
-                )
-                continue
-            # Yarim tayyor omborda ham yetarli emas — qiyom operatoriga bildirish
-            notify_qiyom_operators(
-                db=db,
-                order_number=order.number,
-                order_id=order.id,
-                product_name=(item.product.name if item.product else "Mahsulot"),
-            )
-            insufficient_items.append({
-                "product": item.product,
-                "required": item.quantity,
-                "available": available
-            })
-    
-    # Agar yetarli bo'lmagan mahsulotlar bo'lsa, ishlab chiqarishga yo'naltirish
-    if insufficient_items:
-        try:
-            # Yetmayotgan mahsulotlar ro'yxati (foydalanuvchiga ko'rsatish uchun)
-            parts = []
-            for it in insufficient_items:
-                p = it.get("product")
-                name = (getattr(p, "name", None) or "Mahsulot")
-                req = float(it.get("required") or 0)
-                avail = float(it.get("available") or 0)
-                lack = max(req - avail, 0.0)
-                parts.append(f"{name}: kerak {req:g}, mavjud {avail:g}, yetmaydi {lack:g}")
-            detail_list = "; ".join(parts[:12]) + ("; ..." if len(parts) > 12 else "")
-
-            productions, missing = create_production_from_order(
-                db=db,
-                order=order,
-                insufficient_items=insufficient_items,
-                current_user=current_user
-            )
-            if not productions:
-                db.rollback()
-                msg = "Ishlab chiqarish buyurtmasi yaratilmadi."
-                if missing:
-                    msg += " Retsept topilmadi: " + ", ".join(missing[:10]) + ("…" if len(missing) > 10 else "")
-                return RedirectResponse(
-                    url=f"/sales/edit/{order_id}?error=production&detail=" + quote(msg),
-                    status_code=303,
-                )
-
-            # Production yaratilsa — buyurtma ishlab chiqarishni kutmoqda
-            order.status = "waiting_production"
-            db.commit()
-            
-            # Xabar bilan qaytish
-            production_numbers = ", ".join([p.number for p in productions])
-            return RedirectResponse(
-                url=f"/sales/edit/{order_id}?info=production&detail=" + quote(
-                    f"Yetmayotganlar: {detail_list}. "
-                    f"Ishlab chiqarish buyurtmalari yaratildi: {production_numbers}. "
-                    f"Mahsulotlar tayyor bo'lgach, buyurtma tasdiqlanadi."
-                ),
-                status_code=303,
-            )
-        except Exception as e:
-            db.rollback()
-            import traceback
-            traceback.print_exc()
-            print(f"[Sales production xato] {e}", flush=True)
-            return RedirectResponse(
-                url=f"/sales/edit/{order_id}?error=production&detail=" + quote(f"Ishlab chiqarish yaratishda xato: {str(e)[:200]}"),
-                status_code=303,
-            )
-    
-    # Barcha mahsulotlar yetarli bo'lsa, oddiy sotuv sifatida tasdiqlash
-    from app.services.stock_service import create_stock_movement
-    for item in order.items:
-        wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        create_stock_movement(
-            db=db,
-            warehouse_id=wh_id,
-            product_id=item.product_id,
-            quantity_change=-item.quantity,
-            operation_type="sale",
-            document_type="Sale",
-            document_id=order.id,
-            document_number=order.number,
-            user_id=current_user.id if current_user else None,
-            note=f"Sotuv: {order.number}",
-            created_at=order.date,
-        )
-    order.status = "completed"
-    # Qarzdorlikni hisoblash
-    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))
-    # Partner balansini yangilash
-    if order.partner_id and order.debt > 0:
-        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-        if partner:
-            order.previous_partner_balance = partner.balance
-            partner.balance = (partner.balance or 0) + order.debt
     db.commit()
-    check_low_stock_and_notify(db)
-    # Telegram bildirish (ELYA CLASSIC — real-time)
-    try:
-        from app.bot.services.notifier import notify_new_sale, notify_big_sale
-        partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
-        p_name = partner.name if partner else "Naqd"
-        notify_new_sale(order.number, p_name, order.total or 0, order.paid or 0)
-        if (order.total or 0) >= 10_000_000:
-            notify_big_sale(order.number, p_name, order.total)
-    except Exception:
-        pass
+
+    # Audit watchdog — confirm hodisasini yozish
     try:
         from app.bot.services.audit_watchdog import audit_sale
         audit_sale(order.id)
     except Exception:
         pass
-    return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+
+    return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
 
 
 @router.post("/{order_id}/delete-item/{item_id}")
