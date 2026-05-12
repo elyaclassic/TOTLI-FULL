@@ -67,6 +67,18 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 )
             except ValueError:
                 pass
+        else:
+            # Default: kelajakdagi sanali delivery'lar ko'rinmaydi (overdue va bugungi qoladi).
+            # planned_date NULL bo'lsa eski (legacy) yozuv — qoldiramiz.
+            from datetime import date as _date
+            from sqlalchemy import or_
+            today = _date.today()
+            q = q.filter(
+                or_(
+                    Delivery.planned_date == None,
+                    sa_func.date(Delivery.planned_date) <= today,
+                )
+            )
         deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
         result = []
         for d in deliveries:

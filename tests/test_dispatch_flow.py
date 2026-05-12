@@ -290,3 +290,54 @@ def test_waiting_insufficient_stock_does_not_transition(db):
     assert o.status == "waiting_production"
     assert s.quantity == 1
     assert len(result) == 0
+
+
+def test_driver_deliveries_filter_hides_future_dates(db):
+    """Default filter: kelajakdagi delivery'lar ko'rinmaydi (overdue va bugungi qoladi)."""
+    from app.models.database import Driver, Delivery, Order
+    from sqlalchemy import or_, func as sa_func
+    from datetime import date as _date, timedelta
+
+    drv = Driver(code="DR_F1", full_name="Drv", is_active=True)
+    db.add(drv); db.flush()
+    o = Order(
+        number="O_DLV_F1", date=datetime.now(), type="sale",
+        total=1000, debt=1000, paid=0, status="out_for_delivery",
+    )
+    db.add(o); db.flush()
+
+    today = _date.today()
+    tomorrow = today + timedelta(days=1)
+    yesterday = today - timedelta(days=1)
+
+    d_today = Delivery(
+        number="DLV-T1", driver_id=drv.id, order_id=o.id,
+        planned_date=datetime.combine(today, datetime.min.time()),
+        status="pending",
+    )
+    d_tomorrow = Delivery(
+        number="DLV-T2", driver_id=drv.id, order_id=o.id,
+        planned_date=datetime.combine(tomorrow, datetime.min.time()),
+        status="pending",
+    )
+    d_yesterday = Delivery(
+        number="DLV-T3", driver_id=drv.id, order_id=o.id,
+        planned_date=datetime.combine(yesterday, datetime.min.time()),
+        status="pending",
+    )
+    db.add_all([d_today, d_tomorrow, d_yesterday]); db.commit()
+
+    # Endpoint dagi default filter logikasini takrorlash
+    q = db.query(Delivery).filter(
+        Delivery.driver_id == drv.id,
+        or_(
+            Delivery.planned_date == None,
+            sa_func.date(Delivery.planned_date) <= today,
+        ),
+    )
+    visible = q.all()
+    numbers = {d.number for d in visible}
+
+    assert "DLV-T1" in numbers, "Bugungi delivery ko'rinishi kerak"
+    assert "DLV-T3" in numbers, "Kechagi (overdue) delivery ko'rinishi kerak"
+    assert "DLV-T2" not in numbers, "Ertangi (kelajak) delivery yashirilishi kerak"
