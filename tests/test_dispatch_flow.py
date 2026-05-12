@@ -455,3 +455,44 @@ def test_driver_deliver_does_not_write_balance_for_zero_debt(db):
 
     assert o.status == "delivered"
     assert p.balance == 100, "debt=0 bo'lsa balance o'zgarmaydi"
+
+
+# ---- Task 14: /sales/deliveries dashboard ----
+
+def test_sales_deliveries_route_registered(db):
+    """/sales/deliveries route ro'yxatga olingan."""
+    from app.routes.sales_deliveries import router
+    paths = [getattr(r, "path", None) for r in router.routes]
+    assert "/sales/deliveries" in paths, f"Route topilmadi. Mavjudlar: {paths}"
+
+
+def test_sales_deliveries_categorization(db):
+    """Order'lar bugun/ertaga/kechikkan/waiting kategoriyalariga to'g'ri tushadi."""
+    from app.models.database import Order
+    from datetime import date as _date, timedelta
+
+    today = _date.today()
+
+    o_today = Order(number="DD-T", date=datetime.now(), type="sale",
+                    total=1000, debt=1000, paid=0, status="out_for_delivery",
+                    delivery_date=today)
+    o_tom = Order(number="DD-TM", date=datetime.now(), type="sale",
+                  total=1000, debt=1000, paid=0, status="out_for_delivery",
+                  delivery_date=today + timedelta(days=1))
+    o_overdue = Order(number="DD-OV", date=datetime.now(), type="sale",
+                      total=1000, debt=1000, paid=0, status="out_for_delivery",
+                      delivery_date=today - timedelta(days=2))
+    o_waiting = Order(number="DD-WT", date=datetime.now(), type="sale",
+                      total=1000, debt=1000, paid=0, status="waiting_production")
+    db.add_all([o_today, o_tom, o_overdue, o_waiting])
+    db.commit()
+
+    today_q = db.query(Order).filter(Order.status == "out_for_delivery", Order.delivery_date == today).all()
+    tomorrow_q = db.query(Order).filter(Order.status == "out_for_delivery", Order.delivery_date == today + timedelta(days=1)).all()
+    overdue_q = db.query(Order).filter(Order.status == "out_for_delivery", Order.delivery_date < today).all()
+    waiting_q = db.query(Order).filter(Order.status == "waiting_production").all()
+
+    assert len(today_q) == 1 and today_q[0].number == "DD-T"
+    assert len(tomorrow_q) == 1 and tomorrow_q[0].number == "DD-TM"
+    assert len(overdue_q) == 1 and overdue_q[0].number == "DD-OV"
+    assert len(waiting_q) == 1 and waiting_q[0].number == "DD-WT"

@@ -82,6 +82,7 @@ from app.routes import api_agent_ops as api_agent_ops_routes
 from app.routes import api_agent_advanced as api_agent_advanced_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
+from app.routes import sales_deliveries as sales_deliveries_routes
 from app.routes import admin as admin_routes
 from app.routes import admin_sales_plans as admin_sales_plans_routes
 from app.routes import audit_routes
@@ -154,6 +155,7 @@ app.include_router(api_agent_ops_routes.router)
 app.include_router(api_agent_advanced_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)
+app.include_router(sales_deliveries_routes.router)
 app.include_router(admin_routes.router)
 app.include_router(admin_sales_plans_routes.router)
 app.include_router(audit_routes.router)

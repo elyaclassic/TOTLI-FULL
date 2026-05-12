@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container mt-3">
+  <h2>Yetkazishlar dashboard</h2>
+  <p class="text-muted small">Bugun: {{ today.strftime('%d.%m.%Y') }}</p>
+
+  <ul class="nav nav-tabs" role="tablist">
+    <li class="nav-item">
+      <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#today-tab" type="button">
+        Bugun <span class="badge bg-warning text-dark">{{ today_orders|length }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tomorrow-tab" type="button">
+        Ertaga <span class="badge bg-secondary">{{ tomorrow_orders|length }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#overdue-tab" type="button">
+        Kechikkanlar <span class="badge bg-danger">{{ overdue|length }}</span>
+      </button>
+    </li>
+    <li class="nav-item">
+      <button class="nav-link" data-bs-toggle="tab" data-bs-target="#waiting-tab" type="button">
+        Production kutilmoqda <span class="badge bg-info">{{ waiting|length }}</span>
+      </button>
+    </li>
+  </ul>
+
+  <div class="tab-content mt-3">
+    {% for tab_id, orders in [
+        ('today-tab', today_orders),
+        ('tomorrow-tab', tomorrow_orders),
+        ('overdue-tab', overdue),
+        ('waiting-tab', waiting),
+    ] %}
+      <div id="{{ tab_id }}" class="tab-pane fade {% if loop.first %}show active{% endif %}" role="tabpanel">
+        {% if orders %}
+          <table class="table table-striped table-sm align-middle">
+            <thead>
+              <tr>
+                <th>№</th>
+                <th>Mijoz</th>
+                <th>Haydovchi</th>
+                <th>Yuklash sanasi</th>
+                <th class="text-end">Summa</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for o in orders %}
+                <tr>
+                  <td>{{ o.number }}</td>
+                  <td>{{ o.partner.name if o.partner else '—' }}</td>
+                  <td>
+                    {% set drv = drivers_map.get(o.pending_driver_id) %}
+                    {% if drv %}{{ drv.full_name }}{% else %}<span class="text-muted">—</span>{% endif %}
+                  </td>
+                  <td>
+                    {% if o.delivery_date %}{{ o.delivery_date.strftime('%d.%m.%Y') }}{% else %}—{% endif %}
+                  </td>
+                  <td class="text-end">{{ '{:,.0f}'.format(o.total or 0) }}</td>
+                  <td>
+                    <a href="/sales/edit/{{ o.id }}" class="btn btn-sm btn-outline-primary">Ochish</a>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="text-muted text-center py-3">Bo'sh</p>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
