@@ -220,6 +220,8 @@ async def agent_detail(
         "calls": calls,
         "sms_list": sms_list,
         "drivers": drivers,
+        "active_drivers": drivers,
+        "today_iso": datetime.now().date().isoformat(),
         "order_drivers": order_drivers,
         "today_orders_count": today_orders_count,
         "today_orders_total": today_orders_total,

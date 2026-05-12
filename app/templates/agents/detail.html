@@ -182,6 +182,15 @@
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% endif %}
+                                {% if order.status == 'confirmed' and order.type != 'return_sale' and current_user and current_user.role in ['admin', 'manager'] %}
+                                <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#dispatchModal-{{ order.id }}"
+                                        title="Yuklash (yo'lga chiqarish)">
+                                    <i class="bi bi-truck"></i>
+                                </button>
+                                {% include 'sales/dispatch_modal.html' ignore missing with context %}
+                                {% endif %}
                                 {% if order.status in ('confirmed', 'completed', 'waiting_production') or is_exchange %}
                                 {% if is_exchange %}
                                 <a href="/sales/exchange/{{ order.id }}/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Obmen yuk xati (Excel)">
@@ -469,33 +478,17 @@
         const drafts = Array.from(document.querySelectorAll('.order-cb:checked'))
             .filter(cb => cb.dataset.status === 'draft');
         if (drafts.length === 0) { alert("Belgilangan draft buyurtma yo'q"); return; }
-        if (DRIVERS.length === 0) { alert("Faol haydovchi yo'q"); return; }
-        // Haydovchi tanlash
-        let driverId;
-        let driverName;
-        if (DRIVERS.length === 1) {
-            driverId = DRIVERS[0].id;
-            driverName = DRIVERS[0].name;
-        } else {
-            // Modal yoki prompt — eng oddiy: prompt
-            const opts = DRIVERS.map((d, i) => (i + 1) + '. ' + d.name).join('\n');
-            const idx = parseInt(prompt("Haydovchi raqamini kiriting:\n" + opts), 10);
-            if (!idx || idx < 1 || idx > DRIVERS.length) return;
-            driverId = DRIVERS[idx - 1].id;
-            driverName = DRIVERS[idx - 1].name;
-        }
         const numbers = drafts.map(cb => cb.dataset.num).join(', ');
-        if (!confirm(drafts.length + " ta buyurtmani " + driverName + " ga tasdiqlaysizmi?\n\n" + numbers)) return;
+        if (!confirm(drafts.length + " ta buyurtmani tasdiqlaysizmi?\n\n" + numbers + "\n\nHaydovchi keyinroq \"Yuklash\" bosqichida tanlanadi.")) return;
 
         const btn = document.getElementById('bulkConfirmBtn');
         btn.disabled = true;
-        btn.innerHTML = '<i class="bi bi-hourglass-split"></i> Tasdiqlanmoqda...';
+        btn.textContent = 'Tasdiqlanmoqda...';
 
         let success = 0, failed = 0;
         for (const cb of drafts) {
             try {
                 const fd = new FormData();
-                fd.append('driver_id', String(driverId));
                 fd.append('csrf_token', CSRF_TOKEN);
                 const r = await fetch('/supervisor/agent-orders/confirm/' + cb.dataset.id, {
                     method: 'POST',
@@ -523,26 +516,14 @@
         form.appendChild(input);
     }
     function openConfirmModal(orderId, orderNum) {
-        if (DRIVERS.length === 0) {
-            alert("Faol haydovchi yo'q. Avval haydovchi qo'shing.");
-            return;
-        }
-        // 1 ta haydovchi bo'lsa — avtomatik tasdiqlash, modal kerak emas
-        if (DRIVERS.length === 1) {
-            if (!confirm(orderNum + " buyurtmasini " + DRIVERS[0].name + " ga tasdiqlaysizmi?")) return;
-            var form = document.createElement('form');
-            form.method = 'POST';
-            form.action = '/supervisor/agent-orders/confirm/' + orderId;
-            _appendHidden(form, 'driver_id', String(DRIVERS[0].id));
-            _appendHidden(form, 'csrf_token', CSRF_TOKEN);
-            document.body.appendChild(form);
-            form.submit();
-            return;
-        }
-        // 2+ haydovchi — modal ochiladi
-        document.getElementById('confirmOrderForm').action = '/supervisor/agent-orders/confirm/' + orderId;
-        document.getElementById('confirmOrderNum').textContent = orderNum;
-        new bootstrap.Modal(document.getElementById('confirmOrderModal')).show();
+        // Yangi flow (2026-05-12): confirm faqat status — haydovchi keyinroq "Yuklash" bosqichida tanlanadi.
+        if (!confirm(orderNum + " buyurtmasini tasdiqlaysizmi?\n\nHaydovchi keyinroq \"Yuklash\" bosqichida tanlanadi.")) return;
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/supervisor/agent-orders/confirm/' + orderId;
+        _appendHidden(form, 'csrf_token', CSRF_TOKEN);
+        document.body.appendChild(form);
+        form.submit();
     }
 </script>
 {% if locations %}

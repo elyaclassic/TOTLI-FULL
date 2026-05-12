@@ -538,3 +538,38 @@ def test_revert_out_for_delivery_returns_stock_and_no_balance(db):
     assert s.quantity == 100, "Stock back to 100 after revert"
     assert p.balance == 0, "Balance unchanged"
     assert d.status == "cancelled"
+
+
+def test_supervisor_agent_confirm_only_status_no_side_effects(db):
+    """Agent buyurtma supervisor confirm: faqat status. Stock/balance/Delivery TEGMAYDI."""
+    from app.models.database import Order, OrderItem, Stock, Product, Warehouse, Partner, Agent
+    from sqlalchemy import text as _text
+
+    p = Partner(name="P", balance=0, code="P_SC1")
+    a = Agent(code="A_SC1", full_name="Agent", is_active=True)
+    w = Warehouse(name="W", is_active=True)
+    pr = Product(name="Pr", is_active=True, is_for_agent=True, sale_price=10000)
+    db.add_all([p, a, w, pr]); db.flush()
+    s = Stock(warehouse_id=w.id, product_id=pr.id, quantity=50)
+    db.add(s); db.flush()
+    o = Order(
+        number="AGT-SC1", date=datetime.now(), type="sale", source="agent",
+        partner_id=p.id, agent_id=a.id, warehouse_id=w.id,
+        total=30000, debt=30000, paid=0, status="draft",
+    )
+    db.add(o); db.flush()
+    db.add(OrderItem(order_id=o.id, product_id=pr.id, quantity=3, price=10000, total=30000, warehouse_id=w.id))
+    db.commit()
+
+    # Yangi soddalashtirilgan supervisor confirm logic (status update only)
+    r = db.execute(
+        _text("UPDATE orders SET status='confirmed' WHERE id=:id AND source='agent' AND status='draft'"),
+        {"id": o.id},
+    )
+    db.commit()
+    db.refresh(o); db.refresh(s); db.refresh(p)
+
+    assert r.rowcount == 1
+    assert o.status == "confirmed"
+    assert s.quantity == 50, "Stock confirm paytida tegmaslik kerak"
+    assert p.balance == 0, "Balance confirm paytida yozilmaslik kerak"

@@ -26,7 +26,7 @@ from app.models.database import (
     Stock,
 )
 from app.deps import require_admin, require_admin_or_manager
-from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document, apply_sale_stock_deduction
+from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 from urllib.parse import quote
 from sqlalchemy.orm import joinedload
@@ -462,18 +462,27 @@ async def supervisor_confirm_agent_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent buyurtmasini tasdiqlash + haydovchiga yetkazish yaratish."""
-    form = await request.form()
-    driver_id_raw = form.get("driver_id", "").strip()
+    """Agent buyurtmasini tasdiqlash — faqat status o'zgaradi.
+
+    Yangi flow (POS bilan moslashtirilgan, 2026-05-12):
+      1) confirm  → status='confirmed' (stock/balance/Delivery TEGMAYDI)
+      2) dispatch (/sales/{id}/dispatch) → stock chiqarish + Delivery yaratish
+      3) driver "Yetkazdim" → partner balance + delivered
+
+    Istisno: return_sale (obmen qaytarish) eski oqimda qoladi —
+    qaytgan tovar jismonan tasdiq paytida keladi → apply_return_stock_addition.
+    """
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
         return RedirectResponse(url="/supervisor/agent-orders?error=not_found", status_code=303)
     if order.status not in ("draft",):
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
-    # D4 audit fix: agent buyurtma tasdiqlashda kredit limit tekshiruvi
+
+    # D4 audit fix: agent buyurtma tasdiqlashda kredit limit tekshiruvi (soft guard).
+    # Balance dispatch/delivered bosqichida yoziladi, lekin foydalanuvchini erta ogohlantirish uchun
+    # qoldirilgan.
     if order.type != "return_sale" and order.partner_id and float(order.debt or 0) > 0:
         from app.services.partner_credit import check_credit_limit
-        from urllib.parse import quote
         partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
         ok, err = check_credit_limit(partner, float(order.debt or 0))
         if not ok:
@@ -481,134 +490,31 @@ async def supervisor_confirm_agent_order(
                 url="/supervisor/agent-orders?error=" + quote(err),
                 status_code=303,
             )
-    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish (with_for_update SQLite da no-op)
+
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish.
     from sqlalchemy import text as _text
     claim = db.execute(
         _text("UPDATE orders SET status='confirmed' WHERE id=:id AND source='agent' AND status='draft'"),
-        {"id": order_id}
+        {"id": order_id},
     )
     if claim.rowcount == 0:
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
     db.refresh(order)
 
-    # Obmen qaytarish (return_sale) — Vozvrat omborga kirim, Stock check shartsiz.
-    # Va parent_order_id bor sale (child) — bu obmen yangi tovar qismi, oddiy sale logika.
+    # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi, omborga kirim qilamiz.
+    # Bu yerda dispatch oqimi YO'Q — return confirmda yakunlanadi.
     if order.type == "return_sale":
         from app.services.stock_service import apply_return_stock_addition
         apply_return_stock_addition(db, order, current_user, note_prefix="Obmen qaytarish (Vozvrat kirim)")
         order.user_id = current_user.id
-        # Agar obmen pari child sale bor bo'lsa, uni ham birga tasdiqlash uchun
-        # foydalanuvchi alohida tugma bilan bossan kifoya — bu yerda parent faqat
         db.commit()
         return RedirectResponse(
             url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish) tasdiqlandi"),
             status_code=303,
         )
 
-    # Order itemlari uchun batch load (Stock + Product) — N+1 oldini olish
-    valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
-    pairs = [(it.warehouse_id if it.warehouse_id else order.warehouse_id, it.product_id) for it in valid_items]
-    pairs = [(w, p) for w, p in pairs if w]
-    pids = list({p for _, p in pairs})
-    whs = list({w for w, _ in pairs})
-    stocks_map = {}
-    if pids and whs:
-        for s in db.query(Stock).filter(Stock.warehouse_id.in_(whs), Stock.product_id.in_(pids)).all():
-            stocks_map[(s.warehouse_id, s.product_id)] = s
-    products_map = {p.id: p for p in db.query(Product).filter(Product.id.in_(pids)).all()} if pids else {}
-
-    # Ombor qoldig'ini tekshirish
-    shortage = []
-    shortage_items = []  # production trigger uchun
-    for it in valid_items:
-        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
-        if not wh_id:
-            continue
-        stock = stocks_map.get((wh_id, it.product_id))
-        have = float(stock.quantity or 0) if stock else 0
-        need = float(it.quantity or 0)
-        if have + 1e-6 < need:
-            prod = products_map.get(it.product_id)
-            name = prod.name if prod else f"#{it.product_id}"
-            shortage.append(f"{name} (kerak: {need}, bor: {have})")
-            shortage_items.append({"product_id": it.product_id, "name": name, "need": need, "have": have})
-
-    if shortage:
-        # Stock yetmasa: vaqtincha 'confirmed' status'ni 'waiting_production' ga qaytarish
-        driver_id_int = int(driver_id_raw) if driver_id_raw and driver_id_raw.isdigit() else None
-        order.status = "waiting_production"
-        order.pending_driver_id = driver_id_int
-        order.user_id = current_user.id
-        order.note = (order.note or "") + f"\n[Production kutilmoqda] {', '.join(shortage)}"
-
-        # Avtomatik Production hujjat yaratish (Stock=0 trigger)
-        created_productions = []
-        try:
-            from app.services.auto_production_service import auto_create_productions_for_order
-            created_productions = auto_create_productions_for_order(db, order, shortage_items)
-        except Exception as e:
-            import traceback
-            print(f"[auto_production] xato: {e}", flush=True)
-            traceback.print_exc()
-
-        db.commit()
-        try:
-            from app.bot.services.notifier import notify_production_needed
-            notify_production_needed(order.number, shortage_items)
-        except Exception:
-            pass
-
-        info_msg = "Buyurtma production kutilmoqda — operatorlar xabardor qilindi"
-        if created_productions:
-            pr_nums = ", ".join(p["number"] for p in created_productions)
-            info_msg = f"Buyurtma production kutilmoqda. Avtomat yaratildi: {pr_nums}"
-        return RedirectResponse(
-            url="/supervisor/agent-orders?info=" + quote(info_msg),
-            status_code=303,
-        )
-    # Stock chiqarish (DRY: stock_service.apply_sale_stock_deduction)
-    apply_sale_stock_deduction(db, order, current_user, note_prefix="Agent sotuv (supervisor tasdiq)")
-    # Status allaqachon atomik UPDATE WHERE bilan 'confirmed' ga o'tkazildi
+    # Oddiy sotuv: faqat status va user_id. Stock/balance/Delivery — dispatch bosqichida.
     order.user_id = current_user.id
-    # D1 audit fix: partner.balance ga qarz qo'shish (snapshot revert uchun)
-    if order.partner_id and float(order.debt or 0) > 0:
-        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
-        if partner_obj:
-            if order.previous_partner_balance is None:
-                order.previous_partner_balance = float(partner_obj.balance or 0)
-            partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
-    db.flush()
-    # Haydovchiga yetkazish yaratish
-    if driver_id_raw and driver_id_raw.isdigit():
-        driver_id = int(driver_id_raw)
-        driver = db.query(Driver).filter(Driver.id == driver_id, Driver.is_active == True).first()
-        if driver:
-            # Partner geolokatsiyasi
-            partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-            address = partner.address or "" if partner else ""
-            lat = partner.latitude if partner else None
-            lng = partner.longitude if partner else None
-            # Delivery raqami
-            today = datetime.now()
-            prefix = f"DLV-{today.strftime('%Y%m%d')}"
-            last = db.query(Delivery).filter(Delivery.number.like(f"{prefix}%")).order_by(Delivery.id.desc()).first()
-            try:
-                seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
-            except Exception:
-                seq = 1
-            delivery = Delivery(
-                number=f"{prefix}-{seq:04d}",
-                driver_id=driver_id,
-                order_id=order.id,
-                order_number=order.number,
-                delivery_address=address,
-                latitude=lat,
-                longitude=lng,
-                planned_date=today,
-                notes=f"Mijoz: {partner.name if partner else ''}, Tel: {partner.phone if partner else ''}",
-                status="in_progress",
-            )
-            db.add(delivery)
     db.commit()
     try:
         from app.bot.services.audit_watchdog import audit_agent_order_confirm
