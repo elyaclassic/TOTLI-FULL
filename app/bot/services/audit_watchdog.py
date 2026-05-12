@@ -372,12 +372,22 @@ def audit_production(prod_id: int):
             if prod_items:
                 recipe_items = db.query(RecipeItem).filter(RecipeItem.recipe_id == recipe.id).all()
                 prod_map = {pi.product_id: float(pi.quantity or 0) for pi in prod_items}
+                expected_total = 0.0
+                actual_total = 0.0
                 for ri in recipe_items:
                     expected = float(ri.quantity or 0) * qty
                     if expected <= 0:
                         continue
                     actual = prod_map.get(ri.product_id)
                     if actual is None:
+                        continue
+                    # Umumiy vazn (mass balance) uchun yig'amiz — almashtirilgan ham
+                    expected_total += expected
+                    actual_total += max(0.0, actual)
+                    # Operator 0 kiritgan bo'lsa — bu almashtirish (assortment/substitution),
+                    # anomaliya emas. KITOB 2 assorti, ASSORTI singari mahsulotlarda operator
+                    # mavjud bori bilan ishlaydi (boshqa LIST'lar bilan to'ldiradi).
+                    if actual <= 0:
                         continue
                     ratio = abs(actual - expected) / expected
                     if ratio >= RECIPE_DRIFT_RATIO:
@@ -386,6 +396,23 @@ def audit_production(prod_id: int):
                         sign = "↑" if actual > expected else "↓"
                         warnings.append(
                             f"• <b>{pname}</b>: retseptdan {sign} {int(ratio*100)}% ({fmt(expected)} → <b>{fmt(actual)}</b>)"
+                        )
+
+                # Mass balance — umumiy input vazn retsept bilan ±20% farq qilsa flag
+                # Bu almashtirish-vs-o'g'irlik farqini topadi (assortment'da total mos kelishi shart)
+                if expected_total > 0:
+                    # Operator qo'shgan yangi itemlar (retseptda qty=0 bo'lganlari) ham hisobga olinadi
+                    extra_input = 0.0
+                    recipe_pids = {ri.product_id for ri in recipe_items if float(ri.quantity or 0) > 0}
+                    for pid, q_val in prod_map.items():
+                        if pid not in recipe_pids and q_val > 0:
+                            extra_input += q_val
+                    total_input = actual_total + extra_input
+                    mass_ratio = abs(total_input - expected_total) / expected_total
+                    if mass_ratio >= 0.20:
+                        sign = "↑" if total_input > expected_total else "↓"
+                        warnings.append(
+                            f"• <b>Umumiy vazn</b>: kutilgan {fmt(expected_total)} kg → <b>{fmt(total_input)} kg</b> ({sign} {int(mass_ratio*100)}%)"
                         )
 
         p_name = ""
