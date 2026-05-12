@@ -154,8 +154,24 @@
                             </td>
                             <td>{{ x.user or '—' }}</td>
                             <td class="muted-cell">{{ x.warehouse or '—' }}</td>
-                            <td class="text-center">{{ x.sales_count or 0 }}</td>
-                            <td class="text-end z-amount plus">{{ "{:,.0f}".format(x.sales_total or 0) }}</td>
+                            <td class="text-center">
+                                {{ x.sales_count or 0 }}
+                                {% if not x.is_duplicate and x.diff_sales_count is defined and x.diff_sales_count > 0 %}
+                                <div class="small text-warning fw-bold"
+                                     title="Oldingi Z-hisobotdan keyin qo'shilgan sotuvlar">
+                                    +{{ x.diff_sales_count }}
+                                </div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end z-amount plus">
+                                {{ "{:,.0f}".format(x.sales_total or 0) }}
+                                {% if not x.is_duplicate and x.diff_sales_total is defined and x.diff_sales_total > 0 %}
+                                <div class="small text-warning fw-bold"
+                                     title="Oldingi Z {{ (x.prev_closed_at or '')[11:19] }} dan keyin qo'shilgan summa">
+                                    +{{ "{:,.0f}".format(x.diff_sales_total) }}
+                                </div>
+                                {% endif %}
+                            </td>
                             <td class="text-end z-amount minus">
                                 {% if (x.returns_total or 0) > 0 %}−{{ "{:,.0f}".format(x.returns_total) }}{% else %}—{% endif %}
                             </td>

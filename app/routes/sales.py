@@ -2436,9 +2436,14 @@ async def sales_pos_z_report_open_days(
     import json as _json
     from datetime import date as date_type, datetime as dt, timedelta
 
-    role = (current_user.role or "").strip()
+    role = (current_user.role or "").strip().lower()
     if role not in ("sotuvchi", "admin", "manager"):
         return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+
+    # Manager uchun Z-hisobot shart emas — savdo joyida pul asosiy kassaga tushadi.
+    # Banner faqat sotuvchilar (smena yopishi shart) va admin (monitoring) uchun.
+    if role == "manager":
+        return JSONResponse({"ok": True, "items": [], "reason": "manager_no_z"})
 
     days = max(1, min(int(days or 5), 14))
 

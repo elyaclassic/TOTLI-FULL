@@ -2830,14 +2830,31 @@ def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = N
                 continue
     items.sort(key=lambda x: x.get("closed_at") or "", reverse=True)
 
-    seen_keys: set = set()
+    # Dedup: bir (date, user, warehouse) uchun eng yangi snapshot — primary,
+    # eskilari dublikat. Primary'ga oxirgi dublikat'dan farq qo'shiladi:
+    #   diff_count = primary.sales_count - oxirgi dublikat.sales_count
+    #   diff_total = primary.sales_total - oxirgi dublikat.sales_total
+    # Bu majburiy keyingi Z'da nima qo'shilganini ko'rsatadi.
+    seen_primaries: dict = {}  # key -> primary item (eng yangi)
     for it in items:
         key = (it.get("date") or "", int(it.get("user_id") or 0), it.get("warehouse_id"))
-        if key in seen_keys:
+        if key in seen_primaries:
+            # Bu eski dublikat — primary'ga farqni yozish (faqat birinchi marta)
+            primary = seen_primaries[key]
+            if "prev_sales_count" not in primary:
+                prev_count = int(it.get("sales_count") or 0)
+                prev_total = float(it.get("sales_total") or 0)
+                cur_count = int(primary.get("sales_count") or 0)
+                cur_total = float(primary.get("sales_total") or 0)
+                primary["prev_sales_count"] = prev_count
+                primary["prev_sales_total"] = prev_total
+                primary["prev_closed_at"] = it.get("closed_at")
+                primary["diff_sales_count"] = cur_count - prev_count
+                primary["diff_sales_total"] = cur_total - prev_total
             it["is_duplicate"] = True
         else:
             it["is_duplicate"] = False
-            seen_keys.add(key)
+            seen_primaries[key] = it
     return items
 
 
