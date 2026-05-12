@@ -1,0 +1,44 @@
+<div class="modal fade" id="dispatchModal-{{ order.id }}" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <form action="/sales/{{ order.id }}/dispatch" method="POST" class="modal-content">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+      <div class="modal-header">
+        <h5 class="modal-title">Yuklash — {{ order.number }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Yopish"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" for="dispatch-date-{{ order.id }}">Yuklash sanasi:</label>
+          <input type="date"
+                 id="dispatch-date-{{ order.id }}"
+                 name="delivery_date"
+                 class="form-control"
+                 min="{{ today_iso }}"
+                 value="{{ today_iso }}"
+                 required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="dispatch-driver-{{ order.id }}">Haydovchi:</label>
+          <select id="dispatch-driver-{{ order.id }}"
+                  name="driver_id"
+                  class="form-select"
+                  required>
+            <option value="">— Tanlang —</option>
+            {% for d in active_drivers %}
+              <option value="{{ d.id }}">{{ d.full_name }} ({{ d.code }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        {% if order.partner %}
+          <div class="text-muted small">
+            Mijoz: <strong>{{ order.partner.name }}</strong>{% if order.partner.phone %} — {{ order.partner.phone }}{% endif %}
+          </div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+        <button type="submit" class="btn btn-warning">Yo'lga chiqarish</button>
+      </div>
+    </form>
+  </div>
+</div>

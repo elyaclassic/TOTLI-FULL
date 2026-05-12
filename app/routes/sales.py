@@ -36,6 +36,7 @@ from app.models.database import (
     StockMovement,
     Employee,
     EmployeeAdvance,
+    Driver,
 )
 from app.deps import require_auth, require_admin
 
@@ -201,6 +202,8 @@ async def sales_list(
         "sort_dir": sort_order,
     }
     pq = pagination_query_string(filter_params)
+    active_drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
+    today_iso = datetime.now().date().isoformat()
     return templates.TemplateResponse("sales/list.html", {
         "request": request,
         "orders": orders,
@@ -231,6 +234,8 @@ async def sales_list(
         "current_user": current_user,
         "error": error,
         "error_detail": error_detail,
+        "active_drivers": active_drivers,
+        "today_iso": today_iso,
     })
 
 
