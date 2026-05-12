@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Request, Depends, File, Form, UploadFile, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse, JSONResponse
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, or_, and_
+from sqlalchemy import func, or_, and_, case
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
@@ -2492,14 +2492,20 @@ async def sold_products_report(
     _role = (getattr(current_user, "role", None) or "").strip().lower()
     show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
 
-    # Sotilgan mahsulotlar (OrderItem + Order)
+    # Sotilgan mahsulotlar (OrderItem + Order).
+    # Chegirma proportional: item.total * (order.total / order.subtotal).
+    # Subtotal=0 yoki NULL bo'lsa — koeffitsient 1.0 (chegirma yo'q).
+    _discount_ratio = case(
+        (func.coalesce(Order.subtotal, 0) > 0, Order.total / Order.subtotal),
+        else_=1.0,
+    )
     q = (
         db.query(
             Product.id,
             Product.name,
             Product.purchase_price,
             func.sum(OrderItem.quantity).label("total_qty"),
-            func.sum(OrderItem.total).label("total_sum"),
+            func.sum(OrderItem.total * _discount_ratio).label("total_sum"),
             func.count(func.distinct(Order.id)).label("order_count"),
         )
         .join(OrderItem, OrderItem.product_id == Product.id)
