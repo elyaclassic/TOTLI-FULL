@@ -1632,17 +1632,41 @@ async def report_production(
         .order_by(Production.date.desc())
     )
     productions = q.all()
-    # Donalik mahsulotlarni kg ga aylantirish (nomdan vazn)
+    # 3 ta kategoriya: donalik tayyor / kg tayyor / LIST yarim_tayyor (QIYOM excluded)
+    dona_count = 0.0
+    dona_kg_eq = 0.0      # production_items dan yarim_tayyor sarfi
+    tayyor_kg = 0.0
+    list_kg = 0.0
     for p in productions:
         p.qty_kg = _production_kg(p)
-        # Birlik kodi template uchun (ko'rsatish: "3 ta" yoki "2.56 kg")
         _prod = getattr(getattr(p, "recipe", None), "product", None)
         p.unit_code = ((_prod.unit.code if _prod and _prod.unit else "") or "kg").lower()
-    total_qty = sum(p.qty_kg for p in productions if p.status == "completed")
+        if p.status != "completed":
+            continue
+        if not _prod:
+            continue
+        _type = (_prod.type or "").strip().lower()
+        _name_upper = (_prod.name or "").upper()
+        if _type == "tayyor":
+            if p.unit_code in ("ta", "dona"):
+                dona_count += float(p.quantity or 0)
+                dona_kg_eq += float(p.qty_kg or 0)
+            elif p.unit_code in ("kg", "kilogramm"):
+                tayyor_kg += float(p.quantity or 0)
+        elif _type == "yarim_tayyor" and p.unit_code in ("kg", "kilogramm"):
+            # QIYOM (stage 1) chiqarib tashlanadi — hisob qilinmaydi
+            if "QIYOM" not in _name_upper:
+                list_kg += float(p.quantity or 0)
+    # Legacy summa (eski card uchun, agar kerak bo'lsa) — endi ishlatilmaydi
+    total_qty = list_kg + tayyor_kg
     return templates.TemplateResponse("reports/production.html", {
         "request": request,
         "productions": productions,
         "total_qty": total_qty,
+        "dona_count": dona_count,
+        "dona_kg_eq": dona_kg_eq,
+        "tayyor_kg": tayyor_kg,
+        "list_kg": list_kg,
         "start_date": start_date,
         "end_date": end_date,
         "page_title": "Ishlab chiqarish hisoboti",

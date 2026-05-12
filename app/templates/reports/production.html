@@ -26,26 +26,49 @@
     </form>
 </div>
 
+<!-- Ishlab chiqarish kategoriyalari (qiyom hisobga olinmaydi) -->
 <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
-        <div class="mini-stat">
-            <div class="num text-primary">{{ "{:,.2f}".format(total_qty) }}</div>
-            <div class="lbl">Yakunlangan jami (kg)</div>
+    <div class="col-6 col-md-4">
+        <div class="mini-stat" style="border-left:4px solid #16a34a;">
+            <div class="num" style="color:#16a34a;">{{ "{:,.0f}".format(dona_count) }} <small class="text-muted" style="font-size:14px;">ta</small></div>
+            <div class="lbl">
+              <i class="bi bi-box-seam"></i> Donalik tayyor mahsulotlar
+              <span class="text-muted">(~{{ "{:,.1f}".format(dona_kg_eq) }} kg qadoqlandi)</span>
+            </div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-4">
+        <div class="mini-stat" style="border-left:4px solid #2563eb;">
+            <div class="num" style="color:#1d4ed8;">{{ "{:,.2f}".format(tayyor_kg) }} <small class="text-muted" style="font-size:14px;">kg</small></div>
+            <div class="lbl"><i class="bi bi-stack"></i> Kg lik tayyor mahsulotlar</div>
+        </div>
+    </div>
+    <div class="col-12 col-md-4">
+        <div class="mini-stat" style="border-left:4px solid #9333ea;">
+            <div class="num" style="color:#7e22ce;">{{ "{:,.2f}".format(list_kg) }} <small class="text-muted" style="font-size:14px;">kg</small></div>
+            <div class="lbl">
+              <i class="bi bi-layers"></i> LIST qiyom (yarim tayyor)
+              <span class="text-muted" title="Stage 1 (sof QIYOM) hisobga olinmaydi">qiyom yo'q</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Status hisoblari -->
+<div class="row g-3 mb-3">
+    <div class="col-4">
         <div class="mini-stat">
             <div class="num text-success">{{ productions | selectattr('status', 'equalto', 'completed') | list | length if productions else 0 }}</div>
             <div class="lbl">Yakunlangan</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-4">
         <div class="mini-stat">
             <div class="num text-warning">{{ productions | selectattr('status', 'equalto', 'in_progress') | list | length if productions else 0 }}</div>
             <div class="lbl">Jarayonda</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-4">
         <div class="mini-stat">
             <div class="num text-danger">{{ productions | selectattr('status', 'equalto', 'cancelled') | list | length if productions else 0 }}</div>
             <div class="lbl">Bekor qilingan</div>
