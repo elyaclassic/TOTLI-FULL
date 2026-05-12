@@ -44,7 +44,7 @@ async def admin_sales_plans_list(
         total = db.query(Order).filter(
             Order.agent_id == ag.id,
             Order.source == "agent",
-            Order.status.in_(("confirmed", "completed")),
+            Order.status.in_(("confirmed", "completed", "delivered")),
             Order.date >= month_start,
         ).all()
         sold = sum(float(o.total or 0) for o in total)

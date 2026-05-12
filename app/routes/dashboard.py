@@ -125,13 +125,13 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
     # Bugungi savdo (completed orders)
     today_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     # Kechagi savdo
     yesterday_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) == yesterday,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     # O'sish foizi
@@ -147,7 +147,7 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
     # Bajarilgan buyurtmalar
     completed_orders = db.query(func.count(Order.id)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     # Faol agentlar
@@ -177,7 +177,7 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
         date = today - timedelta(days=i)
         sales = db.query(func.sum(Order.total)).filter(
             func.date(Order.created_at) == date,
-            Order.status == 'completed'
+            Order.status.in_(('completed', 'delivered'))
         ).scalar() or 0
         sales_trend_labels.append(date.strftime('%d.%m'))
         sales_trend_data.append(float(sales))
@@ -192,7 +192,7 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
         Order, OrderItem.order_id == Order.id
     ).filter(
         func.date(Order.created_at) >= week_ago,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).group_by(Product.id, Product.name).order_by(
         func.sum(OrderItem.quantity).desc()
     ).limit(5).all()
@@ -209,7 +209,7 @@ async def executive_dashboard(request: Request, db: Session = Depends(get_db), c
         Order, Order.agent_id == Agent.id
     ).filter(
         func.date(Order.created_at) >= week_ago,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).group_by(Agent.id, Agent.full_name).order_by(
         func.sum(Order.total).desc()
     ).limit(5).all()
@@ -314,12 +314,12 @@ async def sales_dashboard(request: Request, db: Session = Depends(get_db), curre
     # Today's sales
     today_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     yesterday_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) == yesterday,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     sales_growth = 0
@@ -333,7 +333,7 @@ async def sales_dashboard(request: Request, db: Session = Depends(get_db), curre
     
     completed_orders = db.query(func.count(Order.id)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     # Customers
@@ -379,7 +379,7 @@ async def sales_dashboard(request: Request, db: Session = Depends(get_db), curre
         date = today - timedelta(days=i)
         sales = db.query(func.sum(Order.total)).filter(
             func.date(Order.created_at) == date,
-            Order.status == 'completed'
+            Order.status.in_(('completed', 'delivered'))
         ).scalar() or 0
         weekly_labels.append(['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'][date.weekday()])
         weekly_data.append(float(sales))
@@ -414,7 +414,7 @@ async def sales_dashboard(request: Request, db: Session = Depends(get_db), curre
         Order, Partner.id == Order.partner_id
     ).filter(
         func.date(Order.created_at) >= month_ago,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).group_by(Partner.id, Partner.name).order_by(
         func.sum(Order.total).desc()
     ).limit(5).all()
@@ -571,7 +571,7 @@ async def agent_dashboard(request: Request, db: Session = Depends(get_db), curre
     # Today's sales (orders created by agent)
     today_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     today_orders = db.query(func.count(Order.id)).filter(
@@ -580,14 +580,14 @@ async def agent_dashboard(request: Request, db: Session = Depends(get_db), curre
     
     completed_orders = db.query(func.count(Order.id)).filter(
         func.date(Order.created_at) == today,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     # Monthly target (placeholder)
     target_total = 25000000
     month_sales = db.query(func.sum(Order.total)).filter(
         func.date(Order.created_at) >= month_ago,
-        Order.status == 'completed'
+        Order.status.in_(('completed', 'delivered'))
     ).scalar() or 0
     
     target_percent = int((month_sales / target_total * 100)) if target_total > 0 else 0
@@ -681,7 +681,7 @@ async def agent_dashboard(request: Request, db: Session = Depends(get_db), curre
         sales = db.query(func.sum(Order.total)).filter(
             func.date(Order.created_at) >= month_ago,
             func.date(Order.created_at) <= date,
-            Order.status == 'completed'
+            Order.status.in_(('completed', 'delivered'))
         ).scalar() or 0
         
         cumulative_sales = float(sales)

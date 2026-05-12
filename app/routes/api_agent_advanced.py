@@ -537,7 +537,7 @@ async def agent_partner_completed_orders(
             .filter(
                 Order.partner_id == partner_id,
                 Order.type == "sale",
-                Order.status == "completed",
+                Order.status.in_(("completed", "delivered")),
             )
             .order_by(Order.date.desc())
             .limit(30)
@@ -588,7 +588,7 @@ async def agent_partner_orders(
             .filter(
                 Order.partner_id == partner_id,
                 Order.type == "sale",
-                Order.status.in_(["draft", "confirmed", "completed"]),
+                Order.status.in_(["draft", "confirmed", "completed", "delivered"]),
             )
             .order_by(Order.id.desc())
             .limit(50)
@@ -754,7 +754,7 @@ async def agent_return_create(
         sale = db.query(Order).filter(
             Order.id == int(order_id),
             Order.type == "sale",
-            Order.status == "completed",
+            Order.status.in_(("completed", "delivered")),
         ).first()
         if not sale:
             return {"success": False, "error": "Buyurtma topilmadi"}

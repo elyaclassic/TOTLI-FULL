@@ -197,7 +197,7 @@ async def home(
             ).order_by(Order.created_at.desc()).limit(6).all()
             # Tugallangan buyurtmalar (bugun)
             completed_orders = db.query(Order).options(joinedload(Order.partner)).filter(
-                Order.type == "sale", Order.status == "completed", Order.date >= today_start
+                Order.type == "sale", Order.status.in_(("completed", "delivered")), Order.date >= today_start
             ).order_by(Order.created_at.desc()).limit(6).all()
             # Jarayondagi ishlab chiqarish
             in_progress_count = db.query(Production).filter(

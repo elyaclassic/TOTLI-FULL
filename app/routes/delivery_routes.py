@@ -394,7 +394,7 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
             Order.agent_id == agent.id,
             Order.source == "agent",
             Order.type == "sale",  # return_sale (obmen qaytarish) rejaga kirmasin
-            Order.status.in_(("confirmed", "completed", "waiting_production")),
+            Order.status.in_(("confirmed", "completed", "waiting_production", "delivered")),
             Order.date >= month_start,
         ).scalar() or 0.0
         sold = float(sold)
