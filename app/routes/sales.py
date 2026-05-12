@@ -191,6 +191,49 @@ async def sales_list(
     terminal_sum = pay_map.get("terminal", 0)
     click_sum = pay_map.get("click", 0)
 
+    # Chegirma + Tannarx + Foyda (faqat admin/manager/raxbar)
+    _role = (getattr(current_user, "role", None) or "").strip().lower()
+    show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
+    chegirma_sum = 0.0
+    tannarx_sum = 0.0
+    foyda_sum = 0.0
+    foyda_margin_pct = 0.0
+    if show_profit:
+        # Chegirma — subtotal − total (admin/manager qatori)
+        chg_q = db.query(sa_func.coalesce(sa_func.sum(Order.subtotal - Order.total), 0)).filter(
+            Order.type == "sale",
+            Order.status.in_(["completed", "delivered", "confirmed"]),
+        )
+        if date_from and date_from.strip():
+            chg_q = chg_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+        if date_to and date_to.strip():
+            chg_q = chg_q.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+        if wh_id is not None and wh_id > 0:
+            chg_q = chg_q.filter(Order.warehouse_id == wh_id)
+        chegirma_sum = float(chg_q.scalar() or 0)
+
+        # Tannarx — qty * purchase_price (item-level JOIN)
+        tnx_q = db.query(
+            sa_func.coalesce(sa_func.sum(OrderItem.quantity * Product.purchase_price), 0)
+        ).join(
+            Order, Order.id == OrderItem.order_id
+        ).join(
+            Product, Product.id == OrderItem.product_id
+        ).filter(
+            Order.type == "sale",
+            Order.status.in_(["completed", "delivered", "confirmed"]),
+        )
+        if date_from and date_from.strip():
+            tnx_q = tnx_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+        if date_to and date_to.strip():
+            tnx_q = tnx_q.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+        if wh_id is not None and wh_id > 0:
+            tnx_q = tnx_q.filter(Order.warehouse_id == wh_id)
+        tannarx_sum = float(tnx_q.scalar() or 0)
+
+        foyda_sum = total_sum - tannarx_sum
+        foyda_margin_pct = (foyda_sum / total_sum * 100) if total_sum else 0.0
+
     warehouses = get_warehouses_for_user(db, current_user)
     error = request.query_params.get("error")
     error_detail = unquote(request.query_params.get("detail", "") or "")
@@ -234,6 +277,11 @@ async def sales_list(
         "pagination_query": pq,
         "completed_count": completed_count,
         "draft_count": draft_count,
+        "show_profit": show_profit,
+        "chegirma_sum": chegirma_sum,
+        "tannarx_sum": tannarx_sum,
+        "foyda_sum": foyda_sum,
+        "foyda_margin_pct": foyda_margin_pct,
         "page_title": "Sotuvlar",
         "current_user": current_user,
         "error": error,
