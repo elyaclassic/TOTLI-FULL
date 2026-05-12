@@ -157,7 +157,7 @@ async def sales_list(
         sa_func.count(Order.id),
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "confirmed"]),
+        Order.status.in_(["completed", "delivered", "confirmed"]),
     )
     if date_from and date_from.strip():
         stats_row = stats_row.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -174,7 +174,7 @@ async def sales_list(
         Order, Order.id == Payment.order_id
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "confirmed"]),
+        Order.status.in_(["completed", "delivered", "confirmed"]),
         Payment.type == "income",
         Payment.status == "confirmed",
     )
@@ -1620,7 +1620,7 @@ async def sales_pos(
     today_date = date_type.today()
     pos_today_orders = db.query(Order).filter(
         Order.type == "sale",
-        Order.status == "completed",
+        Order.status.in_(("completed", "delivered")),
         func.date(Order.created_at) == today_date,
     ).order_by(Order.created_at.desc()).limit(10).all()
     if not sales_warehouse and role == "sotuvchi":
@@ -1776,7 +1776,7 @@ async def sales_pos_daily_orders(
         o_type = "sale"
     q = db.query(Order).filter(
         Order.type == o_type,
-        Order.status == "completed",
+        Order.status.in_(("completed", "delivered")),
         func.date(Order.created_at) >= d_from,
         func.date(Order.created_at) <= d_to,
     )
@@ -1838,7 +1838,7 @@ async def sales_pos_x_report(
             return JSONResponse({"error": "Sizga POS ombor biriktirilmagan"}, status_code=400)
         base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
 
-    completed_q = base_q.filter(Order.status == "completed")
+    completed_q = base_q.filter(Order.status.in_(("completed", "delivered")))
     cancelled_q = base_q.filter(Order.status == "cancelled")
     orders = completed_q.all()
     cancelled_orders = cancelled_q.all()
@@ -2326,7 +2326,7 @@ async def sales_pos_z_report_open_days(
 
         q = db.query(Order).filter(
             func.date(Order.created_at) == d,
-            Order.status == "completed",
+            Order.status.in_(("completed", "delivered")),
         )
         q = q.filter((Order.type == "sale") | (Order.type.is_(None)))
         if wh_id is not None:
@@ -2503,7 +2503,7 @@ async def sales_pos_z_report(
             return JSONResponse({"ok": False, "error": "Sizga POS ombor biriktirilmagan"}, status_code=400)
         base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
 
-    completed = base_q.filter(Order.status == "completed").all()
+    completed = base_q.filter(Order.status.in_(("completed", "delivered"))).all()
     cancelled = base_q.filter(Order.status == "cancelled").all()
     sales = [o for o in completed if (o.type or "sale") == "sale"]
     returns_o = [o for o in completed if o.type == "return_sale"]
@@ -3037,7 +3037,7 @@ async def sales_returns_list(request: Request, db: Session = Depends(get_db), cu
     """Savdodan qaytarish — bajarilgan sotuvlar ro'yxati (faqat joriy foydalanuvchi)."""
     q = db.query(Order).filter(
         Order.type == "sale",
-        Order.status == "completed"
+        Order.status.in_(("completed", "delivered"))
     )
     # Admin/manager barcha sotuvlarni ko'radi, sotuvchi faqat o'zinikini
     if current_user.role not in ("admin", "manager"):
@@ -3083,7 +3083,7 @@ async def sales_return_form(
     order = db.query(Order).filter(
         Order.id == order_id,
         Order.type == "sale",
-        Order.status == "completed"
+        Order.status.in_(("completed", "delivered"))
     ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi yoki bajarilmagan.")
@@ -3114,7 +3114,7 @@ async def sales_return_create(
     sale = db.query(Order).filter(
         Order.id == order_id,
         Order.type == "sale",
-        Order.status == "completed"
+        Order.status.in_(("completed", "delivered"))
     ).options(joinedload(Order.items)).first()
     if not sale:
         return RedirectResponse(url="/sales/returns?error=not_found&detail=" + quote("Sotuv topilmadi."), status_code=303)

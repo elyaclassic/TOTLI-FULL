@@ -929,7 +929,7 @@ async def qoldiqlar_kontragent_recalculate(
         sale_debt = db.query(func.coalesce(func.sum(Order.debt), 0)).filter(
             Order.partner_id == partner.id,
             Order.type == "sale",
-            Order.status.in_(["confirmed", "completed"]),
+            Order.status.in_(["confirmed", "completed", "delivered"]),
         ).scalar()
         bal += float(sale_debt or 0)
 
@@ -937,7 +937,7 @@ async def qoldiqlar_kontragent_recalculate(
         return_total = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
             Order.partner_id == partner.id,
             Order.type == "return_sale",
-            Order.status.in_(["confirmed", "completed"]),
+            Order.status.in_(["confirmed", "completed", "delivered"]),
         ).scalar()
         bal -= float(return_total or 0)
 
@@ -956,7 +956,7 @@ async def qoldiqlar_kontragent_recalculate(
             Order.type == "sale",
             Order.debt == 0,
             Order.paid > 0,
-            Order.status.in_(["confirmed", "completed"]),
+            Order.status.in_(["confirmed", "completed", "delivered"]),
         ).subquery()
 
         income_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
