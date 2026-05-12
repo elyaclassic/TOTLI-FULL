@@ -11,11 +11,11 @@
     <form method="get" class="d-flex flex-wrap gap-3 align-items-end">
         <div>
             <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Dan</label>
-            <input type="datetime-local" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+            <input type="datetime-local" id="filterDateFrom" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
         </div>
         <div>
             <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Gacha</label>
-            <input type="datetime-local" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+            <input type="datetime-local" id="filterDateTo" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
         </div>
         <div>
             <label class="form-label small mb-1"><i class="bi bi-house"></i> Ombor</label>
@@ -134,5 +134,42 @@ document.getElementById('searchInput').addEventListener('input', function() {
         row.style.display = text.includes(val) ? '' : 'none';
     });
 });
+
+// Sana tanlaganda vaqtni avto-normallashtirish:
+//  - Dan (date_from): har doim 00:00
+//  - Gacha (date_to): bugungi kun bo'lsa hozirgi vaqt, eski sana bo'lsa 23:59
+(function() {
+    function pad2(n) { return String(n).padStart(2, '0'); }
+    function todayStr() {
+        var d = new Date();
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+    function nowTimeStr() {
+        var d = new Date();
+        return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    }
+    var df = document.getElementById('filterDateFrom');
+    var dt = document.getElementById('filterDateTo');
+    if (df) {
+        df.addEventListener('change', function(e) {
+            var v = e.target.value;
+            if (!v) return;
+            var datePart = v.split('T')[0];
+            e.target.value = datePart + 'T00:00';
+        });
+    }
+    if (dt) {
+        dt.addEventListener('change', function(e) {
+            var v = e.target.value;
+            if (!v) return;
+            var datePart = v.split('T')[0];
+            if (datePart === todayStr()) {
+                e.target.value = datePart + 'T' + nowTimeStr();
+            } else {
+                e.target.value = datePart + 'T23:59';
+            }
+        });
+    }
+})();
 </script>
 {% endblock %}
