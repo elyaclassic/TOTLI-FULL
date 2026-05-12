@@ -2501,7 +2501,7 @@ async def sold_products_report(
         .join(Order, Order.id == OrderItem.order_id)
         .filter(
             Order.type == "sale",
-            Order.status == "completed",
+            Order.status.in_(("completed", "delivered")),
             Order.created_at >= d_from,
             Order.created_at <= d_to,
         )
@@ -2539,8 +2539,8 @@ async def sold_products_report(
         "items": items,
         "warehouses": warehouses,
         "categories": categories,
-        "date_from": d_from.strftime("%Y-%m-%d"),
-        "date_to": d_to.strftime("%Y-%m-%d"),
+        "date_from": d_from.strftime("%Y-%m-%dT%H:%M"),
+        "date_to": d_to.strftime("%Y-%m-%dT%H:%M"),
         "selected_warehouse_id": warehouse_id,
         "selected_category_id": category_id,
         "name_query": name_query or "",
