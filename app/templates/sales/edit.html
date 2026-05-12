@@ -53,7 +53,14 @@
             <i class="bi bi-receipt text-primary"></i>
             {{ order.number }}
             {% if order.status == 'draft' %}<span class="badge-draft ms-2">Qoralama</span>
-            {% elif order.status == 'completed' %}<span class="badge-done ms-2">Bajarildi</span>
+            {% elif order.status in ('completed', 'delivered') %}
+              {% if order.source == 'agent' %}
+              <span class="badge-done ms-2">Yetkazildi</span>
+              {% else %}
+              <span class="badge-done ms-2">Sotildi</span>
+              {% endif %}
+            {% elif order.status == 'confirmed' %}<span class="badge-waiting ms-2">Tayyor</span>
+            {% elif order.status == 'out_for_delivery' %}<span class="badge bg-warning text-dark ms-2">Yo'lda</span>
             {% elif order.status == 'waiting_production' %}<span class="badge-waiting ms-2">Ishlab chiqarishda</span>
             {% elif order.status == 'cancelled' %}<span class="badge-cancelled ms-2">Bekor</span>{% endif %}
         </h5>

@@ -147,10 +147,12 @@
           <td class="muted-cell">{{ order.warehouse.name if order.warehouse else '—' }}</td>
           <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total or 0) }}</td>
           <td>
-            {% if order.status == 'completed' %}
-            <span class="badge-done">Yetkazildi</span>
-            {% elif order.status == 'delivered' %}
-            <span class="badge-done">Yetkazildi</span>
+            {% if order.status in ('completed', 'delivered') %}
+              {% if order.source == 'agent' %}
+              <span class="badge-done">Yetkazildi</span>
+              {% else %}
+              <span class="badge-done">Sotildi</span>
+              {% endif %}
             {% elif order.status == 'draft' %}
             <span class="badge-draft">Qoralama</span>
             {% elif order.status == 'waiting_production' %}
