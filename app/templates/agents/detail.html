@@ -65,8 +65,18 @@
     <div class="col-12">
         <div class="data-table">
             <div class="card-header">
-                <span><i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})</span>
+                <span>
+                    <i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})
+                    <span class="badge bg-success ms-2" title="Bugungi buyurtmalar (har qanday filterdan qat'i nazar)">
+                        Bugun: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm
+                    </span>
+                </span>
                 <div class="d-flex gap-2 flex-wrap align-items-center">
+                    {% if current_user and current_user.role in ['admin', 'manager'] %}
+                    <a href="/agents/{{ agent.id }}/order/new" class="btn btn-sm btn-primary">
+                        <i class="bi bi-plus-circle"></i> Yangi buyurtma
+                    </a>
+                    {% endif %}
                     <form method="get" id="orderDateFilterForm" class="d-flex gap-1 align-items-center">
                         <div class="btn-group btn-group-sm" role="group">
                             <button type="button" class="btn btn-outline-success" onclick="setQuickRange('today')"><i class="bi bi-calendar-day"></i> Bugun</button>

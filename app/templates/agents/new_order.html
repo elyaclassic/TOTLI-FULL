@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid p-3">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h4>
+      <i class="bi bi-plus-circle"></i> Yangi buyurtma —
+      <span class="text-success">{{ agent.full_name }}</span>
+    </h4>
+    <a href="/agents/{{ agent.id }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i> Orqaga
+    </a>
+  </div>
+
+  {% set error = request.query_params.get('error') %}
+  {% if error %}
+    <div class="alert alert-danger">
+      {% if error == 'partner_mismatch' %}Mijoz ushbu agentga tegishli emas
+      {% elif error == 'no_items' %}Hech bo'lmasa 1 ta mahsulot tanlang
+      {% elif error == 'no_warehouse' %}Tayyor mahsulot ombori topilmadi
+      {% else %}Xato: {{ error }}{% endif %}
+    </div>
+  {% endif %}
+
+  <form method="POST" action="/agents/{{ agent.id }}/order/create">
+    {% if csrf_token %}
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    {% endif %}
+
+    <div class="card mb-3">
+      <div class="card-body">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Mijoz <span class="text-danger">*</span></label>
+            <select name="partner_id" class="form-select" required>
+              <option value="">— Tanlang —</option>
+              {% for p in partners %}
+                <option value="{{ p.id }}">
+                  {{ p.name }}{% if p.phone %} — {{ p.phone }}{% endif %}
+                </option>
+              {% endfor %}
+            </select>
+            {% if not partners %}
+              <div class="text-warning small mt-1">Bu agentga mijoz biriktirilmagan</div>
+            {% endif %}
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Izoh (ixtiyoriy)</label>
+            <input type="text" name="note" class="form-control" placeholder="Masalan: zakaz telefon orqali">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-box-seam"></i> Mahsulotlar (agentga ruxsat etilgan)</span>
+        <span class="text-muted small">Faqat miqdor &gt; 0 bo'lganlari saqlanadi</span>
+      </div>
+      <div class="card-body p-0" style="max-height: 60vh; overflow-y: auto;">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead class="sticky-top bg-light">
+            <tr>
+              <th style="width:60px;">#</th>
+              <th>Mahsulot</th>
+              <th style="width:160px;" class="text-end">Miqdor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for p in products %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>
+                  <input type="hidden" name="product_id" value="{{ p.id }}">
+                  {{ p.name }}
+                  {% if p.code %}<span class="text-muted small">({{ p.code }})</span>{% endif %}
+                </td>
+                <td>
+                  <input type="number"
+                         name="quantity"
+                         class="form-control form-control-sm text-end"
+                         step="0.001"
+                         min="0"
+                         value="0"
+                         inputmode="decimal">
+                </td>
+              </tr>
+            {% else %}
+              <tr><td colspan="3" class="text-center text-muted py-3">Agent uchun mahsulot ro'yxati bo'sh (Product.is_for_agent=False)</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-success">
+        <i class="bi bi-check2-circle"></i> Yaratish (draft)
+      </button>
+      <a href="/agents/{{ agent.id }}" class="btn btn-secondary">Bekor</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
