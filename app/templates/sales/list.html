@@ -113,7 +113,8 @@
           <th><a href="/sales?{{ qp }}sort_by=warehouse&sort_dir={% if sort_by == 'warehouse' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Ombor {% if sort_by == 'warehouse' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
           <th class="text-end"><a href="/sales?{{ qp }}sort_by=total&sort_dir={% if sort_by == 'total' and sort_dir == 'asc' %}desc{% else %}asc{% endif %}" class="text-decoration-none text-dark">Summa {% if sort_by == 'total' %}<i class="bi bi-arrow-{{ 'up' if sort_dir == 'asc' else 'down' }}-short"></i>{% else %}<i class="bi bi-arrow-down-up text-muted" style="font-size:10px;"></i>{% endif %}</a></th>
           <th>Holat</th>
-          <th style="width:110px;"></th>
+          <th>Yuklash sanasi</th>
+          <th style="width:130px;"></th>
         </tr>
       </thead>
       <tbody id="salesBody">
@@ -127,17 +128,28 @@
           <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total or 0) }}</td>
           <td>
             {% if order.status == 'completed' %}
-            <span class="badge-done">Bajarildi</span>
+            <span class="badge-done">Yetkazildi</span>
+            {% elif order.status == 'delivered' %}
+            <span class="badge-done">Yetkazildi</span>
             {% elif order.status == 'draft' %}
             <span class="badge-draft">Qoralama</span>
             {% elif order.status == 'waiting_production' %}
             <span class="badge-waiting">Ishlab chiqarishda</span>
             {% elif order.status == 'confirmed' %}
-            <span class="badge-waiting">Tasdiqlangan</span>
+            <span class="badge-waiting">Tayyor</span>
+            {% elif order.status == 'out_for_delivery' %}
+            <span class="badge bg-warning text-dark">Yo'lda</span>
             {% elif order.status == 'cancelled' %}
             <span class="badge-cancelled">Bekor qilingan</span>
             {% else %}
             <span class="badge-inactive">{{ order.status }}</span>
+            {% endif %}
+          </td>
+          <td class="muted-cell">
+            {% if order.delivery_date %}
+              {{ order.delivery_date.strftime('%d.%m.%Y') }}
+            {% else %}
+              —
             {% endif %}
           </td>
           <td>
@@ -147,6 +159,14 @@
               <a href="/sales/return/{{ order.id }}" class="btn-act" title="Qaytarish"><i class="bi bi-arrow-return-left"></i></a>
               {% endif %}
               {% if order.status == 'confirmed' %}
+              {% if current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
+              <button type="button"
+                      class="btn-act"
+                      style="color:#fd7e14;"
+                      data-bs-toggle="modal"
+                      data-bs-target="#dispatchModal-{{ order.id }}"
+                      title="Yuklash"><i class="bi bi-truck"></i></button>
+              {% endif %}
               <form method="POST" action="/sales/{{ order.id }}/revert" class="d-inline" onsubmit="return confirm('Draft ga qaytarasizmi?');">
                 <button type="submit" class="btn-act warning" title="Draft ga qaytarish"><i class="bi bi-arrow-counterclockwise"></i></button>
               </form>
@@ -169,9 +189,12 @@
             </div>
           </td>
         </tr>
+        {% if order.status == 'confirmed' and current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
+        {% include 'sales/dispatch_modal.html' ignore missing %}
+        {% endif %}
         {% else %}
         <tr>
-          <td colspan="8" class="text-center text-muted py-5">
+          <td colspan="9" class="text-center text-muted py-5">
             <i class="bi bi-cart3 d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
             Sotuvlar topilmadi. <a href="/sales/new">Yangi sotuv yaratish</a>
           </td>
