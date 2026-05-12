@@ -46,6 +46,19 @@ def _check_order_access(order: Order, current_user: User):
         return
     if order.user_id and order.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
+
+
+def _revert_balance_if_needed(db, order, partner):
+    """Faqat 'delivered' (yangi) yoki 'completed' (legacy) bo'lgan orderda balance qaytariladi.
+
+    Yangi flow'da boshqa statuslarda balance hech yozilmaydi (faqat driver
+    'Yetkazdim' bosgach yoziladi), shuning uchun qaytarish kerak emas.
+    """
+    if order.status not in ("delivered", "completed"):
+        return
+    if not partner or order.previous_partner_balance is None:
+        return
+    partner.balance = order.previous_partner_balance
 from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
@@ -784,7 +797,7 @@ async def sales_revert(
         db.commit()
         referer = "/sales/edit/" + str(order_id)
         return RedirectResponse(url=referer, status_code=303)
-    if status != "completed":
+    if status not in ("completed", "delivered"):
         return RedirectResponse(
             url=f"/sales/edit/{order_id}?error=revert&detail=" + quote("Faqat bajarilgan sotuvning tasdiqini bekor qilish mumkin."),
             status_code=303,
@@ -807,13 +820,10 @@ async def sales_revert(
             note=f"Sotuv tasdiqini bekor qilish: {order.number}",
             created_at=order.date or datetime.now(),
         )
-    if order.partner_id and (order.debt or 0) > 0:
+    partner = None
+    if order.partner_id:
         partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-        if partner:
-            if order.previous_partner_balance is not None:
-                partner.balance = order.previous_partner_balance
-            else:
-                partner.balance = (partner.balance or 0) - order.debt
+    _revert_balance_if_needed(db, order, partner)
     order.previous_partner_balance = None
     # Yetkazilmagan delivery larni cancel qilish (cancelled/failed/delivered emasini)
     from app.models.database import Delivery as DeliveryModel

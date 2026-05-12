@@ -21,6 +21,9 @@ import pytest
 # Test rejimi — main.py startup hooklarni o'tkazib yuborish uchun
 os.environ.setdefault("TESTING", "1")
 
+# Auth modulda SECRET_KEY majburiy — testlar uchun deterministik qiymat
+os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-use-only")
+
 # Loyiha root'ni PYTHONPATH ga
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
