@@ -2488,11 +2488,16 @@ async def sold_products_report(
         .all()
     )
 
+    # Foyda ko'rsatish — faqat admin/manager/raxbar (tannarx maxfiy ma'lumot)
+    _role = (getattr(current_user, "role", None) or "").strip().lower()
+    show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
+
     # Sotilgan mahsulotlar (OrderItem + Order)
     q = (
         db.query(
             Product.id,
             Product.name,
+            Product.purchase_price,
             func.sum(OrderItem.quantity).label("total_qty"),
             func.sum(OrderItem.total).label("total_sum"),
             func.count(func.distinct(Order.id)).label("order_count"),
@@ -2513,16 +2518,23 @@ async def sold_products_report(
     if name_query and name_query.strip():
         q = q.filter(Product.name.ilike(f"%{name_query.strip()}%"))
 
-    rows = q.group_by(Product.id, Product.name).order_by(func.sum(OrderItem.total).desc()).all()
+    rows = q.group_by(Product.id, Product.name, Product.purchase_price).order_by(func.sum(OrderItem.total).desc()).all()
 
     items = []
     grand_qty = 0
     grand_sum = 0
+    grand_cost = 0
+    grand_profit = 0
     for r in rows:
         qty = float(r.total_qty or 0)
         total = float(r.total_sum or 0)
+        cost_unit = float(r.purchase_price or 0)
+        cost = qty * cost_unit
+        profit = total - cost
         grand_qty += qty
         grand_sum += total
+        grand_cost += cost
+        grand_profit += profit
         items.append({
             "product_id": r.id,
             "product_name": r.name,
@@ -2530,6 +2542,9 @@ async def sold_products_report(
             "total": total,
             "order_count": r.order_count,
             "avg_price": round(total / qty, 0) if qty else 0,
+            "cost": cost,
+            "profit": profit,
+            "margin_pct": (profit / total * 100) if total else 0,
         })
 
     return templates.TemplateResponse("reports/sold_products.html", {
@@ -2546,6 +2561,10 @@ async def sold_products_report(
         "name_query": name_query or "",
         "grand_qty": grand_qty,
         "grand_sum": grand_sum,
+        "grand_cost": grand_cost,
+        "grand_profit": grand_profit,
+        "grand_margin_pct": (grand_profit / grand_sum * 100) if grand_sum else 0,
+        "show_profit": show_profit,
     })
 
 

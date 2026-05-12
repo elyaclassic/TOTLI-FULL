@@ -48,30 +48,46 @@
 
 <!-- Statistika -->
 <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
         <div class="mini-stat">
             <div class="num">{{ items|length }}</div>
             <div class="lbl"><i class="bi bi-box-seam"></i> Mahsulot turi</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
         <div class="mini-stat">
             <div class="num">{{ "{:,.0f}".format(grand_qty) }}</div>
             <div class="lbl"><i class="bi bi-boxes"></i> Jami miqdor</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
         <div class="mini-stat">
             <div class="num" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</div>
             <div class="lbl"><i class="bi bi-cash"></i> Jami summa</div>
         </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md-{% if show_profit %}2{% else %}3{% endif %}">
         <div class="mini-stat">
             <div class="num">{{ "{:,.0f}".format(grand_sum / grand_qty if grand_qty else 0) }}</div>
             <div class="lbl"><i class="bi bi-tag"></i> O'rtacha narx</div>
         </div>
     </div>
+    {% if show_profit %}
+    <div class="col-6 col-md-2">
+        <div class="mini-stat" style="border-left:4px solid #f59e0b;">
+            <div class="num" style="color:#92400e;">{{ "{:,.0f}".format(grand_cost) }}</div>
+            <div class="lbl"><i class="bi bi-wallet2"></i> Tannarx</div>
+        </div>
+    </div>
+    <div class="col-6 col-md-2">
+        <div class="mini-stat" style="border-left:4px solid {% if grand_profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+            <div class="num" style="color:{% if grand_profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+                {{ "{:,.0f}".format(grand_profit) }}
+            </div>
+            <div class="lbl"><i class="bi bi-graph-up-arrow"></i> Foyda ({{ "{:.1f}".format(grand_margin_pct) }}%)</div>
+        </div>
+    </div>
+    {% endif %}
 </div>
 
 <!-- Jadval -->
@@ -91,6 +107,11 @@
                     <th class="text-end">Miqdor</th>
                     <th class="text-end">O'rtacha narx</th>
                     <th class="text-end">Summa</th>
+                    {% if show_profit %}
+                    <th class="text-end">Tannarx</th>
+                    <th class="text-end">Foyda</th>
+                    <th class="text-end">Marja %</th>
+                    {% endif %}
                     <th class="text-center">Sotuvlar soni</th>
                 </tr>
             </thead>
@@ -102,10 +123,17 @@
                     <td class="text-end num-cell">{{ "{:,.0f}".format(item.quantity) }}</td>
                     <td class="text-end muted-cell">{{ "{:,.0f}".format(item.avg_price) }}</td>
                     <td class="text-end fw-bold" style="color:#065f46;">{{ "{:,.0f}".format(item.total) }}</td>
+                    {% if show_profit %}
+                    <td class="text-end muted-cell">{{ "{:,.0f}".format(item.cost) }}</td>
+                    <td class="text-end fw-bold" style="color:{% if item.profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+                        {{ "{:,.0f}".format(item.profit) }}
+                    </td>
+                    <td class="text-end muted-cell">{{ "{:.1f}".format(item.margin_pct) }}%</td>
+                    {% endif %}
                     <td class="text-center muted-cell">{{ item.order_count }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="6" class="text-muted text-center py-4">Ma'lumot yo'q</td></tr>
+                <tr><td colspan="{% if show_profit %}9{% else %}6{% endif %}" class="text-muted text-center py-4">Ma'lumot yo'q</td></tr>
                 {% endfor %}
             </tbody>
             {% if items %}
@@ -115,6 +143,13 @@
                     <td class="text-end">{{ "{:,.0f}".format(grand_qty) }}</td>
                     <td></td>
                     <td class="text-end" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</td>
+                    {% if show_profit %}
+                    <td class="text-end" style="color:#92400e;">{{ "{:,.0f}".format(grand_cost) }}</td>
+                    <td class="text-end" style="color:{% if grand_profit >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+                        {{ "{:,.0f}".format(grand_profit) }}
+                    </td>
+                    <td class="text-end">{{ "{:.1f}".format(grand_margin_pct) }}%</td>
+                    {% endif %}
                     <td></td>
                 </tr>
             </tfoot>
