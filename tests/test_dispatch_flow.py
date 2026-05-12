@@ -188,3 +188,105 @@ def test_dispatch_waiting_production_saves_delivery_date_and_driver(db):
     assert o.pending_driver_id == drv.id
     # dispatched_at HALI yo'q — faqat out_for_delivery'ga o'tganda yoziladi
     assert o.dispatched_at is None
+
+
+def test_waiting_to_out_for_delivery_when_driver_set_and_stock_ok(db):
+    """waiting_production + pending_driver_id + stock yetadi -> out_for_delivery."""
+    from app.models.database import Order, OrderItem, Stock, Product, Warehouse, Partner, Driver, Delivery
+    from app.services.agent_order_service import try_confirm_waiting_orders
+    from datetime import date as _date
+
+    p = Partner(name="P", balance=0, code="P_W1")
+    w = Warehouse(name="W", is_active=True)
+    pr = Product(name="Pr", is_active=True, sale_price=10000)
+    drv = Driver(code="DR_W1", full_name="Drv", is_active=True)
+    db.add_all([p, w, pr, drv]); db.flush()
+    s = Stock(warehouse_id=w.id, product_id=pr.id, quantity=50)
+    db.add(s); db.flush()
+
+    o = Order(
+        number="AGT-W-1", date=datetime.now(), type="sale", source="agent",
+        partner_id=p.id, warehouse_id=w.id,
+        total=30000, debt=30000, paid=0, status="waiting_production",
+        delivery_date=_date(2026, 5, 15), pending_driver_id=drv.id,
+    )
+    db.add(o); db.flush()
+    db.add(OrderItem(order_id=o.id, product_id=pr.id, quantity=3,
+                     price=10000, total=30000, warehouse_id=w.id))
+    db.commit()
+
+    result = try_confirm_waiting_orders(db)
+
+    db.refresh(o); db.refresh(s); db.refresh(p)
+    assert o.status == "out_for_delivery", f"Expected out_for_delivery, got {o.status}"
+    assert o.dispatched_at is not None, "dispatched_at must be set on transition"
+    assert s.quantity == 47, f"Stock should decrement by 3, got {s.quantity}"
+    assert p.balance == 0, "Balance must NOT be written at waiting->out_for_delivery"
+    delivery = db.query(Delivery).filter_by(order_id=o.id).first()
+    assert delivery is not None
+    assert delivery.driver_id == drv.id
+    assert delivery.status == "pending"
+    assert len(result) == 1
+
+
+def test_waiting_no_driver_does_not_transition(db):
+    """waiting_production + pending_driver_id=NULL -> qoladi waiting_production (driver tanlanishi kutiladi)."""
+    from app.models.database import Order, OrderItem, Stock, Product, Warehouse, Partner
+    from app.services.agent_order_service import try_confirm_waiting_orders
+
+    p = Partner(name="P", balance=0, code="P_W2")
+    w = Warehouse(name="W", is_active=True)
+    pr = Product(name="Pr", is_active=True, sale_price=10000)
+    db.add_all([p, w, pr]); db.flush()
+    s = Stock(warehouse_id=w.id, product_id=pr.id, quantity=50)
+    db.add(s); db.flush()
+
+    o = Order(
+        number="AGT-W-2", date=datetime.now(), type="sale", source="agent",
+        partner_id=p.id, warehouse_id=w.id,
+        total=20000, debt=20000, paid=0, status="waiting_production",
+        pending_driver_id=None,
+    )
+    db.add(o); db.flush()
+    db.add(OrderItem(order_id=o.id, product_id=pr.id, quantity=2,
+                     price=10000, total=20000, warehouse_id=w.id))
+    db.commit()
+
+    result = try_confirm_waiting_orders(db)
+
+    db.refresh(o); db.refresh(s)
+    assert o.status == "waiting_production", "Driver yo'q -> qoladi waiting"
+    assert s.quantity == 50, "Stock o'zgarmasligi kerak"
+    assert result == [] or len(result) == 0
+
+
+def test_waiting_insufficient_stock_does_not_transition(db):
+    """Stock yetmasa, order qoladi waiting_production."""
+    from app.models.database import Order, OrderItem, Stock, Product, Warehouse, Partner, Driver
+    from app.services.agent_order_service import try_confirm_waiting_orders
+
+    p = Partner(name="P", balance=0, code="P_W3")
+    w = Warehouse(name="W", is_active=True)
+    pr = Product(name="Pr", is_active=True, sale_price=10000)
+    drv = Driver(code="DR_W3", full_name="Drv", is_active=True)
+    db.add_all([p, w, pr, drv]); db.flush()
+    s = Stock(warehouse_id=w.id, product_id=pr.id, quantity=1)  # yetmaydi
+    db.add(s); db.flush()
+
+    o = Order(
+        number="AGT-W-3", date=datetime.now(), type="sale", source="agent",
+        partner_id=p.id, warehouse_id=w.id,
+        total=50000, debt=50000, paid=0, status="waiting_production",
+        pending_driver_id=drv.id,
+    )
+    db.add(o); db.flush()
+    db.add(OrderItem(order_id=o.id, product_id=pr.id, quantity=5,
+                     price=10000, total=50000, warehouse_id=w.id))
+    db.commit()
+
+    result = try_confirm_waiting_orders(db)
+
+    db.refresh(o); db.refresh(s)
+    assert o.status == "waiting_production"
+    assert s.quantity == 1
+    assert len(result) == 0
