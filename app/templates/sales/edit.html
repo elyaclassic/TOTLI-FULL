@@ -93,10 +93,24 @@
                             <button type="submit" class="top-btn btn btn-outline-danger"><i class="bi bi-trash"></i> O'chirish</button>
                         </form>
                         {% endif %}
-                        {% elif (order.status or '')|lower == 'completed' %}
+                        {% elif (order.status or '')|lower in ('completed', 'delivered') %}
                         <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> YUK XATI</a>
                         {% if current_user and (current_user.role or '')|lower == 'admin' %}
                         <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
+                            <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                        </form>
+                        {% endif %}
+                        {% elif (order.status or '')|lower == 'confirmed' %}
+                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> YUK XATI</a>
+                        {% if current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
+                        <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Tasdiqni bekor qilish — draft ga qaytadi. Davom etasizmi?');">
+                            <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
+                        </form>
+                        {% endif %}
+                        {% elif (order.status or '')|lower == 'out_for_delivery' %}
+                        <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> YUK XATI</a>
+                        {% if current_user and (current_user.role or '')|lower in ('admin', 'manager') %}
+                        <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Yo\'lga chiqarishni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
                             <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
                         </form>
                         {% endif %}
