@@ -67,8 +67,8 @@
             <div class="card-header">
                 <span>
                     <i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})
-                    <span class="badge bg-success ms-2" title="Bugungi buyurtmalar (har qanday filterdan qat'i nazar)">
-                        Bugun: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm
+                    <span class="badge bg-success ms-2" title="Tanlangan sana oralig'i bo'yicha (cancelledsiz)">
+                        {{ range_label or 'Bugun' }}: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm
                     </span>
                 </span>
                 <div class="d-flex gap-2 flex-wrap align-items-center">

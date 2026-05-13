@@ -169,21 +169,27 @@ async def agent_detail(
         .limit(50)
         .all()
     )
-    # Bugungi buyurtmalar — har doim hisoblanadi (filter sanasidan qat'iy nazar)
-    today_start = today
-    today_end = today.replace(hour=23, minute=59, second=59)
-    today_q = db.query(
+    # Tanlangan oraliq bo'yicha buyurtmalar (filter sanasiga ergashadi)
+    range_q = db.query(
         func.count(Order.id),
         func.coalesce(func.sum(Order.total), 0),
     ).filter(
         Order.agent_id == agent_id,
-        Order.date >= today_start,
-        Order.date <= today_end,
+        Order.date >= d_from,
+        Order.date <= d_to,
         Order.parent_order_id.is_(None),
         Order.status != "cancelled",
     ).first()
-    today_orders_count = int(today_q[0] or 0)
-    today_orders_total = float(today_q[1] or 0)
+    range_orders_count = int(range_q[0] or 0)
+    range_orders_total = float(range_q[1] or 0)
+    # Label uchun — bugun yoki oraliq
+    is_today_only = (d_from.date() == today.date() and d_to.date() == today.date())
+    if is_today_only:
+        range_label = "Bugun"
+    elif d_from.date() == d_to.date():
+        range_label = d_from.strftime("%d.%m.%Y")
+    else:
+        range_label = f"{d_from.strftime('%d.%m')}–{d_to.strftime('%d.%m')}"
 
     # Tasdiqlash modali uchun haydovchilar (faol)
     from app.models.database import Driver, Delivery
@@ -223,8 +229,9 @@ async def agent_detail(
         "active_drivers": drivers,
         "today_iso": datetime.now().date().isoformat(),
         "order_drivers": order_drivers,
-        "today_orders_count": today_orders_count,
-        "today_orders_total": today_orders_total,
+        "today_orders_count": range_orders_count,
+        "today_orders_total": range_orders_total,
+        "range_label": range_label,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
         "date_from": d_from.strftime("%Y-%m-%d"),
