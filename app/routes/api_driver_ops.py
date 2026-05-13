@@ -260,8 +260,25 @@ async def driver_delivery_status(
             partner_id = order.partner_id if order else None
             total_paid = (naqd or 0) + (plastik or 0)
 
+            # Idempotency: buyurtmaga allaqachon Payment yaratilgan bo'lsa (eski delivery'dan) — yangi
+            # Payment yaratmaymiz. Bu supervisor edit + reconfirm flow'ida dublikat to'lovni to'sadi.
+            existing_paid = 0.0
+            if order and order.id:
+                existing_paid = float(db.query(sa_func.coalesce(sa_func.sum(Payment.amount), 0)).filter(
+                    Payment.order_id == order.id, Payment.type == "income"
+                ).scalar() or 0)
+            order_total = float(order.total or 0) if order else 0
+            skip_new_payment = existing_paid >= order_total - 0.01 and order_total > 0
+
             for pay_type, pay_amount in [("naqd", naqd or 0), ("plastik", plastik or 0)]:
                 if pay_amount <= 0:
+                    continue
+                if skip_new_payment:
+                    logger.warning(
+                        f"Delivery {delivery.id}/{delivery.number}: Payment dublikat'i to'sildi "
+                        f"(order={order.number if order else '?'}, existing_paid={existing_paid}, "
+                        f"order_total={order_total}, new={pay_amount})"
+                    )
                     continue
                 cash_register = db.query(CashRegister).filter(
                     CashRegister.payment_type == pay_type,
