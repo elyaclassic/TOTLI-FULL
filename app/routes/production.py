@@ -1742,16 +1742,25 @@ async def complete_production(
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Topilmadi")
-    if production.status == "completed":
-        return RedirectResponse(url="/production/orders", status_code=303)
     recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish.
+    # Stock harakatlari yozilishidan oldin status'ni atomik claim qilamiz; ikkinchi so'rov
+    # rowcount=0 oladi va early return qiladi (stock'ga tegmaydi).
+    from sqlalchemy import text as _text
+    max_stage = _recipe_max_stage(recipe)
+    claim = db.execute(
+        _text("UPDATE productions SET status='completed', current_stage=:cs WHERE id=:id AND status != 'completed'"),
+        {"id": prod_id, "cs": max_stage}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/production/orders", status_code=303)
+    db.refresh(production)
     err = _do_complete_production_stock(db, production, recipe)
     if err:
+        db.rollback()  # status'ni qaytarish — stock muvaffaqiyatsiz bo'lsa
         return err
-    production.status = "completed"
-    production.current_stage = _recipe_max_stage(recipe)
     db.commit()
     check_low_stock_and_notify(db)
     notify_managers_production_ready(db, production)
