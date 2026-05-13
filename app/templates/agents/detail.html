@@ -90,6 +90,12 @@
                     <button type="button" id="bulkConfirmBtn" class="btn btn-sm btn-success" disabled onclick="confirmSelected()">
                         <i class="bi bi-check2-all"></i> Belgilanganlar tasdiqlash (<span id="bulkConfirmCount">0</span>)
                     </button>
+                    {% if current_user and current_user.role in ['admin', 'manager'] %}
+                    <button type="button" id="bulkDispatchBtn" class="btn btn-sm btn-warning" disabled
+                            data-bs-toggle="modal" data-bs-target="#bulkDispatchModal">
+                        <i class="bi bi-truck"></i> Yo'lga chiqarish (<span id="bulkDispatchCount">0</span>)
+                    </button>
+                    {% endif %}
                     <button type="button" id="bulkExcelBtn" class="btn btn-sm btn-outline-success" disabled onclick="exportSelectedToExcel()">
                         <i class="bi bi-file-earmark-excel"></i> Tanlanganlar Excel (<span id="bulkCount">0</span>)
                     </button>
@@ -133,10 +139,19 @@
                         {% set ex_child = exchange_children.get(order.id) if exchange_children else None %}
                         {% set is_exchange = ex_child is not none and order.type == 'return_sale' %}
                         {% set ex_diff = (ex_child.total or 0) - (order.total or 0) if is_exchange else 0 %}
+                        {% set dispatch_id = ex_child.id if is_exchange else order.id %}
+                        {% set dispatch_status = ex_child.status if is_exchange else order.status %}
                         <tr>
                             <td>
                                 {% if order.status in ('confirmed', 'completed', 'draft', 'waiting_production') %}
-                                <input type="checkbox" class="order-cb" data-id="{{ order.id }}" data-status="{{ order.status }}" data-num="{{ order.number }}" onclick="updateBulkBtn()">
+                                <input type="checkbox" class="order-cb"
+                                       data-id="{{ order.id }}"
+                                       data-status="{{ order.status }}"
+                                       data-num="{{ order.number }}"
+                                       data-dispatch-id="{{ dispatch_id }}"
+                                       data-dispatch-status="{{ dispatch_status }}"
+                                       data-is-exchange="{{ '1' if is_exchange else '0' }}"
+                                       onclick="updateBulkBtn()">
                                 {% endif %}
                             </td>
                             <td>
@@ -182,14 +197,19 @@
                                     <i class="bi bi-pencil"></i>
                                 </a>
                                 {% endif %}
-                                {% if order.status == 'confirmed' and order.type != 'return_sale' and current_user and current_user.role in ['admin', 'manager'] %}
+                                {% if current_user and current_user.role in ['admin', 'manager'] %}
+                                {% if (order.status == 'confirmed' and order.type != 'return_sale') or (is_exchange and ex_child and ex_child.status == 'confirmed') %}
+                                {% set _dispatch_target = ex_child if is_exchange else order %}
                                 <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2"
                                         data-bs-toggle="modal"
-                                        data-bs-target="#dispatchModal-{{ order.id }}"
-                                        title="Yuklash (yo'lga chiqarish)">
+                                        data-bs-target="#dispatchModal-{{ _dispatch_target.id }}"
+                                        title="Yuklash (yo'lga chiqarish){% if is_exchange %} — obmen yangi qism: {{ ex_child.number }}{% endif %}">
                                     <i class="bi bi-truck"></i>
                                 </button>
-                                {% include 'sales/dispatch_modal.html' ignore missing with context %}
+                                {% with order=_dispatch_target %}
+                                  {% include 'sales/dispatch_modal.html' ignore missing %}
+                                {% endwith %}
+                                {% endif %}
                                 {% endif %}
                                 {% if order.status in ('confirmed', 'completed', 'waiting_production') or is_exchange %}
                                 {% if is_exchange %}
@@ -443,6 +463,52 @@
     </div>
   </div>
 </div>
+
+{% if current_user and current_user.role in ['admin', 'manager'] %}
+<!-- Belgilanganlarni yo'lga chiqarish modali -->
+<div class="modal fade" id="bulkDispatchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">
+          <i class="bi bi-truck"></i>
+          Belgilanganlarni yo'lga chiqarish (<span id="bulkDispatchModalCount">0</span>)
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" for="bulkDispatchDate">Yuklash sanasi *</label>
+          <input type="date" id="bulkDispatchDate" class="form-control"
+                 min="{{ today_iso }}" value="{{ today_iso }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="bulkDispatchDriver">Haydovchi *</label>
+          <select id="bulkDispatchDriver" class="form-select" required>
+            <option value="">— Tanlang —</option>
+            {% for d in active_drivers %}
+              <option value="{{ d.id }}">{{ d.full_name }}{% if d.vehicle_number %} ({{ d.vehicle_number }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="alert alert-info py-2 small mb-0">
+          <i class="bi bi-info-circle"></i>
+          Tanlangan barcha buyurtmalar bir xil sana va haydovchi bilan yo'lga chiqariladi.
+          Almashtirish (Обмен) hujjatlarda yangi sotuv qismi yuboriladi.
+          Mahsulot yetishmagan buyurtmalar ishlab chiqarishga jo'natiladi.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+        <button type="button" id="bulkDispatchSubmit" class="btn btn-warning" onclick="dispatchSelected()">
+          <i class="bi bi-truck"></i> Yo'lga chiqarish
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <script>
     // Mavjud faol haydovchilar (1 ta bo'lsa avtomatik tanlanadi, modal kerak emas)
     var DRIVERS = [
@@ -465,6 +531,15 @@
         const draftCount = checked.filter(cb => cb.dataset.status === 'draft').length;
         document.getElementById('bulkConfirmCount').textContent = draftCount;
         document.getElementById('bulkConfirmBtn').disabled = draftCount === 0;
+        // Dispatch: faqat confirmed (obmen uchun child.status='confirmed')
+        const btnDispatch = document.getElementById('bulkDispatchBtn');
+        if (btnDispatch) {
+            const dispatchCount = checked.filter(cb => cb.dataset.dispatchStatus === 'confirmed').length;
+            document.getElementById('bulkDispatchCount').textContent = dispatchCount;
+            const modalCount = document.getElementById('bulkDispatchModalCount');
+            if (modalCount) modalCount.textContent = dispatchCount;
+            btnDispatch.disabled = dispatchCount === 0;
+        }
     }
     function exportSelectedToExcel() {
         const excelStatuses = ['confirmed', 'completed', 'waiting_production'];
@@ -506,6 +581,46 @@
             }
         }
         alert("Tasdiqlandi: " + success + " ta\nXato: " + failed + " ta");
+        location.reload();
+    }
+    async function dispatchSelected() {
+        const targets = Array.from(document.querySelectorAll('.order-cb:checked'))
+            .filter(cb => cb.dataset.dispatchStatus === 'confirmed');
+        if (targets.length === 0) { alert("Yo'lga chiqariladigan tasdiqlangan buyurtma yo'q"); return; }
+        const dateInput = document.getElementById('bulkDispatchDate');
+        const drvInput = document.getElementById('bulkDispatchDriver');
+        if (!dateInput || !dateInput.value) { alert("Yuklash sanasini tanlang"); return; }
+        if (!drvInput || !drvInput.value) { alert("Haydovchini tanlang"); return; }
+
+        const submitBtn = document.getElementById('bulkDispatchSubmit');
+        const origText = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Jo'natilmoqda...";
+
+        let success = 0, failed = 0;
+        for (const cb of targets) {
+            const dispatchId = cb.dataset.dispatchId;
+            try {
+                const fd = new FormData();
+                fd.append('csrf_token', CSRF_TOKEN);
+                fd.append('delivery_date', dateInput.value);
+                fd.append('driver_id', drvInput.value);
+                const r = await fetch('/sales/' + dispatchId + '/dispatch', {
+                    method: 'POST',
+                    body: fd,
+                    redirect: 'manual',
+                });
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') {
+                    success++;
+                } else {
+                    failed++;
+                }
+            } catch (e) {
+                failed++;
+            }
+        }
+        submitBtn.textContent = origText;
+        alert("Yo'lga chiqarildi: " + success + " ta\nXato: " + failed + " ta\n\nMahsulot yetishmaganlar ishlab chiqarishga jo'natilgan (muvaffaqiyat sifatida hisoblanadi).");
         location.reload();
     }
     function _appendHidden(form, name, value) {

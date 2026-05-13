@@ -507,9 +507,17 @@ async def supervisor_confirm_agent_order(
         from app.services.stock_service import apply_return_stock_addition
         apply_return_stock_addition(db, order, current_user, note_prefix="Obmen qaytarish (Vozvrat kirim)")
         order.user_id = current_user.id
+        # Obmen child (yangi sotuv) ham birga tasdiqlanadi — agents detail UX uchun.
+        # Stock/balance/Delivery hali tegmaydi; dispatch bosqichida amalga oshiriladi.
+        child_claim = db.execute(
+            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+            {"uid": current_user.id, "pid": order.id},
+        )
         db.commit()
+        child_msg = " + yangi sotuv tasdiqlandi" if child_claim.rowcount else ""
         return RedirectResponse(
-            url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish) tasdiqlandi"),
+            url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish){child_msg} tasdiqlandi"),
             status_code=303,
         )
 
