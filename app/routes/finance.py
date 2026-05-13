@@ -59,8 +59,10 @@ async def finance(
     current_user: User = Depends(require_auth),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    cash_register_id: Optional[str] = None,
+    partner_id: Optional[str] = None,
 ):
-    """Moliya - kassa. So'nggi to'lovlar sana bo'yicha filtrlanishi mumkin."""
+    """Moliya - kassa. So'nggi to'lovlar sana, kassa va kontragent bo'yicha filtrlanishi mumkin."""
     ensure_payments_status_column(db)
     role = (current_user.role or "").strip()
     # Sotuvchi uchun cheklov: faqat biriktirilgan kassalar va mijozlar
@@ -111,6 +113,21 @@ async def finance(
             q = q.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
+    # Kassa va kontragent filtrlari
+    filter_cash_id = None
+    filter_partner_id = None
+    try:
+        if cash_register_id and str(cash_register_id).strip():
+            filter_cash_id = int(cash_register_id)
+            q = q.filter(Payment.cash_register_id == filter_cash_id)
+    except (ValueError, TypeError):
+        filter_cash_id = None
+    try:
+        if partner_id and str(partner_id).strip():
+            filter_partner_id = int(partner_id)
+            q = q.filter(Payment.partner_id == filter_partner_id)
+    except (ValueError, TypeError):
+        filter_partner_id = None
     from app.utils.pagination import paginate, pagination_query_string
     _pg = paginate(q, request.query_params.get("page", 1), per_page=50)
     payments = _pg["items"]
@@ -236,6 +253,8 @@ async def finance(
         "has_date_filter": has_date_filter,
         "filter_date_from": filter_date_from,
         "filter_date_to": filter_date_to,
+        "filter_cash_id": filter_cash_id,
+        "filter_partner_id": filter_partner_id,
         "current_user": current_user,
         "page": _pg["page"],
         "per_page": _pg["per_page"],
@@ -243,7 +262,12 @@ async def finance(
         "total_pages": _pg["total_pages"],
         "items_count": _pg["items_count"],
         "base_url": "/finance",
-        "pagination_query": pagination_query_string({"date_from": filter_date_from, "date_to": filter_date_to}),
+        "pagination_query": pagination_query_string({
+            "date_from": filter_date_from,
+            "date_to": filter_date_to,
+            "cash_register_id": filter_cash_id or "",
+            "partner_id": filter_partner_id or "",
+        }),
         "page_title": "Moliya"
     })
 
