@@ -223,24 +223,29 @@ async def driver_delivery_status(
 
         if new_status == "failed" and delivery.order_id:
             order = db.query(Order).filter(Order.id == delivery.order_id).first()
-            if order and order.status == "confirmed" and not (order.paid or 0) > 0:
-                for it in order.items:
-                    wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
-                    if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
-                        continue
-                    create_stock_movement(
-                        db=db,
-                        warehouse_id=wh_id,
-                        product_id=it.product_id,
-                        quantity_change=+float(it.quantity or 0),
-                        operation_type="delivery_failed",
-                        document_type="Sale",
-                        document_id=order.id,
-                        document_number=order.number,
-                        user_id=getattr(driver, 'employee_id', None),
-                        note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
-                        created_at=datetime.now(),
-                    )
+            # 2026-05-12 flow: dispatch'dan keyin order.status = 'out_for_delivery'.
+            # Eski 'confirmed' holat ham qoldirilgan (backward compat).
+            if order and order.status in ("confirmed", "out_for_delivery") and not (order.paid or 0) > 0:
+                # Faqat 'out_for_delivery' bo'lsa stock dispatch'da chiqarilgan — qaytarish kerak.
+                # 'confirmed' bo'lsa stock hali chiqarilmagan — qaytarish shart emas.
+                if order.status == "out_for_delivery":
+                    for it in order.items:
+                        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+                        if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
+                            continue
+                        create_stock_movement(
+                            db=db,
+                            warehouse_id=wh_id,
+                            product_id=it.product_id,
+                            quantity_change=+float(it.quantity or 0),
+                            operation_type="delivery_failed",
+                            document_type="Sale",
+                            document_id=order.id,
+                            document_number=order.number,
+                            user_id=getattr(driver, 'employee_id', None),
+                            note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
+                            created_at=datetime.now(),
+                        )
                 order.status = "cancelled"
 
         if new_status == "delivered":
