@@ -759,6 +759,7 @@ async def sales_confirm(
 
 @router.post("/{order_id}/dispatch")
 async def sales_dispatch(
+    request: Request,
     order_id: int,
     delivery_date: str = Form(...),
     driver_id: int = Form(...),
@@ -978,6 +979,11 @@ async def sales_dispatch(
     except Exception:
         pass
 
+    # Agar foydalanuvchi agent detail sahifasidan kelgan bo'lsa, o'sha sahifaga qaytarish
+    # (browser back tugmasi yaxshi ishlasin — modal qayta ochilmasin).
+    referer = request.headers.get("referer", "")
+    if "/agents/" in referer:
+        return RedirectResponse(url=referer, status_code=303)
     return RedirectResponse(url=f"/sales/edit/{order_id}?dispatched=1", status_code=303)
 
 
