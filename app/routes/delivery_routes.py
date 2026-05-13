@@ -851,10 +851,13 @@ async def supervisor_confirm_driver_payment(
     if p.status != "pending":
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
 
-    # Atomik UPDATE WHERE
+    # Atomik UPDATE WHERE + Payment.date'ni tasdiqlangan vaqtga ko'chirish.
+    # created_at original audit izi sifatida o'zgarmaydi (haydovchi pul olgan vaqt).
+    now = datetime.now()
     claim = db.execute(
-        _text("UPDATE payments SET status='confirmed' WHERE id=:id AND status='pending' AND category='delivery'"),
-        {"id": payment_id},
+        _text("UPDATE payments SET status='confirmed', date=:now "
+              "WHERE id=:id AND status='pending' AND category='delivery'"),
+        {"id": payment_id, "now": now},
     )
     if claim.rowcount == 0:
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
