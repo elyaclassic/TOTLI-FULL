@@ -104,19 +104,30 @@
 <div class="card data-table">
   <div class="card-header flex-wrap gap-2">
     <span class="fw-bold"><i class="bi bi-clock-history text-primary"></i> So'nggi to'lovlar</span>
+    {% set selected_partner = partners | selectattr('id', 'equalto', filter_partner_id) | first if filter_partner_id else None %}
     <form method="get" action="/finance" class="d-flex align-items-center gap-2 flex-wrap">
       <select name="cash_register_id" class="form-select form-select-sm" style="width:auto;border-radius:10px;min-width:140px;" title="Kassa">
         <option value="">— Hamma kassa —</option>
         {% for c in cash_registers %}
-        <option value="{{ c.id }}" {% if filter_cash_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+        <option value="{{ c.id }}" {% if filter_cash_id and filter_cash_id|int == c.id|int %}selected{% endif %}>{{ c.name }}</option>
         {% endfor %}
       </select>
-      <select name="partner_id" class="form-select form-select-sm" style="width:auto;border-radius:10px;min-width:180px;" title="Kontragent">
-        <option value="">— Hamma kontragent —</option>
-        {% for p in partners %}
-        <option value="{{ p.id }}" {% if filter_partner_id == p.id %}selected{% endif %}>{{ p.name }}</option>
-        {% endfor %}
-      </select>
+      <div class="ss-wrap" style="position:relative;min-width:200px;">
+        <input type="hidden" name="partner_id" id="finFilterPartnerId" value="{{ filter_partner_id or '' }}">
+        <input type="text" class="form-control form-control-sm" id="finFilterPartnerSearch"
+               placeholder="— Hamma kontragent —" autocomplete="off"
+               style="border-radius:10px;" value="{{ selected_partner.name if selected_partner else '' }}">
+        <div class="ss-dropdown" id="finFilterPartnerDropdown"
+             style="position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ced4da;border-radius:0 0 10px 10px;z-index:1060;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:240px;">
+          <div class="ss-opt-f" data-id="" data-name="" style="padding:8px 12px;cursor:pointer;font-size:14px;color:#999;">— Hamma kontragent —</div>
+          {% for p in partners %}
+          <div class="ss-opt-f" data-id="{{ p.id }}" data-name="{{ p.name }}{% if p.phone %} {{ p.phone }}{% endif %}"
+               style="padding:8px 12px;cursor:pointer;font-size:14px;">
+            {{ p.name }}{% if p.phone %} <small style="color:#888;">{{ p.phone }}</small>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
       <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_from or '' }}" title="Sana dan">
       <span class="text-muted small">—</span>
       <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_to or '' }}" title="Sana gacha">
@@ -333,6 +344,40 @@ document.getElementById('addPaymentModal').addEventListener('show.bs.modal', fun
     dateInput.value = y + '-' + m + '-' + d;
   }
 });
+// Filter typeahead — kontragent (yuqori formada)
+(function(){
+  var input = document.getElementById('finFilterPartnerSearch');
+  var dropdown = document.getElementById('finFilterPartnerDropdown');
+  var hidden = document.getElementById('finFilterPartnerId');
+  if(!input || !dropdown) return;
+  var allOpts = Array.from(dropdown.querySelectorAll('.ss-opt-f'));
+
+  function filter(){
+    var q = (input.value||'').toLowerCase();
+    allOpts.forEach(function(opt){
+      var name = (opt.getAttribute('data-name')||'').toLowerCase();
+      opt.style.display = (!q || name.indexOf(q)!==-1) ? '' : 'none';
+    });
+  }
+  input.addEventListener('focus', function(){ filter(); dropdown.style.display='block'; });
+  input.addEventListener('input', function(){ hidden.value=''; filter(); dropdown.style.display='block'; });
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('#finFilterPartnerSearch') && !e.target.closest('#finFilterPartnerDropdown'))
+      dropdown.style.display='none';
+  });
+  allOpts.forEach(function(opt){
+    opt.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    opt.addEventListener('click', function(){
+      hidden.value = opt.getAttribute('data-id');
+      input.value = opt.getAttribute('data-name') || '';
+      dropdown.style.display = 'none';
+    });
+    opt.addEventListener('mouseenter', function(){ opt.style.background='#0d6efd'; opt.style.color='#fff'; });
+    opt.addEventListener('mouseleave', function(){ opt.style.background=''; opt.style.color=''; });
+  });
+})();
+
+// Mavjud modal typeahead
 (function(){
   var input = document.getElementById('finPartnerSearch');
   var dropdown = document.getElementById('finPartnerDropdown');
