@@ -544,9 +544,10 @@ async def report_stock_source(
         .all()
     )
     confirmed_adj_ids, completed_production_ids, doc_dates = _load_movement_doc_filters(db, movements)
-    # Bir xil hujjat (document_type, document_id) uchun bitta qator — dublikat harakatlar birlashtiriladi
+    # Har bir movement alohida qator — dedupe (document_type, document_id) ledger drift'ga olib kelardi.
+    # Dublikat movement'lar duplicate flag bilan belgilanadi (eski race-condition bug audit izi).
     rows = []
-    seen_doc = set()  # (document_type, document_id)
+    seen_doc = {}  # (document_type, document_id) -> index of first occurrence
     transfers_by_id = {}  # keyed by document_id for wrong_warehouse check
     for m in movements:
         # Qoldiq tuzatish: faqat tasdiqlangan hujjat ko'rinsin
@@ -556,9 +557,9 @@ async def report_stock_source(
         if (m.document_type or "") == "Production" and m.document_id and m.document_id not in completed_production_ids:
             continue
         key = (m.document_type or "", m.document_id)
-        if key in seen_doc:
-            continue
-        seen_doc.add(key)
+        is_dup = key in seen_doc
+        if not is_dup:
+            seen_doc[key] = len(rows)
         if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id and m.document_id in doc_dates and doc_dates[m.document_id]:
             display_date = doc_dates[m.document_id].strftime("%d.%m.%Y %H:%M")
         else:
@@ -573,6 +574,7 @@ async def report_stock_source(
             "quantity_change": float(m.quantity_change or 0),
             "quantity_after": float(m.quantity_after or 0),
             "movement_id": getattr(m, "id", None),
+            "is_duplicate": is_dup,
             "_sort_at": m.created_at if m.created_at else datetime.min,
         }
         # Ombordan omborga: hujjatda bu ombor ko'rsatilmagan bo'lsa ogohlantirish
@@ -594,12 +596,6 @@ async def report_stock_source(
     _check_production_quantity_mismatch(db, rows)
     # Tartib: haqiqiy vaqt bo'yicha (created_at), matn sanasi emas — oxirgi qator = hozirgi qoldiq
     rows.sort(key=lambda r: (r.get("_sort_at") or datetime.min, r.get("document_id") or 0))
-    # Qoldiq (harakatdan keyin) — ketma-ket yig'indi (sana tartibida)
-    if rows:
-        balance = 0.0
-        for r in rows:
-            balance += r["quantity_change"]
-            r["quantity_after"] = round(balance, 6)
     for r in rows:
         r.pop("_sort_at", None)
     current_stock = db.query(Stock).filter(
@@ -607,9 +603,44 @@ async def report_stock_source(
         Stock.product_id == product_id,
     ).all()
     current_qty = sum(float(s.quantity or 0) for s in current_stock)
+    # Backward-walk: bugungi Stock.quantity dan teskari yurib har qatorning quantity_after ni hisoblash.
+    # Bu yondashuv Qoldiq hisoboti bilan moslashtiriladi: INV qatori = INV'ga kiritilgan jismoniy son.
+    # Formula: r.quantity_after = current_stock - SUM(quantity_change of LATER rows)
+    if rows:
+        balance = float(current_qty)
+        for r in reversed(rows):
+            r["quantity_after"] = round(balance, 6)
+            balance -= r["quantity_change"]
+        implied_start = round(balance, 6)
+    else:
+        implied_start = 0.0
     # Dona mahsulotlar uchun ko'rsatishda butun son (216, 6), boshqalar uchun 3 xona kasr
     _unit_str = ((getattr(product, "unit", None) and (product.unit.name or "") or "") + " " + (getattr(product, "unit", None) and (product.unit.code or "") or "")).lower()
     is_dona = product and "dona" in _unit_str
+
+    # Statistika: kirim/chiqim/INV jami + drift (Stock vs ledger)
+    total_in = sum(r["quantity_change"] for r in rows if r["quantity_change"] > 0)
+    total_out = sum(r["quantity_change"] for r in rows if r["quantity_change"] < 0)
+    ledger_balance = round(total_in + total_out, 6)
+    drift = round(current_qty - ledger_balance, 6)
+    # Operatsiya turi bo'yicha yig'indi
+    type_totals = {}
+    for r in rows:
+        key = r.get("document_type") or "Other"
+        if key not in type_totals:
+            type_totals[key] = {"in": 0.0, "out": 0.0, "count": 0, "label": r.get("document_type_label") or key}
+        if r["quantity_change"] > 0:
+            type_totals[key]["in"] += r["quantity_change"]
+        else:
+            type_totals[key]["out"] += r["quantity_change"]
+        type_totals[key]["count"] += 1
+    # Tartibga solib (eng katta net o'zgarish birinchi)
+    type_totals_sorted = sorted(
+        type_totals.items(),
+        key=lambda kv: abs(kv[1]["in"] + kv[1]["out"]),
+        reverse=True,
+    )
+
     msg = request.query_params.get("msg") or ""
     error = request.query_params.get("error") or ""
     removed = request.query_params.get("removed")
@@ -620,6 +651,11 @@ async def report_stock_source(
         "movements": rows,
         "current_qty": current_qty,
         "is_dona": is_dona,
+        "total_in": total_in,
+        "total_out": total_out,
+        "ledger_balance": ledger_balance,
+        "drift": drift,
+        "type_totals": type_totals_sorted,
         "page_title": "Qoldiq manbai",
         "current_user": current_user,
         "msg": msg,

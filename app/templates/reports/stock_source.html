@@ -12,10 +12,31 @@
 </div>
 {% endif %}
 
+{% macro fmt(v) -%}
+{% if is_dona %}{{ "{:,.0f}".format(v|round(0)) }}{% else %}{{ "{:,.3f}".format(v) }}{% endif %}
+{%- endmacro %}
+{% macro fmt_signed(v) -%}
+{% if is_dona %}{{ "{:+,.0f}".format(v|round(0)) }}{% else %}{{ "{:+,.3f}".format(v) }}{% endif %}
+{%- endmacro %}
+
+{# Document type → CSS rang va ikona #}
+{% set DOC_STYLES = {
+    'Production':         {'cls': 'bg-success-subtle text-success-emphasis',  'ico': 'bi-gear-wide-connected', 'lbl': 'Ishlab chiqarish'},
+    'Sale':               {'cls': 'bg-primary-subtle text-primary-emphasis',  'ico': 'bi-cart-check',          'lbl': 'Sotuv'},
+    'SaleReturn':         {'cls': 'bg-info-subtle text-info-emphasis',        'ico': 'bi-arrow-return-left',   'lbl': 'Qaytarish'},
+    'WarehouseTransfer':  {'cls': 'bg-secondary-subtle text-secondary-emphasis','ico': 'bi-arrow-left-right',    'lbl': 'Ombordan omborga'},
+    'StockAdjustmentDoc': {'cls': 'bg-warning-subtle text-warning-emphasis',  'ico': 'bi-clipboard-check',     'lbl': 'Inventarizatsiya/Tuzatish'},
+    'InitialBalance':     {'cls': 'bg-dark-subtle text-dark-emphasis',        'ico': 'bi-flag',                'lbl': 'Boshlang\'ich qoldiq'},
+    'BalanceCorrection':  {'cls': 'bg-danger-subtle text-danger-emphasis',    'ico': 'bi-tools',               'lbl': 'Balance tuzatish'},
+    'Purchase':           {'cls': 'bg-success-subtle text-success-emphasis',  'ico': 'bi-box-arrow-in-down',   'lbl': 'Xarid'},
+    'Delivery':           {'cls': 'bg-primary-subtle text-primary-emphasis',  'ico': 'bi-truck',               'lbl': 'Yetkazib berildi'},
+    'ProductConversion':  {'cls': 'bg-info-subtle text-info-emphasis',        'ico': 'bi-shuffle',             'lbl': 'Konversiya'},
+} %}
+
 <div class="page-header mb-3">
     <div>
         <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Mahsulot harakati tarixi</h5>
-        <p class="text-muted mb-0 small">Qayerdan keldi / qayerga ketdi</p>
+        <p class="text-muted mb-0 small">{{ product.name if product else '-' }} — {{ warehouse.name if warehouse else '-' }}</p>
     </div>
     <div class="d-flex align-items-center gap-2">
         <a href="/reports/stock" class="top-btn btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Qoldiq hisoboti</a>
@@ -23,59 +44,174 @@
     </div>
 </div>
 
-<div class="data-table">
-    <div class="card-header">
-        <div>
-            <strong>Ombor:</strong> {{ warehouse.name if warehouse else '-' }} &nbsp;|&nbsp;
-            <strong>Mahsulot:</strong> {{ product.name if product else '-' }} ({{ product.code or product.barcode or '-' }})
+{# ============== TEPADAGI XULOSA KARTOCHKALARI ============== #}
+<div class="row g-3 mb-3">
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-box-seam"></i> Haqiqiy qoldiq</div>
+                <div class="fs-3 fw-bold text-success">{{ fmt(current_qty) }}</div>
+                <div class="text-muted small">Stock jadvalida (hozir)</div>
+            </div>
         </div>
     </div>
-    <div class="card-body" style="border-bottom: 1px solid #e9ecef;">
-        <p class="text-muted small mb-2">Jadvalda faqat <strong>shu mahsulot</strong> ({{ product.name if product else '-' }}) omborga kirgan yoki chiqqan harakatlar ko'rsatiladi. «Ishlab chiqarish» qatori — shu mahsulotni tayyor mahsulot qilib chiqargan buyurtma (hujjatni «Ochish» orqali ko'ring).</p>
-        <p class="text-muted small mb-2"><i class="bi bi-exclamation-triangle text-warning"></i> <strong>«Hujjatda …»</strong> — ishlab chiqarishda retsept bo'yicha chiqish (masalan 16) va harakatda yozilgan miqdor (masalan +6) farq qilsa chiqadi; retsept o'zgartirilgandan keyin bo'lishi mumkin. Tasdiqni bekor qilingan buyurtmalar jadvalda ko'rsatilmaydi.</p>
-        <p class="text-success fw-bold mb-2">Hozirgi qoldiq (Stock jadvalidagi yig'indi): <strong>{% if is_dona %}{{ "{:,.0f}".format(current_qty|round(0)) }}{% else %}{{ "{:,.3f}".format(current_qty) }}{% endif %}</strong></p>
-        <p class="text-muted small mb-0"><strong>Jadval:</strong> <strong>birinchi qator</strong> — birinchi harakat (masalan qoldiq tushuriladi), <strong>oxirgi qator</strong> — eng so'nggi harakat. «Qoldiq (harakatdan keyin)» — shu qatordagi harakatdan keyingi yig'indi qoldiq. Masalan: +3.400 (qoldiq tuzatish) keyin −6.800 (ombordan omborga) bo'lsa, oxirgi qatorda qoldiq 3.400 − 6.800 = <strong>−3.400</strong>.</p>
-        <p class="text-muted small mb-0">Agar «Hozirgi qoldiq» oxirgi qatordagi raqamdan farq qilsa, keyinroq boshqa harakatlar bo'lgan bo'lishi mumkin.</p>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-plus-circle text-success"></i> Jami kirim</div>
+                <div class="fs-4 fw-bold text-success">+{{ fmt(total_in) }}</div>
+                <div class="text-muted small">Ishlab chiqarish + xarid + qaytarish</div>
+            </div>
+        </div>
     </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-dash-circle text-danger"></i> Jami chiqim</div>
+                <div class="fs-4 fw-bold text-danger">{{ fmt(total_out) }}</div>
+                <div class="text-muted small">Sotuv + transfer + INV minus</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 col-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-body py-3">
+                <div class="text-muted small mb-1"><i class="bi bi-calculator"></i> Ledger yig'indi</div>
+                <div class="fs-4 fw-bold {% if ledger_balance < 0 %}text-danger{% else %}text-body{% endif %}">{{ fmt(ledger_balance) }}</div>
+                <div class="text-muted small">Jadvaldagi yig'indi</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ============== DRIFT OGOHLANTIRISH ============== #}
+{% if drift|abs > 0.01 %}
+<div class="alert alert-warning d-flex align-items-start gap-2 mb-3 py-2">
+    <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+    <div class="flex-grow-1 small">
+        <strong>Drift aniqlandi:</strong>
+        Stock jadvalida <strong>{{ fmt(current_qty) }}</strong>, lekin pastdagi harakatlar yig'indisi <strong>{{ fmt(ledger_balance) }}</strong>.
+        Farq: <strong>{{ fmt_signed(drift) }}</strong>.
+        <div class="text-muted mt-1">
+            Sabablar: (1) inventarizatsiya retroaktiv tuzatishlar; (2) bekor qilingan ishlab chiqarish/INV jadvalda ko'rinmaydi; (3) eski yozuvlar yoki to'g'ridan-to'g'ri tuzatishlar. Bu drift keyingi inventarizatsiya bilan tuzatiladi. <strong>Haqiqiy qoldiq</strong> har doim <strong>{{ fmt(current_qty) }}</strong> — birinchi kartochkadagi raqamga ishoning.
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{# ============== OPERATSIYA TURLARI BO'YICHA XULOSA ============== #}
+{% if type_totals %}
+<div class="card border-0 shadow-sm mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+            <span class="text-muted small"><i class="bi bi-pie-chart"></i> Tur bo'yicha:</span>
+            {% for dtype, t in type_totals %}
+                {% set st = DOC_STYLES.get(dtype, {'cls': 'bg-light text-body', 'ico': 'bi-circle', 'lbl': t.label or dtype}) %}
+                {% set net = t.in + t.out %}
+                <span class="badge rounded-pill {{ st.cls }} fw-normal" style="font-size:.85em;">
+                    <i class="{{ st.ico }}"></i> {{ st.lbl }}
+                    <span class="ms-1">({{ t.count }})</span>
+                    <strong class="ms-1">{{ fmt_signed(net) }}</strong>
+                </span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="data-table">
+    <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+        <div>
+            <strong>{{ product.name if product else '-' }}</strong>
+            <code class="ms-1">{{ product.code or product.barcode or '-' }}</code>
+            <span class="text-muted">·</span>
+            <span class="text-muted">{{ warehouse.name if warehouse else '-' }}</span>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <input type="text" id="opFilter" class="form-control form-control-sm" style="width:200px;" placeholder="🔍 Hujjat raqami filtri">
+            <span class="text-muted small"><span id="rowCount">{{ movements|length }}</span> / {{ movements|length }} harakat</span>
+        </div>
+    </div>
+
+    <details class="px-3 pt-2">
+        <summary class="text-muted small" style="cursor:pointer;"><i class="bi bi-info-circle"></i> Jadvalni qanday o'qish kerak?</summary>
+        <div class="text-muted small mt-2 mb-2">
+            <ul class="mb-0 ps-3">
+                <li><strong>Sana</strong>: harakat sodir bo'lgan vaqt (eng eski → eng yangi).</li>
+                <li><strong>Kirim/Chiqim</strong>: yashil (+) — omborga kirgan; qizil (−) — omborga chiqqan.</li>
+                <li><strong>Yig'ilgan qoldiq</strong>: shu qator yozilgan vaqtdagi haqiqiy qoldiq.<br>
+                    <em>Hisoblanish usuli:</em> bugungi Stock'dan keyingi harakatlar yig'indisi ayriladi (Qoldiq hisoboti bilan bir xil formula).<br>
+                    <em>Misol:</em> INV qatorida — INV o'tkazilganda kiritilgan jismoniy son.</li>
+                <li><span class="badge bg-warning text-dark">Dublikat yozuv</span> — bitta hujjat uchun bir nechta StockMovement (eski race bug izi, lekin qoldiqqa ta'sir qilgan).</li>
+                <li><span class="badge bg-secondary text-white">Bekor qilish (revert)</span> — asl hujjat o'chirilgan, audit uchun teskari harakat saqlangan. Stock'ga ta'siri 0.</li>
+                <li>Qator <span class="badge bg-danger-subtle text-danger-emphasis">qizil fonda</span> — yig'indi minusda (eski drift davri belgisi).</li>
+                <li>Hujjat ikona orqali asl hujjatga o'tish mumkin.</li>
+            </ul>
+        </div>
+    </details>
+
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-hover mb-0">
-                <thead>
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light sticky-top">
                     <tr>
-                        <th>Sana</th>
-                        <th>Hujjat turi</th>
-                        <th>Hujjat raqami</th>
-                        <th class="text-end">O'zgarish (+/−)</th>
-                        <th class="text-end">Qoldiq (harakatdan keyin)</th>
-                        <th>Hujjat</th>
+                        <th style="width:140px;">Sana</th>
+                        <th>Operatsiya</th>
+                        <th style="width:170px;">Hujjat</th>
+                        <th class="text-end" style="width:120px;">Kirim/Chiqim</th>
+                        <th class="text-end" style="width:140px;">Yig'ilgan qoldiq</th>
+                        <th style="width:90px;">Amal</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% if movements %}
                         {% for m in movements %}
-                        <tr>
-                            <td class="muted-cell">{{ m.date }}</td>
-                            <td>{{ m.document_type_label }}</td>
-                            <td><code>{{ m.document_number }}</code></td>
-                            <td class="text-end {% if m.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %} num-cell">
-                                {% if is_dona %}{{ "{:+,.0f}".format(m.quantity_change|round(0)) }}{% else %}{{ "{:+,.3f}".format(m.quantity_change) }}{% endif %}
-                            </td>
-                            <td class="text-end num-cell">{% if is_dona %}{{ "{:,.0f}".format(m.quantity_after|round(0)) }}{% else %}{{ "{:,.3f}".format(m.quantity_after) }}{% endif %}</td>
+                        {% set st = DOC_STYLES.get(m.document_type, {'cls': 'bg-light text-body', 'ico': 'bi-circle', 'lbl': m.document_type_label or m.document_type}) %}
+                        {% set neg_row = m.quantity_after < 0 %}
+                        {% set is_revert = '-REVERT' in (m.document_number or '') %}
+                        <tr class="op-row {% if neg_row %}table-danger{% elif is_revert %}table-secondary{% elif m.is_duplicate %}table-warning{% endif %}" data-doc="{{ m.document_number|lower }}">
+                            <td class="muted-cell small">{{ m.date }}</td>
                             <td>
-                                <a href="{{ m.document_url }}" target="_blank" class="btn-act" title="Ochish"><i class="bi bi-box-arrow-up-right"></i></a>
-                                {% if m.get('wrong_warehouse') %}
-                                <br><span class="badge-cancelled mt-1" title="Bu hujjatda «{{ warehouse.name }}» ombori ko'rsatilmagan — hujjat boshqa ombor uchun. Noto'g'ri yozuvni tozalash tugmasi orqali olib tashlang."><i class="bi bi-exclamation-triangle"></i> Bu hujjatda bu ombor ko'rsatilmagan</span>
-                                {% if current_user and current_user.role == 'admin' and m.get('movement_id') %}
-                                <form method="post" action="/reports/stock/source/remove-movement" class="d-inline mt-1" onsubmit="return confirm('Ushbu noto\'g\'ri harakatni olib tashlash va qoldiqni qaytarishni xohlaysizmi?');">
-                                    <input type="hidden" name="movement_id" value="{{ m.movement_id }}">
-                                    <input type="hidden" name="warehouse_id" value="{{ warehouse.id }}">
-                                    <input type="hidden" name="product_id" value="{{ product.id }}">
-                                    <button type="submit" class="btn-act danger" title="Noto'g'ri yozuvni tozalash"><i class="bi bi-trash"></i></button>
-                                </form>
+                                <span class="badge rounded-pill {{ st.cls }} fw-normal" style="font-size:.85em;">
+                                    <i class="{{ st.ico }}"></i> {{ st.lbl }}
+                                </span>
+                                {% if is_revert %}
+                                <span class="badge bg-secondary text-white ms-1" style="font-size:.75em;" title="Bekor qilish izi: asl hujjat o'chirilgan, lekin audit uchun teskari harakat saqlangan. Stock'ga ta'siri 0 (asl + revert = 0).">
+                                    <i class="bi bi-arrow-counterclockwise"></i> Bekor qilish (revert)
+                                </span>
+                                {% elif m.is_duplicate %}
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:.75em;" title="Bu hujjat uchun avval boshqa harakat ham yozilgan (race-condition bug izi). Stock'ga ta'sir qilgan, shuning uchun ko'rsatiladi.">
+                                    <i class="bi bi-files"></i> Dublikat yozuv
+                                </span>
                                 {% endif %}
+                            </td>
+                            <td><code class="small">{{ m.document_number }}</code></td>
+                            <td class="text-end num-cell fw-bold {% if m.quantity_change >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ fmt_signed(m.quantity_change) }}
+                            </td>
+                            <td class="text-end num-cell fw-bold {% if neg_row %}text-danger{% endif %}">
+                                {{ fmt(m.quantity_after) }}
+                                {% if neg_row %}<i class="bi bi-exclamation-triangle text-danger ms-1" title="Yig'indi minusga tushgan — drift belgisi"></i>{% endif %}
+                            </td>
+                            <td>
+                                <a href="{{ m.document_url }}" target="_blank" class="btn btn-sm btn-outline-secondary py-0 px-2" title="Hujjatni ochish"><i class="bi bi-box-arrow-up-right"></i></a>
+                                {% if m.get('wrong_warehouse') %}
+                                <div class="mt-1">
+                                    <span class="badge bg-danger-subtle text-danger-emphasis" title="Bu hujjatda «{{ warehouse.name }}» ombori ko'rsatilmagan"><i class="bi bi-exclamation-triangle"></i> Noto'g'ri ombor</span>
+                                    {% if current_user and current_user.role == 'admin' and m.get('movement_id') %}
+                                    <form method="post" action="/reports/stock/source/remove-movement" class="d-inline mt-1" onsubmit="return confirm('Noto\'g\'ri yozuvni olib tashlash va qoldiqni qaytarishni xohlaysizmi?');">
+                                        <input type="hidden" name="movement_id" value="{{ m.movement_id }}">
+                                        <input type="hidden" name="warehouse_id" value="{{ warehouse.id }}">
+                                        <input type="hidden" name="product_id" value="{{ product.id }}">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="Olib tashlash"><i class="bi bi-trash"></i></button>
+                                    </form>
+                                    {% endif %}
+                                </div>
                                 {% endif %}
                                 {% if m.get('quantity_mismatch') %}
-                                <br><small class="text-warning" title="Hujjatda (retsept boʻyicha) {{ m.document_quantity|round(0) if is_dona else m.document_quantity }}, harakatda yozilgan {{ '{:+,.0f}'.format(m.quantity_change|round(0)) if is_dona else '{:+,.3f}'.format(m.quantity_change) }} — farq bor. Qoldiq har doim tasdiqlashdagi miqdorga asoslangan."><i class="bi bi-exclamation-triangle"></i> Hujjatda {{ m.document_quantity|round(0) if is_dona else "{:,.1f}".format(m.document_quantity) }}</small>
+                                <div class="mt-1">
+                                    <span class="badge bg-warning-subtle text-warning-emphasis" title="Hujjat va harakat farqi"><i class="bi bi-exclamation-triangle"></i> Hujjatda {{ fmt(m.document_quantity) }}</span>
+                                </div>
                                 {% endif %}
                             </td>
                         </tr>
@@ -85,7 +221,7 @@
                             <td colspan="6" class="text-center text-muted py-4">
                                 Ushbu ombor va mahsulot uchun <code>StockMovement</code> yozuvlari topilmadi. Qoldiq eski tizimdan yoki importdan kiritilgan bo'lishi mumkin.
                                 <br><br>
-                                <a href="/reports/stock/no-history?warehouse_id={{ warehouse.id if warehouse else '' }}" class="top-btn btn btn-outline-warning btn-sm">Bu omborda barcha tarixsiz qoldiqlarni ko'rish</a>
+                                <a href="/reports/stock/no-history?warehouse_id={{ warehouse.id if warehouse else '' }}" class="btn btn-outline-warning btn-sm">Tarixsiz qoldiqlarni ko'rish</a>
                             </td>
                         </tr>
                     {% endif %}
@@ -94,4 +230,24 @@
         </div>
     </div>
 </div>
+
+<script>
+    (function() {
+        var input = document.getElementById('opFilter');
+        if (!input) return;
+        var rows = document.querySelectorAll('.op-row');
+        var counter = document.getElementById('rowCount');
+        input.addEventListener('input', function() {
+            var q = this.value.trim().toLowerCase();
+            var visible = 0;
+            rows.forEach(function(r) {
+                var doc = r.dataset.doc || '';
+                var show = !q || doc.indexOf(q) !== -1;
+                r.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            if (counter) counter.textContent = visible;
+        });
+    })();
+</script>
 {% endblock %}
