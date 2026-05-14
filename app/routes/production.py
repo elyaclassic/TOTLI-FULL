@@ -1717,7 +1717,13 @@ async def complete_production_stage(
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+        op_name = ""
+        if production.operator_id:
+            from app.models.database import Employee
+            emp = db.query(Employee).filter(Employee.id == production.operator_id).first()
+            if emp:
+                op_name = emp.full_name or ""
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"), operator_name=op_name)
     except Exception:
         pass
     try:
@@ -1770,7 +1776,13 @@ async def complete_production(
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+        op_name = ""
+        if production.operator_id:
+            from app.models.database import Employee
+            emp = db.query(Employee).filter(Employee.id == production.operator_id).first()
+            if emp:
+                op_name = emp.full_name or ""
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"), operator_name=op_name)
     except Exception:
         pass
     try:

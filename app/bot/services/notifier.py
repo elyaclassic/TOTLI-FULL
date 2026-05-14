@@ -135,22 +135,18 @@ def notify_big_sale(order_number: str, partner_name: str, total: float):
     _send_to_chats_sync(text, REALTIME_CHAT_IDS)
 
 
-def notify_production_ready(production_number: str, product_name: str, quantity: float, is_semi: bool = False):
-    if is_semi:
-        text = (
-            f"🔶 <b>Qiyom/yarim tayyor yakunlandi</b>\n\n"
-            f"Raqam: {production_number}\n"
-            f"Mahsulot: {product_name}\n"
-            f"Miqdor: {fmt(quantity)}"
-        )
-    else:
-        text = (
-            f"✅ <b>Tayyor mahsulot yakunlandi</b>\n\n"
-            f"Raqam: {production_number}\n"
-            f"Mahsulot: {product_name}\n"
-            f"Miqdor: {fmt(quantity)}"
-        )
-    _send_to_chats_sync(text, REALTIME_CHAT_IDS)
+def notify_production_ready(production_number: str, product_name: str, quantity: float, is_semi: bool = False, operator_name: str = ""):
+    header = "🔶 <b>Qiyom/yarim tayyor yakunlandi</b>" if is_semi else "✅ <b>Tayyor mahsulot yakunlandi</b>"
+    lines = [
+        header,
+        "",
+        f"Raqam: {production_number}",
+        f"Mahsulot: {product_name}",
+        f"Miqdor: {fmt(quantity)}",
+    ]
+    if operator_name:
+        lines.append(f"Operator: {operator_name}")
+    _send_to_chats_sync("\n".join(lines), REALTIME_CHAT_IDS)
 
 
 def notify_expense(doc_number: str, total: float, description: str = ""):
