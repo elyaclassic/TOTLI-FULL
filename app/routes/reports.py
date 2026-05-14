@@ -3101,14 +3101,27 @@ async def report_z_report_detail(
     request: Request,
     fmt: str = "html",
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_manager),
+    current_user: User = Depends(require_auth),
 ):
     """Print uchun alohida sahifa (default) yoki JSON snapshot (?fmt=json).
 
     Eski Z-snapshot'larda `payments_made`/`expenses_made` yo'q bo'lsa,
     DB'dan dinamik to'ldiriladi (faqat shu Z'ning user_id va date bo'yicha).
+
+    Ruxsat: admin/manager — barcha Z; sotuvchi — faqat o'ziniki.
     """
     snap = _z_load_snapshot(z_id)
+    # Sotuvchi faqat o'zining Z-hisobotini ko'ra oladi
+    role = (current_user.role or "").strip()
+    if role not in ("admin", "manager"):
+        if not snap or int(snap.get("user_id") or 0) != int(current_user.id):
+            if fmt == "json":
+                return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+            return HTMLResponse(
+                "<div style='padding:40px;text-align:center;font-family:sans-serif;'>"
+                "<h2>Ruxsat yo'q</h2><p>Faqat o'zingizning Z-hisobotingizni ko'ra olasiz.</p></div>",
+                status_code=403,
+            )
     if not snap:
         if fmt == "json":
             return JSONResponse({"ok": False, "error": "Topilmadi"}, status_code=404)
@@ -3122,8 +3135,57 @@ async def report_z_report_detail(
     if "payments_made" not in snap or "expenses_made" not in snap:
         _z_fill_operations_from_db(db, snap)
 
+    # Naqd kassa hisoboti — eski snapshotlar uchun DB'dan to'ldirish.
+    # Bug'li yangi snapshotlarni ham tuzatish: agar cash_sales_total saqlangan bo'lsa-yu,
+    # uning qiymati 0 va sales_total > 0 bo'lsa — recompute (eski filter naqd vs cash bug izi).
+    _need_fill = "cash_sales_total" not in snap
+    if not _need_fill:
+        _saved_total = snap.get("cash_sales_total") or 0
+        _sales_total = snap.get("sales_total") or 0
+        if _saved_total == 0 and _sales_total > 0:
+            _need_fill = True
+    if _need_fill:
+        try:
+            from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+            target_d = datetime.strptime((snap.get("date") or "")[:10], "%Y-%m-%d").date()
+            uid = int(snap.get("user_id") or 0)
+            # closed_at ni vaqt qutisi sifatida ishlatamiz — operatsiyalarni shu momentgacha hisoblash
+            _closed_at_str = snap.get("closed_at") or ""
+            until_dt = None
+            try:
+                until_dt = datetime.fromisoformat(_closed_at_str) if _closed_at_str else None
+            except (ValueError, TypeError):
+                until_dt = None
+            if uid:
+                cs = compute_z_cash_summary(db, target_d, uid, until_dt=until_dt)
+                prev_rem, prev_zid = find_previous_z_remaining(
+                    user_id=uid,
+                    warehouse_id=snap.get("warehouse_id"),
+                    before_closed_at=_closed_at_str,
+                )
+                snap["cash_sales_pure"] = cs["cash_sales_pure"]
+                snap["cash_sales_split"] = cs["cash_sales_split"]
+                snap["cash_sales_total"] = cs["cash_sales_total"]
+                snap["cash_expenses_total"] = cs["cash_expenses_total"]
+                snap["cash_payments_out"] = cs["cash_payments_out"]
+                snap["previous_cash_remaining"] = prev_rem
+                snap["previous_z_id"] = prev_zid
+                snap["cash_remaining"] = (
+                    prev_rem + cs["cash_sales_total"]
+                    - cs["cash_expenses_total"] - cs["cash_payments_out"]
+                )
+        except (ValueError, TypeError, KeyError):
+            pass
+
     if fmt == "json":
         return JSONResponse({"ok": True, "snapshot": snap})
+    if fmt in ("receipt", "chek"):
+        return templates.TemplateResponse("reports/z_report_receipt.html", {
+            "request": request,
+            "page_title": snap.get("z_id") or z_id,
+            "current_user": current_user,
+            "snap": snap,
+        })
     return templates.TemplateResponse("reports/z_report_detail.html", {
         "request": request,
         "page_title": snap.get("z_id") or z_id,

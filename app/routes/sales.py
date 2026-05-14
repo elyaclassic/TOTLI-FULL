@@ -2168,7 +2168,9 @@ async def sales_pos_x_report(
         pass
 
     # OLDINGI KUNLARDAN HALI KELMAGAN PUL: oxirgi 7 kun ichida 2+ Z bo'lgan kunlar
-    # uchun (voluntary close + forced close) → farq = topshirilmagan naqd
+    # uchun (voluntary close + forced close) → farq = topshirilmagan naqd.
+    # CashTransfer (kassadan kassaga, FROM naqd POS kassa) — bu pulning topshirilgani
+    # demakdir. FIFO: eski kun avval qoplanadi.
     pending_prev_days = []
     try:
         from datetime import timedelta as _td
@@ -2192,6 +2194,63 @@ async def sales_pos_x_report(
                 "diff_sales_count": d_c,
                 "diff_sales_total": d_t,
             })
+
+        # CashTransfer'larni qoplash: pending kunlardan eski→yangi tartibda
+        if pending_prev_days:
+            naqd_cash_ids_local = []
+            try:
+                user_full_l = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
+                user_cashes_l = list(getattr(user_full_l, "cash_registers_list", None) or []) if user_full_l else []
+                if role == "sotuvchi" and pos_wh:
+                    wh_dept_l = getattr(pos_wh, "department_id", None)
+                    cands = [c for c in user_cashes_l if getattr(c, "department_id", None) == wh_dept_l] if wh_dept_l else []
+                    if not cands and wh_dept_l:
+                        cands = db.query(CashRegister).filter(
+                            CashRegister.department_id == wh_dept_l,
+                            CashRegister.is_active == True,
+                        ).all()
+                else:
+                    cands = user_cashes_l
+                naqd_cash_ids_local = [c.id for c in cands if (c.payment_type or "").strip().lower() == "naqd"]
+            except Exception:
+                naqd_cash_ids_local = []
+
+            if naqd_cash_ids_local:
+                cutoff_dt = datetime.combine(target_date - _td(days=10), datetime.min.time())
+                transfers = db.query(CashTransfer).filter(
+                    CashTransfer.from_cash_id.in_(naqd_cash_ids_local),
+                    CashTransfer.status.in_(("in_transit", "completed")),
+                    CashTransfer.date >= cutoff_dt,
+                ).order_by(CashTransfer.date.asc()).all()
+                transfer_remaining = [float(t.amount or 0) for t in transfers]
+                transfer_dates = [t.date for t in transfers]
+
+                pending_prev_days.sort(key=lambda x: x["date"])
+                filtered = []
+                for pd_item in pending_prev_days:
+                    needed = float(pd_item["diff_sales_total"] or 0)
+                    if needed <= 0.01:
+                        continue
+                    first_closed_iso = pd_item.get("first_closed_at") or ""
+                    try:
+                        first_closed_dt = datetime.fromisoformat(first_closed_iso) if first_closed_iso else None
+                    except (ValueError, TypeError):
+                        first_closed_dt = None
+                    for i, td in enumerate(transfer_dates):
+                        if transfer_remaining[i] <= 0:
+                            continue
+                        if first_closed_dt and td < first_closed_dt:
+                            continue
+                        consumed = min(transfer_remaining[i], needed)
+                        transfer_remaining[i] -= consumed
+                        needed -= consumed
+                        if needed <= 0.01:
+                            break
+                    if needed > 0.01:
+                        pd_item["diff_sales_total"] = round(needed, 2)
+                        filtered.append(pd_item)
+                pending_prev_days = filtered
+                pending_prev_days.sort(key=lambda x: x["date"], reverse=True)
     except Exception:
         pass
 
@@ -2806,10 +2865,27 @@ async def sales_pos_z_report(
     except Exception:
         pass
 
+    # Naqd kassa hisoboti — savdo, harajat, to'lov + oldingi Z'dan boshlang'ich qoldiq
+    from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+    _close_dt = dt.now()
+    _now_iso = _close_dt.isoformat()
+    cash_summary = compute_z_cash_summary(db, target_date, current_user.id, until_dt=_close_dt)
+    prev_remaining, prev_zid = find_previous_z_remaining(
+        user_id=current_user.id,
+        warehouse_id=(pos_wh.id if pos_wh else None),
+        before_closed_at=_now_iso,
+    )
+    cash_remaining = (
+        prev_remaining
+        + cash_summary["cash_sales_total"]
+        - cash_summary["cash_expenses_total"]
+        - cash_summary["cash_payments_out"]
+    )
+
     snapshot = {
         "z_id": f"Z-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}",
         "date": target_date.strftime("%Y-%m-%d"),
-        "closed_at": dt.now().isoformat(),
+        "closed_at": _now_iso,
         "user_id": current_user.id,
         "user": current_user.full_name or current_user.username,
         "role": role,
@@ -2829,6 +2905,15 @@ async def sales_pos_z_report(
         "payments_made_sum": sum(r["amount"] for r in payments_made),
         "expenses_made": expenses_made,
         "expenses_made_sum": sum(r["amount"] for r in expenses_made),
+        # Naqd kassa hisoboti
+        "cash_sales_pure": cash_summary["cash_sales_pure"],
+        "cash_sales_split": cash_summary["cash_sales_split"],
+        "cash_sales_total": cash_summary["cash_sales_total"],
+        "cash_expenses_total": cash_summary["cash_expenses_total"],
+        "cash_payments_out": cash_summary["cash_payments_out"],
+        "previous_cash_remaining": prev_remaining,
+        "previous_z_id": prev_zid,
+        "cash_remaining": cash_remaining,
     }
 
     out_path = None

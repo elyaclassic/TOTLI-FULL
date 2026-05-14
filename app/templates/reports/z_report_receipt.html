@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=80mm">
+    <title>Z-hisobot {{ snap.z_id if snap else '' }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            margin: 0;
+            padding: 6px 8px;
+            max-width: 80mm;
+            margin: 0 auto;
+            color: #000;
+        }
+        .receipt-logo { text-align: center; margin-bottom: 6px; }
+        .receipt-logo .brand {
+            font-size: 18px; font-weight: bold; color: #0d6b4b; letter-spacing: 0.5px;
+        }
+        .receipt-logo .sweets {
+            font-size: 11px; color: #FFB50D; margin-top: 2px;
+            letter-spacing: 2px; text-transform: uppercase; font-weight: 700;
+        }
+        .receipt-logo .doc-title {
+            font-size: 13px; font-weight: bold; margin-top: 6px;
+            border-top: 1px dashed #333; padding-top: 4px;
+        }
+        .dotted { border-bottom: 1px dotted #333; margin: 6px 0; }
+        .receipt-line { font-size: 11px; margin: 2px 0; }
+        .receipt-line.center { text-align: center; }
+        .row { display: flex; justify-content: space-between; font-size: 11px; margin: 2px 0; }
+        .row .right { font-variant-numeric: tabular-nums; }
+        .section-title {
+            text-align: center; font-size: 11px; font-weight: bold;
+            border-top: 1px dashed #333; border-bottom: 1px dashed #333;
+            padding: 3px 0; margin: 6px 0 4px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .net-row {
+            border-top: 1px solid #000; border-bottom: 1px solid #000;
+            margin: 6px 0; padding: 4px 0;
+            font-size: 13px; font-weight: bold;
+        }
+        .indent { padding-left: 10px; font-size: 10.5px; color: #444; }
+        .thanks { text-align: center; margin-top: 12px; font-size: 11px; }
+        .z-id { font-size: 10px; text-align: center; word-break: break-all; }
+        @media print {
+            @page { size: 72mm auto; margin: 2mm 0; }
+            body { padding: 4px 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body onload="setTimeout(function(){ window.print(); }, 400);">
+{% if snap %}
+    <div class="receipt-logo">
+        <div class="brand">Totli Holva</div>
+        <div class="sweets">SWEETS</div>
+        <div class="doc-title">Z-HISOBOT</div>
+    </div>
+
+    <div class="z-id">{{ snap.z_id or '—' }}</div>
+    <div class="dotted"></div>
+
+    <div class="receipt-line">Sana: {{ (snap.date or '—') }}</div>
+    <div class="receipt-line">Yopildi: {{ (snap.closed_at or '')[:19] | replace('T', ' ') }}</div>
+    <div class="receipt-line">Sotuvchi: {{ snap.user or '—' }}</div>
+    <div class="receipt-line">Ombor: {{ snap.warehouse or '—' }}</div>
+
+    <div class="section-title">Smena yakuni</div>
+    <div class="row"><span>Sotuv ({{ snap.sales_count or 0 }})</span><span class="right">{{ "{:,.0f}".format(snap.sales_total or 0) }}</span></div>
+    {% if (snap.returns_total or 0) > 0 %}
+    <div class="row"><span>Qaytarish ({{ snap.returns_count or 0 }})</span><span class="right">−{{ "{:,.0f}".format(snap.returns_total) }}</span></div>
+    {% endif %}
+    {% if (snap.cancelled_count or 0) > 0 %}
+    <div class="row"><span>Bekor ({{ snap.cancelled_count }})</span><span class="right">{{ "{:,.0f}".format(snap.cancelled_total or 0) }}</span></div>
+    {% endif %}
+    <div class="row net-row"><span>NET</span><span class="right">{{ "{:+,.0f}".format(snap.net_total or 0) }}</span></div>
+
+    <div class="section-title">To'lov turi</div>
+    {% if snap.payment_breakdown %}
+        {% for b in snap.payment_breakdown %}
+        <div class="row"><span>{{ (b.type or '—').upper() }} ({{ b.count or 0 }})</span><span class="right">{{ "{:,.0f}".format(b.sum or 0) }}</span></div>
+        {% endfor %}
+    {% else %}
+        <div class="receipt-line center">—</div>
+    {% endif %}
+
+    <div class="section-title">Naqd kassa hisoboti</div>
+    {% if (snap.previous_cash_remaining or 0) > 0 %}
+    <div class="row"><span>Oldingi qoldiq</span><span class="right">{{ "{:,.0f}".format(snap.previous_cash_remaining) }}</span></div>
+    {% if snap.previous_z_id %}
+    <div class="indent">({{ snap.previous_z_id }})</div>
+    {% endif %}
+    {% endif %}
+
+    <div class="row"><strong>Sof naqd savdo:</strong><span></span></div>
+    <div class="row indent"><span>Naqd</span><span class="right">{{ "{:,.0f}".format(snap.cash_sales_pure or 0) }}</span></div>
+    {% if (snap.cash_sales_split or 0) > 0 %}
+    <div class="row indent"><span>Split-naqd</span><span class="right">{{ "{:,.0f}".format(snap.cash_sales_split) }}</span></div>
+    {% endif %}
+    <div class="row"><span>JAMI naqd savdo</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_sales_total or 0) }}</strong></span></div>
+
+    {% if (snap.cash_expenses_total or 0) > 0 %}
+    <div class="row"><strong>Naqd harajat:</strong><span></span></div>
+    {% for e in snap.expenses_made or [] %}
+        {% if (e.payment_type or 'naqd') == 'naqd' %}
+        <div class="row indent"><span>− {{ (e.description or '—')[:18] }}</span><span class="right">{{ "{:,.0f}".format(e.amount or 0) }}</span></div>
+        {% endif %}
+    {% endfor %}
+    <div class="row"><span>JAMI harajat</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_expenses_total) }}</strong></span></div>
+    {% endif %}
+
+    {% if (snap.cash_payments_out or 0) > 0 %}
+    <div class="row"><strong>Naqd kontragentga:</strong><span></span></div>
+    {% for p in snap.payments_made or [] %}
+        {% if (p.payment_type or 'naqd') == 'naqd' %}
+        <div class="row indent"><span>− {{ (p.partner_name or '—')[:18] }}</span><span class="right">{{ "{:,.0f}".format(p.amount or 0) }}</span></div>
+        {% endif %}
+    {% endfor %}
+    <div class="row"><span>JAMI to'lov</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_payments_out) }}</strong></span></div>
+    {% endif %}
+
+    <div class="row net-row"><span>QOLDIQ NAQD</span><span class="right">{{ "{:,.0f}".format(snap.cash_remaining or 0) }}</span></div>
+    <div class="receipt-line center" style="font-size:9px; color:#666;">
+        (oldingi + savdo − harajat − to'lov)
+    </div>
+
+    <div class="thanks">
+        Smena yopildi<br>
+        Snapshot o'zgartirib bo'lmaydi
+    </div>
+
+    <div class="no-print" style="margin-top: 20px; text-align: center; font-size: 11px;">
+        <button type="button" onclick="window.print();" style="padding: 6px 14px; font-size: 12px; margin-right: 8px;">Qayta chop etish</button>
+        <a href="/reports/z-reports" style="display:inline-block; padding: 6px 14px; font-size:12px; background:#0d6b4b; color:#fff; text-decoration:none; border-radius:4px;">Ro'yxatga</a>
+    </div>
+{% else %}
+    <div class="receipt-line">Z-hisobot topilmadi.</div>
+{% endif %}
+</body>
+</html>

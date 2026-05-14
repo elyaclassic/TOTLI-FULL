@@ -147,6 +147,11 @@
                     btn.appendChild(makeIcon('bi bi-check-circle'));
                     btn.appendChild(document.createTextNode(' Yopildi'));
                     setTimeout(loadOpenDays, 800);
+                    // Z-hisobot chek shaklida avtomatik chop etish uchun ochish
+                    if (d.snapshot_id) {
+                        try { window.open('/reports/z-reports/' + encodeURIComponent(d.snapshot_id) + '?fmt=receipt', '_blank'); }
+                        catch (e) { /* popup blocked */ }
+                    }
                 } else {
                     btn.disabled = false;
                     while (btn.firstChild) btn.removeChild(btn.firstChild);
