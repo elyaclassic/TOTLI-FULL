@@ -8,10 +8,16 @@ logger = logging.getLogger("database")
 
 Base = declarative_base()
 
-# Loyiha ildizidagi baza (qayerdan ishga tushirilmasa ham bir xil fayl)
+# Loyiha ildizidagi baza (qayerdan ishga tushirilmasa ham bir xil fayl).
+# TOTLI_DB_FILE env-var bilan ustun yoziladi (dev sandbox uchun: totli_holva_dev.db).
 _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_db_path = os.path.join(_root, "totli_holva.db")
+_db_filename = os.environ.get("TOTLI_DB_FILE", "totli_holva.db")
+if os.path.isabs(_db_filename):
+    _db_path = _db_filename
+else:
+    _db_path = os.path.join(_root, _db_filename)
 DATABASE_URL = f"sqlite:///{_db_path}"
+logger.info(f"DATABASE: {_db_path}")
 
 engine = create_engine(
     DATABASE_URL,

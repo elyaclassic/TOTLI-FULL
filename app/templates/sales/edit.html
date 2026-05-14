@@ -380,8 +380,16 @@
                 if (!productId || quantity <= 0) return;
                 price = parseFloat(price) || 0;
                 quantity = parseFloat(quantity) || 0;
-                var sum = price * quantity;
-                cart.push({ productId: productId, productName: productName, price: price, quantity: quantity, sum: sum });
+                // Mavjud qator bo'lsa miqdorga qo'shamiz (narx ham mos kelishi shart)
+                var existing = cart.findIndex(function(it) {
+                    return String(it.productId) === String(productId) && parseFloat(it.price) === price;
+                });
+                if (existing >= 0) {
+                    cart[existing].quantity = (parseFloat(cart[existing].quantity) || 0) + quantity;
+                    cart[existing].sum = cart[existing].price * cart[existing].quantity;
+                } else {
+                    cart.push({ productId: productId, productName: productName, price: price, quantity: quantity, sum: price * quantity });
+                }
                 renderCart();
             }
 
