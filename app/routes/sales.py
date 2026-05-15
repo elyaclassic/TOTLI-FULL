@@ -1858,7 +1858,16 @@ async def sales_pos(
     # Harajat turlari (POS expense modal uchun)
     pos_expense_types = db.query(ExpenseType).order_by(ExpenseType.name).all()
     # Kassalar (inkasatsiya "Yangi yuborish" modali uchun)
-    pos_cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
+    # Sotuvchi faqat naqd pul ko'taradi va Asosiy kassaga (markaziy naqd) keltiradi —
+    # boshqa kassalarni (do'kon plastik, click, terminal) ko'rsatish keraksiz.
+    _cash_q = db.query(CashRegister).filter(CashRegister.is_active == True)
+    _role = (current_user.role or "").strip().lower()
+    if _role == "sotuvchi":
+        _cash_q = _cash_q.filter(
+            CashRegister.payment_type == "naqd",
+            CashRegister.name == "Asosiy kassa",
+        )
+    pos_cash_registers = _cash_q.order_by(CashRegister.name).all()
     return templates.TemplateResponse("sales/pos.html", {
         "request": request,
         "page_title": "Sotuv oynasi",
