@@ -1501,15 +1501,21 @@ async def cash_transfer_create(
     if amount <= 0:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
 
-    op_date = datetime.now()
+    now = datetime.now()
+    op_date = now
     if date:
         try:
             parsed = datetime.strptime(date[:10], "%Y-%m-%d")
-            if parsed.date() > datetime.now().date():
+            today = now.date()
+            if parsed.date() > today:
                 return RedirectResponse(url="/cash/transfers/new?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
             if is_period_closed(db, parsed):
                 return RedirectResponse(url="/cash/transfers/new?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan — retroaktiv kiritish mumkin emas."), status_code=303)
-            op_date = parsed.replace(hour=datetime.now().hour, minute=datetime.now().minute, second=datetime.now().second)
+            # Bugungi kun = hozirgi vaqt; eski kun = 23:59:59 (kun oxiri)
+            if parsed.date() == today:
+                op_date = now
+            else:
+                op_date = parsed.replace(hour=23, minute=59, second=59)
         except ValueError:
             return RedirectResponse(url="/cash/transfers/new?error=" + quote("Sana formati notogri."), status_code=303)
 
@@ -1563,11 +1569,19 @@ async def cash_transfer_edit(
     if date:
         try:
             parsed = datetime.strptime(date[:10], "%Y-%m-%d")
-            if parsed.date() > datetime.now().date():
+            now = datetime.now()
+            today = now.date()
+            if parsed.date() > today:
                 return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
             if is_period_closed(db, parsed):
                 return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan."), status_code=303)
-            new_date = parsed.replace(hour=(t.date.hour if t.date else 0), minute=(t.date.minute if t.date else 0), second=(t.date.second if t.date else 0))
+            # Bugun = hozirgi vaqt; eski kun = 23:59:59. Sana o'zgarmagan bo'lsa, eski vaqt saqlanadi.
+            if t.date and parsed.date() == t.date.date():
+                new_date = t.date  # Sana o'zgarmadi — vaqtni saqlash
+            elif parsed.date() == today:
+                new_date = now
+            else:
+                new_date = parsed.replace(hour=23, minute=59, second=59)
         except ValueError:
             return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Sana formati notogri."), status_code=303)
 
