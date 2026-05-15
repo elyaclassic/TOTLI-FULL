@@ -346,6 +346,11 @@ async def startup():
         await start_senior_bot()
     except Exception as e:
         print("[Startup] Senior bot ishga tushmadi:", e)
+    try:
+        from app.bot.expert_bots import start_expert_bots
+        await start_expert_bots()
+    except Exception as e:
+        print("[Startup] Expert botlar ishga tushmadi:", e)
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)

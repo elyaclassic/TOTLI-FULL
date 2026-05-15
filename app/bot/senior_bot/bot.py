@@ -346,16 +346,27 @@ def _register_handlers(dp: Dispatcher) -> None:
         # javob beradi (maxsus bot gruppasi uchun). 0 bo'lsa — faqat @mention/reply.
         if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
             bot_username = (await message.bot.me()).username or ""
+            raw_text = message.text or ""
+            is_mention = bool(bot_username) and f"@{bot_username}" in raw_text
+            is_reply_to_bot = (
+                message.reply_to_message is not None
+                and message.reply_to_message.from_user is not None
+                and message.reply_to_message.from_user.id == message.bot.id
+            )
+            # Boshqa bot @mention qilingan (masalan @Kamila_UX_bot) — bu ekspert
+            # botga yo'naltirilgan, asosiy Yordamchim aralashmasin (ikki javob bo'lmasin).
+            import re as _re
+            other_bot_mentioned = False
+            for m in _re.findall(r"@(\w+)", raw_text):
+                if m.lower() != bot_username.lower() and m.lower().endswith("bot"):
+                    other_bot_mentioned = True
+                    break
+            if other_bot_mentioned and not is_mention:
+                return
             # @mention bor bo'lsa har doim olib tashlaymiz
             if bot_username:
                 text = text.replace(f"@{bot_username}", "").strip()
             if not RESPOND_ALL:
-                is_mention = bot_username and f"@{bot_username}" in (message.text or "")
-                is_reply_to_bot = (
-                    message.reply_to_message is not None
-                    and message.reply_to_message.from_user is not None
-                    and message.reply_to_message.from_user.is_bot
-                )
                 if not (is_mention or is_reply_to_bot):
                     return
             # Juda qisqa "ok", emoji kabi shovqinni o'tkazib yuborish
