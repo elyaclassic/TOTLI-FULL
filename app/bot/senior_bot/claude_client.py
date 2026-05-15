@@ -106,6 +106,12 @@ async def ask(chat_id: int, question: str, system_prompt: str) -> tuple[str, dic
     else:
         exec_args = args
 
+    # MUHIM: ANTHROPIC_API_KEY ni subprocess env'dan olib tashlaymiz.
+    # Aks holda `claude` CLI Max obuna OAuth o'rniga API key billing'ni
+    # ishlatadi (API plan balansi $0 → "Credit balance is too low").
+    _env = os.environ.copy()
+    _env.pop("ANTHROPIC_API_KEY", None)
+
     def _blocking_run():
         return _sp.run(
             exec_args,
@@ -114,6 +120,7 @@ async def ask(chat_id: int, question: str, system_prompt: str) -> tuple[str, dic
             stderr=_sp.PIPE,
             stdin=_sp.DEVNULL,
             timeout=TIMEOUT,
+            env=_env,
         )
 
     try:
