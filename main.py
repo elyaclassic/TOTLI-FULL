@@ -342,10 +342,10 @@ async def startup():
     except Exception as e:
         print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
     try:
-        from app.bot.claude_remote import start_claude_bot
-        await start_claude_bot()
+        from app.bot.senior_bot import start_senior_bot
+        await start_senior_bot()
     except Exception as e:
-        print("[Startup] Claude remote bot ishga tushmadi:", e)
+        print("[Startup] Senior bot ishga tushmadi:", e)
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)
