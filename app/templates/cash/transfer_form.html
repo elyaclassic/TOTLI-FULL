@@ -190,12 +190,12 @@
                 <div class="col-12 d-flex gap-2">
                     <button type="submit" class="btn btn-success" id="btnEditTransfer"><i class="bi bi-check-lg me-1"></i>Saqlash</button>
                     <a href="/cash/transfers" class="btn btn-outline-secondary">Bekor</a>
-                    <form method="post" action="/cash/transfers/{{ transfer.id }}/delete" class="d-inline ms-auto" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
-                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                    </form>
                 </div>
             </div>
+        </form>
+        <form method="post" action="/cash/transfers/{{ transfer.id }}/delete" class="mt-2" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Hujjatni o'chirish</button>
         </form>
         <hr class="my-3">
         <div class="d-flex flex-wrap gap-2">
