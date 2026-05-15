@@ -62,6 +62,10 @@ CWD = os.environ.get("CLAUDE_BOT_CWD") or os.getcwd()
 AUTH_TTL_SECONDS = 12 * 3600
 TG_MSG_MAX = 4000
 
+# Gruppada har oddiy matnga javob berish (maxsus bot gruppasi uchun).
+# 0 qilinса — faqat @mention yoki reply'ga javob beradi (aralash gruppa uchun).
+RESPOND_ALL = (os.environ.get("SENIOR_BOT_GROUP_RESPOND_ALL", "1") or "1").strip() not in ("0", "false", "no", "")
+
 LOG_DIR = Path(CWD) / "app" / "bot" / "data"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 AUDIT_LOG = LOG_DIR / "senior_bot_audit.log"
@@ -338,20 +342,24 @@ def _register_handlers(dp: Dispatcher) -> None:
         if not _user_allowed(message):
             return
 
-        # Gruppada — faqat bot @mention yoki reply bo'lganda javob ber (privacy mode oshqozonida)
+        # Gruppada: SENIOR_BOT_GROUP_RESPOND_ALL=1 (default) bo'lsa har oddiy matnga
+        # javob beradi (maxsus bot gruppasi uchun). 0 bo'lsa — faqat @mention/reply.
         if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
             bot_username = (await message.bot.me()).username or ""
-            is_mention = bot_username and f"@{bot_username}" in text
-            is_reply_to_bot = (
-                message.reply_to_message is not None
-                and message.reply_to_message.from_user is not None
-                and message.reply_to_message.from_user.is_bot
-            )
-            if not (is_mention or is_reply_to_bot):
-                return
-            # Mention'ni text'dan olib tashlaymiz
-            text = text.replace(f"@{bot_username}", "").strip()
-            if not text:
+            # @mention bor bo'lsa har doim olib tashlaymiz
+            if bot_username:
+                text = text.replace(f"@{bot_username}", "").strip()
+            if not RESPOND_ALL:
+                is_mention = bot_username and f"@{bot_username}" in (message.text or "")
+                is_reply_to_bot = (
+                    message.reply_to_message is not None
+                    and message.reply_to_message.from_user is not None
+                    and message.reply_to_message.from_user.is_bot
+                )
+                if not (is_mention or is_reply_to_bot):
+                    return
+            # Juda qisqa "ok", emoji kabi shovqinni o'tkazib yuborish
+            if len(text) < 3:
                 return
 
         await _handle_question(message, text)
