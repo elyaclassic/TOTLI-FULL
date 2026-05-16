@@ -2806,12 +2806,40 @@ async def sales_pos_z_report(
     returns_total = sum(float(o.total or 0) for o in returns_o)
 
     by_type: dict = {}
-    for o in sales:
-        pt = (o.payment_type or "naqd").lower()
-        if pt not in by_type:
-            by_type[pt] = {"count": 0, "sum": 0.0}
-        by_type[pt]["count"] += 1
-        by_type[pt]["sum"] += float(o.total or 0)
+    sale_order_ids = [o.id for o in sales]
+    if sale_order_ids:
+        try:
+            pmt_q = db.query(Payment).filter(
+                Payment.type == "income",
+                or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                Payment.order_id.in_(sale_order_ids),
+            ).all()
+            cash_pt_map = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in db.query(CashRegister).all()}
+            sale_with_payments: set = set()
+            for p in pmt_q:
+                sale_with_payments.add(p.order_id)
+                pt = cash_pt_map.get(p.cash_register_id, "naqd")
+                if pt == "perechisleniye":
+                    pt = "bank"
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(p.amount or 0)
+            # To'lovsiz buyurtmalar → qarz
+            qarz_orders = [o for o in sales if o.id not in sale_with_payments]
+            if qarz_orders:
+                by_type["qarz"] = {
+                    "count": len(qarz_orders),
+                    "sum": sum(float(o.total or 0) for o in qarz_orders),
+                }
+        except Exception:
+            # Fallback: Order.payment_type dan o'qish
+            for o in sales:
+                pt = (o.payment_type or "naqd").lower()
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(o.total or 0)
 
     cash_snapshot: list = []
     try:
