@@ -2388,12 +2388,10 @@ def _parse_profit_date_range(date_from: Optional[str], date_to: Optional[str]) -
 
 def _compute_sales_and_cogs(db: Session, dt_from: datetime, dt_to: datetime) -> tuple:
     """Returns: (sale_orders, revenue, cogs, sale_items)."""
-    sale_orders = (
-        db.query(Order)
-        .filter(Order.type == "sale", Order.status != "cancelled",
-                Order.date >= dt_from, Order.date <= dt_to)
-        .all()
-    )
+    from app.services.sales_metrics import sale_orders_query
+    sale_orders = sale_orders_query(
+        db, scope="realized", dt_from=dt_from, dt_to=dt_to
+    ).all()
     revenue = sum(float(o.total or 0) for o in sale_orders)
     sale_order_ids = [o.id for o in sale_orders]
     sale_items = []

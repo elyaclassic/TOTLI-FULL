@@ -93,3 +93,17 @@ def test_unknown_scope_raises(db):
 
 def test_realized_constant_is_exactly_four(db):
     assert set(SALE_REALIZED) == {"delivered", "completed", "confirmed", "out_for_delivery"}
+
+
+def test_profit_compute_uses_realized_scope(db):
+    from app.routes.reports import _compute_sales_and_cogs
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=500, date=d)
+    _order(db, status="confirmed", total=300, date=d)
+    _order(db, status="draft", total=999, date=d)        # realized emas
+    _order(db, status="cancelled", total=999, date=d)    # realized emas
+    sale_orders, revenue, cogs, sale_items = _compute_sales_and_cogs(
+        db, datetime(2026, 5, 1), datetime(2026, 5, 31, 23, 59, 59)
+    )
+    assert revenue == 800.0
+    assert {o.status for o in sale_orders} == {"completed", "confirmed"}
