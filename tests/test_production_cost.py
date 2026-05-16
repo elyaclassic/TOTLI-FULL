@@ -133,6 +133,7 @@ def test_backfill_recomputes_per_unit_apply(db):
     """Backfill: 400gr SKU retsept dona-narxiga keladi (kg-narx EMAS), idempotent,
     distinct BACKFILL- doc_number, dry-run yozmaydi."""
     import importlib.util
+    from pathlib import Path
     from app.models.database import Product, Recipe, RecipeItem, Stock, ProductPriceHistory
     from app.routes.production import _calculate_recipe_cost_per_kg
     from app.utils.production_order import recipe_kg_per_unit
@@ -152,8 +153,8 @@ def test_backfill_recomputes_per_unit_apply(db):
     expected = _calculate_recipe_cost_per_kg(db, r.id) * recipe_kg_per_unit(r)
     assert expected > 0 and expected < 999999          # per-unit, buzuq qiymatdan past
 
-    spec = importlib.util.spec_from_file_location(
-        "bf_mod", r"\\server2220\d\TOTLI BI\.claude\worktrees\purchase-price-feat\scripts\backfill_produced_purchase_price.py")
+    _bf_path = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
+    spec = importlib.util.spec_from_file_location("bf_mod", str(_bf_path))
     bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
 
     # DRY-RUN: yozmaydi
@@ -177,3 +178,46 @@ def test_backfill_recomputes_per_unit_apply(db):
     db.refresh(out)
     assert abs(out.purchase_price - expected) < 1e-6
     assert db.query(ProductPriceHistory).count() == 1
+
+
+def test_backfill_idempotent_with_semi_chain(db):
+    """finished -> semi (semi ham aktiv retseptli) zanjir: 2-marta apply = 0 yangi
+    history (two-phase order-independent). Eski interleaved kod bu yerda surilardi."""
+    import importlib.util
+    from pathlib import Path
+    from app.models.database import Product, Recipe, RecipeItem, Stock, ProductPriceHistory
+
+    raw = Product(name="SUT", code="SUT", type="xom", is_active=True,
+                   purchase_price=8000, sale_price=0)
+    db.add(raw); db.flush()
+    semi = Product(name="QIYOM yarim", code="QYM", type="yarim_tayyor", is_active=True,
+                   purchase_price=999999, sale_price=0)
+    db.add(semi); db.flush()
+    fin = Product(name="HOLVA 400gr", code="H400", type="tayyor", is_active=True,
+                  purchase_price=999999, sale_price=40000)
+    db.add(fin); db.flush()
+    rs = Recipe(product_id=semi.id, name="QIYOM yarim", output_quantity=1.0, is_active=True)
+    db.add(rs); db.flush()
+    db.add(RecipeItem(recipe_id=rs.id, product_id=raw.id, quantity=2.0))
+    rf = Recipe(product_id=fin.id, name="HOLVA 400gr", output_quantity=1.0, is_active=True)
+    db.add(rf); db.flush()
+    db.add(RecipeItem(recipe_id=rf.id, product_id=semi.id, quantity=1.0))
+    db.add(Stock(warehouse_id=1, product_id=semi.id, quantity=3.0, cost_price=999999))
+    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=3.0, cost_price=999999))
+    db.commit()
+
+    _bf_path = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
+    spec = importlib.util.spec_from_file_location("bf_mod2", str(_bf_path))
+    bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
+
+    bf.run(db, apply=True)
+    n1 = db.query(ProductPriceHistory).count()
+    semi_pp1 = db.query(Product).filter(Product.id == semi.id).first().purchase_price
+    fin_pp1 = db.query(Product).filter(Product.id == fin.id).first().purchase_price
+    assert n1 >= 2  # semi + finished tuzatildi
+
+    bf.run(db, apply=True)   # 2-marta
+    n2 = db.query(ProductPriceHistory).count()
+    assert n2 == n1          # 0 YANGI history (idempotent)
+    assert db.query(Product).filter(Product.id == semi.id).first().purchase_price == semi_pp1
+    assert db.query(Product).filter(Product.id == fin.id).first().purchase_price == fin_pp1

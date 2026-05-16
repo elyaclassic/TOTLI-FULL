@@ -35,7 +35,8 @@ def _next_doc(db, prefix: str) -> str:
 
 
 def run(db, *, apply: bool) -> list:
-    """Har aktiv retseptli mahsulot uchun (id, name, old, new, flag). apply -> yozadi."""
+    """Phase 1: barcha new'ni YOZMASDAN hisobla (order-independent, original holatdan).
+    Phase 2: apply bo'lsa Phase 1 natijalaridan yoz. Idempotent two-phase."""
     prefix = f"BACKFILL-{datetime.now().strftime('%Y%m%d')}-"
     recipes = (
         db.query(Recipe)
@@ -44,6 +45,7 @@ def run(db, *, apply: bool) -> list:
         .all()
     )
     seen: set = set()
+    plan = []  # (product, old, new, flag)
     report = []
     for r in recipes:
         if r.product_id in seen:
@@ -59,23 +61,27 @@ def run(db, *, apply: bool) -> list:
             flag = "SKIP(retsept bo'sh)"
         elif p.sale_price and new > p.sale_price:
             flag = "ANOMALY(new>sale)"
+        elif old > 0 and abs(new - old) / old > 0.70:
+            flag = "SUSPECT(>70%)"
+        plan.append((p, old, new, flag))
         report.append((p.id, p.name, old, new, flag))
-        if apply and new > 0 and abs(old - new) >= 1e-6:
-            p.purchase_price = new
-            for s in db.query(Stock).filter(Stock.product_id == p.id).all():
-                s.cost_price = new
-            db.add(ProductPriceHistory(
-                doc_number=_next_doc(db, prefix),
-                product_id=p.id,
-                price_type_id=None,
-                old_purchase_price=old,
-                new_purchase_price=float(new),
-                old_sale_price=float(p.sale_price or 0),
-                new_sale_price=float(p.sale_price or 0),
-                changed_by_id=None,
-            ))
-            db.flush()
     if apply:
+        for p, old, new, flag in plan:
+            if new > 0 and abs(old - new) >= 1e-6:
+                p.purchase_price = new
+                for s in db.query(Stock).filter(Stock.product_id == p.id).all():
+                    s.cost_price = new
+                db.add(ProductPriceHistory(
+                    doc_number=_next_doc(db, prefix),
+                    product_id=p.id,
+                    price_type_id=None,
+                    old_purchase_price=old,
+                    new_purchase_price=float(new),
+                    old_sale_price=float(p.sale_price or 0),
+                    new_sale_price=float(p.sale_price or 0),
+                    changed_by_id=None,
+                ))
+                db.flush()
         db.commit()
     return report
 
@@ -94,18 +100,25 @@ def main():
         rep = run(db, apply=apply)
         mode = "APPLY" if apply else "DRY-RUN"
         print(f"[{mode}] {db_path} — {len(rep)} mahsulot")
-        changed = anom = 0
+        changed = anom = suspect = 0
         for pid, name, old, new, flag in sorted(rep, key=lambda x: -(x[3] or 0)):
             if flag or abs(old - new) >= 1e-6:
                 pct = ((new - old) / old * 100) if old else 0
-                star = " *" if "ANOMALY" in flag else ""
+                if "ANOMALY" in flag:
+                    star = " *"
+                elif flag.startswith("SUSPECT"):
+                    star = " ~"
+                else:
+                    star = ""
                 print(f"  {pid:5} {name[:30]:30} {old:>12,.0f} -> {new:>12,.0f} "
                       f"({pct:+.0f}%) {flag}{star}")
                 if abs(old - new) >= 1e-6 and new > 0:
                     changed += 1
                 if "ANOMALY" in flag:
                     anom += 1
-        print(f"O'zgaradi: {changed} | Anomaliya(new>sale): {anom}")
+                if flag.startswith("SUSPECT"):
+                    suspect += 1
+        print(f"O'zgaradi: {changed} | Anomaliya: {anom} | Suspect(>70%): {suspect}")
         if not apply:
             print("DRY-RUN — hech narsa yozilmadi. --apply bilan qo'llang.")
     finally:
