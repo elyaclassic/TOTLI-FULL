@@ -221,3 +221,49 @@ def test_backfill_idempotent_with_semi_chain(db):
     assert n2 == n1          # 0 YANGI history (idempotent)
     assert db.query(Product).filter(Product.id == semi.id).first().purchase_price == semi_pp1
     assert db.query(Product).filter(Product.id == fin.id).first().purchase_price == fin_pp1
+
+
+def test_backfill_fixed_point_multilevel_tayyor_chain(db):
+    """FIN -> MID(type='tayyor', o'z aktiv retsepti bor) -> raw.
+    (a) BITTA apply FIN ni ham MID ni ham to'g'rilaydi (own fixed-point bir o'tishda);
+    (b) 2-apply = 0 yangi history, narxlar o'zgarmaydi (idempotent)."""
+    import importlib.util
+    from pathlib import Path
+    from app.models.database import Product, Recipe, RecipeItem, Stock, ProductPriceHistory
+
+    raw = Product(name="MOY", code="MOY", type="xom", is_active=True,
+                   purchase_price=5000, sale_price=0)
+    db.add(raw); db.flush()
+    mid = Product(name="ARALASHMA", code="ARL", type="tayyor", is_active=True,
+                   purchase_price=999999, sale_price=0)
+    db.add(mid); db.flush()
+    fin = Product(name="TORT 1kg", code="T1", type="tayyor", is_active=True,
+                   purchase_price=888888, sale_price=80000)
+    db.add(fin); db.flush()
+    r_mid = Recipe(product_id=mid.id, name="ARALASHMA 1kg", output_quantity=1.0, is_active=True)
+    db.add(r_mid); db.flush()
+    db.add(RecipeItem(recipe_id=r_mid.id, product_id=raw.id, quantity=2.0))  # 2*5000
+    r_fin = Recipe(product_id=fin.id, name="TORT 1kg", output_quantity=1.0, is_active=True)
+    db.add(r_fin); db.flush()
+    db.add(RecipeItem(recipe_id=r_fin.id, product_id=mid.id, quantity=3.0))  # 3 * MID_cost
+    db.add(Stock(warehouse_id=1, product_id=mid.id, quantity=4.0, cost_price=999999))
+    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=4.0, cost_price=888888))
+    db.commit()
+
+    _bf = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
+    spec = importlib.util.spec_from_file_location("bf_fp", str(_bf))
+    bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
+
+    bf.run(db, apply=True)
+    db.refresh(mid); db.refresh(fin)
+    # MID 1kg: raw(no recipe)=5000, 2*5000=10000, kg/unit("ARALASHMA 1kg")=1.0 -> 10000
+    assert abs(mid.purchase_price - 10000.0) < 1e-6
+    # FIN 1kg: MID recursed (NOT stored 999999) per-kg=10000, 3*10000=30000, kg/unit=1.0 -> 30000
+    assert abs(fin.purchase_price - 30000.0) < 1e-6, f"FIN bir o'tishda tuzalmadi: {fin.purchase_price}"
+    n1 = db.query(ProductPriceHistory).count()
+
+    bf.run(db, apply=True)  # 2-marta
+    db.refresh(mid); db.refresh(fin)
+    assert db.query(ProductPriceHistory).count() == n1   # 0 yangi (idempotent)
+    assert abs(mid.purchase_price - 10000.0) < 1e-6
+    assert abs(fin.purchase_price - 30000.0) < 1e-6
