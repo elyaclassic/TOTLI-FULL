@@ -246,28 +246,48 @@ def _calculate_total_material_cost(db: Session, items_actual: list) -> float:
     return total
 
 
-def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, output_units: float, cost_per_unit: float) -> None:
-    """Tayyor mahsulotning Stock.cost_price va Product.purchase_price ni weighted average bilan yangilaydi."""
+def _log_price_history(db: Session, product, old_pp: float, new_pp: float, doc_number: str) -> None:
+    """Production-driven purchase_price o'zgarishini tarixga yozadi (sukutda emas)."""
+    if abs((old_pp or 0) - (new_pp or 0)) < 1e-6:
+        return
+    from app.models.database import ProductPriceHistory
+    db.add(ProductPriceHistory(
+        doc_number=doc_number,
+        product_id=product.id,
+        price_type_id=None,
+        old_purchase_price=float(old_pp or 0),
+        new_purchase_price=float(new_pp or 0),
+        old_sale_price=float(product.sale_price or 0),
+        new_sale_price=float(product.sale_price or 0),
+        changed_by_id=None,
+    ))
+
+
+def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_unit: float, production) -> None:
+    """Tayyor mahsulot Product.purchase_price + Stock.cost_price ni production'ning
+    dona-boshiga material narxiga (cost_per_unit) flat tayinlaydi. Weighted-avg/self-feedback YO'Q
+    (eski cheksiz-surilish bug'i ildizi). Har o'zgarish product_price_history'ga yoziladi."""
+    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+    if not output_product:
+        return
+    cost = cost_per_unit
+    if not cost or cost <= 0:
+        return  # retsept/narx vaqtincha yo'q — eski qiymat saqlanadi (nolga tushirilmaydi)
     product_stock = db.query(Stock).filter(
         Stock.warehouse_id == out_wh_id,
         Stock.product_id == recipe.product_id,
     ).first()
-    if product_stock and hasattr(Stock, "cost_price"):
-        qty_old = (product_stock.quantity or 0) - output_units
-        cost_old = getattr(product_stock, "cost_price", None) or 0
-        if qty_old <= 0 or cost_old <= 0:
-            product_stock.cost_price = cost_per_unit
-        else:
-            product_stock.cost_price = (qty_old * cost_old + output_units * cost_per_unit) / (product_stock.quantity or 1)
-    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
-    if not output_product:
-        return
-    old_price = output_product.purchase_price or 0
-    old_qty = (product_stock.quantity - output_units) if product_stock else 0
-    if old_qty > 0 and old_price > 0 and output_units > 0:
-        output_product.purchase_price = (old_qty * old_price + output_units * cost_per_unit) / (old_qty + output_units)
-    elif cost_per_unit > 0:
-        output_product.purchase_price = cost_per_unit
+    old = output_product.purchase_price or 0
+    output_product.purchase_price = cost
+    if product_stock is not None and hasattr(Stock, "cost_price"):
+        product_stock.cost_price = cost
+    _log_price_history(db, output_product, old, cost, production.number)
+    db.flush()
+    if output_product.sale_price and cost > output_product.sale_price:
+        logger.warning(
+            "PRICE ANOMALY %s: tannarx %.0f > sotuv %.0f (xom ashyo narxi tekshirilsin)",
+            output_product.name, cost, output_product.sale_price,
+        )
 
 
 def _do_complete_production_stock(db: Session, production, recipe):
@@ -316,7 +336,7 @@ def _do_complete_production_stock(db: Session, production, recipe):
         "production_complete: OK #%s output=%s units cost=%.2f cost_per_unit=%.2f wh=%s",
         production.number, output_units, total_material_cost, cost_per_unit, out_wh_id,
     )
-    _update_output_cost_and_price(db, out_wh_id, recipe, output_units, cost_per_unit)
+    _update_output_cost_and_price(db, out_wh_id, recipe, cost_per_unit, production)
     return None
 
 
