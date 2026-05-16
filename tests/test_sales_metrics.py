@@ -139,7 +139,7 @@ def test_report_sales_total_excludes_cancelled(db, monkeypatch):
         role = "admin"
 
     import asyncio
-    asyncio.get_event_loop().run_until_complete(
+    asyncio.run(
         reports.report_sales(
             request=None, start_date="2026-05-01", end_date="2026-05-31",
             warehouse_id=None, partner_id=None, db=db, current_user=_U(),
