@@ -149,7 +149,6 @@ def test_report_sales_total_excludes_cancelled(db, monkeypatch):
     assert captured["total"] == 1000.0
 
 
-
 def test_sales_list_uses_shared_constant_no_literal(db):
     import inspect
     from app.routes import sales
@@ -157,3 +156,58 @@ def test_sales_list_uses_shared_constant_no_literal(db):
     assert 'SALE_REALIZED' in src
     assert '["completed", "delivered", "confirmed"]' not in src
     assert 'pg["total_count"] - completed_count' not in src
+
+
+def test_sales_list_draft_count_is_real_and_filter_independent(db, monkeypatch):
+    from app.routes import sales
+    d = datetime(2026, 5, 10)
+    for i in range(2):
+        _order(db, status="draft", total=10 + i, date=d)
+    for i in range(3):
+        _order(db, status="completed", total=100 + i, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(sales.templates, "TemplateResponse", fake_tpl)
+
+    class _QP:
+        def get(self, key, default=None):
+            return default
+
+    class _Req:
+        query_params = _QP()
+
+    class _U:
+        role = "admin"
+        id = 1
+        username = "test_admin"
+
+    import asyncio
+
+    asyncio.run(
+        sales.sales_list(
+            request=_Req(), date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, status=None, sort_by=None, sort_dir=None,
+            page=None, db=db, current_user=_U(),
+        )
+    )
+    assert captured["draft_count"] == 2
+    assert captured["completed_count"] == 3
+
+    captured.clear()
+    asyncio.run(
+        sales.sales_list(
+            request=_Req(), date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, status="cancelled", sort_by=None, sort_dir=None,
+            page=None, db=db, current_user=_U(),
+        )
+    )
+    # draft_count active status filtridan mustaqil (Task 5 bug aynan shu edi)
+    assert captured["draft_count"] == 2
+    assert len(captured["orders"]) == 1
+    assert captured["orders"][0].status == "cancelled"
