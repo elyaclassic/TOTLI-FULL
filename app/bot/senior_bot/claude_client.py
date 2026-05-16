@@ -64,7 +64,7 @@ def _save_session(chat_id: int, sid: str) -> None:
         logger.error(f"session save fail: {e}")
 
 
-def reset_session(chat_id: int) -> None:
+def reset_session(chat_id: int | str) -> None:
     data = _load_sessions()
     if str(chat_id) in data:
         data.pop(str(chat_id), None)
@@ -74,7 +74,7 @@ def reset_session(chat_id: int) -> None:
             pass
 
 
-async def ask(chat_id: int, question: str, system_prompt: str) -> tuple[str, dict]:
+async def ask(chat_id: int | str, question: str, system_prompt: str) -> tuple[str, dict]:
     """Claude CLI orqali savol-javob.
 
     Birinchi xabar (sessiya yo'q): system_prompt + savol birga yuboriladi.
