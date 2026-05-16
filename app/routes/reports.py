@@ -2608,6 +2608,8 @@ async def sold_products_report(
     _role = (getattr(current_user, "role", None) or "").strip().lower()
     show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
 
+    from app.services.sales_metrics import SALE_REALIZED
+
     # Sotilgan mahsulotlar (OrderItem + Order).
     # Chegirma proportional: item.total * (order.total / order.subtotal).
     # Subtotal=0 yoki NULL bo'lsa — koeffitsient 1.0 (chegirma yo'q).
@@ -2628,9 +2630,9 @@ async def sold_products_report(
         .join(Order, Order.id == OrderItem.order_id)
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:
@@ -2647,9 +2649,9 @@ async def sold_products_report(
         db.query(func.coalesce(func.sum(Order.subtotal - Order.total), 0))
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:

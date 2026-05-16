@@ -108,3 +108,14 @@ def test_profit_compute_uses_realized_scope(db):
     )
     assert revenue == 800.0
     assert {o.status for o in sale_orders} == {"completed", "confirmed"}
+
+
+def test_sold_products_status_filter_is_realized(db):
+    import inspect
+    from app.routes import reports
+    src = inspect.getsource(reports.sold_products_report)
+    assert 'Order.status.in_(("completed", "delivered"))' not in src
+    assert "Order.created_at >= d_from" not in src
+    assert "Order.created_at <= d_to" not in src
+    assert "SALE_REALIZED" in src
+    assert "Order.date >= d_from" in src
