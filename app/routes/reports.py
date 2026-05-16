@@ -109,19 +109,23 @@ async def report_sales(
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    q = db.query(Order).filter(
-        Order.type == "sale",
-        Order.date >= start_date,
-        Order.date <= end_date + " 23:59:59",
+    from app.services.sales_metrics import sale_orders_query, sale_revenue
+    dt_from = start_date
+    dt_to = end_date + " 23:59:59"
+    orders = (
+        sale_orders_query(
+            db, scope="all", dt_from=dt_from, dt_to=dt_to,
+            warehouse_id=warehouse_id, partner_id=partner_id,
+        )
+        .order_by(Order.date.desc())
+        .all()
     )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    if partner_id:
-        q = q.filter(Order.partner_id == partner_id)
-    orders = q.all()
     warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
     partners = db.query(Partner).filter(Partner.type.in_(["customer", "both"])).order_by(Partner.name).all()
-    total = sum(o.total or 0 for o in orders)
+    total = sale_revenue(
+        db, dt_from=dt_from, dt_to=dt_to,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+    )
     return templates.TemplateResponse("reports/sales.html", {
         "request": request,
         "orders": orders,

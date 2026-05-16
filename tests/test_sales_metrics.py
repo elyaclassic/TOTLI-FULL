@@ -119,3 +119,31 @@ def test_sold_products_status_filter_is_realized(db):
     assert "Order.created_at <= d_to" not in src
     assert "SALE_REALIZED" in src
     assert "Order.date >= d_from" in src
+
+
+def test_report_sales_total_excludes_cancelled(db, monkeypatch):
+    from app.routes import reports
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=1000, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(reports.templates, "TemplateResponse", fake_tpl)
+
+    class _U:
+        role = "admin"
+
+    import asyncio
+    asyncio.get_event_loop().run_until_complete(
+        reports.report_sales(
+            request=None, start_date="2026-05-01", end_date="2026-05-31",
+            warehouse_id=None, partner_id=None, db=db, current_user=_U(),
+        )
+    )
+    assert len(captured["orders"]) == 2
+    assert captured["total"] == 1000.0
