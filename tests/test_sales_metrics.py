@@ -213,6 +213,39 @@ def test_sales_list_draft_count_is_real_and_filter_independent(db, monkeypatch):
     assert captured["orders"][0].status == "cancelled"
 
 
+def test_report_sales_export_total_excludes_cancelled(db):
+    import openpyxl, io, asyncio
+    from app.routes import reports
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=1000, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    class _U:
+        role = "admin"
+
+    resp = asyncio.run(
+        reports.report_sales_export(
+            request=None, start_date="2026-05-01", end_date="2026-05-31",
+            warehouse_id=None, partner_id=None, db=db, current_user=_U(),
+        )
+    )
+    async def _collect():
+        chunks = []
+        async for c in resp.body_iterator:
+            chunks.append(c if isinstance(c, bytes) else c.encode())
+        return b"".join(chunks)
+
+    body = asyncio.run(_collect()) if hasattr(resp, "body_iterator") else resp.body
+    wb = openpyxl.load_workbook(io.BytesIO(body))
+    ws = wb.active
+    cells = [c.value for row in ws.iter_rows() for c in row]
+    # Ikkala order ham ro'yxatda (audit), lekin JAMI faqat realized (1000, 1400 emas)
+    assert any(c == 1000 for c in cells)        # completed qatori
+    assert any(c == 400 for c in cells)         # cancelled qatori ham ko'rinadi
+    assert 1400 not in cells                     # JAMI cancelled'siz
+    assert any(c == 1000.0 or c == 1000 for c in cells)
+
+
 def test_reconciliation_invariant_sales_equals_revenue(db):
     """Buzilgan invariant: realized revenue (skalyar) == realized Order.total yig'indisi.
 
