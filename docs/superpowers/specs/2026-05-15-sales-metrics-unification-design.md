@@ -68,14 +68,17 @@ def sale_revenue(db, *, dt_from, dt_to, warehouse_id=None, partner_id=None) -> f
 
 ## 6. Xavfsiz deploy
 
-- **Branch:** `safe-fix-sales-metrics` ← `main` (joriy `feat-bulk-dispatch`'dagi aloqasiz WIP'ga tegilmaydi)
+> **TUZATISH 2026-05-16:** Asl spec "`main`'dan branch" degandi — bu **xato**. Aniqlandi: `main` (origin/main) prod liniyasidan **50+ commit eskirgan**; prod aslida `feat-bulk-dispatch`'da ishlaydi (Sotilgan mahsulotlar discount/profit ustunlari faqat shu yerda). Shu sabab feature `feat-bulk-dispatch` bazasida qurildi (branch `sales-metrics-feat`). `main`'ga rebase qilish — biz tuzatgan baza-nomuvofiqlik bug'ini qaytaradi, shuning uchun QILINMAYDI.
+
+- **Branch:** `sales-metrics-feat` ← `feat-bulk-dispatch` (prod liniyasi). Faqat shu feature'ga tegishli 8 fayl, 14 commit — aloqasiz WIP "tortilmaydi" chunki u allaqachon `feat-bulk-dispatch`'da
+- **Merge target:** `feat-bulk-dispatch` (prod liniyasi) — `main` EMAS. (Loyiha git-gigienasi alohida masala: `main` qachondir `feat-bulk-dispatch`'ga yetkazilishi kerak — bu refactordan tashqari.)
 - **Backup:** git tag + DB dump
 - **Feature flag:** YO'Q — read-only, `git revert` bir zumda qaytaradi (flag = keraksiz murakkablik)
 - **Oyna:** tungi 00:00–04:00 (23:00 backup tugagach)
-- **Pre-deploy:** snapshot skript (eski raqamlar)
-- **Deploy:** merge → `taskkill python.exe` → `start.bat`
-- **Post-smoke:** 4 sahifa ochiladi (xato yo'q) + snapshot qayta → delta izohlanadi
-- **Rollback:** `git revert` + restart (~1 daq, ma'lumot xavfi 0)
+- **Pre-deploy:** snapshot skript (eski raqamlar) — kutilgan delta: savdo total −cancelled (~−9.0M joriy oy), profit revenue −(draft+waiting+pending) (~−3.7M), out_for_delivery=0
+- **Deploy:** `feat-bulk-dispatch`'ga merge → `taskkill python.exe` → `start.bat`
+- **Post-smoke:** 4 sahifa + export ochiladi (xato yo'q) + snapshot qayta → delta izohlanadi
+- **Rollback:** 14 feature commit izolyatsiyalangan (8 fayl) → `git revert <merge>` + restart (~1 daq, ma'lumot xavfi 0)
 
 ## 7. Scope tashqarisi (ataylab)
 
