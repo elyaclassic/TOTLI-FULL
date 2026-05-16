@@ -109,19 +109,23 @@ async def report_sales(
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    q = db.query(Order).filter(
-        Order.type == "sale",
-        Order.date >= start_date,
-        Order.date <= end_date + " 23:59:59",
+    from app.services.sales_metrics import sale_orders_query, sale_revenue
+    dt_from = start_date
+    dt_to = end_date + " 23:59:59"
+    orders = (
+        sale_orders_query(
+            db, scope="all", dt_from=dt_from, dt_to=dt_to,
+            warehouse_id=warehouse_id, partner_id=partner_id,
+        )
+        .order_by(Order.date.desc())
+        .all()
     )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    if partner_id:
-        q = q.filter(Order.partner_id == partner_id)
-    orders = q.all()
     warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
     partners = db.query(Partner).filter(Partner.type.in_(["customer", "both"])).order_by(Partner.name).all()
-    total = sum(o.total or 0 for o in orders)
+    total = sale_revenue(
+        db, dt_from=dt_from, dt_to=dt_to,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+    )
     return templates.TemplateResponse("reports/sales.html", {
         "request": request,
         "orders": orders,
@@ -159,16 +163,17 @@ async def report_sales_export(
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    q = db.query(Order).filter(
-        Order.type == "sale",
-        Order.date >= start_date,
-        Order.date <= end_date + " 23:59:59",
+    from app.services.sales_metrics import sale_orders_query, sale_revenue
+    dt_from = start_date
+    dt_to = end_date + " 23:59:59"
+    orders = (
+        sale_orders_query(
+            db, scope="all", dt_from=dt_from, dt_to=dt_to,
+            warehouse_id=warehouse_id, partner_id=partner_id,
+        )
+        .order_by(Order.date.desc())
+        .all()
     )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    if partner_id:
-        q = q.filter(Order.partner_id == partner_id)
-    orders = q.order_by(Order.date.desc()).all()
     wb = Workbook()
     ws = wb.active
     ws.title = "Savdo"
@@ -190,7 +195,10 @@ async def report_sales_export(
             float(o.total or 0),
             o.status or "",
         ])
-    total = sum(o.total or 0 for o in orders)
+    total = sale_revenue(
+        db, dt_from=dt_from, dt_to=dt_to,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+    )
     ws.append(["", "", "", "", "JAMI:", total, ""])
     buf = io.BytesIO()
     wb.save(buf)
@@ -2388,12 +2396,10 @@ def _parse_profit_date_range(date_from: Optional[str], date_to: Optional[str]) -
 
 def _compute_sales_and_cogs(db: Session, dt_from: datetime, dt_to: datetime) -> tuple:
     """Returns: (sale_orders, revenue, cogs, sale_items)."""
-    sale_orders = (
-        db.query(Order)
-        .filter(Order.type == "sale", Order.status != "cancelled",
-                Order.date >= dt_from, Order.date <= dt_to)
-        .all()
-    )
+    from app.services.sales_metrics import sale_orders_query
+    sale_orders = sale_orders_query(
+        db, scope="realized", dt_from=dt_from, dt_to=dt_to
+    ).all()
     revenue = sum(float(o.total or 0) for o in sale_orders)
     sale_order_ids = [o.id for o in sale_orders]
     sale_items = []
@@ -2610,6 +2616,8 @@ async def sold_products_report(
     _role = (getattr(current_user, "role", None) or "").strip().lower()
     show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
 
+    from app.services.sales_metrics import SALE_REALIZED
+
     # Sotilgan mahsulotlar (OrderItem + Order).
     # Chegirma proportional: item.total * (order.total / order.subtotal).
     # Subtotal=0 yoki NULL bo'lsa — koeffitsient 1.0 (chegirma yo'q).
@@ -2630,9 +2638,9 @@ async def sold_products_report(
         .join(Order, Order.id == OrderItem.order_id)
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:
@@ -2649,9 +2657,9 @@ async def sold_products_report(
         db.query(func.coalesce(func.sum(Order.subtotal - Order.total), 0))
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:
