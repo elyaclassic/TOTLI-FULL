@@ -211,3 +211,27 @@ def test_sales_list_draft_count_is_real_and_filter_independent(db, monkeypatch):
     assert captured["draft_count"] == 2
     assert len(captured["orders"]) == 1
     assert captured["orders"][0].status == "cancelled"
+
+
+def test_reconciliation_invariant_sales_equals_revenue(db):
+    """Buzilgan invariant: realized revenue (skalyar) == realized Order.total yig'indisi.
+
+    Refactordan keyin bir davr uchun bu ikkisi teng bo'lishi shart;
+    draft/cancelled tashqarida qoladi.
+    """
+    d = datetime(2026, 5, 10)
+    _order(db, status="delivered", total=1000, date=d)
+    _order(db, status="completed", total=500, date=d)
+    _order(db, status="confirmed", total=250, date=d)
+    _order(db, status="out_for_delivery", total=300, date=d)
+    _order(db, status="draft", total=777, date=d)
+    _order(db, status="cancelled", total=888, date=d)
+
+    dt_from, dt_to = datetime(2026, 5, 1), datetime(2026, 5, 31, 23, 59, 59)
+
+    rev = sale_revenue(db, dt_from=dt_from, dt_to=dt_to)
+    realized_sum = sum(
+        o.total
+        for o in sale_orders_query(db, scope="realized", dt_from=dt_from, dt_to=dt_to).all()
+    )
+    assert rev == realized_sum == 2050.0
