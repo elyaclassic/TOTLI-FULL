@@ -267,3 +267,58 @@ def test_backfill_fixed_point_multilevel_tayyor_chain(db):
     assert db.query(ProductPriceHistory).count() == n1   # 0 yangi (idempotent)
     assert abs(mid.purchase_price - 10000.0) < 1e-6
     assert abs(fin.purchase_price - 30000.0) < 1e-6
+
+
+def test_backfill_converges_with_live_cost_per_unit_dona_400gr(db):
+    """C2 (to'g'rilangan): "dona"-birlik 400gr SKU (real 130 SKU shu yo'lda) uchun
+    backfill `new` == jonli forward-fix cost_per_unit AYNAN. C1 (yakuniy review)
+    rad etilgan; bu doimiy konvergensiya fence'i."""
+    import importlib.util
+    from pathlib import Path
+    from app.models.database import Product, Recipe, RecipeItem, Stock, Production, Unit
+    from app.routes.production import _calculate_total_material_cost
+    from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock
+
+    dona = Unit(name="dona")          # ADAPT to real Unit model (add code= if column exists)
+    db.add(dona); db.flush()
+    raw1 = Product(name="PISTA xom", code="PX", type="xom", is_active=True,
+                    purchase_price=42000, sale_price=0)
+    raw2 = Product(name="SHAKAR xom", code="SX", type="xom", is_active=True,
+                    purchase_price=9000, sale_price=0)
+    db.add_all([raw1, raw2]); db.flush()
+    out = Product(name="MAYDA PISTA 400gr", code="MP400", type="tayyor", is_active=True,
+                  purchase_price=999999, sale_price=30000, unit_id=dona.id)
+    db.add(out); db.flush()
+    r = Recipe(product_id=out.id, name="MAYDA PISTA 400gr", output_quantity=1.0, is_active=True)
+    db.add(r); db.flush()
+    db.add(RecipeItem(recipe_id=r.id, product_id=raw1.id, quantity=0.3))
+    db.add(RecipeItem(recipe_id=r.id, product_id=raw2.id, quantity=0.1))
+    db.add(Stock(warehouse_id=1, product_id=out.id, quantity=5.0, cost_price=999999))
+    db.commit()
+
+    assert recipe_kg_per_unit(r) == 0.4                       # 400gr, kg/unit != 1.0
+    db.refresh(out)
+    assert "dona" in ((out.unit.name or "") + " " + (getattr(out.unit, "code", "") or "")).lower()
+
+    prod = Production(number="PR-CONV-002", recipe_id=r.id, quantity=10.0,
+                      status="completed", warehouse_id=1)
+    db.add(prod); db.flush()
+    items = [(it.product_id, float(it.quantity or 0) * float(prod.quantity or 0)) for it in r.items]
+    tmc = _calculate_total_material_cost(db, items)
+    ou = production_output_quantity_for_stock(db, prod, r)    # dona -> prod.quantity (=10)
+    live_cpu = tmc / ou if ou else 0.0
+    assert live_cpu > 0
+
+    _bf = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
+    spec = importlib.util.spec_from_file_location("bf_conv2", str(_bf))
+    bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
+    report = bf.run(db, apply=False)
+    row = [x for x in report if x[0] == out.id]
+    assert row, "out report'da yo'q"
+    backfill_new = row[0][3]
+
+    assert abs(backfill_new - live_cpu) < 1e-6, (
+        f"DIVERGENSIYA: backfill={backfill_new} live_cpu={live_cpu} "
+        f"unit=dona kg/unit={recipe_kg_per_unit(r)}")
+    db.refresh(out)
+    assert out.purchase_price == 999999          # DRY-RUN yozmadi
