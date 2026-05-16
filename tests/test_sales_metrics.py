@@ -147,3 +147,13 @@ def test_report_sales_total_excludes_cancelled(db, monkeypatch):
     )
     assert len(captured["orders"]) == 2
     assert captured["total"] == 1000.0
+
+
+
+def test_sales_list_uses_shared_constant_no_literal(db):
+    import inspect
+    from app.routes import sales
+    src = inspect.getsource(sales.sales_list)
+    assert 'SALE_REALIZED' in src
+    assert '["completed", "delivered", "confirmed"]' not in src
+    assert 'pg["total_count"] - completed_count' not in src

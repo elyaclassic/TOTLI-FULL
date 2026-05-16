@@ -151,13 +151,14 @@ async def sales_list(
     orders = pg["items"]
 
     from sqlalchemy import func as sa_func
+    from app.services.sales_metrics import SALE_REALIZED
     stats_row = db.query(
         sa_func.coalesce(sa_func.sum(Order.total), 0),
         sa_func.coalesce(sa_func.sum(Order.debt), 0),
         sa_func.count(Order.id),
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "delivered", "confirmed"]),
+        Order.status.in_(SALE_REALIZED),
     )
     if date_from and date_from.strip():
         stats_row = stats_row.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -168,13 +169,22 @@ async def sales_list(
     total_sum, qarz_sum, completed_count = stats_row.one()
     total_sum = float(total_sum or 0)
     qarz_sum = float(qarz_sum or 0)
-    draft_count = pg["total_count"] - completed_count
+    draft_q = db.query(sa_func.count(Order.id)).filter(
+        Order.type == "sale", Order.status == "draft"
+    )
+    if date_from and date_from.strip():
+        draft_q = draft_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+    if date_to and date_to.strip():
+        draft_q = draft_q.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+    if wh_id is not None and wh_id > 0:
+        draft_q = draft_q.filter(Order.warehouse_id == wh_id)
+    draft_count = int(draft_q.scalar() or 0)
 
     pay_stats = db.query(Payment.payment_type, sa_func.sum(Payment.amount)).join(
         Order, Order.id == Payment.order_id
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "delivered", "confirmed"]),
+        Order.status.in_(SALE_REALIZED),
         Payment.type == "income",
         Payment.status == "confirmed",
     )
@@ -202,7 +212,7 @@ async def sales_list(
         # Chegirma — subtotal − total (admin/manager qatori)
         chg_q = db.query(sa_func.coalesce(sa_func.sum(Order.subtotal - Order.total), 0)).filter(
             Order.type == "sale",
-            Order.status.in_(["completed", "delivered", "confirmed"]),
+            Order.status.in_(SALE_REALIZED),
         )
         if date_from and date_from.strip():
             chg_q = chg_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -221,7 +231,7 @@ async def sales_list(
             Product, Product.id == OrderItem.product_id
         ).filter(
             Order.type == "sale",
-            Order.status.in_(["completed", "delivered", "confirmed"]),
+            Order.status.in_(SALE_REALIZED),
         )
         if date_from and date_from.strip():
             tnx_q = tnx_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
