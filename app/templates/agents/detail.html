@@ -177,7 +177,7 @@
                                 {% if order.status == 'draft' %}
                                 <span class="badge-waiting">Draft</span>
                                 {% elif order.status == 'confirmed' %}
-                                <span class="badge-done">Tasdiqlangan</span>
+                                <span class="badge-done">{% if order.type == 'return_sale' %}Almashtirildi{% else %}Tasdiqlangan{% endif %}</span>
                                 {% elif order.status == 'completed' %}
                                 <span class="badge-done">Yakunlangan</span>
                                 {% elif order.status == 'cancelled' %}
