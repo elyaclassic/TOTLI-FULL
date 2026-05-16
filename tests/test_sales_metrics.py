@@ -102,6 +102,7 @@ def test_profit_compute_uses_realized_scope(db):
     _order(db, status="confirmed", total=300, date=d)
     _order(db, status="draft", total=999, date=d)        # realized emas
     _order(db, status="cancelled", total=999, date=d)    # realized emas
+    _order(db, status="waiting_production", total=999, date=d)  # realized emas — eski filtr buni xato qo'shardi
     sale_orders, revenue, cogs, sale_items = _compute_sales_and_cogs(
         db, datetime(2026, 5, 1), datetime(2026, 5, 31, 23, 59, 59)
     )
