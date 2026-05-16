@@ -121,6 +121,98 @@ def test_sold_products_status_filter_is_realized(db):
     assert "Order.date >= d_from" in src
 
 
+def _product(db, *, name, purchase_price):
+    from app.models.database import Product
+    p = Product(name=name, code=f"P-{name}", is_active=True, purchase_price=purchase_price)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def _item(db, *, order, product, quantity, total):
+    from app.models.database import OrderItem
+    it = OrderItem(
+        order_id=order.id, product_id=product.id,
+        quantity=quantity, price=total / quantity if quantity else 0, total=total,
+    )
+    db.add(it)
+    db.commit()
+    return it
+
+
+def test_sold_products_report_realized_behavior(db, monkeypatch):
+    """REAL sold_products_report — realized scope (confirmed/out_for_delivery
+    kiradi, eski completed/delivered emas) + Order.date oynasi.
+
+    Eski filtr ("completed","delivered") ga qaytarilsa bu test BUZILADI:
+    confirmed/out_for_delivery order'lari yig'indidan chiqib, grand_sum
+    10000 → 6000 ga tushadi.
+    """
+    from app.routes import reports
+
+    pa = _product(db, name="Alfa", purchase_price=1000)
+    pb = _product(db, name="Beta", purchase_price=500)
+
+    d_in = datetime(2026, 5, 10)
+    d_out = datetime(2026, 6, 1)  # oyna tashqarisida (Order.date bo'yicha chiqib ketadi)
+
+    o_del = _order(db, status="delivered", total=2000, date=d_in)
+    _item(db, order=o_del, product=pa, quantity=2, total=2000)
+
+    o_conf = _order(db, status="confirmed", total=3000, date=d_in)
+    _item(db, order=o_conf, product=pa, quantity=3, total=3000)
+
+    o_ofd = _order(db, status="out_for_delivery", total=1000, date=d_in)
+    _item(db, order=o_ofd, product=pa, quantity=1, total=1000)
+
+    o_comp = _order(db, status="completed", total=4000, date=d_in)
+    _item(db, order=o_comp, product=pb, quantity=4, total=4000)
+
+    # Chiqarib tashlanishi kerak:
+    o_canc = _order(db, status="cancelled", total=5000, date=d_in)
+    _item(db, order=o_canc, product=pa, quantity=5, total=5000)
+
+    o_draft = _order(db, status="draft", total=7000, date=d_in)
+    _item(db, order=o_draft, product=pa, quantity=7, total=7000)
+
+    # Oyna tashqarisidagi (Order.date) realized order — chiqarib tashlanadi:
+    o_future = _order(db, status="completed", total=9000, date=d_out)
+    _item(db, order=o_future, product=pa, quantity=9, total=9000)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(reports.templates, "TemplateResponse", fake_tpl)
+
+    class _U:
+        role = "admin"
+
+    import asyncio
+    asyncio.run(
+        reports.sold_products_report(
+            request=None, date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, category_id=None, name_query=None,
+            db=db, current_user=_U(),
+        )
+    )
+
+    by_name = {it["product_name"]: it for it in captured["items"]}
+    assert set(by_name) == {"Alfa", "Beta"}
+    # Alfa: delivered(2) + confirmed(3) + out_for_delivery(1) = 6 dona, 6000 so'm
+    assert by_name["Alfa"]["quantity"] == 6.0
+    assert by_name["Alfa"]["total"] == 6000.0
+    # Beta: completed(4) = 4 dona, 4000 so'm
+    assert by_name["Beta"]["quantity"] == 4.0
+    assert by_name["Beta"]["total"] == 4000.0
+    # cancelled/draft/oyna-tashqarisi chiqarib tashlandi
+    assert captured["grand_qty"] == 10.0
+    assert captured["grand_sum"] == 10000.0
+
+
 def test_report_sales_total_excludes_cancelled(db, monkeypatch):
     from app.routes import reports
     d = datetime(2026, 5, 10)
