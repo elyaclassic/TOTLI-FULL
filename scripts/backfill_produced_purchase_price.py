@@ -109,7 +109,9 @@ def run(db, *, apply: bool) -> list:
         report.append((p.id, p.name, old, new, flag))
     if apply:
         for p, old, new, flag in plan:
-            if new > 0 and abs(old - new) >= 1e-6:
+            # Faqat toza qatorlar yoziladi (flag=="" ): SKIP/ANOMALY/SUSPECT
+            # yozilmaydi — to'liqsiz/shubhali retsept jonli ma'lumotni buzmasin.
+            if flag == "" and new > 0 and abs(old - new) >= 1e-6:
                 p.purchase_price = new
                 for s in db.query(Stock).filter(Stock.product_id == p.id).all():
                     s.cost_price = new

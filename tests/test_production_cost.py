@@ -142,16 +142,16 @@ def test_backfill_recomputes_per_unit_apply(db):
                   purchase_price=10000, sale_price=0)
     db.add(raw); db.flush()
     out = Product(name="NON 400gr", code="NON400", type="tayyor", is_active=True,
-                  purchase_price=999999, sale_price=20000)
+                  purchase_price=15000, sale_price=20000)
     db.add(out); db.flush()
     r = Recipe(product_id=out.id, name="NON 400gr", output_quantity=1.0, is_active=True)
     db.add(r); db.flush()
     db.add(RecipeItem(recipe_id=r.id, product_id=raw.id, quantity=1.0))
-    db.add(Stock(warehouse_id=1, product_id=out.id, quantity=5.0, cost_price=999999))
+    db.add(Stock(warehouse_id=1, product_id=out.id, quantity=5.0, cost_price=15000))
     db.commit()
 
     expected = _calculate_recipe_cost_per_kg(db, r.id) * recipe_kg_per_unit(r)
-    assert expected > 0 and expected < 999999          # per-unit, buzuq qiymatdan past
+    assert expected > 0 and expected < 15000           # per-unit, buzuq qiymatdan past
 
     _bf_path = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
     spec = importlib.util.spec_from_file_location("bf_mod", str(_bf_path))
@@ -160,7 +160,7 @@ def test_backfill_recomputes_per_unit_apply(db):
     # DRY-RUN: yozmaydi
     bf.run(db, apply=False)
     db.refresh(out)
-    assert out.purchase_price == 999999
+    assert out.purchase_price == 15000
     assert db.query(ProductPriceHistory).count() == 0
 
     # APPLY
@@ -191,10 +191,10 @@ def test_backfill_idempotent_with_semi_chain(db):
                    purchase_price=8000, sale_price=0)
     db.add(raw); db.flush()
     semi = Product(name="QIYOM yarim", code="QYM", type="yarim_tayyor", is_active=True,
-                   purchase_price=999999, sale_price=0)
+                   purchase_price=24000, sale_price=0)
     db.add(semi); db.flush()
     fin = Product(name="HOLVA 400gr", code="H400", type="tayyor", is_active=True,
-                  purchase_price=999999, sale_price=40000)
+                  purchase_price=24000, sale_price=40000)
     db.add(fin); db.flush()
     rs = Recipe(product_id=semi.id, name="QIYOM yarim", output_quantity=1.0, is_active=True)
     db.add(rs); db.flush()
@@ -202,8 +202,8 @@ def test_backfill_idempotent_with_semi_chain(db):
     rf = Recipe(product_id=fin.id, name="HOLVA 400gr", output_quantity=1.0, is_active=True)
     db.add(rf); db.flush()
     db.add(RecipeItem(recipe_id=rf.id, product_id=semi.id, quantity=1.0))
-    db.add(Stock(warehouse_id=1, product_id=semi.id, quantity=3.0, cost_price=999999))
-    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=3.0, cost_price=999999))
+    db.add(Stock(warehouse_id=1, product_id=semi.id, quantity=3.0, cost_price=24000))
+    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=3.0, cost_price=24000))
     db.commit()
 
     _bf_path = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
@@ -235,10 +235,10 @@ def test_backfill_fixed_point_multilevel_tayyor_chain(db):
                    purchase_price=5000, sale_price=0)
     db.add(raw); db.flush()
     mid = Product(name="ARALASHMA", code="ARL", type="tayyor", is_active=True,
-                   purchase_price=999999, sale_price=0)
+                   purchase_price=15000, sale_price=0)
     db.add(mid); db.flush()
     fin = Product(name="TORT 1kg", code="T1", type="tayyor", is_active=True,
-                   purchase_price=888888, sale_price=80000)
+                   purchase_price=42000, sale_price=80000)
     db.add(fin); db.flush()
     r_mid = Recipe(product_id=mid.id, name="ARALASHMA 1kg", output_quantity=1.0, is_active=True)
     db.add(r_mid); db.flush()
@@ -246,8 +246,8 @@ def test_backfill_fixed_point_multilevel_tayyor_chain(db):
     r_fin = Recipe(product_id=fin.id, name="TORT 1kg", output_quantity=1.0, is_active=True)
     db.add(r_fin); db.flush()
     db.add(RecipeItem(recipe_id=r_fin.id, product_id=mid.id, quantity=3.0))  # 3 * MID_cost
-    db.add(Stock(warehouse_id=1, product_id=mid.id, quantity=4.0, cost_price=999999))
-    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=4.0, cost_price=888888))
+    db.add(Stock(warehouse_id=1, product_id=mid.id, quantity=4.0, cost_price=15000))
+    db.add(Stock(warehouse_id=1, product_id=fin.id, quantity=4.0, cost_price=42000))
     db.commit()
 
     _bf = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
@@ -322,3 +322,35 @@ def test_backfill_converges_with_live_cost_per_unit_dona_400gr(db):
         f"unit=dona kg/unit={recipe_kg_per_unit(r)}")
     db.refresh(out)
     assert out.purchase_price == 999999          # DRY-RUN yozmadi
+
+
+def test_backfill_skips_suspect_rows(db):
+    """SUSPECT(>70%) qatorlar --apply'da YOZILMAYDI (to'liqsiz retsept jonli
+    ma'lumotni buzmasin). flag=='' bo'lgan toza qatorlargina yoziladi."""
+    import importlib.util
+    from pathlib import Path
+    from app.models.database import Product, Recipe, RecipeItem, Stock, ProductPriceHistory
+
+    raw = Product(name="ARZON xom", code="AZ", type="xom", is_active=True,
+                   purchase_price=1000, sale_price=0)
+    db.add(raw); db.flush()
+    out = Product(name="SHUBHALI MAHSULOT", code="SUSP", type="tayyor", is_active=True,
+                  purchase_price=100000, sale_price=200000)   # old=100000
+    db.add(out); db.flush()
+    r = Recipe(product_id=out.id, name="SHUBHALI MAHSULOT", output_quantity=1.0, is_active=True)
+    db.add(r); db.flush()
+    db.add(RecipeItem(recipe_id=r.id, product_id=raw.id, quantity=0.1))  # new ~100, -99.9%
+    db.add(Stock(warehouse_id=1, product_id=out.id, quantity=5.0, cost_price=100000))
+    db.commit()
+
+    _bf = Path(__file__).resolve().parents[1] / "scripts" / "backfill_produced_purchase_price.py"
+    spec = importlib.util.spec_from_file_location("bf_susp", str(_bf))
+    bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
+
+    rep = bf.run(db, apply=True)
+    row = [x for x in rep if x[0] == out.id][0]
+    assert row[4].startswith("SUSPECT"), f"SUSPECT kutilgandi: {row}"
+    db.refresh(out)
+    assert out.purchase_price == 100000          # YOZILMADI (eski qiymat saqlandi)
+    assert db.query(ProductPriceHistory).filter(
+        ProductPriceHistory.product_id == out.id).count() == 0
