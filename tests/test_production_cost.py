@@ -127,3 +127,53 @@ def test_bulk_confirm_same_transaction_distinct_doc_numbers(db):
     for p, r, cost in triples:
         db.refresh(p)
         assert p.purchase_price == cost
+
+
+def test_backfill_recomputes_per_unit_apply(db):
+    """Backfill: 400gr SKU retsept dona-narxiga keladi (kg-narx EMAS), idempotent,
+    distinct BACKFILL- doc_number, dry-run yozmaydi."""
+    import importlib.util
+    from app.models.database import Product, Recipe, RecipeItem, Stock, ProductPriceHistory
+    from app.routes.production import _calculate_recipe_cost_per_kg
+    from app.utils.production_order import recipe_kg_per_unit
+
+    raw = Product(name="UN", code="UN", type="xom", is_active=True,
+                  purchase_price=10000, sale_price=0)
+    db.add(raw); db.flush()
+    out = Product(name="NON 400gr", code="NON400", type="tayyor", is_active=True,
+                  purchase_price=999999, sale_price=20000)
+    db.add(out); db.flush()
+    r = Recipe(product_id=out.id, name="NON 400gr", output_quantity=1.0, is_active=True)
+    db.add(r); db.flush()
+    db.add(RecipeItem(recipe_id=r.id, product_id=raw.id, quantity=1.0))
+    db.add(Stock(warehouse_id=1, product_id=out.id, quantity=5.0, cost_price=999999))
+    db.commit()
+
+    expected = _calculate_recipe_cost_per_kg(db, r.id) * recipe_kg_per_unit(r)
+    assert expected > 0 and expected < 999999          # per-unit, buzuq qiymatdan past
+
+    spec = importlib.util.spec_from_file_location(
+        "bf_mod", r"\\server2220\d\TOTLI BI\.claude\worktrees\purchase-price-feat\scripts\backfill_produced_purchase_price.py")
+    bf = importlib.util.module_from_spec(spec); spec.loader.exec_module(bf)
+
+    # DRY-RUN: yozmaydi
+    bf.run(db, apply=False)
+    db.refresh(out)
+    assert out.purchase_price == 999999
+    assert db.query(ProductPriceHistory).count() == 0
+
+    # APPLY
+    bf.run(db, apply=True)
+    db.refresh(out)
+    assert abs(out.purchase_price - expected) < 1e-6
+    st = db.query(Stock).filter(Stock.product_id == out.id).first()
+    assert abs(st.cost_price - expected) < 1e-6
+    hrows = db.query(ProductPriceHistory).all()
+    assert len(hrows) == 1
+    assert hrows[0].doc_number.startswith("BACKFILL-")
+
+    # Idempotent: 2-marta apply = bir xil, yangi history yo'q (o'zgarmadi)
+    bf.run(db, apply=True)
+    db.refresh(out)
+    assert abs(out.purchase_price - expected) < 1e-6
+    assert db.query(ProductPriceHistory).count() == 1
