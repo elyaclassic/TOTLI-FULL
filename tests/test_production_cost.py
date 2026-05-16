@@ -18,25 +18,21 @@ def _mk_stock(db, *, wh_id, product_id, qty=10.0, cost=999999):
     return s
 
 
-class _Prod:
-    number = "PR-TEST-001"
-
-
 def test_update_output_sets_pp_to_cost_per_unit_not_weighted(db):
     from app.routes.production import _update_output_cost_and_price
     p, r = _mk_output(db, pp=999999)
     _mk_stock(db, wh_id=1, product_id=p.id, qty=10.0, cost=999999)
-    _update_output_cost_and_price(db, 1, r, 15000.0, _Prod())
+    _update_output_cost_and_price(db, 1, r, 15000.0)
     db.refresh(p)
     assert p.purchase_price == 15000.0
 
 
-def test_update_output_idempotent(db):
+def test_update_output_same_cost_no_duplicate(db):
     from app.routes.production import _update_output_cost_and_price
     p, r = _mk_output(db, pp=999999)
     _mk_stock(db, wh_id=1, product_id=p.id)
-    _update_output_cost_and_price(db, 1, r, 15000.0, _Prod())
-    _update_output_cost_and_price(db, 1, r, 15000.0, _Prod())
+    _update_output_cost_and_price(db, 1, r, 15000.0)
+    _update_output_cost_and_price(db, 1, r, 15000.0)
     db.refresh(p)
     assert p.purchase_price == 15000.0
 
@@ -45,7 +41,7 @@ def test_update_output_zero_cost_keeps_old(db):
     from app.routes.production import _update_output_cost_and_price
     p, r = _mk_output(db, pp=12345)
     _mk_stock(db, wh_id=1, product_id=p.id)
-    _update_output_cost_and_price(db, 1, r, 0.0, _Prod())
+    _update_output_cost_and_price(db, 1, r, 0.0)
     db.refresh(p)
     assert p.purchase_price == 12345
 
@@ -55,12 +51,12 @@ def test_update_output_writes_price_history(db):
     from app.models.database import ProductPriceHistory
     p, r = _mk_output(db, pp=999999)
     _mk_stock(db, wh_id=1, product_id=p.id)
-    _update_output_cost_and_price(db, 1, r, 15000.0, _Prod())
+    _update_output_cost_and_price(db, 1, r, 15000.0)
     rows = db.query(ProductPriceHistory).filter(ProductPriceHistory.product_id == p.id).all()
     assert len(rows) == 1
     assert rows[0].old_purchase_price == 999999.0
     assert rows[0].new_purchase_price == 15000.0
-    assert rows[0].doc_number == "PR-TEST-001"
+    assert rows[0].doc_number.startswith("PRC-")
 
 
 def test_update_output_no_history_when_unchanged(db):
@@ -68,7 +64,7 @@ def test_update_output_no_history_when_unchanged(db):
     from app.models.database import ProductPriceHistory
     p, r = _mk_output(db, pp=15000)
     _mk_stock(db, wh_id=1, product_id=p.id)
-    _update_output_cost_and_price(db, 1, r, 15000.0, _Prod())
+    _update_output_cost_and_price(db, 1, r, 15000.0)
     assert db.query(ProductPriceHistory).filter(
         ProductPriceHistory.product_id == p.id).count() == 0
 
@@ -79,7 +75,29 @@ def test_update_output_anomaly_warns_but_completes(db, caplog):
     p, r = _mk_output(db, pp=100, sale=10000)
     _mk_stock(db, wh_id=1, product_id=p.id)
     with caplog.at_level(logging.WARNING):
-        _update_output_cost_and_price(db, 1, r, 50000.0, _Prod())
+        _update_output_cost_and_price(db, 1, r, 50000.0)
     db.refresh(p)
     assert p.purchase_price == 50000.0
     assert any("PRICE ANOMALY" in m for m in caplog.messages)
+
+
+def test_update_output_reconfirm_changed_cost_two_history_no_error(db):
+    """Bekor→qayta-tasdiq o'zgargan tannarx bilan: 2 history, distinct doc_number,
+    IntegrityError YO'Q (eski spec bu yerda UNIQUE buzilardi)."""
+    from app.routes.production import _update_output_cost_and_price
+    from app.models.database import ProductPriceHistory
+    p, r = _mk_output(db, pp=999999)
+    _mk_stock(db, wh_id=1, product_id=p.id)
+    _update_output_cost_and_price(db, 1, r, 15000.0)
+    _update_output_cost_and_price(db, 1, r, 18000.0)   # turli cost (re-confirm)
+    db.commit()                                         # UNIQUE buzilsa shu yerda portlardi
+    db.refresh(p)
+    assert p.purchase_price == 18000.0
+    rows = (db.query(ProductPriceHistory)
+              .filter(ProductPriceHistory.product_id == p.id)
+              .order_by(ProductPriceHistory.id).all())
+    assert len(rows) == 2
+    assert rows[0].new_purchase_price == 15000.0
+    assert rows[1].new_purchase_price == 18000.0
+    assert rows[0].doc_number != rows[1].doc_number
+    assert all(x.doc_number.startswith("PRC-") for x in rows)

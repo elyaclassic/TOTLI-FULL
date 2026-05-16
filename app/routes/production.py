@@ -246,13 +246,26 @@ def _calculate_total_material_cost(db: Session, items_actual: list) -> float:
     return total
 
 
-def _log_price_history(db: Session, product, old_pp: float, new_pp: float, doc_number: str) -> None:
-    """Production-driven purchase_price o'zgarishini tarixga yozadi (sukutda emas)."""
+def _log_price_history(db: Session, product, old_pp: float, new_pp: float) -> None:
+    """Production-driven purchase_price o'zgarishini tarixga yozadi (sukutda emas).
+    O'zi unique PRC-YYYYMMDD-NNN raqam generatsiya qiladi (doc_number UNIQUE constraint;
+    PRC- prefiks qo'lda PN- tahrirdan ajratadi)."""
     if abs((old_pp or 0) - (new_pp or 0)) < 1e-6:
         return
     from app.models.database import ProductPriceHistory
+    prefix = f"PRC-{datetime.now().strftime('%Y%m%d')}-"
+    last = (
+        db.query(ProductPriceHistory)
+        .filter(ProductPriceHistory.doc_number.like(f"{prefix}%"))
+        .order_by(ProductPriceHistory.id.desc())
+        .first()
+    )
+    try:
+        num = (int(last.doc_number.rsplit("-", 1)[-1]) + 1) if last and last.doc_number else 1
+    except (ValueError, IndexError):
+        num = 1
     db.add(ProductPriceHistory(
-        doc_number=doc_number,
+        doc_number=f"{prefix}{num:03d}",
         product_id=product.id,
         price_type_id=None,
         old_purchase_price=float(old_pp or 0),
@@ -263,7 +276,7 @@ def _log_price_history(db: Session, product, old_pp: float, new_pp: float, doc_n
     ))
 
 
-def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_unit: float, production) -> None:
+def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_unit: float) -> None:
     """Tayyor mahsulot Product.purchase_price + Stock.cost_price ni production'ning
     dona-boshiga material narxiga (cost_per_unit) flat tayinlaydi. Weighted-avg/self-feedback YO'Q
     (eski cheksiz-surilish bug'i ildizi). Har o'zgarish product_price_history'ga yoziladi."""
@@ -281,7 +294,7 @@ def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_
     output_product.purchase_price = cost
     if product_stock is not None and hasattr(Stock, "cost_price"):
         product_stock.cost_price = cost
-    _log_price_history(db, output_product, old, cost, production.number)
+    _log_price_history(db, output_product, old, cost)
     db.flush()
     if output_product.sale_price and cost > output_product.sale_price:
         logger.warning(
@@ -336,7 +349,7 @@ def _do_complete_production_stock(db: Session, production, recipe):
         "production_complete: OK #%s output=%s units cost=%.2f cost_per_unit=%.2f wh=%s",
         production.number, output_units, total_material_cost, cost_per_unit, out_wh_id,
     )
-    _update_output_cost_and_price(db, out_wh_id, recipe, cost_per_unit, production)
+    _update_output_cost_and_price(db, out_wh_id, recipe, cost_per_unit)
     return None
 
 
