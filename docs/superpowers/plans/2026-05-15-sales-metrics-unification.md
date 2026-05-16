@@ -58,16 +58,16 @@ def _order(db, *, status, total, date, type_="sale", warehouse_id=None, partner_
     return o
 
 
-def test_realized_includes_only_three_statuses(db):
+def test_realized_includes_only_four_statuses(db):
     d = datetime(2026, 5, 10)
-    for st in ("delivered", "completed", "confirmed"):
+    for st in ("delivered", "completed", "confirmed", "out_for_delivery"):
         _order(db, status=st, total=100, date=d)
-    for st in ("draft", "cancelled", "waiting_production", "out_for_delivery", "pending"):
+    for st in ("draft", "cancelled", "waiting_production", "pending"):
         _order(db, status=st, total=999, date=d)
     rows = sale_orders_query(
         db, scope="realized", dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)
     ).all()
-    assert sorted(o.status for o in rows) == ["completed", "confirmed", "delivered"]
+    assert sorted(o.status for o in rows) == ["completed", "confirmed", "delivered", "out_for_delivery"]
 
 
 def test_all_scope_includes_cancelled(db):
@@ -127,8 +127,8 @@ def test_unknown_scope_raises(db):
         )
 
 
-def test_realized_constant_is_exactly_three(db):
-    assert set(SALE_REALIZED) == {"delivered", "completed", "confirmed"}
+def test_realized_constant_is_exactly_four(db):
+    assert set(SALE_REALIZED) == {"delivered", "completed", "confirmed", "out_for_delivery"}
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -156,7 +156,9 @@ from app.models.database import Order
 
 # Daromad/foyda hisoblanadigan sotuv holatlari — YAGONA ta'rif.
 # Modul tashqarisida Order.status.in_(...) yozilmaydi.
-SALE_REALIZED = ("delivered", "completed", "confirmed")
+# Sotuv qat'iy: stock ombordan ketgan (delivered, completed, out_for_delivery)
+# yoki buyurtma tasdiqlangan (confirmed); draft/cancelled/waiting_production chiqarib tashlanadi.
+SALE_REALIZED = ("delivered", "completed", "confirmed", "out_for_delivery")
 
 
 def sale_orders_query(
@@ -711,7 +713,7 @@ def main():
     try:
         for label, a, b in PERIODS:
             base = db.query(Order).filter(Order.type == "sale", Order.date >= a, Order.date <= b)
-            new_realized = _sum(base.filter(Order.status.in_(("delivered", "completed", "confirmed"))))
+            new_realized = _sum(base.filter(Order.status.in_(("delivered", "completed", "confirmed", "out_for_delivery"))))
             old_all = _sum(base)
             old_non_cancelled = _sum(base.filter(Order.status != "cancelled"))
             print(f"\n=== {label} ===")

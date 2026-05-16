@@ -13,7 +13,9 @@ from app.models.database import Order
 
 # Daromad/foyda hisoblanadigan sotuv holatlari — YAGONA ta'rif.
 # Modul tashqarisida Order.status.in_(...) yozilmaydi.
-SALE_REALIZED = ("delivered", "completed", "confirmed")
+# Sotuv qat'iy: stock ombordan ketgan (delivered, completed, out_for_delivery)
+# yoki buyurtma tasdiqlangan (confirmed); draft/cancelled/waiting_production chiqarib tashlanadi.
+SALE_REALIZED = ("delivered", "completed", "confirmed", "out_for_delivery")
 
 
 def sale_orders_query(

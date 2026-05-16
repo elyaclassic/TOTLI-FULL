@@ -20,7 +20,7 @@ Farq ildizi: "qaysi buyurtma sanaladi" ta'rifi 4 joyda mustaqil takrorlangan →
 
 ## 2. Qaror qilingan ta'riflar
 
-- **Realized (haqiqiy) sotuv** = status `delivered` + `completed` + `confirmed`
+- **Realized (haqiqiy) sotuv** = status `delivered` + `completed` + `confirmed` + `out_for_delivery` — `out_for_delivery`'da stock allaqachon ombordan ketgan, shuning uchun qat'iy sotuv (bugun 0 qator, raqam o'zgarmaydi, ammo latent revenue-undercount bug oldini oladi).
 - **Sana maydoni** = `Order.date` (biznes sanasi), doimo
 - **Yondashuv** = query-builder + scope konstantalar (C-darajadagi to'liq agregatsiya servisi EMAS — YAGNI)
 - **Cancelled** `/reports/sales` ro'yxatida qoladi (kulrang, audit uchun), lekin summadan chiqadi
@@ -30,7 +30,7 @@ Farq ildizi: "qaysi buyurtma sanaladi" ta'rifi 4 joyda mustaqil takrorlangan →
 `finance_service.cash_balance_formula()` etalon uslubida — yagona haqiqat manbai.
 
 ```python
-SALE_REALIZED = ("delivered", "completed", "confirmed")  # daromad/foyda
+SALE_REALIZED = ("delivered", "completed", "confirmed", "out_for_delivery")  # daromad/foyda
 
 def sale_orders_query(db, *, scope="realized", dt_from=None, dt_to=None,
                       warehouse_id=None, partner_id=None) -> Query:
