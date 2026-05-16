@@ -47,12 +47,14 @@ async def global_safe_middleware_impl(request: Request, call_next):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; "
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
-                "https://cdn.jsdelivr.net https://unpkg.com https://api-maps.yandex.ru; "
+                "https://cdn.jsdelivr.net https://unpkg.com https://api-maps.yandex.ru "
+                "https://yastatic.net; "
                 "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com "
-                "https://fonts.googleapis.com; "
-                "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net; "
+                "https://fonts.googleapis.com https://yastatic.net; "
+                "font-src 'self' data: https://fonts.gstatic.com https://cdn.jsdelivr.net "
+                "https://yastatic.net; "
                 "img-src 'self' data: blob: https:; "
-                "connect-src 'self' https://api-maps.yandex.ru wss: ws:; "
+                "connect-src 'self' https://api-maps.yandex.ru https://yastatic.net wss: ws:; "
                 "frame-ancestors 'self'; "
                 "base-uri 'self'"
             )

@@ -26,6 +26,11 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin, require_admin_or_manager
 
+try:
+    from app.config.maps_config import YANDEX_MAPS_API_KEY as _YANDEX_MAPS_API_KEY
+except Exception:
+    _YANDEX_MAPS_API_KEY = ""
+
 router = APIRouter(tags=["agents"])
 
 
@@ -234,6 +239,7 @@ async def agent_detail(
         "range_label": range_label,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
+        "yandex_maps_apikey": _YANDEX_MAPS_API_KEY,
         "date_from": d_from.strftime("%Y-%m-%d"),
         "date_to": d_to.strftime("%Y-%m-%d"),
     })
