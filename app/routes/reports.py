@@ -2895,6 +2895,13 @@ def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = N
                 primary["prev_closed_at"] = it.get("closed_at")
                 primary["diff_sales_count"] = cur_count - prev_count
                 primary["diff_sales_total"] = cur_total - prev_total
+                _cur_pb = {b.get("type"): float(b.get("sum") or 0) for b in (primary.get("payment_breakdown") or [])}
+                _prev_pb = {b.get("type"): float(b.get("sum") or 0) for b in (it.get("payment_breakdown") or [])}
+                primary["diff_payment_breakdown"] = [
+                    {"type": t, "sum": _cur_pb.get(t, 0.0) - _prev_pb.get(t, 0.0)}
+                    for t in ("naqd", "plastik", "terminal", "click")
+                    if abs(_cur_pb.get(t, 0.0) - _prev_pb.get(t, 0.0)) > 0.001
+                ]
             it["is_duplicate"] = True
         else:
             it["is_duplicate"] = False

@@ -836,6 +836,7 @@
         }
     </style>
 
+    <link href="/static/css/mobile-fixes.css" rel="stylesheet">
     {% block extra_css %}{% endblock %}
     {% set sotuvchi_no_sidebar = (current_user.role if current_user else '') == 'sotuvchi' %}
     {% set production_no_sidebar = (current_user.role if current_user else '')|lower in ['production', 'qadoqlash', 'rahbar', 'raxbar', 'operator'] %}

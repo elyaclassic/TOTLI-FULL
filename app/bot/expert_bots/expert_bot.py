@@ -22,6 +22,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import Message
 
 from app.bot.senior_bot import claude_client, experts
+from app.bot.expert_bots import group_logger
 
 logger = logging.getLogger(__name__)
 
@@ -355,8 +356,15 @@ class ExpertBot:
             claude_client.reset_session(self._session_key(message.chat.id))
             await message.answer("Suhbat tozalandi.")
 
-        @dp.message(F.text & ~F.text.startswith("/"))
+        @dp.message(F.text)
         async def on_text(message: Message):
+            # Barcha guruh xabarlarini log qilamiz (dedup — faqat bir marta yoziladi)
+            if message.chat.type in (ChatType.GROUP, ChatType.SUPERGROUP):
+                group_logger.log_message(message)
+
+            if (message.text or "").startswith("/"):
+                return
+
             uid = message.from_user.id if message.from_user else 0
             text = (message.text or "").strip()
 

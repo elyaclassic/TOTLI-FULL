@@ -131,6 +131,7 @@ async def purchase_new(
         "warehouses": warehouses,
         "current_user": current_user,
         "page_title": "Yangi tovar kirimi",
+        "now": datetime.now(),
     })
 
 

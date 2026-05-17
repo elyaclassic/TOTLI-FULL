@@ -237,9 +237,9 @@
 (function() {
     var showTannarx = {{ 'true' if show_tannarx else 'false' }};
     var hasTarixColumn = {{ 'true' if (transfer and transfer.from_warehouse_id) else 'false' }};
-    var stockByWhProduct = {{ stock_by_warehouse_product | tojson | safe }};
-    var stockCostByWhProduct = {{ (stock_cost_by_warehouse_product or {}) | tojson | safe }};
-    var products = {{ products_list | tojson | safe }};
+    var stockByWhProduct = {{ stock_by_warehouse_product | tojson }};
+    var stockCostByWhProduct = {{ (stock_cost_by_warehouse_product or {}) | tojson }};
+    var products = {{ products_list | tojson }};
     var fromWh = document.getElementById('fromWh');
     var toWh = document.getElementById('toWh');
     var itemsBody = document.getElementById('itemsBody');
