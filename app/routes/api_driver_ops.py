@@ -353,6 +353,22 @@ async def driver_delivery_status(
                             if order.previous_partner_balance is None:
                                 order.previous_partner_balance = float(partner_obj.balance or 0)
                             partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
+                    # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi —
+                    # endi (yetkazilganda, to'g'ri vaqt) omborga kirim qilamiz va
+                    # bog'langan child sotuvni tasdiqlaymiz. Atomik rowcount==1 bilan
+                    # himoyalangan — endpoint qayta chaqirilsa qayta ishlamaydi.
+                    if (order.type or "") == "return_sale":
+                        from app.services.stock_service import apply_return_stock_addition
+                        apply_return_stock_addition(
+                            db, order, None,
+                            note_prefix="Obmen qaytarish (Vozvrat kirim)",
+                            user_id=getattr(driver, "employee_id", None),
+                        )
+                        db.execute(
+                            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+                            {"uid": getattr(driver, "employee_id", None), "pid": order.id},
+                        )
                     # SQLAlchemy obyektini refresh — yangi status ko'rinsin
                     db.refresh(order)
 

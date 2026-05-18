@@ -482,8 +482,9 @@ async def supervisor_confirm_agent_order(
       2) dispatch (/sales/{id}/dispatch) → stock chiqarish + Delivery yaratish
       3) driver "Yetkazdim" → partner balance + delivered
 
-    Istisno: return_sale (obmen qaytarish) eski oqimda qoladi —
-    qaytgan tovar jismonan tasdiq paytida keladi → apply_return_stock_addition.
+    return_sale (obmen qaytarish) ham endi oddiy sotuv kabi dispatch → driver
+    oqimidan o'tadi. Qaytgan tovar jismonan haydovchi "Yetkazdim" bosganda keladi
+    (apply_return_stock_addition shu yerda emas, api_driver_ops.py da chaqiriladi).
     """
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
@@ -514,27 +515,9 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
     db.refresh(order)
 
-    # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi, omborga kirim qilamiz.
-    # Bu yerda dispatch oqimi YO'Q — return confirmda yakunlanadi.
-    if order.type == "return_sale":
-        from app.services.stock_service import apply_return_stock_addition
-        apply_return_stock_addition(db, order, current_user, note_prefix="Obmen qaytarish (Vozvrat kirim)")
-        order.user_id = current_user.id
-        # Obmen child (yangi sotuv) ham birga tasdiqlanadi — agents detail UX uchun.
-        # Stock/balance/Delivery hali tegmaydi; dispatch bosqichida amalga oshiriladi.
-        child_claim = db.execute(
-            _text("UPDATE orders SET status='confirmed', user_id=:uid "
-                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
-            {"uid": current_user.id, "pid": order.id},
-        )
-        db.commit()
-        child_msg = " + yangi sotuv tasdiqlandi" if child_claim.rowcount else ""
-        return RedirectResponse(
-            url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish){child_msg} tasdiqlandi"),
-            status_code=303,
-        )
-
-    # Oddiy sotuv: faqat status va user_id. Stock/balance/Delivery — dispatch bosqichida.
+    # Oddiy sotuv VA obmen (return_sale): faqat status va user_id.
+    # Stock/balance/Delivery — dispatch bosqichida; obmen qaytgan tovar kirimi
+    # haydovchi "Yetkazdim" bosganda (api_driver_ops.py) amalga oshiriladi.
     order.user_id = current_user.id
     db.commit()
     try:

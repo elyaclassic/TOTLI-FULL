@@ -570,7 +570,10 @@ async def sales_add_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    # return_sale (obmen qaytarish) ham dispatch → driver oqimidan o'tadi.
+    order = db.query(Order).filter(
+        Order.id == order_id, Order.type.in_(("sale", "return_sale"))
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     _check_order_access(order, current_user)
@@ -847,6 +850,48 @@ async def sales_dispatch(
             url=f"/sales/edit/{order_id}?error=no_items",
             status_code=303,
         )
+
+    # Obmen qaytarish (return_sale): qaytgan tovar — stock chiqim YO'Q, stock
+    # yetishmovchilik tekshiruvi YO'Q. Faqat out_for_delivery + Delivery.
+    # Qaytgan tovar omborga kirimi haydovchi "Yetkazdim" bosganda (api_driver_ops.py).
+    if order.type == "return_sale":
+        r = db.execute(
+            _text("UPDATE orders SET status='out_for_delivery', delivery_date=:dd, "
+                  "dispatched_at=:now, pending_driver_id=:drv "
+                  "WHERE id=:id AND status='confirmed'"),
+            {"id": order_id, "dd": delivery_d, "now": _dt.now(), "drv": driver_id},
+        )
+        if r.rowcount == 0:
+            return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+        prefix = f"DLV-{delivery_d.strftime('%Y%m%d')}"
+        last = (
+            db.query(Delivery)
+            .filter(Delivery.number.like(f"{prefix}%"))
+            .order_by(Delivery.id.desc())
+            .first()
+        )
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except Exception:
+            seq = 1
+        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+        db.add(Delivery(
+            number=f"{prefix}-{seq:04d}",
+            order_id=order.id,
+            order_number=order.number,
+            driver_id=driver_id,
+            delivery_address=(partner_obj.address or "") if partner_obj else "",
+            latitude=partner_obj.latitude if partner_obj else None,
+            longitude=partner_obj.longitude if partner_obj else None,
+            planned_date=delivery_d,
+            notes=f"OBMEN qaytarish — Mijoz: {partner_obj.name if partner_obj else ''}, Tel: {partner_obj.phone if partner_obj else ''}",
+            status="pending",
+        ))
+        db.commit()
+        referer = request.headers.get("referer", "")
+        if "/agents/" in referer:
+            return RedirectResponse(url=referer, status_code=303)
+        return RedirectResponse(url=f"/sales/edit/{order_id}?dispatched=1", status_code=303)
 
     # Stock yetarli yoki yo'qligini tekshirish (semi-finished fallback bilan)
     semi_warehouse = get_semi_finished_warehouse(db)

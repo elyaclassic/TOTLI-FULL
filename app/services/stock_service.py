@@ -168,12 +168,18 @@ def delete_stock_movements_for_document(db: Session, document_type: str, documen
     return deleted
 
 
-def apply_return_stock_addition(db: Session, order, current_user, note_prefix: str = "Qaytarish") -> None:
+def apply_return_stock_addition(db: Session, order, current_user, note_prefix: str = "Qaytarish",
+                                user_id: int = None) -> None:
     """Return order itemlari uchun "return_sale" StockMovementlarini yaratadi (stock kirim).
 
     Vozvrat omborga (yoki order.warehouse_id ga) qaytgan tovar kiradi. Stock check
-    kerak emas — bu kirim hujjati."""
+    kerak emas — bu kirim hujjati.
+
+    user_id: agar berilsa, current_user.id o'rniga shu ishlatiladi (haydovchi
+    kontekstida current_user yo'q — Driver.employee_id beriladi)."""
     from datetime import datetime as _dt
+    if user_id is None and current_user is not None:
+        user_id = current_user.id
     valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
     for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
@@ -188,7 +194,7 @@ def apply_return_stock_addition(db: Session, order, current_user, note_prefix: s
             document_type="Sale",
             document_id=order.id,
             document_number=order.number,
-            user_id=current_user.id if current_user else None,
+            user_id=user_id,
             note=f"{note_prefix}: {order.number}",
             created_at=order.date or _dt.now(),
         )
