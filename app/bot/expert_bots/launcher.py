@@ -26,6 +26,9 @@ EXPERT_ENV_VARS: dict[str, str] = {
     "Jahongir": "EXPERT_JAHONGIR_TOKEN",
     "Alisher": "EXPERT_ALISHER_TOKEN",
     "Dilshoda": "EXPERT_DILSHODA_TOKEN",
+    "Sardor": "EXPERT_SARDOR_TOKEN",
+    "Malika": "EXPERT_MALIKA_TOKEN",
+    "Timur": "EXPERT_TIMUR_TOKEN",
 }
 
 _bots: list[ExpertBot] = []

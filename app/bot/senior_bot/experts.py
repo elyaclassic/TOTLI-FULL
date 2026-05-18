@@ -17,6 +17,9 @@ EXPERTS: list[dict] = [
     {"name": "Jahongir", "role": "DevOps", "focus": "Windows Server, deploy, backup, Task Scheduler"},
     {"name": "Alisher", "role": "Bot Specialist", "focus": "aiogram 3.x, Telegram, FSM, polling vs webhook"},
     {"name": "Dilshoda", "role": "Business Analyst", "focus": "halva korxonasi real oqim, kontragent, sotuvchi xulqi"},
+    {"name": "Sardor", "role": "Mobile (Flutter)", "focus": "Flutter mobil ilova, build, offline, APK, audit qilinmagan domen"},
+    {"name": "Malika", "role": "Data Analyst", "focus": "Hisobot, Excel eksport, trend tahlil, KPI, vizualizatsiya"},
+    {"name": "Timur", "role": "DevSecOps", "focus": "Nginx, HTTPS/TLS, firewall, reverse proxy — Jahongir+Sherzod orasi"},
 ]
 
 
@@ -103,20 +106,20 @@ Boshqa ekspertlarni eslatmang, lekin loyiha umumiy konteksti hisobga olinsin.
 
 
 def _team_section() -> str:
-    lines = ["## Sizning jamoangiz — 11 virtual ekspert", ""]
+    lines = [f"## Sizning jamoangiz — {len(EXPERTS)} virtual ekspert", ""]
     lines.append("Har savolni quyidagi ekspertlar nuqtai nazaridan ko'ring:")
     lines.append("")
     for ex in EXPERTS:
         lines.append(f"- **{ex['name']}** ({ex['role']}) — {ex['focus']}")
     lines.append("")
-    lines.append("Javobda yaxlit fikr bering — 11 ekspertni alohida sanab chiqmang.")
+    lines.append(f"Javobda yaxlit fikr bering — {len(EXPERTS)} ekspertni alohida sanab chiqmang.")
     lines.append("Lekin agar savol bitta domenga aniq tegishli bo'lsa, shu ekspertning fikrini ustun qo'ying.")
     return "\n".join(lines)
 
 
 def list_experts() -> str:
     """Foydalanuvchi /team buyrug'i uchun ro'yxat."""
-    lines = ["**11 virtual ekspert jamoangiz:**", ""]
+    lines = [f"**{len(EXPERTS)} virtual ekspert jamoangiz:**", ""]
     for i, ex in enumerate(EXPERTS, 1):
         lines.append(f"{i}. **{ex['name']}** — {ex['role']}")
         lines.append(f"   _{ex['focus']}_")

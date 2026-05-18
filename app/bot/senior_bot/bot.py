@@ -179,9 +179,9 @@ def _register_handlers(dp: Dispatcher) -> None:
         await message.answer(
             "Buyruqlar:\n"
             "/pin <raqam> — gruppada PIN bilan auth\n"
-            "/ask <savol> — 11 ekspert bilan kengashib javob\n"
+            f"/ask <savol> — {len(experts.EXPERTS)} ekspert bilan kengashib javob\n"
             "/expert <nom> — bitta ekspert nuqtai nazari\n"
-            "/team — 11 ekspert ro'yxati\n"
+            f"/team — {len(experts.EXPERTS)} ekspert ro'yxati\n"
             "/memory — MEMORY.md\n"
             "/status — auth, sessiya, ekspert\n"
             "/whoami — chat ID (gruppa qo'shish uchun)\n"
@@ -215,7 +215,7 @@ def _register_handlers(dp: Dispatcher) -> None:
         uid = message.from_user.id
         s = _auth_state.get(uid, {})
         left = max(0, int(s.get("auth_until", 0) - time.time()))
-        ex = s.get("expert") or "11 ekspert"
+        ex = s.get("expert") or f"{len(experts.EXPERTS)} ekspert"
         await message.answer(
             f"Holat:\n"
             f"- Auth: {'OK' if _user_allowed(message) else 'Yo`q'} "
@@ -241,17 +241,17 @@ def _register_handlers(dp: Dispatcher) -> None:
             return
         arg = (command.args or "").strip()
         if not arg:
-            cur = _auth_state.get(message.from_user.id, {}).get("expert") or "11 ekspert"
+            cur = _auth_state.get(message.from_user.id, {}).get("expert") or f"{len(experts.EXPERTS)} ekspert"
             await message.answer(
                 f"Joriy ekspert: {cur}\n"
-                "O'zgartirish: `/expert Anvar` yoki `/expert all` (11 ekspert)",
+                f"O'zgartirish: `/expert Anvar` yoki `/expert all` ({len(experts.EXPERTS)} ekspert)",
                 parse_mode=None,
             )
             return
         s = _auth_state.setdefault(message.from_user.id, {"auth_until": 0})
         if arg.lower() == "all":
             s["expert"] = None
-            await message.answer("Yoqildi: 11 ekspert bilan kengashish.")
+            await message.answer(f"Yoqildi: {len(experts.EXPERTS)} ekspert bilan kengashish.")
             return
         ex = next((e for e in experts.EXPERTS if e["name"].lower() == arg.lower()), None)
         if not ex:
