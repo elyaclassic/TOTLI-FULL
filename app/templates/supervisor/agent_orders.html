@@ -51,6 +51,12 @@
                     <span class="badge bg-warning text-dark">Yangi</span>
                     {% elif order.status == 'waiting_production' %}
                     <span class="badge bg-secondary"><i class="bi bi-hourglass-split"></i> Production kutmoqda</span>
+                    {% if production_info.get(order.id) %}
+                    <div class="small text-muted mt-1" title="Yetmagani uchun ishlab chiqarishga jo'natildi">
+                        <i class="bi bi-gear"></i>
+                        {% for s in production_info[order.id] %}{{ s }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+                    </div>
+                    {% endif %}
                     {% elif order.status == 'confirmed' %}
                     <span class="badge bg-info">Tasdiqlangan</span>
                     {% elif order.status == 'completed' %}

@@ -438,6 +438,18 @@ async def supervisor_agent_orders(
     if status and status != "all":
         q = q.filter(Order.status == status)
     orders = q.order_by(Order.created_at.desc()).limit(100).all()
+    # Topilma 2A: waiting_production buyurtma uchun qaysi Production (qaysi mahsulot) ko'rsatilsin
+    from app.models.database import Production as _Production
+    production_info = {}
+    _wp_ids = [o.id for o in orders if o.status == "waiting_production"]
+    if _wp_ids:
+        for p in db.query(_Production).options(joinedload(_Production.recipe)).filter(
+            _Production.order_id.in_(_wp_ids)
+        ).all():
+            rn = getattr(getattr(p, "recipe", None), "name", None) or "—"
+            production_info.setdefault(p.order_id, []).append(
+                f"{p.number} · {rn} · {float(p.quantity or 0):g} · {p.status}"
+            )
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
@@ -451,6 +463,7 @@ async def supervisor_agent_orders(
         "current_status": status,
         "draft_count": draft_count,
         "waiting_count": waiting_count,
+        "production_info": production_info,
         "page_title": "Agent buyurtmalari",
     })
 
