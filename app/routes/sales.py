@@ -587,7 +587,17 @@ async def sales_add_item(
         prod = db.query(Product).filter(Product.id == product_id).first()
         price = (prod.sale_price or prod.purchase_price or 0) if prod else 0
     total_row = quantity * price
-    db.add(OrderItem(order_id=order_id, product_id=product_id, quantity=quantity, price=price, total=total_row))
+    # Bir xil mahsulot+narx allaqachon bo'lsa — yangi qator emas, soniga qo'shish
+    existing = db.query(OrderItem).filter(
+        OrderItem.order_id == order_id,
+        OrderItem.product_id == product_id,
+        OrderItem.price == price,
+    ).first()
+    if existing:
+        existing.quantity = (existing.quantity or 0) + quantity
+        existing.total = (existing.total or 0) + total_row
+    else:
+        db.add(OrderItem(order_id=order_id, product_id=product_id, quantity=quantity, price=price, total=total_row))
     order.subtotal = (order.subtotal or 0) + total_row
     order.total = (order.total or 0) + total_row
     db.commit()
@@ -642,7 +652,17 @@ async def sales_add_items(
                 prod = db.query(Product).filter(Product.id == pid).first()
                 price = (prod.sale_price or prod.purchase_price or 0) if prod else 0
         total_row = qty * price
-        db.add(OrderItem(order_id=order_id, product_id=pid, warehouse_id=order.warehouse_id, quantity=qty, price=price, total=total_row))
+        existing = db.query(OrderItem).filter(
+            OrderItem.order_id == order_id,
+            OrderItem.product_id == pid,
+            OrderItem.price == price,
+            OrderItem.warehouse_id == order.warehouse_id,
+        ).first()
+        if existing:
+            existing.quantity = (existing.quantity or 0) + qty
+            existing.total = (existing.total or 0) + total_row
+        else:
+            db.add(OrderItem(order_id=order_id, product_id=pid, warehouse_id=order.warehouse_id, quantity=qty, price=price, total=total_row))
         order.subtotal = (order.subtotal or 0) + total_row
         order.total = (order.total or 0) + total_row
     db.commit()
