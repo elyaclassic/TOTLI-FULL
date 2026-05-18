@@ -38,7 +38,12 @@ except Exception as e:  # SECRET_KEY/.env yo'q bo'lsa import zanjiri sinadi
     sys.exit(1)
 
 
-TARGET_ORDERS = ["AGT-20260502-012", "AGT-20260508-006"]
+# 2026-05-18: S-20260314-0066 qo'shildi — p5 toza 2x (net -2, kerak -1, revert yo'q).
+# Skript guard'i (expected_net<0 AND actual_net==2*expected) faqat shu p5 ni
+# tuzatadi; orphan (p7/29/90/133/134/332 — order_items'da yo'q) va p8 (OK)
+# avtomatik SKIP. Qisman-revert (AGT-20260429-003/004) ATAYLAB qo'shilmadi —
+# foydalanuvchi qarori: faqat tasdiqlangan toza-2x.
+TARGET_ORDERS = ["AGT-20260502-012", "AGT-20260508-006", "S-20260314-0066"]
 DBLFIX_MARKER = "DBLFIX-20260516"
 DBLFIX_NOTE = "DBLFIX-20260516: takroriy sale chegirim qaytarildi (double-count audit)"
 
@@ -112,7 +117,7 @@ def run(db, *, apply: bool) -> list:
                     "product_name": pname, "warehouse_id": wh,
                     "expected_net": expected_net, "actual_net": actual_net,
                     "compensation": 0.0,
-                    "status": f"SKIP(pattern≠2x: net={actual_net:g})",
+                    "status": f"SKIP(pattern!=2x: net={actual_net:g})",
                 })
                 continue
 
