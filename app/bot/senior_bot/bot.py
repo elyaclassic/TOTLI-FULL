@@ -105,6 +105,19 @@ def _set_authed(uid: int) -> None:
     s["auth_until"] = int(time.time() + AUTH_TTL_SECONDS)
 
 
+async def _delete_pin_message(message: Message) -> None:
+    # Gruppada PIN sirini ochiq qoldirmaslik uchun foydalanuvchi xabarini
+    # o'chiramiz. Faqat asosiy Yordamchim o'chiradi; ekspert botlar tegmaydi
+    # (12 bot bir xabarni o'chirsa 11 tasi xato beradi). Ruxsat yo'q / xabar
+    # eskirgan / allaqachon o'chirilgan — yutiladi.
+    if message.chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        return
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
 def _chat_allowed(message: Message) -> bool:
     """Chat (DM yoki gruppa) ruxsat berilganmi?"""
     ctype = message.chat.type
@@ -304,6 +317,7 @@ def _register_handlers(dp: Dispatcher) -> None:
         else:
             _audit(message.chat.id, uid, "auth_failed_pin")
             await message.answer("PIN noto'g'ri.")
+        await _delete_pin_message(message)
 
     @dp.message(Command("ask"))
     async def cmd_ask(message: Message, command: CommandObject):
@@ -330,10 +344,12 @@ def _register_handlers(dp: Dispatcher) -> None:
                 _set_authed(uid)
                 _audit(cid, uid, "auth_success")
                 await message.answer("PIN to'g'ri. 12 soat avtorizatsiya.")
+                await _delete_pin_message(message)
                 return
             elif text.isdigit():
                 _audit(cid, uid, "auth_failed")
                 await message.answer("PIN noto'g'ri.")
+                await _delete_pin_message(message)
                 return
             else:
                 await message.answer("Avval PIN kiriting.")
