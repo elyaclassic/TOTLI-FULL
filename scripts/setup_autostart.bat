@@ -18,13 +18,12 @@ schtasks /delete /tn "TOTLI_BI_Autostart" /f >nul 2>&1
 echo Tozalandi.
 
 echo.
-echo === [2/3] Yangi Task: At startup, %USERNAME% kontekstida ===
+echo === [2/3] Yangi Task: At startup, %USERNAME% (S4U /np) ===
 echo ----------------------------------------------------------------
-echo  DIQQAT: quyida "%USERNAME%" hisobining PAROLINI so'raydi.
-echo  Bu parol Windows'da xavfsiz saqlanadi va boot'da login'siz
-echo  server'ni ko'tarish uchun ishlatiladi.
+echo  /np = parolsiz S4U: "login bo'lsa ham bo'lmasa ham ishla".
+echo  Svet o'chib yonganda Windows boot'da login'siz ishga tushadi.
 echo ----------------------------------------------------------------
-schtasks /create /tn "TOTLI_BI_Autostart" /tr "cmd /c \"D:\TOTLI BI\_server_runner.bat\"" /sc ONSTART /ru "%USERNAME%" /rl HIGHEST /f
+schtasks /create /tn "TOTLI_BI_Autostart" /tr "cmd /c \"D:\TOTLI BI\_server_runner.bat\"" /sc ONSTART /ru "%USERNAME%" /np /rl HIGHEST /f
 if errorlevel 1 (
     echo.
     echo XATO: Task yaratilmadi. Bu oyna Administrator sifatida ochilganini
