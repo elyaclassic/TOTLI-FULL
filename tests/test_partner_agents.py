@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.models.database import Partner, Agent, PartnerAgent
 from app.services.partner_agents import effective_agent_ids
+from scripts.backfill_partner_agents import backfill
 
 
 def test_partner_agent_row_create(db):
@@ -49,3 +50,22 @@ def test_effective_agent_ids_union(db):
     p3 = Partner(code="PE3", name="PE3", type="customer", agent_id=None)
     db.add(p3); db.commit()
     assert effective_agent_ids(p3) == set()
+
+
+def test_backfill_creates_position1_rows(db):
+    a1 = Agent(code="B1", full_name="B1")
+    db.add(a1); db.flush()
+    p_with = Partner(code="PB1", name="PB1", type="customer",
+                      agent_id=a1.id, visit_day=2)
+    p_none = Partner(code="PB2", name="PB2", type="customer", agent_id=None)
+    db.add_all([p_with, p_none]); db.commit()
+
+    n = backfill(db, apply=True)
+    assert n == 1
+    rows = db.query(PartnerAgent).filter_by(partner_id=p_with.id).all()
+    assert len(rows) == 1
+    assert rows[0].agent_id == a1.id
+    assert rows[0].position == 1
+    assert rows[0].visit_days == "2"
+    assert db.query(PartnerAgent).filter_by(partner_id=p_none.id).count() == 0
+    assert backfill(db, apply=True) == 0
