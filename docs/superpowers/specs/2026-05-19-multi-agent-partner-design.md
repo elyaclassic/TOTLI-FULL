@@ -40,10 +40,16 @@ Yangi jadval **`partner_agents`**:
 `Partner.agent_id` QOLADI (anchor/legacy/qo'shuvchi). Partner'ning mavjud
 tashrif maydonlari (`Tashrif kuni` va h.k.) saqlanadi (back-compat).
 
-**MUHIM (noaniqlik yopildi):** `visit_type`/`visit_days` — YANGI format
-IXTIRO QILINMAYDI. Implementatsiya rejasi avval Partner modelidagi mavjud
-tashrif maydonlari nomi va saqlash formatini aniqlaydi (model'дан o'qib),
-`partner_agents` AYNAN shu format/qiymatlarni ishlatadi (UI ham bir xil).
+**MUHIM (reallik bilan tuzatildi):** Kod tekshiruvi ko'rsatdi —
+`Partner.visit_day` = `Column(Integer)` BITTA kun (0-6), `visit_type`
+Partner'da YO'Q. Sales Doctor multi-day talabi uchun bu yetarli emas →
+`partner_agents` YANGI format ishlatadi:
+- `visit_days` = `String`, CSV kun raqamlari "0,2,4" (Du=0..Yak=6 —
+  Partner.visit_day bilan AYNAN bir xil kodlash, izchil)
+- `visit_type` = `String` nullable (masalan 'weekly'/'biweekly'/'monthly';
+  aniq qiymatlar UI bilan P3'da)
+Backfill: `Partner.visit_day` (int) → position-1 qatorida
+`visit_days = str(visit_day)` (bitta kun CSV sifatida).
 
 **Migratsiya (additive, CLAUDE.md: faqat additive):** `partner_agents`
 yaratiladi; har `agent_id IS NOT NULL` partner uchun bitta qator backfill
