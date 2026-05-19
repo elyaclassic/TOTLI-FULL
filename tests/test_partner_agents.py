@@ -1,3 +1,6 @@
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from app.models.database import Partner, Agent, PartnerAgent
 
 
@@ -13,3 +16,13 @@ def test_partner_agent_row_create(db):
     assert rows[0].agent_id == ag.id
     assert rows[0].visit_days == "0,2,4"
     assert p.partner_agents[0].agent_id == ag.id
+
+
+def test_partner_agent_unique(db):
+    ag = Agent(code="AGU", full_name="A"); p = Partner(code="PU", name="P", type="customer")
+    db.add_all([ag, p]); db.flush()
+    db.add(PartnerAgent(partner_id=p.id, agent_id=ag.id, position=1)); db.commit()
+    db.add(PartnerAgent(partner_id=p.id, agent_id=ag.id, position=2))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
