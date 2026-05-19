@@ -874,6 +874,12 @@ class Partner(Base):
 
     orders = relationship("Order", back_populates="partner")
     payments = relationship("Payment", back_populates="partner")
+    partner_agents = relationship(
+        "PartnerAgent",
+        backref="partner",
+        cascade="all, delete-orphan",
+        order_by="PartnerAgent.position",
+    )
 
     @property
     def display_name(self) -> str:
@@ -1049,6 +1055,27 @@ class Payment(Base):
     
     partner = relationship("Partner", back_populates="payments")
     cash_register = relationship("CashRegister", foreign_keys=[cash_register_id])
+
+
+class PartnerAgent(Base):
+    """Kontragentga biriktirilgan agentlar (N:N + per-agent tashrif).
+
+    Spec: docs/superpowers/specs/2026-05-19-multi-agent-partner-design.md
+    visit_days = CSV kun raqamlari "0,2,4" (Du=0..Yak=6, Partner.visit_day bilan izchil).
+    """
+    __tablename__ = "partner_agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    visit_type = Column(String(20), nullable=True)
+    visit_days = Column(String(50), nullable=True)
+    position = Column(Integer, default=1)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "agent_id", name="uq_partner_agent"),
+    )
 
 
 # ==========================================
