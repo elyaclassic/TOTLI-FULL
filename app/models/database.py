@@ -1070,7 +1070,7 @@ class PartnerAgent(Base):
     agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
     visit_type = Column(String(20), nullable=True)
     visit_days = Column(String(50), nullable=True)
-    position = Column(Integer, default=1)
+    position = Column(Integer, default=1, nullable=False)
     created_at = Column(DateTime, default=datetime.now)
 
     __table_args__ = (
