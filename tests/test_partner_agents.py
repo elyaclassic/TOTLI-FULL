@@ -2,6 +2,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.models.database import Partner, Agent, PartnerAgent
+from app.services.partner_agents import effective_agent_ids
 
 
 def test_partner_agent_row_create(db):
@@ -26,3 +27,25 @@ def test_partner_agent_unique(db):
     with pytest.raises(IntegrityError):
         db.commit()
     db.rollback()
+
+
+def test_effective_agent_ids_union(db):
+    a1 = Agent(code="A1", full_name="A1"); a2 = Agent(code="A2", full_name="A2")
+    a3 = Agent(code="A3", full_name="A3")
+    db.add_all([a1, a2, a3]); db.flush()
+    p = Partner(code="PE", name="PE", type="customer", agent_id=a1.id)
+    db.add(p); db.flush()
+    db.add_all([
+        PartnerAgent(partner_id=p.id, agent_id=a2.id, position=1),
+        PartnerAgent(partner_id=p.id, agent_id=a3.id, position=2),
+    ])
+    db.commit()
+    assert effective_agent_ids(p) == {a1.id, a2.id, a3.id}
+
+    p2 = Partner(code="PE2", name="PE2", type="customer", agent_id=a1.id)
+    db.add(p2); db.commit()
+    assert effective_agent_ids(p2) == {a1.id}
+
+    p3 = Partner(code="PE3", name="PE3", type="customer", agent_id=None)
+    db.add(p3); db.commit()
+    assert effective_agent_ids(p3) == set()
