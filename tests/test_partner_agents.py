@@ -69,3 +69,15 @@ def test_backfill_creates_position1_rows(db):
     assert rows[0].visit_days == "2"
     assert db.query(PartnerAgent).filter_by(partner_id=p_none.id).count() == 0
     assert backfill(db, apply=True) == 0
+
+
+def test_p1_no_behavior_change(db):
+    """P1: agent_id hali authoritative. effective set HAR DOIM agent_id ni
+    o'z ichiga oladi -> agent_id == x o'qiydigan eski kod buzilmaydi."""
+    a1 = Agent(code="R1", full_name="R1")
+    db.add(a1); db.flush()
+    p = Partner(code="PR", name="PR", type="customer", agent_id=a1.id)
+    db.add(p); db.commit()
+    eff = effective_agent_ids(p)
+    assert a1.id in eff
+    assert p.agent_id == a1.id
