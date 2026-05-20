@@ -519,6 +519,17 @@ async def supervisor_confirm_agent_order(
     # Stock/balance/Delivery — dispatch bosqichida; obmen qaytgan tovar kirimi
     # haydovchi "Yetkazdim" bosganda (api_driver_ops.py) amalga oshiriladi.
     order.user_id = current_user.id
+    # Obmen child (yangi sotuv) ham birga tasdiqlanadi — dispatch UI tugmasi
+    # ex_child.status=='confirmed' shartiga bog'liq (agents/detail.html).
+    # b881e3c'da bu blok early-return va apply_return_stock_addition bilan birga
+    # noto'g'ri o'chirilgan edi (regressiya, 2 orphan: AGT-20260518-005,
+    # AGT-20260519-011); endi tiklandi.
+    if order.type == "return_sale":
+        db.execute(
+            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+            {"uid": current_user.id, "pid": order.id},
+        )
     db.commit()
     try:
         from app.bot.services.audit_watchdog import audit_agent_order_confirm

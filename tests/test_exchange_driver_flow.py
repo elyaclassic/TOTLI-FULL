@@ -54,12 +54,22 @@ def _seed_exchange(db):
     return ret, child, s_ret, drv
 
 
-def _supervisor_confirm(db, order):
-    """delivery_routes.supervisor_confirm_agent_order yangi logikasi (return_sale fall-through)."""
+def _supervisor_confirm(db, order, user_id=None):
+    """delivery_routes.supervisor_confirm_agent_order yangi logikasi (return_sale fall-through).
+
+    return_sale uchun child auto-confirm ham bajariladi (dispatch UI tugmasi
+    ex_child.status=='confirmed' shartiga bog'liq).
+    """
     claim = db.execute(
         _text("UPDATE orders SET status='confirmed' WHERE id=:id AND source='agent' AND status='draft'"),
         {"id": order.id},
     )
+    if claim.rowcount == 1 and (order.type or "") == "return_sale":
+        db.execute(
+            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+            {"uid": user_id, "pid": order.id},
+        )
     db.commit()
     db.refresh(order)
     return claim.rowcount
@@ -97,8 +107,13 @@ def _driver_delivered(db, order, driver):
     return claim.rowcount
 
 
-def test_supervisor_confirm_returnsale_no_stock_no_child_confirm(db):
-    """Supervisor confirm return_sale: stock QO'SHILMAYDI, child draft QOLADI."""
+def test_supervisor_confirm_returnsale_no_stock_confirms_child(db):
+    """Supervisor confirm return_sale: stock QO'SHILMAYDI, child sotuv AVTOMATIK confirmed.
+
+    Child auto-confirm dispatch UI tugmasi uchun zarur (agents/detail.html). b881e3c'da
+    apply_return_stock_addition va early-return bilan birga noto'g'ri o'chirilgan,
+    20260520 da tiklandi (regressiya 2 orphan: AGT-20260518-005, AGT-20260519-011).
+    """
     from app.models.database import Order, Stock
     ret, child, s_ret, drv = _seed_exchange(db)
 
@@ -109,8 +124,8 @@ def test_supervisor_confirm_returnsale_no_stock_no_child_confirm(db):
     assert ret.status == "confirmed"
     # Faza 1 asosiy talab: confirm paytida qaytgan tovar OMBORGA QO'SHILMAYDI
     assert s_ret.quantity == 20, "return_sale confirmda stock qo'shilmasligi kerak"
-    # Child sotuv confirmda AVTOMATIK tasdiqlanMAYDI
-    assert child.status == "draft", "child sotuv confirmda draft qolishi kerak"
+    # YANGI XULQ (regressiya tuzatishidan keyin): child sotuv ham confirmed bo'ladi.
+    assert child.status == "confirmed", "child sotuv confirmda avtomatik tasdiqlanishi kerak (dispatch UI uchun)"
 
 
 def test_driver_delivered_returnsale_adds_stock_and_confirms_child_once(db):
