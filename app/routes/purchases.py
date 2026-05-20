@@ -79,7 +79,7 @@ async def purchases_list(
                 wh_id = ""
     if wh_id and wh_id.isdigit():
         query = query.filter(Purchase.warehouse_id == int(wh_id))
-    # Filtrlangan to'liq jami (paginatsiyadan oldin, barcha sahifalar bo'ylab)
+    # Filtrlangan to'liq jami va status hisobi (paginatsiyadan oldin, barcha sahifalar)
     total_summa = (
         query.with_entities(
             func.coalesce(
@@ -89,6 +89,12 @@ async def purchases_list(
         ).order_by(None).scalar()
         or 0
     )
+    status_counts = dict(
+        query.with_entities(Purchase.status, func.count())
+        .order_by(None).group_by(Purchase.status).all()
+    )
+    total_confirmed = int(status_counts.get("confirmed", 0))
+    total_draft = int(status_counts.get("draft", 0))
     from app.utils.pagination import paginate, pagination_query_string
     _pg = paginate(query, request.query_params.get("page", 1), per_page=50)
     purchases = _pg["items"]
@@ -108,6 +114,8 @@ async def purchases_list(
         "total_pages": _pg["total_pages"],
         "items_count": _pg["items_count"],
         "total_summa": float(total_summa or 0),
+        "total_confirmed": total_confirmed,
+        "total_draft": total_draft,
         "base_url": "/purchases",
         "pagination_query": pagination_query_string({"date_from": date_from, "date_to": date_to, "warehouse_id": wh_id}),
     })
