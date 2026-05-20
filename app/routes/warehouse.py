@@ -979,11 +979,16 @@ async def inventory_new_page(
 async def inventory_create_draft(
     warehouse_id: int = Form(...),
     force_new: int = Form(0),
+    type: str = Form("inventory"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    ensure_stock_adjustment_doc_type_column(db)
+    if type not in ("inventory", "stock_entry"):
+        type = "inventory"
     wh = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if not wh:
         return RedirectResponse(url="/inventory/new?message=Ombor topilmadi.", status_code=303)
@@ -1007,6 +1012,7 @@ async def inventory_create_draft(
         warehouse_id=warehouse_id,
         user_id=current_user.id,
         status="draft",
+        type=type,
         total_tannarx=0,
         total_sotuv=0,
     )
