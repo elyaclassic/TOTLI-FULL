@@ -1413,6 +1413,8 @@ async def inventory_confirm(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    ensure_stock_adjustment_doc_type_column(db)
     doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
     if not doc or doc.status != "draft" or not doc.warehouse_id:
         return RedirectResponse(url="/inventory", status_code=303)
@@ -1432,9 +1434,20 @@ async def inventory_confirm(
         parsed = _parse_doc_date(doc_date_str)
         if parsed:
             doc.date = parsed
-    # INV-PENDING = tovar qoldiqlari hujjati (miqdor QO'SHILADI)
-    # Oddiy inventarizatsiya = qoldiq YANGILANADI (SET)
-    is_stock_entry = bool(doc.number and doc.number.startswith("INV-PENDING"))
+    # Tur doc.type'dan; POST'da posted type tasdig'i (xato turdan defense)
+    posted_type = (form.get("type") or "").strip()
+    doc_type = (doc.type or "inventory")
+    if posted_type and posted_type != doc_type:
+        db.execute(
+            _text("UPDATE stock_adjustment_docs SET status='draft' WHERE id=:id"),
+            {"id": doc_id},
+        )
+        db.commit()
+        return RedirectResponse(
+            url=f"/inventory/{doc_id}/edit?message=Tur mos kelmadi, sahifani yangilang.",
+            status_code=303,
+        )
+    is_stock_entry = (doc_type == "stock_entry")
     if is_stock_entry and doc.date:
         date_str = doc.date.strftime("%Y%m%d")
         doc.number = _next_inventory_number(db, date_str)
