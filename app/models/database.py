@@ -456,6 +456,7 @@ class StockAdjustmentDoc(Base):
     total_tannarx = Column(Float, default=0)   # Jami summa tannarx (so'm)
     total_sotuv = Column(Float, default=0)     # Jami sotuv summa (so'm)
     created_at = Column(DateTime, default=datetime.now)
+    type = Column(String(20), default="inventory", nullable=True)  # 'inventory' (SET) | 'stock_entry' (ADD)
 
     warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
     user = relationship("User")
