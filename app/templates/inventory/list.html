@@ -51,6 +51,7 @@
           <th>Sana</th>
           <th>Ombor</th>
           <th>Holat</th>
+          <th>Turi</th>
           <th style="width:120px;"></th>
         </tr>
       </thead>
@@ -71,6 +72,13 @@
             {% endif %}
           </td>
           <td>
+            {% if d.type == 'stock_entry' %}
+            <span class="badge bg-warning text-dark">Tovar qoldiqlari</span>
+            {% else %}
+            <span class="badge bg-info">Inventarizatsiya</span>
+            {% endif %}
+          </td>
+          <td>
             <div class="d-flex gap-1">
               <a href="/inventory/{{ d.id }}" class="btn-act" title="Ko'rish"><i class="bi bi-eye"></i></a>
               {% if d.status == 'draft' %}
@@ -84,7 +92,7 @@
         </tr>
         {% else %}
         <tr>
-          <td colspan="6" class="text-center text-muted py-5">
+          <td colspan="7" class="text-center text-muted py-5">
             <i class="bi bi-clipboard-check d-block mb-2" style="font-size:2.5rem;opacity:.3;"></i>
             Hujjatlar yo'q. <a href="/inventory/new">Yaratish</a>
           </td>
