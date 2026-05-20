@@ -11,6 +11,7 @@
                 Ombor: <strong>{{ warehouse.name }}</strong>
                 &middot; Sana: {{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }}
                 &middot; <span class="badge-done">Tasdiqlangan</span>
+                &middot; {% if doc.type == 'stock_entry' %}<span class="badge bg-warning text-dark">Tovar qoldiqlari</span>{% else %}<span class="badge bg-info">Inventarizatsiya</span>{% endif %}
             </p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
