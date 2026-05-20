@@ -159,6 +159,20 @@
                         </tr>
                         {% endfor %}
                     </tbody>
+                    {% if purchases %}
+                    <tfoot style="position: sticky; bottom: 0; background: #f8f9fa; z-index: 2; box-shadow: 0 -1px 0 rgba(0,0,0,0.08);">
+                        <tr>
+                            <td colspan="5" class="text-end fw-bold py-2">Filtrlangan jami:</td>
+                            <td class="sum-cell fw-bold" style="color:#065f46;">
+                                {{ "{:,.0f}".format(total_summa or 0) }}
+                                <span class="text-muted fw-normal" style="font-size:11px;">so'm</span>
+                            </td>
+                            <td colspan="2" class="text-muted" style="font-size:11px;">
+                                ({{ total_count }} kirim, barcha sahifalar)
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
                 </table>
             </div>
             {% include "components/pagination.html" %}
