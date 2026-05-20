@@ -21,3 +21,10 @@ def test_type_column_accepts_stock_entry(db):
     db.add(doc); db.commit()
     db.refresh(doc)
     assert doc.type == "stock_entry"
+
+
+def test_ensure_helper_idempotent(db):
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    # In-memory DB'da model orqali ustun allaqachon bor; helper xato bermasligi kerak
+    ensure_stock_adjustment_doc_type_column(db)
+    ensure_stock_adjustment_doc_type_column(db)  # 2-marta — duplicate column ushlanishi kerak
