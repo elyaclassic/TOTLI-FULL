@@ -32,6 +32,25 @@
                     {% endfor %}
                 </select>
             </div>
+            <div class="col-md-12">
+                <label class="form-label fw-600">Hujjat turi</label>
+                <div class="d-flex flex-column gap-2">
+                    <label class="form-check">
+                        <input class="form-check-input" type="radio" name="type" value="inventory" checked>
+                        <span class="form-check-label">
+                            <strong>Inventarizatsiya</strong>
+                            <small class="text-muted d-block">Jismoniy sanoq — qoldiq aynan kiritilgan songa o'rnatiladi.</small>
+                        </span>
+                    </label>
+                    <label class="form-check">
+                        <input class="form-check-input" type="radio" name="type" value="stock_entry">
+                        <span class="form-check-label">
+                            <strong>Tovar qoldiqlari</strong>
+                            <small class="text-muted d-block">Yangi partiya — kiritilgan son mavjud qoldiq ustiga qo'shiladi.</small>
+                        </span>
+                    </label>
+                </div>
+            </div>
             <div class="col-md-6">
                 <button type="submit" class="top-btn" style="background:#065f46;color:#fff;border-color:#065f46;">
                     <i class="bi bi-arrow-right-circle me-1"></i>Davom etish
