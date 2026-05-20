@@ -1515,8 +1515,11 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
     """Inventarizatsiya/tovar qoldiqlari hujjati uchun stock movementlarni yaratadi
     va Stock.quantity ni hujjat sanasidan keyingi harakatlar bilan birga yangilaydi.
     Returns: ishlangan itemlar soni.
-    Batch optimization: 4N query -> ~5 ta umumiy query (item soniga bog'liq emas)."""
-    from sqlalchemy import func as sqla_func, tuple_ as sqla_tuple
+
+    BASELINE: get_stock_at_date_batch (SUM<=doc_date) - quantity_after ishonchsiz.
+    """
+    from sqlalchemy import func as sqla_func
+    from app.utils.stock_at_date import get_stock_at_date_batch
     items_snapshot = [
         {
             "item": item,
@@ -1533,37 +1536,23 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
     whs = list({w for w, _ in pairs})
     pids = list({p for _, p in pairs})
 
-    # Batch 1: Stock rowlar (fallback + final update uchun)
+    # Stock rowlar (final overwrite uchun)
     stock_rows_by_pair: dict = {}
-    stock_sum_fallback: dict = {}
     if whs and pids:
         for s in db.query(Stock).filter(Stock.warehouse_id.in_(whs), Stock.product_id.in_(pids)).all():
-            key = (s.warehouse_id, s.product_id)
-            stock_rows_by_pair.setdefault(key, s)  # birinchi row
-            stock_sum_fallback[key] = stock_sum_fallback.get(key, 0.0) + float(s.quantity or 0)
+            stock_rows_by_pair.setdefault((s.warehouse_id, s.product_id), s)
 
-    # Batch 2: Har pair uchun oxirgi movement ID (doc_date dan oldin yoki teng)
-    last_mv_id_rows = (
-        db.query(
-            StockMovement.warehouse_id,
-            StockMovement.product_id,
-            sqla_func.max(StockMovement.id).label("max_id"),
-        )
-        .filter(
-            StockMovement.warehouse_id.in_(whs),
-            StockMovement.product_id.in_(pids),
-            StockMovement.created_at <= doc_date,
-        )
-        .group_by(StockMovement.warehouse_id, StockMovement.product_id)
-        .all()
-    ) if whs and pids else []
-    max_ids = [r.max_id for r in last_mv_id_rows if r.max_id]
-    last_mv_by_pair: dict = {}
-    if max_ids:
-        for mv in db.query(StockMovement).filter(StockMovement.id.in_(max_ids)).all():
-            last_mv_by_pair[(mv.warehouse_id, mv.product_id)] = mv
+    # BASELINE: warehouse bo'yicha guruhlab batch chaqirig'i (D2 fix)
+    old_qty_by_pair: dict = {}
+    pids_by_wh: dict = {}
+    for w, p in pairs:
+        pids_by_wh.setdefault(w, []).append(p)
+    for w, ps in pids_by_wh.items():
+        qmap = get_stock_at_date_batch(db, warehouse_id=w, product_ids=ps, cutoff=doc_date)
+        for p, q in qmap.items():
+            old_qty_by_pair[(w, p)] = float(q or 0)
 
-    # Batch 3: doc_date dan keyingi non-adjustment SUM(quantity_change) har pair uchun
+    # doc_date dan keyingi non-adjustment SUM(quantity_change) - mavjud
     after_changes_by_pair: dict = {}
     if whs and pids:
         for r in (
@@ -1583,14 +1572,9 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
         ):
             after_changes_by_pair[(r.warehouse_id, r.product_id)] = float(r.delta or 0)
 
-    # Endi loop — DB ga so'rov YO'Q, faqat dictionary lookup
     for snap in items_snapshot:
         key = (snap["warehouse_id"], snap["product_id"])
-        last_mv = last_mv_by_pair.get(key)
-        if last_mv:
-            old_qty = float(last_mv.quantity_after or 0)
-        else:
-            old_qty = stock_sum_fallback.get(key, 0.0)
+        old_qty = old_qty_by_pair.get(key, 0.0)
         new_qty = snap["quantity"]
         if hasattr(snap["item"], "previous_quantity"):
             snap["item"].previous_quantity = old_qty
