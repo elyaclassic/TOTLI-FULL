@@ -381,6 +381,7 @@ async def sales_new(
         "product_warehouse_quantities": product_warehouse_quantities,
         "current_user": current_user,
         "page_title": "Yangi sotuv",
+        "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
     })
 
 
@@ -423,8 +424,27 @@ async def sales_create(
                 warehouse_ids.append(None)
         except (ValueError, TypeError):
             warehouse_ids.append(None)
+    # Sana — foydalanuvchi backdate qilishi mumkin (closed period va kelajak guard)
+    sale_date_str = (form.get("sale_date") or "").strip()
+    order_date = None
+    if sale_date_str:
+        for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                order_date = datetime.strptime(sale_date_str, fmt)
+                break
+            except ValueError:
+                continue
+    if order_date is None:
+        order_date = datetime.now()
+    if order_date > datetime.now():
+        order_date = datetime.now()  # kelajak rad — hozirgi vaqtga clamp
+    if is_period_closed(db, order_date):
+        return RedirectResponse(
+            url="/sales/new?error=" + quote("Tanlangan sana yopiq davrga to'g'ri keladi. Boshqa sana tanlang."),
+            status_code=303,
+        )
     last_order = db.query(Order).filter(Order.type == "sale").order_by(Order.id.desc()).first()
-    new_number = f"S-{datetime.now().strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
+    new_number = f"S-{order_date.strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
     order = Order(
         number=new_number,
         type="sale",
@@ -432,6 +452,7 @@ async def sales_create(
         warehouse_id=warehouse_id,
         price_type_id=price_type_id if price_type_id else None,
         status="draft",
+        date=order_date,
     )
     db.add(order)
     db.commit()
@@ -559,6 +580,7 @@ async def sales_edit(
         "info_detail": info_detail,
         "foyda_zarar": foyda_zarar,
         "show_foyda_zarar": show_foyda_zarar,
+        "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
     })
 
 
@@ -670,6 +692,50 @@ async def sales_add_items(
         order.total = (order.total or 0) + total_row
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+
+
+@router.post("/{order_id}/set-date")
+async def sales_set_date(
+    order_id: int,
+    sale_date: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft sotuv sanasini o'zgartirish (backdate). Faqat draft holatda.
+    Kelajak sana va closed period rad etiladi."""
+    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    if order.status != "draft":
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Faqat qoralama holatdagi sotuv sanasini o'zgartirib bo'ladi."),
+            status_code=303,
+        )
+    new_date = None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            new_date = datetime.strptime((sale_date or "").strip(), fmt)
+            break
+        except ValueError:
+            continue
+    if new_date is None:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Sana formati noto'g'ri."),
+            status_code=303,
+        )
+    if new_date > datetime.now():
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Kelajakdagi sana qabul qilinmaydi."),
+            status_code=303,
+        )
+    if is_period_closed(db, new_date):
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Tanlangan sana yopiq davrga to'g'ri keladi."),
+            status_code=303,
+        )
+    order.date = new_date
+    db.commit()
+    return RedirectResponse(url=f"/sales/edit/{order_id}?message=date-updated", status_code=303)
 
 
 @router.post("/{order_id}/confirm")

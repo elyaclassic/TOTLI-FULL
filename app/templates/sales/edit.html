@@ -130,17 +130,35 @@
                 </div>
                 <div class="card-body" style="border-bottom:1px solid #f1f3f5;">
                     <div class="row g-3">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Mijoz</div>
                             <div style="font-size:14px;font-weight:600;">{{ order.partner.name if order.partner else '—' }}</div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Ombor</div>
                             <div style="font-size:14px;font-weight:600;">{{ order.warehouse.name if order.warehouse else '—' }}</div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Narx turi</div>
                             <div style="font-size:14px;font-weight:600;">{{ order.price_type.name if order.price_type_id and order.price_type else '—' }}</div>
+                        </div>
+                        <div class="col-md-3">
+                            <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Sana</div>
+                            {% if order.status == 'draft' %}
+                            <form method="POST" action="/sales/{{ order.id }}/set-date" class="d-flex gap-1 align-items-center">
+                                <input type="datetime-local" name="sale_date" class="form-control form-control-sm"
+                                       value="{{ order.date.strftime('%Y-%m-%dT%H:%M') if order.date else '' }}"
+                                       max="{{ now_iso }}" required>
+                                <button type="submit" class="btn btn-sm btn-outline-success py-0 px-2" title="Saqlash">
+                                    <i class="bi bi-check-lg"></i>
+                                </button>
+                            </form>
+                            {% if request.query_params.get('message') == 'date-updated' %}
+                            <small class="text-success">Sana yangilandi ✓</small>
+                            {% endif %}
+                            {% else %}
+                            <div style="font-size:14px;font-weight:600;">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '—' }}</div>
+                            {% endif %}
                         </div>
                     </div>
                 </div>
