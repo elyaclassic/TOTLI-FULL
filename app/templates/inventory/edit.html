@@ -28,6 +28,17 @@
         </div>
     </div>
 
+    {% set _is_stock_entry = (doc.type == 'stock_entry') %}
+    <div class="alert {% if _is_stock_entry %}alert-warning{% else %}alert-info{% endif %} py-2 small mb-3">
+      <i class="bi bi-{% if _is_stock_entry %}plus-circle{% else %}clipboard-check{% endif %}"></i>
+      <strong>{% if _is_stock_entry %}Tovar qoldiqlari{% else %}Inventarizatsiya{% endif %}</strong> —
+      {% if _is_stock_entry %}
+        kiritilgan son mavjud qoldiq <strong>ustiga qo'shiladi</strong>.
+      {% else %}
+        qoldiq <strong>aynan</strong> kiritilgan songa o'rnatiladi.
+      {% endif %}
+    </div>
+
     {% if request.query_params.get('message') %}
     <div class="alert alert-info alert-dismissible fade show">{{ request.query_params.get('message') }}
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
@@ -75,6 +86,7 @@
 
     {% if products_data %}
     <form method="post" action="/inventory/{{ doc.id }}/save" id="invForm">
+        <input type="hidden" name="type" value="{{ doc.type or 'inventory' }}">
         <div class="card data-table">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -86,7 +98,9 @@
                 </div>
                 <div class="d-flex gap-2">
                     <button type="submit" formaction="/inventory/{{ doc.id }}/save" class="top-btn btn btn-outline-primary"><i class="bi bi-save"></i> Saqlash (qoralama)</button>
-                    <button type="submit" formaction="/inventory/{{ doc.id }}/confirm" class="top-btn btn btn-success" onclick="return confirm('Tasdiqlashni xohlaysizmi? Ombordagi qoldiq yangilanadi.');"><i class="bi bi-check-circle"></i> Tasdiqlash</button>
+                    <button type="submit" formaction="/inventory/{{ doc.id }}/confirm" class="top-btn btn btn-success" onclick="return confirm('Tasdiqlashni xohlaysizmi? Ombordagi qoldiq yangilanadi.');"><i class="bi bi-check-circle me-1"></i>
+                      {% if doc.type == 'stock_entry' %}Tovar qoldiqlari sifatida tasdiqlash{% else %}Inventarizatsiya sifatida tasdiqlash{% endif %}
+                    </button>
                 </div>
             </div>
             <div class="card-body p-0">
