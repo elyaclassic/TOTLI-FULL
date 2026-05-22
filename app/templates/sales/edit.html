@@ -47,6 +47,18 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
+    {% if error == "item" and error_detail %}
+    <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+        <strong>Qatorni yangilab bo'lmadi.</strong> {{ error_detail }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+    {% if request.query_params.get('message') == 'item-updated' %}
+    <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+        Qator yangilandi ✓
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
 
     <div class="page-header mb-3">
         <h5 class="mb-0">
@@ -182,8 +194,17 @@
                                 <tr>
                                     <td class="muted-cell">{{ loop.index }}</td>
                                     <td>{{ item.product.name if item.product else '—' }}</td>
+                                    {% if order.status == 'draft' %}
+                                    <td class="text-end">
+                                        <input type="number" name="quantity" form="ei-{{ item.id }}" value="{{ "%.3f"|format(item.quantity or 0) }}" step="0.001" min="0.001" class="form-control form-control-sm text-end d-inline-block" style="width:90px;">
+                                    </td>
+                                    <td class="text-end">
+                                        <input type="number" name="price" form="ei-{{ item.id }}" value="{{ "%.0f"|format(item.price or 0) }}" step="1" min="0" class="form-control form-control-sm text-end d-inline-block" style="width:110px;">
+                                    </td>
+                                    {% else %}
                                     <td class="text-end num-cell">{{ "{:,.3f}".format(item.quantity or 0) }}</td>
                                     <td class="text-end muted-cell">{{ "{:,.0f}".format(item.price) }} so'm</td>
+                                    {% endif %}
                                     <td class="text-end sum-cell">{{ "{:,.0f}".format(item.total) }} so'm</td>
                                     {% if order.warehouse_id and current_user and current_user.role == 'admin' %}
                                     <td class="text-center">
@@ -191,7 +212,10 @@
                                     </td>
                                     {% endif %}
                                     {% if order.status == 'draft' %}
-                                    <td>
+                                    <td class="text-nowrap">
+                                        <form id="ei-{{ item.id }}" method="POST" action="/sales/{{ order.id }}/update-item/{{ item.id }}" style="display:inline;">
+                                            <button type="submit" class="btn-act" title="Saqlash"><i class="bi bi-check-lg text-success"></i></button>
+                                        </form>
                                         <form method="POST" action="/sales/{{ order.id }}/delete-item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Ushbu qatorni o\'chirmoqchimisiz?');">
                                             <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                         </form>

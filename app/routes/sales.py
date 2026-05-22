@@ -694,6 +694,39 @@ async def sales_add_items(
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
 
+@router.post("/{order_id}/update-item/{item_id}")
+async def sales_update_item(
+    order_id: int,
+    item_id: int,
+    quantity: float = Form(...),
+    price: float = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft sotuv qatorining miqdor/narxini yangilash. Faqat draft holatda."""
+    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    if not order or order.status != "draft":
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+    _check_order_access(order, current_user)
+    item = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
+    if not item:
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+    if not (0 < quantity < 1_000_000) or not (0 <= price < 1_000_000_000):
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=item&detail=" + quote("Miqdor yoki narx noto'g'ri."),
+            status_code=303,
+        )
+    new_total = quantity * price
+    delta = new_total - (item.total or 0)
+    item.quantity = quantity
+    item.price = price
+    item.total = new_total
+    order.subtotal = (order.subtotal or 0) + delta
+    order.total = (order.total or 0) + delta
+    db.commit()
+    return RedirectResponse(url=f"/sales/edit/{order_id}?message=item-updated", status_code=303)
+
+
 @router.post("/{order_id}/set-date")
 async def sales_set_date(
     order_id: int,
@@ -2901,6 +2934,191 @@ async def sales_pos_z_report_check(
         "last": existing[0] if existing else None,
         "date": target_date.strftime("%Y-%m-%d"),
     })
+
+
+def _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh):
+    """POS smena snapshot ma'lumotini yasaydi (X va Z hisobot uchun umumiy chek).
+    z_id / closed_at / doc_title chaqiruvchida to'ldiriladi."""
+    from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+    from datetime import datetime as _dt
+    from sqlalchemy.orm import joinedload as _jl
+
+    base_q = db.query(Order).filter(func.date(Order.created_at) == target_date)
+    if role == "sotuvchi" and pos_wh:
+        base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
+    completed = base_q.filter(Order.status.in_(("completed", "delivered"))).all()
+    cancelled = base_q.filter(Order.status == "cancelled").all()
+    sales = [o for o in completed if (o.type or "sale") == "sale"]
+    returns_o = [o for o in completed if o.type == "return_sale"]
+    sales_total = sum(float(o.total or 0) for o in sales)
+    returns_total = sum(float(o.total or 0) for o in returns_o)
+
+    by_type: dict = {}
+    sale_order_ids = [o.id for o in sales]
+    if sale_order_ids:
+        try:
+            pmt_q = db.query(Payment).filter(
+                Payment.type == "income",
+                or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                Payment.order_id.in_(sale_order_ids),
+            ).all()
+            cash_pt_map = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in db.query(CashRegister).all()}
+            sale_with_payments: set = set()
+            for p in pmt_q:
+                sale_with_payments.add(p.order_id)
+                pt = cash_pt_map.get(p.cash_register_id, "naqd")
+                if pt == "perechisleniye":
+                    pt = "bank"
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(p.amount or 0)
+            qarz_orders = [o for o in sales if o.id not in sale_with_payments]
+            if qarz_orders:
+                by_type["qarz"] = {"count": len(qarz_orders), "sum": sum(float(o.total or 0) for o in qarz_orders)}
+        except Exception:
+            for o in sales:
+                pt = (o.payment_type or "naqd").lower()
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(o.total or 0)
+
+    cash_snapshot: list = []
+    try:
+        from app.services.finance_service import cash_balance_formula
+        user_full = db.query(User).options(_jl(User.cash_registers_list)).filter(User.id == current_user.id).first()
+        user_cashes_z = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
+        wh_dept_id = getattr(pos_wh, "department_id", None) if pos_wh else None
+        if role == "sotuvchi" and wh_dept_id:
+            shop_cashes = [c for c in user_cashes_z if getattr(c, "department_id", None) == wh_dept_id]
+            if not shop_cashes:
+                shop_cashes = db.query(CashRegister).filter(
+                    CashRegister.department_id == wh_dept_id,
+                    CashRegister.is_active == True,
+                ).all()
+        else:
+            shop_cashes = user_cashes_z
+        for c in shop_cashes:
+            bal, inc, exp = cash_balance_formula(db, c.id)
+            cash_snapshot.append({"id": c.id, "name": c.name, "balance": float(bal or 0), "income": float(inc or 0), "expense": float(exp or 0)})
+    except Exception:
+        pass
+
+    payments_made: list = []
+    expenses_made: list = []
+    try:
+        op_rows = (
+            db.query(Payment)
+            .filter(
+                func.date(Payment.created_at) == target_date,
+                Payment.user_id == current_user.id,
+                Payment.type == "expense",
+                Payment.category.in_(("supplier_payment", "expense")),
+            )
+            .order_by(Payment.created_at)
+            .all()
+        )
+        for p in op_rows:
+            partner_name = ""
+            if p.partner_id:
+                pn = db.query(Partner.name).filter(Partner.id == p.partner_id).first()
+                partner_name = pn[0] if pn else ""
+            cash_name = ""
+            if p.cash_register_id:
+                cn = db.query(CashRegister.name).filter(CashRegister.id == p.cash_register_id).first()
+                cash_name = cn[0] if cn else ""
+            rec = {
+                "number": p.number or "",
+                "time": p.created_at.strftime("%H:%M") if p.created_at else "",
+                "amount": float(p.amount or 0),
+                "payment_type": (p.payment_type or "naqd"),
+                "cash_name": cash_name,
+                "partner_name": partner_name,
+                "description": p.description or "",
+            }
+            if (p.category or "").strip() == "supplier_payment":
+                payments_made.append(rec)
+            else:
+                expenses_made.append(rec)
+    except Exception:
+        pass
+
+    cash_summary = compute_z_cash_summary(db, target_date, current_user.id, until_dt=_dt.now())
+    prev_remaining, prev_zid = find_previous_z_remaining(
+        user_id=current_user.id,
+        warehouse_id=(pos_wh.id if pos_wh else None),
+        before_closed_at=_dt.now().isoformat(),
+    )
+    cash_remaining = (
+        prev_remaining
+        + cash_summary["cash_sales_total"]
+        - cash_summary["cash_expenses_total"]
+        - cash_summary["cash_payments_out"]
+    )
+
+    return {
+        "date": target_date.strftime("%Y-%m-%d"),
+        "user_id": current_user.id,
+        "user": current_user.full_name or current_user.username,
+        "role": role,
+        "warehouse_id": pos_wh.id if pos_wh else None,
+        "warehouse": pos_wh.name if pos_wh else "Barcha",
+        "sales_count": len(sales),
+        "sales_total": sales_total,
+        "returns_count": len(returns_o),
+        "returns_total": returns_total,
+        "cancelled_count": len(cancelled),
+        "cancelled_total": sum(float(o.total or 0) for o in cancelled),
+        "net_total": sales_total - returns_total,
+        "payment_breakdown": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in by_type.items()],
+        "cash_snapshot": cash_snapshot,
+        "order_numbers": [o.number for o in completed],
+        "payments_made": payments_made,
+        "payments_made_sum": sum(r["amount"] for r in payments_made),
+        "expenses_made": expenses_made,
+        "expenses_made_sum": sum(r["amount"] for r in expenses_made),
+        "cash_sales_pure": cash_summary["cash_sales_pure"],
+        "cash_sales_split": cash_summary["cash_sales_split"],
+        "cash_sales_total": cash_summary["cash_sales_total"],
+        "cash_expenses_total": cash_summary["cash_expenses_total"],
+        "cash_payments_out": cash_summary["cash_payments_out"],
+        "previous_cash_remaining": prev_remaining,
+        "previous_z_id": prev_zid,
+        "cash_remaining": cash_remaining,
+    }
+
+
+@router.get("/pos/x-report/receipt", response_class=HTMLResponse)
+async def sales_pos_x_report_receipt(
+    request: Request,
+    date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """X-hisobot 80mm chek (Z-chek bilan bir xil go'zal format)."""
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return HTMLResponse("Ruxsat yo'q", status_code=403)
+    target_date = date_type.today()
+    if date:
+        try:
+            parsed = dt.strptime(date[:10], "%Y-%m-%d").date()
+            if parsed <= date_type.today():
+                target_date = parsed
+        except ValueError:
+            pass
+    pos_wh = None
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if not pos_wh:
+            return HTMLResponse("Sizga POS ombor biriktirilmagan", status_code=400)
+    snap = _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh)
+    snap["z_id"] = f"X-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}"
+    snap["closed_at"] = dt.now().isoformat()
+    snap["doc_title"] = "X-HISOBOT"
+    return templates.TemplateResponse("reports/z_report_receipt.html", {"request": request, "snap": snap})
 
 
 @router.post("/pos/z-report")
