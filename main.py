@@ -1,3 +1,4 @@
+# TOTLI BI — Copyright (c) 2026 Elyor Uzakbayev <e999922555@gmail.com>. All rights reserved. See LICENSE.
 # reload: 2026-04-10 audit watchdog
 # --- .env ni eng birinchi yuklash (boshqa importlar undan oldin env o'qiydi) ---
 from dotenv import load_dotenv
