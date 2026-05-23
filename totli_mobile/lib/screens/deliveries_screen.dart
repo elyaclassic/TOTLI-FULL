@@ -256,7 +256,11 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
           Icon(Icons.local_shipping, color: color, size: 22),
           const SizedBox(width: 10),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(d['partner_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            Row(children: [
+              Flexible(child: Text(d['partner_name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14), overflow: TextOverflow.ellipsis)),
+              const SizedBox(width: 6),
+              _orderTypeBadge(d['order_type']?.toString() ?? 'sale'),
+            ]),
             Text(d['partner_address'] ?? d['delivery_address'] ?? '', style: TextStyle(fontSize: 12, color: Colors.grey[600]), maxLines: 1, overflow: TextOverflow.ellipsis),
             if (items.isNotEmpty)
               Text('${items.length} ta mahsulot', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
@@ -275,6 +279,22 @@ class _DeliveriesScreenState extends State<DeliveriesScreen> {
           ]),
         ])),
       ),
+    );
+  }
+
+  Widget _orderTypeBadge(String orderType) {
+    final isExchange = orderType == 'obmen' || orderType == 'exchange';
+    final isReturn = orderType == 'return_sale';
+    final label = isExchange ? 'ALMASHTIRISH' : isReturn ? 'QAYTARISH' : 'BUYURTMA';
+    final color = isExchange ? Colors.purple : isReturn ? Colors.orange : Colors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.4), width: 0.6),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 9, color: color, fontWeight: FontWeight.w700, letterSpacing: 0.3)),
     );
   }
 }
@@ -572,9 +592,11 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          // Buyurtma raqami
+          // Buyurtma raqami + tur badge + status
           Row(children: [
             Expanded(child: Text(_d['order_number'] ?? _d['number'] ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+            _detailOrderTypeBadge(_d['order_type']?.toString() ?? 'sale'),
+            const SizedBox(width: 6),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -790,5 +812,21 @@ class _DeliveryDetailPageState extends State<_DeliveryDetailPage> {
         child: const Icon(Icons.copy, size: 14, color: Colors.grey),
       ),
     ]));
+  }
+
+  Widget _detailOrderTypeBadge(String orderType) {
+    final isExchange = orderType == 'obmen' || orderType == 'exchange';
+    final isReturn = orderType == 'return_sale';
+    final label = isExchange ? 'ALMASHTIRISH' : isReturn ? 'QAYTARISH' : 'BUYURTMA';
+    final color = isExchange ? Colors.purple : isReturn ? Colors.orange : Colors.teal;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5), width: 0.8),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+    );
   }
 }

@@ -12,8 +12,8 @@ import 'services/sync_service.dart';
 import 'services/pin_service.dart';
 
 // Joriy ilova versiyasi
-const String appVersion = '2.0.12';
-const int appBuild = 60;
+const String appVersion = '2.0.13';
+const int appBuild = 61;
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
