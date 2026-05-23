@@ -1074,7 +1074,11 @@
     if (xReportDateInput) xReportDateInput.addEventListener('change', loadXReport);
     var xReportPrintBtn = document.getElementById('posXReportPrintBtn');
     if (xReportPrintBtn) {
-        xReportPrintBtn.addEventListener('click', function() { window.print(); });
+        xReportPrintBtn.addEventListener('click', function() {
+            var d = document.getElementById('posXReportDate');
+            var dateParam = (d && d.value) ? ('?date=' + encodeURIComponent(d.value)) : '';
+            window.open('/sales/pos/x-report/receipt' + dateParam, '_blank');
+        });
     }
     var xReportZBtn = document.getElementById('posXReportZBtn');
     if (xReportZBtn) {
@@ -1097,8 +1101,12 @@
                 .then(function(d) {
                     xReportZBtn.disabled = false;
                     if (d && d.ok) {
-                        alert('Z-hisobot saqlandi: ' + (d.snapshot_id || ''));
-                        window.print();
+                        if (d.snapshot_id) {
+                            try { window.open('/reports/z-reports/' + encodeURIComponent(d.snapshot_id) + '?fmt=receipt', '_blank'); }
+                            catch (e) { /* popup blocked */ }
+                        } else {
+                            alert('Z-hisobot saqlandi, lekin snapshot_id qaytmadi.');
+                        }
                     } else {
                         alert('Xato: ' + (d && d.error ? d.error : 'noma\'lum'));
                     }
