@@ -29,7 +29,7 @@
     <div class="card mb-3">
       <div class="card-body">
         <div class="row g-3 align-items-end">
-          <div class="col-md-5">
+          <div class="col-md-4">
             <label class="form-label">Mijoz <span class="text-danger">*</span></label>
             <select name="partner_id" id="partnerSelect" class="form-select" required onchange="updatePrices()">
               <option value="">— Tanlang —</option>
@@ -44,7 +44,11 @@
               <div class="text-warning small mt-1">Bu agentga mijoz biriktirilmagan</div>
             {% endif %}
           </div>
-          <div class="col-md-3">
+          <div class="col-md-2">
+            <label class="form-label">Sana <span class="text-danger">*</span></label>
+            <input type="date" name="order_date" id="orderDate" class="form-control" required value="{{ today_iso }}">
+          </div>
+          <div class="col-md-2">
             <label class="form-label">Narx turi</label>
             <input type="text" id="priceTypeLabel" class="form-control" readonly value="—" style="background:#f8f9fa;">
           </div>

@@ -128,9 +128,11 @@
                             <th>Raqam</th>
                             <th>Sana</th>
                             <th>Mijoz</th>
+                            <th class="text-end">Miqdor</th>
                             <th>Jami</th>
                             <th>Status</th>
                             <th>Haydovchi</th>
+                            <th>Yetkazilgan</th>
                             <th></th>
                         </tr>
                     </thead>
@@ -164,6 +166,17 @@
                             </td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
                             <td>{{ order.partner.name if order.partner else '-' }}</td>
+                            <td class="text-end">
+                                {% if is_exchange %}
+                                {% set ret_qty = order.items|sum(attribute='quantity') %}
+                                {% set new_qty = ex_child.items|sum(attribute='quantity') if ex_child else 0 %}
+                                <span title="Qaytgan: {{ ret_qty }} / Yangi: {{ new_qty }}">
+                                    {{ "{:g}".format(new_qty - ret_qty) if (new_qty - ret_qty) != 0 else "0" }}
+                                </span>
+                                {% else %}
+                                {{ "{:g}".format(order.items|sum(attribute='quantity') or 0) }}
+                                {% endif %}
+                            </td>
                             <td class="fw-bold">
                                 {% if is_exchange %}
                                 <span title="Qaytgan: {{ '{:,.0f}'.format(order.total or 0) }} / Yangi: {{ '{:,.0f}'.format(ex_child.total or 0) }}">
@@ -182,11 +195,18 @@
                                 <span class="badge-done">Yakunlangan</span>
                                 {% elif order.status == 'cancelled' %}
                                 <span class="badge-cancelled">Bekor</span>
+                                {% elif order.status == 'waiting_production' and missing_items and missing_items.get(order.id) %}
+                                <span class="badge-waiting" title="Yetishmaydi: {% for m in missing_items[order.id] %}{{ m.product }} (−{{ m.missing|round(1) }}){% if not loop.last %}, {% endif %}{% endfor %}">waiting_production</span>
+                                <div class="small mt-1" style="color:#d32f2f;font-weight:600;line-height:1.2;">
+                                  <i class="bi bi-exclamation-triangle-fill"></i>
+                                  {% for m in missing_items[order.id] %}{{ m.product }} (−{{ m.missing|round(1) }}){% if not loop.last %}, {% endif %}{% endfor %}
+                                </div>
                                 {% else %}
                                 <span class="badge-waiting">{{ order.status }}</span>
                                 {% endif %}
                             </td>
                             <td class="muted-cell"><small>{{ order_drivers.get(order.id, '—') }}</small></td>
+                            <td class="muted-cell"><small>{% if order_delivered_at and order_delivered_at.get(order.id) %}{{ order_delivered_at[order.id].strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}</small></td>
                             <td class="text-nowrap">
                                 {% if order.status == 'draft' %}
                                 <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" title="Tasdiqlash"

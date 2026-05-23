@@ -567,6 +567,11 @@ async def sales_edit(
     role = (getattr(current_user, "role", None) or "").strip().lower() if current_user else ""
     # Foyda/Zarar faqat admin yoki rahbar/raxbar ko'radi
     show_foyda_zarar = bool(role in ("admin", "rahbar", "raxbar"))
+    # Waiting production sababini ko'rsatish — qaysi mahsulot yetishmayapti
+    missing_items = []
+    if order.status == "waiting_production":
+        from app.services.stock_service import compute_missing_items
+        missing_items = compute_missing_items(db, order)
     return templates.TemplateResponse("sales/edit.html", {
         "request": request,
         "order": order,
@@ -580,6 +585,7 @@ async def sales_edit(
         "info_detail": info_detail,
         "foyda_zarar": foyda_zarar,
         "show_foyda_zarar": show_foyda_zarar,
+        "missing_items": missing_items,
         "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
     })
 

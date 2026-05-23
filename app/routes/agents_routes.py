@@ -200,9 +200,10 @@ async def agent_detail(
     from app.models.database import Driver, Delivery
     drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
 
-    # Har order uchun haydovchi nomini olish (Delivery.driver_id orqali)
+    # Har order uchun haydovchi nomini va yetkazilgan vaqtini olish (Delivery.driver_id orqali)
     # Obmen parent uchun ham child sale ning haydovchisini ko'rsatish
     order_drivers = {}
+    order_delivered_at = {}  # order_id -> delivered_at datetime
     if orders:
         # Parent ID lar + child sale ID lar (obmen uchun)
         order_ids = [o.id for o in orders]
@@ -220,6 +221,21 @@ async def agent_detail(
                 parent_id = child_to_parent.get(dl.order_id)
                 if parent_id and parent_id not in order_drivers:
                     order_drivers[parent_id] = driver_map[dl.driver_id]
+            if dl.delivered_at:
+                if dl.order_id not in order_delivered_at:
+                    order_delivered_at[dl.order_id] = dl.delivered_at
+                parent_id = child_to_parent.get(dl.order_id)
+                if parent_id and parent_id not in order_delivered_at:
+                    order_delivered_at[parent_id] = dl.delivered_at
+
+    # Waiting_production buyurtmalar uchun yetishmayotgan mahsulotlar
+    missing_items = {}
+    from app.services.stock_service import compute_missing_items
+    for o in orders:
+        if o.status == "waiting_production":
+            m = compute_missing_items(db, o)
+            if m:
+                missing_items[o.id] = m
 
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
@@ -234,9 +250,11 @@ async def agent_detail(
         "active_drivers": drivers,
         "today_iso": datetime.now().date().isoformat(),
         "order_drivers": order_drivers,
+        "order_delivered_at": order_delivered_at,
         "today_orders_count": range_orders_count,
         "today_orders_total": range_orders_total,
         "range_label": range_label,
+        "missing_items": missing_items,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
         "yandex_maps_apikey": _YANDEX_MAPS_API_KEY,
@@ -302,6 +320,7 @@ async def agent_order_new_form(
         "prices": prices,
         "default_price_type_id": DEFAULT_AGENT_PRICE_TYPE_ID,
         "current_user": current_user,
+        "today_iso": datetime.now().date().isoformat(),
         "page_title": f"Yangi buyurtma — {agent.full_name}",
     })
 
@@ -312,6 +331,7 @@ async def agent_order_create(
     agent_id: int,
     partner_id: int = Form(...),
     note: str = Form(""),
+    order_date: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
@@ -368,8 +388,17 @@ async def agent_order_create(
     if not order_items:
         return RedirectResponse(url=f"/agents/{agent.id}/order/new?error=no_items", status_code=303)
 
-    today = datetime.now()
-    prefix = f"AGT-{today.strftime('%Y%m%d')}"
+    # Sana tanlash: foydalanuvchi kiritgan sana (kun) + hozirgi soat:minut (audit izi uchun)
+    now = datetime.now()
+    order_dt = now
+    if order_date:
+        try:
+            chosen = datetime.strptime(order_date, "%Y-%m-%d")
+            order_dt = chosen.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+        except (ValueError, TypeError):
+            order_dt = now
+
+    prefix = f"AGT-{order_dt.strftime('%Y%m%d')}"
     last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
     try:
         seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
@@ -381,7 +410,7 @@ async def agent_order_create(
     total = subtotal - discount_amount
     order = Order(
         number=order_number,
-        date=today,
+        date=order_dt,
         type="sale",
         partner_id=partner.id,
         warehouse_id=warehouse.id,

@@ -76,12 +76,27 @@
             {% elif order.status == 'waiting_production' %}<span class="badge-waiting ms-2">Ishlab chiqarishda</span>
             {% elif order.status == 'cancelled' %}<span class="badge-cancelled ms-2">Bekor</span>{% endif %}
         </h5>
+        {% if order.status == 'waiting_production' and missing_items %}
+        <div class="alert alert-warning mt-2 mb-0" style="border-left:4px solid #ff9800;">
+            <strong><i class="bi bi-exclamation-triangle-fill"></i> Yetishmaydigan mahsulot{% if missing_items|length > 1 %}lar{% endif %}:</strong>
+            <ul class="mb-0 mt-1" style="padding-left:20px;">
+            {% for m in missing_items %}
+                <li>
+                    <strong style="color:#d32f2f;">{{ m.product }}</strong>
+                    — kerak <strong>{{ m.need|round(1) }}</strong>,
+                    bor <strong>{{ m.have|round(1) }}</strong>,
+                    yetmaydi: <strong style="color:#d32f2f;">−{{ m.missing|round(1) }}</strong>
+                </li>
+            {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         <div class="d-flex gap-2 flex-wrap">
             <a href="/sales/pos" class="top-btn btn btn-outline-primary"><i class="bi bi-cart-check"></i> Sotuv oynasi</a>
             {% if current_user and current_user.role == 'sotuvchi' %}
             <a href="/sales/pos" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
             {% else %}
-            <a href="javascript:void(0)" onclick="if(document.referrer&&document.referrer.indexOf(location.host)!==-1){history.back();}else{location.href='/sales/list';}return false;" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            <a href="/sales" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
             {% endif %}
         </div>
     </div>
@@ -225,20 +240,26 @@
                                 {% endfor %}
                             </tbody>
                             <tfoot>
+                                {% set total_qty = order.items|sum(attribute='quantity') %}
+                                {% set extras = (1 if order.warehouse_id and current_user and current_user.role == 'admin' else 0) + (1 if order.status == 'draft' else 0) %}
                                 <tr style="background:#f8f9fa;">
-                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}4{% else %}3{% endif %}" class="text-end" style="font-size:13px;color:#555;">Jami:</th>
-                                    <th colspan="{% if order.status == 'draft' %}3{% else %}2{% endif %}" class="text-end sum-cell" style="font-size:15px;">{{ "{:,.0f}".format(order.total or 0) }} so'm</th>
+                                    <th colspan="2" class="text-end" style="font-size:13px;color:#555;">Jami:</th>
+                                    <th class="text-end" style="font-size:14px;color:#0d6b4b;">{{ "{:,.3f}".format(total_qty or 0).rstrip('0').rstrip('.') }} dona</th>
+                                    <th></th>
+                                    <th class="text-end sum-cell" style="font-size:15px;">{{ "{:,.0f}".format(order.total or 0) }} so'm</th>
+                                    {% if extras > 0 %}<th colspan="{{ extras }}"></th>{% endif %}
                                 </tr>
                                 {% if show_foyda_zarar %}
                                 <tr style="background:#f8f9fa;">
-                                    <th colspan="{% if order.warehouse_id and current_user and current_user.role == 'admin' %}4{% else %}3{% endif %}" class="text-end" style="font-size:13px;color:#555;">Foyda / Zarar:</th>
-                                    <th colspan="{% if order.status == 'draft' %}3{% else %}2{% endif %}" class="text-end" style="font-size:15px;">
+                                    <th colspan="4" class="text-end" style="font-size:13px;color:#555;">Foyda / Zarar:</th>
+                                    <th class="text-end" style="font-size:15px;">
                                         {% if (foyda_zarar or 0) >= 0 %}
                                         <span class="text-success fw-bold">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</span>
                                         {% else %}
                                         <span class="text-danger fw-bold">{{ "{:,.0f}".format(foyda_zarar or 0) }} so'm</span>
                                         {% endif %}
                                     </th>
+                                    {% if extras > 0 %}<th colspan="{{ extras }}"></th>{% endif %}
                                 </tr>
                                 {% endif %}
                             </tfoot>
