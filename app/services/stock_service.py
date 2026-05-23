@@ -200,6 +200,40 @@ def apply_return_stock_addition(db: Session, order, current_user, note_prefix: s
         )
 
 
+def compute_missing_items(db: Session, order) -> list:
+    """Order itemlari uchun ombordagi yetishmaydigan miqdorni hisoblaydi.
+
+    Foydalanuvchi waiting_production status sababini bilishi uchun ishlatiladi.
+
+    Qaytaradi: [{product, product_id, need, have, missing, warehouse_id}, ...]
+    """
+    from app.models.database import Stock
+    missing = []
+    for it in (order.items or []):
+        if not it.product_id or not (it.quantity or 0) > 0:
+            continue
+        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+        if not wh_id:
+            continue
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id, Stock.product_id == it.product_id
+        ).first()
+        have = float(stock.quantity or 0) if stock else 0.0
+        need = float(it.quantity or 0)
+        gap = need - have
+        if gap > 0.01:
+            pname = it.product.name if it.product else f"#{it.product_id}"
+            missing.append({
+                "product": pname,
+                "product_id": it.product_id,
+                "need": need,
+                "have": have,
+                "missing": gap,
+                "warehouse_id": wh_id,
+            })
+    return missing
+
+
 def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: str = "Sotuv") -> None:
     """Order itemlari uchun "sale" StockMovementlarini yaratadi (stock chiqim).
     sales.py va delivery_routes.py:supervisor_confirm_agent_order o'rtasidagi DRY uchun.

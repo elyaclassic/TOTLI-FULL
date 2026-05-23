@@ -439,9 +439,11 @@ async def supervisor_agent_orders(
         q = q.filter(Order.status == status)
     orders = q.order_by(Order.created_at.desc()).limit(100).all()
     # Topilma 2A: waiting_production buyurtma uchun qaysi Production (qaysi mahsulot) ko'rsatilsin
-    from app.models.database import Production as _Production
+    from app.models.database import Production as _Production, Stock as _Stock
     production_info = {}
-    _wp_ids = [o.id for o in orders if o.status == "waiting_production"]
+    missing_items = {}  # {order_id: [{product, need, have, missing}]}
+    _wp_orders = [o for o in orders if o.status == "waiting_production"]
+    _wp_ids = [o.id for o in _wp_orders]
     if _wp_ids:
         for p in db.query(_Production).options(joinedload(_Production.recipe)).filter(
             _Production.order_id.in_(_wp_ids)
@@ -450,6 +452,26 @@ async def supervisor_agent_orders(
             production_info.setdefault(p.order_id, []).append(
                 f"{p.number} · {rn} · {float(p.quantity or 0):g} · {p.status}"
             )
+        # Yetishmayotgan mahsulotlarni hisoblash (har order uchun)
+        for o in _wp_orders:
+            missing = []
+            for it in (o.items or []):
+                if not it.product_id or not (it.quantity or 0) > 0:
+                    continue
+                wh_id = it.warehouse_id or o.warehouse_id
+                if not wh_id:
+                    continue
+                stock = db.query(_Stock).filter(
+                    _Stock.warehouse_id == wh_id, _Stock.product_id == it.product_id
+                ).first()
+                have = float(stock.quantity or 0) if stock else 0.0
+                need = float(it.quantity or 0)
+                gap = need - have
+                if gap > 0.01:
+                    pname = it.product.name if it.product else f"#{it.product_id}"
+                    missing.append({"product": pname, "need": need, "have": have, "missing": gap})
+            if missing:
+                missing_items[o.id] = missing
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
@@ -464,6 +486,7 @@ async def supervisor_agent_orders(
         "draft_count": draft_count,
         "waiting_count": waiting_count,
         "production_info": production_info,
+        "missing_items": missing_items,
         "page_title": "Agent buyurtmalari",
     })
 
@@ -611,7 +634,9 @@ async def supervisor_delete_agent_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent buyurtmasini o'chirish (faqat bekor qilingan yoki draft)."""
+    """Agent buyurtmasini o'chirish (faqat bekor qilingan yoki draft).
+    Obmen juftligi (return_sale + parent_order_id'li child sale) avtomatik birga o'chiriladi.
+    """
     from app.models.database import OrderItem as OI, Delivery as DeliveryModel
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
@@ -621,15 +646,46 @@ async def supervisor_delete_agent_order(
             url="/supervisor/agent-orders?error=confirmed_delete&detail=" + quote("Tasdiqlangan buyurtmani to'g'ridan-to'g'ri o'chirib bo'lmaydi. Avval bekor qiling."),
             status_code=303,
         )
-    # Cancelled bo'lsa StockMovement orphan bo'lib qolmasligi uchun tozalash
-    if order.status == "cancelled":
-        delete_stock_movements_for_document(db, "Sale", order.id)
-    # Bog'liq yetkazishlarni o'chirish
-    db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id).delete()
-    # Order itemlarni o'chirish
-    db.query(OI).filter(OI.order_id == order.id).delete()
-    # Buyurtmani o'chirish
-    db.delete(order)
+
+    # Obmen juftligini topish (FK constraint uchun ikkalasini birga o'chirish kerak)
+    to_delete = [order]
+    if order.type == "return_sale":
+        # Parent ret_order: child sale topib qo'shish
+        child = db.query(Order).filter(Order.parent_order_id == order.id, Order.type == "sale").first()
+        if child:
+            if child.status not in ("draft", "cancelled"):
+                return RedirectResponse(
+                    url="/supervisor/agent-orders?error=obmen_pair&detail=" + quote(
+                        f"Bu obmen juftligi: child {child.number} status='{child.status}'. Avval ikkalasini bekor qiling."
+                    ),
+                    status_code=303,
+                )
+            to_delete.append(child)
+    elif order.parent_order_id:
+        # Child sale: parent ret_order topib qo'shish (agar mavjud bo'lsa va ham cancelled bo'lsa)
+        parent = db.query(Order).filter(Order.id == order.parent_order_id).first()
+        if parent and parent.status in ("draft", "cancelled"):
+            to_delete.append(parent)
+        elif parent:
+            return RedirectResponse(
+                url="/supervisor/agent-orders?error=obmen_pair&detail=" + quote(
+                    f"Bu obmen yangi sotuvi: parent {parent.number} status='{parent.status}'. Avval ikkalasini bekor qiling."
+                ),
+                status_code=303,
+            )
+
+    for o in to_delete:
+        if o.status == "cancelled":
+            delete_stock_movements_for_document(db, "Sale", o.id)
+        db.query(DeliveryModel).filter(DeliveryModel.order_id == o.id).delete()
+        db.query(OI).filter(OI.order_id == o.id).delete()
+
+    # Sale child avval o'chirilsin (FK constraint), keyin parent ret_order.
+    # SQLAlchemy executemany ni oldini olish uchun flush() har biri uchun chaqiriladi.
+    to_delete.sort(key=lambda o: 0 if o.parent_order_id else 1)
+    for o in to_delete:
+        db.delete(o)
+        db.flush()  # Majburiy: SQLAlchemy batch deletes ni qilmasin
     db.commit()
     return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
 
@@ -658,10 +714,26 @@ def _get_pending_agent_payments(db):
 async def supervisor_agent_payments(
     request: Request,
     status: str = "all",
+    date_from: str = None,
+    date_to: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent va Haydovchi to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
+    # Sana filtri (default: bugun)
+    from datetime import datetime as _dt, date as _date
+    today = _date.today()
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+    except (ValueError, TypeError):
+        d_from = today
+    try:
+        d_to = _dt.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+    except (ValueError, TypeError):
+        d_to = today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+
     q = db.query(AgentPayment).order_by(AgentPayment.id.desc())
     if status == "pending":
         q = q.filter(AgentPayment.status == "pending")
@@ -674,9 +746,13 @@ async def supervisor_agent_payments(
         p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
         p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
 
-    # Haydovchi to'lovlari (Payment.category='delivery')
+    # Haydovchi to'lovlari (Payment.category='delivery') — sana filtri bilan
     from app.models.database import Payment as _Payment
-    dq = db.query(_Payment).filter(_Payment.category == "delivery").order_by(_Payment.id.desc())
+    dq = db.query(_Payment).filter(
+        _Payment.category == "delivery",
+        func.date(_Payment.date) >= d_from,
+        func.date(_Payment.date) <= d_to,
+    ).order_by(_Payment.id.desc())
     if status == "confirmed":
         dq = dq.filter(_Payment.status == "confirmed")
     driver_payments = dq.limit(QUERY_LIMIT_DEFAULT).all()
@@ -721,6 +797,11 @@ async def supervisor_agent_payments(
     driver_balances.sort(key=lambda x: -x["amount"])
     total_pending = sum(d["amount"] for d in driver_balances)
 
+    # Tanlangan davr jamisi (filtered driver_payments uchun)
+    range_total = sum(float(p.amount or 0) for p in driver_payments)
+    range_pending = sum(float(p.amount or 0) for p in driver_payments if p.status == "pending")
+    range_confirmed = sum(float(p.amount or 0) for p in driver_payments if p.status == "confirmed")
+
     return templates.TemplateResponse("supervisor/agent_payments.html", {
         "request": request,
         "payments": payments,
@@ -728,6 +809,11 @@ async def supervisor_agent_payments(
         "driver_balances": driver_balances,
         "total_pending": total_pending,
         "status_filter": status,
+        "date_from": d_from.isoformat(),
+        "date_to": d_to.isoformat(),
+        "range_total": range_total,
+        "range_pending": range_pending,
+        "range_confirmed": range_confirmed,
         "current_user": current_user,
     })
 
