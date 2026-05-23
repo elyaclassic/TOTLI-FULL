@@ -48,11 +48,11 @@ async def app_version():
     Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
     """
     return {
-        "version": "2.0.12",
-        "build": 60,
+        "version": "2.0.13",
+        "build": 61,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Vizit ekranidagi 'Vozvrat' va 'Obmen' tugmalari endi tarixsiz ham ishlaydi (parent buyurtma talab qilmaydi). Mahsulot+miqdor+narxni manual kiritasiz.",
+        "changelog": "Buyurtma va almashtirish endi alohida kartochkalarda ko'rinadi (avval bitta kartochkaga aralashardi). Har bir kartochka ustida BUYURTMA / ALMASHTIRISH / QAYTARISH belgisi.",
     }
 
 

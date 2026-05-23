@@ -81,68 +81,59 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
             )
         deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
 
-        # Birlashtirish: bir mijoz (partner_id) + bir sana (planned_date) = 1 entry.
-        # Faqat bir xil statusda bo'lganlar birlashadi (pending/picked_up/in_progress bir guruh;
-        # delivered/failed/cancelled alohida ko'rinadi — chunki ular yakunlangan).
-        ACTIVE_STATUSES = {"pending", "picked_up", "in_progress"}
-        groups = {}  # group_key -> list of (delivery, order, partner)
+        # Har Delivery alohida kartochka — buyurtma va almashtirish aralashmaydi.
+        # Bir mijozga bir kunda 2 hujjat bo'lsa (masalan: buyurtma + almashtirish),
+        # haydovchi har birini alohida "Yetkazildi" qilishi kerak (SD uslubi).
+        result = []
         for d in deliveries:
             order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None
             partner = None
             if order and order.partner_id:
                 partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-            partner_id = order.partner_id if order else None
-            planned_str = d.planned_date.date().isoformat() if d.planned_date else "no_date"
-            status_key = "active" if (d.status or "pending") in ACTIVE_STATUSES else f"done:{d.id}"
-            group_key = (partner_id, planned_str, status_key)
-            groups.setdefault(group_key, []).append((d, order, partner))
-
-        # Tartib: eng yangi primary'lar birinchi
-        sorted_groups = sorted(groups.values(), key=lambda g: max(m[0].id for m in g), reverse=True)
-
-        result = []
-        for members in sorted_groups:
-            members.sort(key=lambda m: m[0].id)
-            primary_d, primary_o, primary_p = members[0]
             items = []
-            delivery_ids = []
-            order_numbers = []
-            total = 0.0
-            paid = 0.0
-            for d, order, partner in members:
-                delivery_ids.append(d.id)
-                if order:
-                    order_numbers.append(order.number)
-                    total += float(order.total or 0)
-                    paid += float(order.paid or 0)
-                    for oi in order.items:
-                        prod = oi.product
-                        items.append({
-                            "product_id": oi.product_id,
-                            "name": prod.name if prod else f"#{oi.product_id}",
-                            "quantity": float(oi.quantity or 0),
-                            "price": float(oi.price or 0),
-                            "total": float(oi.total or 0),
-                            "order_number": order.number,
-                        })
-            lat = primary_d.latitude or (primary_p.latitude if primary_p else None)
-            lng = primary_d.longitude or (primary_p.longitude if primary_p else None)
+            total = float(order.total or 0) if order else 0.0
+            paid = float(order.paid or 0) if order else 0.0
+            if order:
+                for oi in order.items:
+                    prod = oi.product
+                    items.append({
+                        "product_id": oi.product_id,
+                        "name": prod.name if prod else f"#{oi.product_id}",
+                        "quantity": float(oi.quantity or 0),
+                        "price": float(oi.price or 0),
+                        "total": float(oi.total or 0),
+                        "order_number": order.number,
+                    })
+            lat = d.latitude or (partner.latitude if partner else None)
+            lng = d.longitude or (partner.longitude if partner else None)
+            order_type = (order.type or "sale") if order else "sale"
+            # Tur belgilash:
+            #   sale  + parent_order_id=None  → BUYURTMA (oddiy sotuv)
+            #   sale  + parent_order_id≠None  → ALMASHTIRISH (almashtirish yangi tomon)
+            #   return_sale + parent_order_id≠None → ALMASHTIRISH (almashtirish qaytarish tomon)
+            #   return_sale + parent_order_id=None → QAYTARISH (sof qaytarish)
+            has_parent = bool(order and order.parent_order_id)
+            if has_parent:
+                order_type_display = "obmen"
+            else:
+                order_type_display = order_type
             result.append({
-                "id": primary_d.id,
-                "delivery_ids": delivery_ids,
-                "combined_count": len(delivery_ids),
-                "number": primary_d.number,
-                "order_number": ", ".join(order_numbers) if order_numbers else (primary_d.order_number or ""),
-                "delivery_address": primary_d.delivery_address or (primary_p.address if primary_p else ""),
-                "partner_name": primary_p.name if primary_p else "",
-                "partner_phone": primary_p.phone if primary_p else "",
-                "partner_phone2": primary_p.phone2 if primary_p and primary_p.phone2 else "",
-                "partner_address": primary_p.address if primary_p else "",
-                "landmark": primary_p.landmark if primary_p else "",
-                "status": primary_d.status or "pending",
-                "planned_date": primary_d.planned_date.isoformat() if primary_d.planned_date else "",
-                "delivered_at": primary_d.delivered_at.isoformat() if primary_d.delivered_at else "",
-                "notes": primary_d.notes or "",
+                "id": d.id,
+                "delivery_ids": [d.id],
+                "combined_count": 1,
+                "number": d.number,
+                "order_number": order.number if order else (d.order_number or ""),
+                "order_type": order_type_display,
+                "delivery_address": d.delivery_address or (partner.address if partner else ""),
+                "partner_name": partner.name if partner else "",
+                "partner_phone": partner.phone if partner else "",
+                "partner_phone2": partner.phone2 if partner and partner.phone2 else "",
+                "partner_address": partner.address if partner else "",
+                "landmark": partner.landmark if partner else "",
+                "status": d.status or "pending",
+                "planned_date": d.planned_date.isoformat() if d.planned_date else "",
+                "delivered_at": d.delivered_at.isoformat() if d.delivered_at else "",
+                "notes": d.notes or "",
                 "total": total,
                 "paid": paid,
                 "debt": max(total - paid, 0),
@@ -372,67 +363,10 @@ async def driver_delivery_status(
                     # SQLAlchemy obyektini refresh — yangi status ko'rinsin
                     db.refresh(order)
 
-        # Sibling propagation: agar bir kunda shu mijozga bir nechta delivery bo'lsa,
-        # primary delivered/failed bo'lganda boshqalar ham birga o'zgaradi (UI guruhlash bilan mos).
-        if new_status in ("delivered", "failed") and delivery.order_id and delivery.planned_date:
-            primary_order = db.query(Order).filter(Order.id == delivery.order_id).first()
-            if primary_order and primary_order.partner_id:
-                from sqlalchemy import text as _text
-                sibling_deliveries = db.query(Delivery).join(
-                    Order, Delivery.order_id == Order.id
-                ).filter(
-                    Delivery.id != delivery.id,
-                    Delivery.driver_id == driver.id,
-                    Order.partner_id == primary_order.partner_id,
-                    sa_func.date(Delivery.planned_date) == sa_func.date(delivery.planned_date),
-                    Delivery.status.in_(["pending", "picked_up", "in_progress"]),
-                ).all()
-                for sib in sibling_deliveries:
-                    sib.status = new_status
-                    sib_order = db.query(Order).filter(Order.id == sib.order_id).first() if sib.order_id else None
-                    if not sib_order:
-                        continue
-                    if new_status == "failed":
-                        # Stock qaytarish + order cancelled (faqat to'langan bo'lmasa)
-                        if sib_order.status == "out_for_delivery" and not (sib_order.paid or 0) > 0:
-                            for it in sib_order.items:
-                                wh_id = it.warehouse_id if it.warehouse_id else sib_order.warehouse_id
-                                if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
-                                    continue
-                                create_stock_movement(
-                                    db=db,
-                                    warehouse_id=wh_id,
-                                    product_id=it.product_id,
-                                    quantity_change=+float(it.quantity or 0),
-                                    operation_type="delivery_failed",
-                                    document_type="Sale",
-                                    document_id=sib_order.id,
-                                    document_number=sib_order.number,
-                                    user_id=getattr(driver, 'employee_id', None),
-                                    note=f"Yetkazish muvaffaqiyatsiz (guruh): {sib_order.number}",
-                                    created_at=datetime.now(),
-                                )
-                            sib_order.status = "cancelled"
-                    elif new_status == "delivered":
-                        sib.delivered_at = datetime.now()
-                        if latitude:
-                            sib.latitude = latitude
-                        if longitude:
-                            sib.longitude = longitude
-                        # Atomik UPDATE sib_order status va partner balance
-                        sib_claim = db.execute(
-                            _text(
-                                "UPDATE orders SET status='delivered' "
-                                "WHERE id=:id AND status IN ('out_for_delivery', 'confirmed')"
-                            ),
-                            {"id": sib_order.id},
-                        )
-                        if sib_claim.rowcount == 1 and sib_order.partner_id and float(sib_order.debt or 0) > 0:
-                            sib_partner = db.query(Partner).filter(Partner.id == sib_order.partner_id).first()
-                            if sib_partner:
-                                if sib_order.previous_partner_balance is None:
-                                    sib_order.previous_partner_balance = float(sib_partner.balance or 0)
-                                sib_partner.balance = float(sib_partner.balance or 0) + float(sib_order.debt or 0)
+        # Sibling propagation OLIB TASHLANDI (2026-05-23):
+        # Eski grouping UI uchun ishlatilgan — bitta Yetkazildi barchasini birga yopardi.
+        # Endi har Delivery alohida kartochka (SD uslubi) — har biri o'z statusiga ega.
+        # Buyurtma+almashtirish bir mijozga bo'lsa, driver har birini alohida tasdiqlaydi.
 
         db.commit()
         try:
