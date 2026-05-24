@@ -279,9 +279,17 @@ async def finance_harajatlar(
     current_user: User = Depends(require_auth),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    show_all: Optional[str] = None,
 ):
-    """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida)."""
+    """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida).
+
+    Default: faqat bugun. ?show_all=1 → barcha sanalar. ?date_from=..&date_to=.. → aniq oraliq.
+    """
     ensure_payments_status_column(db)
+    if date_from is None and date_to is None and show_all != "1":
+        _today_str = datetime.now().date().isoformat()
+        date_from = _today_str
+        date_to = _today_str
     cash_registers = db.query(CashRegister).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     expense_docs_q = (

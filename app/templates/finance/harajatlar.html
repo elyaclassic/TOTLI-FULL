@@ -38,7 +38,7 @@
         </div>
     </div>
 
-    <!-- Sana filtri -->
+    <!-- Sana filtri (default: bugun) -->
     <form method="get" class="row g-2 mb-3 align-items-end" style="max-width:720px;">
         <div class="col-auto">
             <label class="form-label small mb-1">Dan</label>
@@ -50,9 +50,8 @@
         </div>
         <div class="col-auto">
             <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filtr</button>
-            {% if filter_date_from or filter_date_to %}
-            <a href="/finance/harajatlar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Tozalash</a>
-            {% endif %}
+            <a href="/finance/harajatlar" class="btn btn-sm btn-outline-secondary" title="Bugunga qaytish"><i class="bi bi-arrow-counterclockwise"></i> Bugun</a>
+            <a href="/finance/harajatlar?show_all=1" class="btn btn-sm btn-outline-secondary" title="Barchasini ko'rsatish"><i class="bi bi-list"></i> Hammasi</a>
         </div>
     </form>
 
