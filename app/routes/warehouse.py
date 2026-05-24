@@ -1454,7 +1454,10 @@ async def inventory_confirm(
             status_code=303,
         )
     is_stock_entry = (doc_type == "stock_entry")
-    if is_stock_entry and doc.date:
+    # Number generatsiya — har qanday turi uchun placeholderni real raqamga almashtirish
+    # (save handler bilan bir xil pattern, satr 1256). Avval faqat is_stock_entry uchun edi,
+    # shu sababli inventory tasdiqlanganda "INV-PENDING-{id}" placeholder qolib ketardi.
+    if doc.number and doc.number.startswith("INV-PENDING") and doc.date:
         date_str = doc.date.strftime("%Y%m%d")
         doc.number = _next_inventory_number(db, date_str)
     item_ids = form.getlist("item_id")

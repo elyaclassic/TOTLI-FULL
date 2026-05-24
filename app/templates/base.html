@@ -955,6 +955,16 @@
                 </a>
             </li>
 
+            <!-- HISOBOTLAR -->
+            <li class="nav-item mt-3">
+                <small class="text-light opacity-50 px-3">HISOBOTLAR</small>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Qoldiq hisoboti' in (page_title or '') %}active{% endif %}" href="/reports/stock">
+                    <i class="bi bi-box2-heart"></i> Qoldiq hisoboti
+                </a>
+            </li>
+
             <!-- MONITORING -->
             <li class="nav-item mt-3">
                 <small class="text-light opacity-50 px-3">MONITORING</small>
@@ -1247,6 +1257,13 @@
                     <i class="bi bi-tags"></i> Harajat turlari
                 </a>
             </li>
+            {% if current_user and current_user.role == 'admin' %}
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Valyuta kursi' %}active{% endif %}" href="/admin/exchange-rates">
+                    <i class="bi bi-currency-exchange"></i> Valyuta kursi
+                </a>
+            </li>
+            {% endif %}
 
             <!-- HISOBOTLAR -->
             <li class="nav-item mt-3">
@@ -1514,6 +1531,85 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Kalkulyator widget — F4 yoki 🧮 tugma orqali ochiladi (Bootstrap modal'sdan ajratilgan) -->
+    <style>
+      .input-calc-wrap input[type="number"]::-webkit-outer-spin-button,
+      .input-calc-wrap input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      .input-calc-wrap input[type="number"] { -moz-appearance: textfield; }
+      #inputCalcModal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+      }
+      #inputCalcModal.is-open { display: flex; }
+      #inputCalcBackdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1995;
+      }
+      #inputCalcBackdrop.is-open { display: block; }
+      #inputCalcModal .calc-box {
+        max-width: 340px;
+        width: 100%;
+        background: #fff;
+        border-radius: 14px;
+        box-shadow: 0 10px 40px rgba(0,0,0,.25);
+      }
+    </style>
+    <div id="inputCalcBackdrop"></div>
+    <div id="inputCalcModal" role="dialog" aria-labelledby="inputCalcTitle" aria-modal="true">
+      <div class="calc-box">
+        <div class="d-flex justify-content-between align-items-center px-3 pt-3 pb-2">
+          <h6 id="inputCalcTitle" class="fw-bold mb-0"><i class="bi bi-calculator"></i> Kalkulyator</h6>
+          <button type="button" class="btn-close" data-calc-close aria-label="Yopish"></button>
+        </div>
+        <div class="px-3 pb-2">
+          <input type="text" id="inputCalcDisplay" class="form-control form-control-lg text-end fw-bold mb-2"
+                 style="font-size:1.5rem;background:#f8f9fa;border-radius:10px;" autocomplete="off">
+          <div id="inputCalcGrid" class="d-grid gap-2" style="grid-template-columns:repeat(4,1fr);">
+            <button type="button" class="btn btn-outline-danger" data-act="C">C</button>
+            <button type="button" class="btn btn-outline-secondary" data-act="CE">CE</button>
+            <button type="button" class="btn btn-outline-secondary" data-act="(">(</button>
+            <button type="button" class="btn btn-outline-secondary" data-act=")">)</button>
+            <button type="button" class="btn btn-light" data-num="7">7</button>
+            <button type="button" class="btn btn-light" data-num="8">8</button>
+            <button type="button" class="btn btn-light" data-num="9">9</button>
+            <button type="button" class="btn btn-outline-primary" data-op="/">÷</button>
+            <button type="button" class="btn btn-light" data-num="4">4</button>
+            <button type="button" class="btn btn-light" data-num="5">5</button>
+            <button type="button" class="btn btn-light" data-num="6">6</button>
+            <button type="button" class="btn btn-outline-primary" data-op="*">×</button>
+            <button type="button" class="btn btn-light" data-num="1">1</button>
+            <button type="button" class="btn btn-light" data-num="2">2</button>
+            <button type="button" class="btn btn-light" data-num="3">3</button>
+            <button type="button" class="btn btn-outline-primary" data-op="-">−</button>
+            <button type="button" class="btn btn-light" data-num="0">0</button>
+            <button type="button" class="btn btn-light" data-num=".">.</button>
+            <button type="button" class="btn btn-outline-secondary" data-act="BACK">⌫</button>
+            <button type="button" class="btn btn-outline-primary" data-op="+">+</button>
+            <button type="button" class="btn btn-success fw-bold" data-act="EQ" style="grid-column: span 4; font-size:1.2rem;">=</button>
+          </div>
+          <div class="text-muted small mt-2 text-center">Enter — qabul · Esc — bekor</div>
+        </div>
+        <div class="d-flex justify-content-end gap-2 px-3 pb-3">
+          <button type="button" class="btn btn-outline-secondary" data-calc-close>Bekor</button>
+          <button type="button" class="btn btn-primary" id="inputCalcAccept">
+            <i class="bi bi-check-lg"></i> Qabul qilish (Enter)
+          </button>
+        </div>
+      </div>
+    </div>
+    <script src="/static/js/input_calc_v4.js"></script>
 
     {% block extra_js %}{% endblock %}
 

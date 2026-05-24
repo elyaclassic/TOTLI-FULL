@@ -34,7 +34,12 @@
                 {% for cash in cash_registers %}
                 <tr>
                     <td>{{ cash.id }}</td>
-                    <td><strong>{{ cash.name }}</strong></td>
+                    <td>
+                        <strong>{{ cash.name }}</strong>
+                        {% if cash.currency and cash.currency != 'UZS' %}
+                        <span class="badge bg-warning text-dark ms-1" title="Bu kassa {{ cash.currency }} valyutasida">{{ cash.currency }}</span>
+                        {% endif %}
+                    </td>
                     <td>
                         {% if cash.payment_type == 'naqd' %}
                         <span class="badge bg-success">Naqd</span>
@@ -57,8 +62,10 @@
                     </td>
                     <td>
                         {% set bal = cash_computed_balance.get(cash.id, cash.balance) %}
+                        {% set curr = cash.currency or 'UZS' %}
+                        {% set suffix = "so'm" if curr == 'UZS' else curr %}
                         <span class="badge {% if bal >= 0 %}bg-success{% else %}bg-danger{% endif %} fs-6" title="Faqat tasdiqlangan kirim/chiqimlar yig'indisi">
-                            {{ "{:,.0f}".format(bal) }} so'm
+                            {% if curr == 'USD' %}${{ "{:,.2f}".format(bal) }}{% else %}{{ "{:,.0f}".format(bal) }} {{ suffix }}{% endif %}
                         </span>
                     </td>
                     <td>
@@ -70,7 +77,7 @@
                     </td>
                     <td>
                         <button class="btn-act" title="Tahrirlash"
-                            onclick="editCash({{ cash.id }}, `{{ cash.name }}`, {{ cash.balance }}, {{ cash.department_id or 'null' }}, '{{ (cash.payment_type or '')|e }}')">
+                            onclick="editCash({{ cash.id }}, `{{ cash.name }}`, {{ cash.balance }}, {{ cash.department_id or 'null' }}, '{{ (cash.payment_type or '')|e }}', '{{ (cash.currency or 'UZS')|e }}')">
                             <i class="bi bi-pencil"></i>
                         </button>
                         {% if current_user and current_user.role == 'admin' %}
@@ -95,20 +102,24 @@
     </div>
 </div>
 
-<!-- Jami balans (faqat tasdiqlangan to'lovlar bo'yicha) -->
+<!-- Jami balans (har valyuta alohida) -->
 {% if cash_registers %}
-<div class="row mt-3">
-    <div class="col-md-4">
-        <div class="card bg-primary text-white">
+<div class="row mt-3 g-2">
+    {% for curr, total in (totals_by_currency or {}).items() %}
+    <div class="col-md-3">
+        <div class="card {% if curr == 'UZS' %}bg-primary{% elif curr == 'USD' %}bg-warning text-dark{% else %}bg-secondary{% endif %} text-white">
             <div class="card-body">
-                <h6 class="card-title">Jami balans</h6>
+                <h6 class="card-title">Jami {{ curr }}</h6>
                 <h3 class="mb-0">
-                    {{ "{:,.0f}".format(jami_balans) }} so'm
+                    {% if curr == 'USD' %}${{ "{:,.2f}".format(total) }}
+                    {% elif curr == 'UZS' %}{{ "{:,.0f}".format(total) }} so'm
+                    {% else %}{{ "{:,.2f}".format(total) }} {{ curr }}{% endif %}
                 </h3>
-                <small class="opacity-75">Faqat tasdiqlangan kirim/chiqimlar yig'indisi. Bekor qilingan to'lovlar hisobga olinmaydi.</small>
+                <small class="opacity-75">Faqat tasdiqlangan kirim/chiqimlar.</small>
             </div>
         </div>
     </div>
+    {% endfor %}
 </div>
 {% endif %}
 
@@ -125,6 +136,16 @@
                     <div class="mb-2">
                         <label class="form-label small mb-0">Nomi *</label>
                         <input type="text" class="form-control form-control-sm" name="name" placeholder="Asosiy kassa" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Valyuta</label>
+                        <select class="form-select form-select-sm" name="currency">
+                            <option value="UZS" selected>UZS — so'm</option>
+                            <option value="USD">USD — dollar</option>
+                            <option value="EUR">EUR — yevro</option>
+                            <option value="RUB">RUB — rubl</option>
+                        </select>
+                        <small class="text-muted">Yangi USD kassa kiritish uchun bu yerda tanlang.</small>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-0">To'lov turi (POS)</label>
@@ -173,6 +194,15 @@
                     <div class="mb-2">
                         <label class="form-label small mb-0">Nomi *</label>
                         <input type="text" class="form-control form-control-sm" name="name" id="edit_name" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small mb-0">Valyuta</label>
+                        <select class="form-select form-select-sm" name="currency" id="edit_currency">
+                            <option value="UZS">UZS — so'm</option>
+                            <option value="USD">USD — dollar</option>
+                            <option value="EUR">EUR — yevro</option>
+                            <option value="RUB">RUB — rubl</option>
+                        </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small mb-0">To'lov turi (POS)</label>
@@ -253,12 +283,13 @@
         }
     });
 
-    function editCash(id, name, balance, departmentId, paymentType) {
+    function editCash(id, name, balance, departmentId, paymentType, currency) {
         document.getElementById('editCashForm').action = '/info/cash/edit/' + id;
         document.getElementById('edit_name').value = name;
         document.getElementById('edit_balance').value = balance;
         document.getElementById('edit_department_id').value = departmentId || '';
         document.getElementById('edit_payment_type').value = paymentType || '';
+        document.getElementById('edit_currency').value = currency || 'UZS';
         new bootstrap.Modal(document.getElementById('editCashModal')).show();
     }
 

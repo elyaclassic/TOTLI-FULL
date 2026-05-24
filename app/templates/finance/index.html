@@ -200,18 +200,15 @@
             <td>
               <div class="d-flex gap-1">
                 {% if p_status == 'cancelled' %}
-                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash?');">
-                  <button type="submit" class="btn-act" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Qayta tasdiqlash?');">
+                  <button type="submit" class="btn-act" style="color:#28a745;" title="Qayta tasdiqlash"><i class="bi bi-check-circle"></i></button>
                 </form>
+                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                 {% else %}
                 <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');">
-                  <button type="submit" class="btn-act warning" title="Bekor qilish"><i class="bi bi-x-circle"></i></button>
+                  <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish (keyin tahrirlash mumkin)"><i class="bi bi-x-circle"></i></button>
                 </form>
-                {% endif %}
-                {% if p_status == 'confirmed' %}
                 <a href="/finance/payment/{{ payment.id }}/edit?view=1" class="btn-act" title="Ko'rish"><i class="bi bi-eye"></i></a>
-                {% else %}
-                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                 {% endif %}
                 <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirish?');">
                   <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
@@ -274,8 +271,8 @@ document.addEventListener('DOMContentLoaded', function() {
               <input type="date" class="form-control" name="payment_date" id="paymentDateInput" style="border-radius:10px;">
             </div>
             <div class="col-12">
-              <label class="form-label fw-semibold">Summa *</label>
-              <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" style="border-radius:10px;">
+              <label class="form-label fw-semibold">Summa * <small class="text-muted fw-normal">(F4 — kalkulyator)</small></label>
+              <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" data-calc style="border-radius:10px;">
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">Kontragent *</label>

@@ -1,0 +1,114 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0"><i class="bi bi-currency-exchange"></i> Valyuta kursi</h5>
+    {% if current_usd > 0 %}
+    <span class="badge bg-success fs-6 px-3 py-2">
+        Bugungi USD: <strong>{{ "{:,.2f}".format(current_usd) }}</strong> so'm
+    </span>
+    {% else %}
+    <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+        <i class="bi bi-exclamation-triangle"></i> Bugungi USD kursi yo'q — kiriting!
+    </span>
+    {% endif %}
+</div>
+
+{% if request.query_params.get('info') == 'added' %}
+<div class="alert alert-success py-2 small"><i class="bi bi-check-circle"></i> Yangi kurs qo'shildi.</div>
+{% elif request.query_params.get('info') == 'deleted' %}
+<div class="alert alert-warning py-2 small"><i class="bi bi-trash"></i> Kurs o'chirildi.</div>
+{% elif request.query_params.get('error') == 'invalid' %}
+<div class="alert alert-danger py-2 small">Noto'g'ri kiritildi — valyutalar har xil bo'lishi va kurs &gt; 0 bo'lishi kerak.</div>
+{% elif request.query_params.get('error') == 'invalid_date' %}
+<div class="alert alert-danger py-2 small">Noto'g'ri sana formati.</div>
+{% endif %}
+
+<div class="card mb-3">
+    <div class="card-header fw-bold"><i class="bi bi-plus-circle"></i> Yangi kurs qo'shish</div>
+    <div class="card-body">
+        <form method="post" action="/admin/exchange-rates/create" class="row g-3 align-items-end">
+            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+            <div class="col-md-2">
+                <label class="form-label small">Manba</label>
+                <select name="from_currency" class="form-select" required>
+                    <option value="USD" selected>USD</option>
+                    <option value="EUR">EUR</option>
+                    <option value="RUB">RUB</option>
+                </select>
+            </div>
+            <div class="col-md-1 text-center" style="padding-top:30px;font-size:20px;">→</div>
+            <div class="col-md-2">
+                <label class="form-label small">Maqsad</label>
+                <select name="to_currency" class="form-select" required>
+                    <option value="UZS" selected>UZS</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small">Kurs (1 dona = ? so'm)</label>
+                <input type="number" name="rate" class="form-control" step="0.01" min="0.01" placeholder="Masalan: 12950" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Sanadan kuchda</label>
+                <input type="date" name="effective_date" class="form-control" value="{{ today_iso }}" required>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-success w-100"><i class="bi bi-check-lg"></i> Saqlash</button>
+            </div>
+            <div class="col-12">
+                <label class="form-label small">Izoh (ixtiyoriy)</label>
+                <input type="text" name="note" class="form-control form-control-sm" placeholder="Masalan: bank kursi, bozor kursi va h.k.">
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card data-table">
+    <div class="card-header fw-bold">
+        <i class="bi bi-clock-history"></i> Kurs tarixi
+        <span class="badge bg-secondary ms-2">{{ rates|length }} ta</span>
+    </div>
+    <table class="table table-sm mb-0">
+        <thead>
+            <tr>
+                <th>Sana</th>
+                <th>Yo'nalish</th>
+                <th class="text-end">Kurs</th>
+                <th>Izoh</th>
+                <th>Kim kiritgan</th>
+                <th>Yaratildi</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in rates %}
+            <tr>
+                <td class="fw-bold">{{ r.effective_date.strftime('%d.%m.%Y') if r.effective_date else '—' }}</td>
+                <td>
+                    <span class="badge bg-primary">{{ r.from_currency }}</span>
+                    →
+                    <span class="badge bg-info text-dark">{{ r.to_currency }}</span>
+                </td>
+                <td class="text-end fw-bold">{{ "{:,.2f}".format(r.rate or 0) }}</td>
+                <td class="text-muted small">{{ r.note or '—' }}</td>
+                <td>{{ r.user.username if r.user else '—' }}</td>
+                <td class="text-muted small">{{ r.created_at.strftime('%d.%m.%Y %H:%M') if r.created_at else '—' }}</td>
+                <td>
+                    <form method="post" action="/admin/exchange-rates/delete/{{ r.id }}" style="display:inline;" onsubmit="return confirm('Kursni o\'chirmoqchimisiz? Bu amal qaytarib bo\'lmaydi.');">
+                        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
+                        <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="O'chirish">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="text-center py-4 text-muted">
+                <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.3;"></i>
+                Hali kurs kiritilmagan. Yuqoridagi formadan birinchi kursni qo'shing.
+            </td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

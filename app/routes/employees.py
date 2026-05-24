@@ -82,6 +82,12 @@ async def employees_list(
     })
 
 
+@router.get("/add")
+async def employee_add_redirect():
+    """GET /employees/add → ro'yxatga (modal avtomatik ochiladi). To'g'ridan ochilganda bo'sh sahifa o'rniga."""
+    return RedirectResponse(url="/employees?add=1", status_code=303)
+
+
 @router.post("/add")
 async def employee_add(
     request: Request,

@@ -566,7 +566,9 @@ class CashTransfer(Base):
     date = Column(DateTime, default=datetime.now)
     from_cash_id = Column(Integer, ForeignKey("cash_registers.id"), nullable=False)
     to_cash_id = Column(Integer, ForeignKey("cash_registers.id"), nullable=False)
-    amount = Column(Float, default=0)
+    amount = Column(Float, default=0)  # Yuborilgan summa (from_cash valyutasida)
+    exchange_rate = Column(Float, nullable=True)  # Cross-currency uchun: 1 from_currency = X to_currency
+    to_amount = Column(Float, nullable=True)  # Qabul qilingan summa (to_cash valyutasida). NULL = amount bilan bir xil (same currency)
     status = Column(String(20), default="pending")  # pending, in_transit, completed, cancelled
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Yaratuvchi (admin)
     sent_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Sotuvchi (pulni bergan)
@@ -581,6 +583,27 @@ class CashTransfer(Base):
     user = relationship("User", foreign_keys=[user_id])
     sent_by = relationship("User", foreign_keys=[sent_by_user_id])
     approved_by = relationship("User", foreign_keys=[approved_by_user_id])
+
+
+# ==========================================
+# VALYUTA KURSI TARIXI (USD, RUB, EUR ↔ UZS)
+# ==========================================
+
+class ExchangeRate(Base):
+    """Kurs tarixi: admin qo'lda kiritadi. get_rate() helper sana bo'yicha eng yangi kursni topadi."""
+    __tablename__ = "exchange_rates"
+    __table_args__ = (Index("idx_exr_pair_date", "from_currency", "to_currency", "effective_date"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    from_currency = Column(String(3), nullable=False)  # USD, RUB, EUR
+    to_currency = Column(String(3), nullable=False)    # UZS (odatda)
+    rate = Column(Float, nullable=False)  # 1 from_currency = X to_currency
+    effective_date = Column(Date, nullable=False)  # Qaysi sanadan boshlab kuchda
+    note = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    user = relationship("User")
 
 
 # ==========================================
@@ -1000,8 +1023,9 @@ class CashRegister(Base):
     opening_balance = Column(Float, default=0)  # Qoldiq — faqat qoldiq hujjati orqali o'rnatiladi
     department_id = Column(Integer, ForeignKey("departments.id"), nullable=True)  # Bo'limga biriktirish
     payment_type = Column(String(20), nullable=True)  # naqd, plastik, click, terminal — POS to'lov turi
+    currency = Column(String(3), default="UZS", nullable=False)  # UZS, USD — kassa valyutasi
     is_active = Column(Boolean, default=True)
-    
+
     department = relationship("Department", back_populates="cash_registers")
 
 
@@ -1964,6 +1988,7 @@ def init_db():
     ensure_product_conversions_table()
     ensure_attendance_improvements()
     ensure_visit_feedback_columns()
+    ensure_currency_columns()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
@@ -2076,6 +2101,51 @@ def ensure_production_group_docs_table():
                     conn.execute(text("ALTER TABLE production_group_docs ADD COLUMN confirmed_at DATETIME"))
     except Exception as e:
         print(f"ensure_production_group_docs_table: {e}")
+
+
+def ensure_currency_columns():
+    """Valyuta konvertatsiyasi uchun additive migration:
+    - cash_registers.currency (default UZS)
+    - cash_transfers.exchange_rate, to_amount
+    - exchange_rates jadvali (kurs tarixi)
+    """
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            # cash_registers.currency
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(cash_registers)"))]
+            if "currency" not in cols:
+                conn.execute(text("ALTER TABLE cash_registers ADD COLUMN currency VARCHAR(3) DEFAULT 'UZS' NOT NULL"))
+                print("cash_registers.currency qo'shildi (default UZS).")
+
+            # cash_transfers.exchange_rate, to_amount
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(cash_transfers)"))]
+            if "exchange_rate" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN exchange_rate REAL"))
+                print("cash_transfers.exchange_rate qo'shildi.")
+            if "to_amount" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN to_amount REAL"))
+                print("cash_transfers.to_amount qo'shildi.")
+
+            # exchange_rates jadvali
+            r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='exchange_rates'"))
+            if not r.fetchone():
+                conn.execute(text("""
+                    CREATE TABLE exchange_rates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        from_currency VARCHAR(3) NOT NULL,
+                        to_currency VARCHAR(3) NOT NULL,
+                        rate REAL NOT NULL,
+                        effective_date DATE NOT NULL,
+                        note TEXT,
+                        user_id INTEGER REFERENCES users(id),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("CREATE INDEX idx_exr_pair_date ON exchange_rates (from_currency, to_currency, effective_date)"))
+                print("exchange_rates jadvali yaratildi.")
+    except Exception as e:
+        print(f"ensure_currency_columns: {e}")
 
 
 def ensure_product_conversions_table():

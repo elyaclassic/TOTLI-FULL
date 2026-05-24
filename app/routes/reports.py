@@ -2526,10 +2526,17 @@ async def report_profit(
     payments_income = _payment_sum("income")
     payments_expense = _payment_sum("expense")
 
+    # Savdo chegirmasi (skidka): subtotal − total yig'indisi. revenue allaqachon NET (chegirmali),
+    # shuning uchun hisobotda GROSS ko'rsatib, chegirmani alohida operatsion xarajat qatori qilamiz.
+    # SOF FOYDA o'zgarmaydi (gross − chegirma = net).
+    grand_discount = sum(max(0.0, float(o.subtotal or 0) - float(o.total or 0)) for o in sale_orders)
+    revenue = revenue + grand_discount               # GROSS daromad (chegirmasiz)
+    gross_profit = revenue - cogs                    # GROSS yalpi foyda
+
     # Yakuniy hisob + trend
     net_revenue = revenue - returns_total
-    operating_expenses = total_expenses + salary_total
-    net_profit = gross_profit - returns_total - operating_expenses
+    operating_expenses = total_expenses + salary_total + grand_discount  # chegirma qo'shildi
+    net_profit = gross_profit - returns_total - operating_expenses        # = eski (chegirma qisqaradi)
     daily_labels, daily_revenue, daily_profit = _compute_daily_trend(sale_orders, sale_items)
 
     return templates.TemplateResponse("reports/profit.html", {
@@ -2552,6 +2559,7 @@ async def report_profit(
         "salary_total": salary_total,
         "operating_expenses": operating_expenses,
         "expense_list": expense_list,
+        "grand_discount": grand_discount,
         # Natija
         "net_profit": net_profit,
         # To'lovlar

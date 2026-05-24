@@ -26,6 +26,9 @@
             <form action="/partners/export" method="get" class="d-inline">
                 <button type="submit" class="top-btn btn btn-outline-success"><i class="bi bi-file-earmark-excel"></i> Export</button>
             </form>
+            {% if current_user and current_user.role == 'admin' %}
+            <a href="/partners/duplicates" class="top-btn btn btn-outline-warning" title="Dublikat partnerlarni topib birlashtirish"><i class="bi bi-files"></i> Dublikatlar</a>
+            {% endif %}
             <a href="/partners/template" class="top-btn btn btn-outline-secondary" title="Import uchun andoza yuklab olish"><i class="bi bi-download"></i> Andoza</a>
             <form action="/partners/import" method="post" enctype="multipart/form-data" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
@@ -76,23 +79,11 @@
             <a href="/partners?type=supplier" class="btn btn-sm type-filter-btn {% if current_type == 'supplier' %}btn-primary active{% else %}btn-outline-primary{% endif %} text-nowrap">
                 <i class="bi bi-truck"></i> Yetkazib beruvchilar
             </a>
-            {% if route_partner_ids %}
-            <button type="button" id="notInRouteFilterBtn" class="btn btn-sm btn-outline-warning text-nowrap" onclick="toggleNotInRouteFilter()" title="Eksport ro'yxatida bo'lmagan kontragentlar (review uchun)">
-                <i class="bi bi-funnel"></i> Eksportda yo'q ({{ not_in_route_count }})
-            </button>
-            {% endif %}
             <div class="ms-auto search-wrap" style="min-width: 180px;">
                 <i class="bi bi-search"></i>
                 <input type="text" id="partnerSearchInput" class="form-control form-control-sm" placeholder="Qidirish..." oninput="filterPartnersTable(this.value)" autocomplete="off">
             </div>
         </div>
-        {% if route_partner_ids and route_generated_at %}
-        <div class="small text-muted mt-2">
-            <i class="bi bi-info-circle"></i>
-            Agent eksport: {{ route_export_total }} ta mijoz, mos kelganlar: {{ route_partner_ids|length }} ta
-            <span class="text-muted">· yangilangan: {{ route_generated_at[:16].replace('T', ' ') }}</span>
-        </div>
-        {% endif %}
     </div>
 
     <!-- Bulk edit panel -->
@@ -192,9 +183,6 @@
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td>
                                 <strong>{{ partner.name or '-' }}</strong>
-                                {% if not in_route %}
-                                <span class="badge bg-warning text-dark ms-1" title="Agent eksport ro'yxatida topilmadi"><i class="bi bi-exclamation-triangle"></i> Eksportda yo'q</span>
-                                {% endif %}
                                 {% if (partner.discount_percent or 0) > 0 %}
                                 <br><small class="text-success"><i class="bi bi-tag"></i> {{ partner.discount_percent }}% chegirma</small>
                                 {% endif %}
@@ -217,7 +205,10 @@
                                     <span class="text-muted">—</span>
                                 {% endif %}
                             </td>
-                            <td class="muted-cell">{{ partner.phone or '-' }}</td>
+                            <td class="muted-cell">
+                                {{ partner.phone or '-' }}
+                                {% if partner.phone2 %}<br><small class="text-muted">{{ partner.phone2 }}</small>{% endif %}
+                            </td>
                             <td class="muted-cell" style="max-width:180px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="{{ partner.address or '' }}">
                                 {{ partner.address or '-' }}
                                 {% if partner.region %}<br><small class="text-muted">{{ partner.region }}</small>{% endif %}
@@ -523,7 +514,29 @@
     </div>
 </div>
 
-<!-- Kontragent tahrirlash modal -->
+<!-- Kontragent tahrirlash modal — kompakt ko'rinish -->
+<style>
+    #editPartnerModal .modal-header { padding: .5rem 1rem; }
+    #editPartnerModal .modal-header .modal-title { font-size: 1rem; font-weight: 600; }
+    #editPartnerModal .modal-body { padding: .75rem 1rem; }
+    #editPartnerModal .modal-footer { padding: .5rem 1rem; }
+    #editPartnerModal .form-label { font-size: .75rem; margin-bottom: .15rem; color: #5a6268; font-weight: 500; }
+    #editPartnerModal .form-control, #editPartnerModal .form-select {
+        padding: .3rem .55rem; font-size: .85rem; border-radius: 6px;
+    }
+    #editPartnerModal textarea.form-control { font-size: .85rem; }
+    #editPartnerModal .row.g-3 { --bs-gutter-x: .75rem; --bs-gutter-y: .5rem; }
+    #editPartnerModal .accordion-button { padding: .5rem .75rem; font-size: .85rem; }
+    #editPartnerModal .accordion-body { padding: .5rem .75rem; }
+    #editPartnerModal .btn-sm { font-size: .8rem; padding: .25rem .6rem; }
+    #editPartnerModal small.text-muted { font-size: .72rem; }
+    #editPartnerModal .agent-block { padding: .5rem !important; }
+    #editPartnerModal .agent-block .form-label { font-size: .68rem; }
+    #editPartnerModal .day-btn { font-size: .75rem !important; padding: .15rem .45rem !important; }
+    #editPartnerModal #editPartnerPhotoPreview { width: 64px !important; height: 64px !important; }
+    #editPartnerModal #editPartnerPhotoPreview i { font-size: 24px !important; }
+    #editPartnerModal .photo-block { margin-bottom: .75rem !important; }
+</style>
 <div class="modal fade" id="editPartnerModal" tabindex="-1">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">
@@ -533,12 +546,12 @@
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <!-- Photo Upload -->
-                    <div class="mb-4 text-center">
+                    <!-- Photo Upload (kompakt) -->
+                    <div class="photo-block text-center">
                         <div id="editPartnerPhotoPreview"
-                            style="width: 100px; height: 100px; background: #f0f0f0; border-radius: 10px; margin: 0 auto; display: flex; align-items: center; justify-content: center; cursor: pointer;"
+                            style="background: #f0f0f0; border-radius: 8px; margin: 0 auto; display: flex; align-items: center; justify-content: center; cursor: pointer;"
                             onclick="document.getElementById('editPartnerPhoto').click()">
-                            <i class="bi bi-camera" style="font-size: 40px; color: #999;"></i>
+                            <i class="bi bi-camera" style="color: #999;"></i>
                         </div>
                         <input type="file" id="editPartnerPhoto" name="photo" accept="image/*" style="display: none;"
                             onchange="previewEditPartnerPhoto(event)">
@@ -690,15 +703,57 @@
                             </select>
                         </div>
 
-                        <!-- Agent -->
-                        <div class="col-md-4">
-                            <label class="form-label">Agent</label>
-                            <select class="form-select" name="agent_id" id="edit_agent_id">
-                                <option value="">— Biriktirilmagan —</option>
-                                {% for a in agents %}
-                                <option value="{{ a.id }}">{{ a.full_name }} ({{ a.code }})</option>
-                                {% endfor %}
-                            </select>
+                        <!-- Agentlar (asosiy + qo'shimcha) — Sales Doctor stili -->
+                        <div class="col-md-12">
+                            <label class="form-label">Agentlar <small class="text-muted">— birinchi agent asosiy. Har biri uchun alohida tashrif kunlari.</small></label>
+                            <div id="editAgentsContainer"></div>
+                            <button type="button" id="editAddAgentBtn" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-plus-circle"></i> Agent qo'shish
+                            </button>
+                            <!-- Agent bloki template (kompakt, 1-qator UI) -->
+                            <template id="agentBlockTemplate">
+                                <div class="agent-block d-flex align-items-end gap-2 p-2 mb-2 rounded" style="background:#f8f9fa;border-left:3px solid #0d6efd;">
+                                    <div style="flex:0 0 auto;min-width:70px;">
+                                        <label class="form-label small mb-1 text-muted">№</label>
+                                        <div><span class="badge bg-primary agent-position-label">Asosiy</span></div>
+                                    </div>
+                                    <div style="flex:1 1 0;min-width:140px;">
+                                        <label class="form-label small mb-1 text-muted">Agent</label>
+                                        <select name="agent_ids" class="form-select form-select-sm agent-select" required>
+                                            <option value="">— Tanlang —</option>
+                                            {% for a in agents %}
+                                            <option value="{{ a.id }}">{{ a.full_name }} ({{ a.code }})</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div style="flex:0 0 auto;min-width:130px;">
+                                        <label class="form-label small mb-1 text-muted">Tashrif turi</label>
+                                        <select name="visit_types" class="form-select form-select-sm">
+                                            <option value="weekly">Har hafta</option>
+                                            <option value="biweekly">Har 2 hafta</option>
+                                            <option value="monthly">Oyiga 1 marta</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex:0 0 auto;">
+                                        <label class="form-label small mb-1 text-muted">Kunlar</label>
+                                        <div class="btn-group btn-group-sm visit-days-group d-flex" role="group">
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="1" style="padding:.15rem .5rem;">Du</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="2" style="padding:.15rem .5rem;">Se</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="3" style="padding:.15rem .5rem;">Ch</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="4" style="padding:.15rem .5rem;">Pa</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="5" style="padding:.15rem .5rem;">Ju</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="6" style="padding:.15rem .5rem;">Sh</button>
+                                            <button type="button" class="btn btn-outline-secondary day-btn" data-day="0" style="padding:.15rem .5rem;">Yak</button>
+                                        </div>
+                                        <input type="hidden" name="visit_days_csv" class="visit-days-csv" value="">
+                                    </div>
+                                    <div style="flex:0 0 auto;">
+                                        <button type="button" class="btn btn-sm btn-light text-danger" data-remove-agent-block title="O'chirish" style="padding:.25rem .5rem;">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
 
                         <!-- Financial -->
@@ -960,7 +1015,19 @@
                 document.getElementById('edit_credit_limit').value = p.credit_limit || 0;
                 document.getElementById('edit_discount_percent').value = p.discount_percent || 0;
                 document.getElementById('edit_price_type_id').value = p.price_type_id != null ? p.price_type_id : '';
-                document.getElementById('edit_agent_id').value = p.agent_id || '';
+                // Agentlar bloklarini to'ldirish (asosiy + qo'shimchalar)
+                var agentsContainer = document.getElementById('editAgentsContainer');
+                if (agentsContainer) {
+                    while (agentsContainer.firstChild) agentsContainer.removeChild(agentsContainer.firstChild);
+                    var agentsArr = (p.agents && p.agents.length > 0) ? p.agents : [{ agent_id: p.agent_id || '', visit_type: 'weekly', visit_days: (p.visit_day != null ? String(p.visit_day) : '') }];
+                    agentsArr.forEach(function(a) {
+                        window.addAgentBlock(a);
+                    });
+                    // Agar hech narsa qo'shilmagan bo'lsa, bitta bo'sh blok
+                    if (agentsContainer.querySelectorAll('.agent-block').length === 0) {
+                        window.addAgentBlock(null);
+                    }
+                }
                 document.getElementById('edit_legal_name').value = p.legal_name || '';
                 document.getElementById('edit_contact_person').value = p.contact_person || '';
                 document.getElementById('edit_phone2').value = p.phone2 || '';
@@ -1103,6 +1170,98 @@
             maximumAge: 0
         });
     }
+
+    // Agentlar bloki (asosiy + qo'shimcha) — kompakt UI
+    function _setDayActive(btn, on) {
+        if (on) {
+            btn.classList.remove('btn-outline-secondary');
+            btn.classList.add('btn-primary');
+            btn.dataset.active = '1';
+        } else {
+            btn.classList.add('btn-outline-secondary');
+            btn.classList.remove('btn-primary');
+            btn.dataset.active = '';
+        }
+    }
+
+    function _syncBlockCsv(block) {
+        var days = [];
+        block.querySelectorAll('.day-btn').forEach(function(b) {
+            if (b.dataset.active === '1') days.push(b.dataset.day);
+        });
+        var hidden = block.querySelector('.visit-days-csv');
+        if (hidden) hidden.value = days.join(',');
+    }
+
+    window.refreshAgentBlockLabels = function() {
+        var container = document.getElementById('editAgentsContainer');
+        if (!container) return;
+        var blocks = container.querySelectorAll('.agent-block');
+        blocks.forEach(function(b, i) {
+            var badge = b.querySelector('.agent-position-label');
+            if (badge) {
+                badge.textContent = i === 0 ? 'Asosiy' : '#' + (i + 1);
+                badge.className = 'badge agent-position-label ' + (i === 0 ? 'bg-success' : 'bg-secondary');
+            }
+            // Birinchi blok chap chegarasi yashil, qolganlari ko'k
+            b.style.borderLeftColor = i === 0 ? '#198754' : '#6c757d';
+            var rmBtn = b.querySelector('[data-remove-agent-block]');
+            if (rmBtn) {
+                rmBtn.disabled = (blocks.length === 1 && i === 0);
+                rmBtn.style.opacity = rmBtn.disabled ? '0.3' : '1';
+            }
+        });
+    };
+
+    window.addAgentBlock = function(data) {
+        var container = document.getElementById('editAgentsContainer');
+        var tpl = document.getElementById('agentBlockTemplate');
+        if (!container || !tpl) return null;
+        var clone = tpl.content.firstElementChild.cloneNode(true);
+        container.appendChild(clone);
+        if (data) {
+            var sel = clone.querySelector('.agent-select');
+            if (sel) sel.value = data.agent_id || '';
+            var typeSel = clone.querySelector('select[name="visit_types"]');
+            if (typeSel) typeSel.value = data.visit_type || 'weekly';
+            var daysCsv = data.visit_days || '';
+            var daysSet = new Set(daysCsv.split(',').map(function(s) { return s.trim(); }).filter(Boolean));
+            clone.querySelectorAll('.day-btn').forEach(function(btn) {
+                _setDayActive(btn, daysSet.has(btn.dataset.day));
+            });
+            _syncBlockCsv(clone);
+        }
+        window.refreshAgentBlockLabels();
+        return clone;
+    };
+
+    (function initAgentBlocks() {
+        var addBtn = document.getElementById('editAddAgentBtn');
+        var container = document.getElementById('editAgentsContainer');
+        if (!addBtn || !container) return;
+        addBtn.addEventListener('click', function() { window.addAgentBlock(null); });
+
+        container.addEventListener('click', function(e) {
+            // Day-btn toggle
+            var dayBtn = e.target.closest('.day-btn');
+            if (dayBtn) {
+                e.preventDefault();
+                _setDayActive(dayBtn, dayBtn.dataset.active !== '1');
+                _syncBlockCsv(dayBtn.closest('.agent-block'));
+                return;
+            }
+            // Blok o'chirish
+            var rmBtn = e.target.closest('[data-remove-agent-block]');
+            if (rmBtn) {
+                var block = rmBtn.closest('.agent-block');
+                if (!block) return;
+                var blocks = container.querySelectorAll('.agent-block');
+                if (blocks.length <= 1) return;
+                block.remove();
+                window.refreshAgentBlockLabels();
+            }
+        });
+    })();
 
     // Edit partner photo preview
     function previewEditPartnerPhoto(event) {

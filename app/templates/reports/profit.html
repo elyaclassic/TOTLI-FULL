@@ -117,7 +117,13 @@
                             <td class="text-end text-danger">{{ "{:,.0f}".format(exp.amount) }}</td>
                         </tr>
                         {% endfor %}
-                        {% if not salary_total and not expense_list %}
+                        {% if grand_discount and grand_discount > 0 %}
+                        <tr>
+                            <td class="ps-4">Savdo chegirmasi <span class="text-muted small">(skidka)</span></td>
+                            <td class="text-end text-danger">{{ "{:,.0f}".format(grand_discount) }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if not salary_total and not expense_list and not (grand_discount and grand_discount > 0) %}
                         <tr>
                             <td class="ps-4 text-muted" colspan="2">Davrda operatsion xarajat yo'q</td>
                         </tr>

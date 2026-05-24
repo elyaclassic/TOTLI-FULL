@@ -59,7 +59,7 @@
     <div class="receipt-logo">
         <div class="brand">Totli Holva</div>
         <div class="sweets">SWEETS</div>
-        <div class="doc-title">Z-HISOBOT</div>
+        <div class="doc-title">{{ snap.doc_title or 'Z-HISOBOT' }}</div>
     </div>
 
     <div class="z-id">{{ snap.z_id or '—' }}</div>
@@ -81,20 +81,15 @@
     <div class="row net-row"><span>NET</span><span class="right">{{ "{:+,.0f}".format(snap.net_total or 0) }}</span></div>
 
     <div class="section-title">To'lov turi</div>
-    {% if snap.payment_breakdown %}
-        {% for b in snap.payment_breakdown %}
-        <div class="row"><span>{{ (b.type or '—').upper() }} ({{ b.count or 0 }})</span><span class="right">{{ "{:,.0f}".format(b.sum or 0) }}</span></div>
-        {% endfor %}
-    {% else %}
-        <div class="receipt-line center">—</div>
-    {% endif %}
+    {% for ptype in ['naqd', 'plastik', 'terminal', 'qarz'] %}
+        {% set b = (snap.payment_breakdown or []) | selectattr('type', 'equalto', ptype) | first %}
+        <div class="row"><span>{{ ptype.upper() }} ({{ b.count if b else 0 }})</span><span class="right">{{ "{:,.0f}".format(b.sum if b else 0) }}</span></div>
+    {% endfor %}
 
     <div class="section-title">Naqd kassa hisoboti</div>
-    {% if (snap.previous_cash_remaining or 0) > 0 %}
-    <div class="row"><span>Oldingi qoldiq</span><span class="right">{{ "{:,.0f}".format(snap.previous_cash_remaining) }}</span></div>
+    <div class="row"><span>Oldingi qoldiq</span><span class="right">{{ "{:,.0f}".format(snap.previous_cash_remaining or 0) }}</span></div>
     {% if snap.previous_z_id %}
     <div class="indent">({{ snap.previous_z_id }})</div>
-    {% endif %}
     {% endif %}
 
     <div class="row"><strong>Sof naqd savdo:</strong><span></span></div>
@@ -104,25 +99,21 @@
     {% endif %}
     <div class="row"><span>JAMI naqd savdo</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_sales_total or 0) }}</strong></span></div>
 
-    {% if (snap.cash_expenses_total or 0) > 0 %}
     <div class="row"><strong>Naqd harajat:</strong><span></span></div>
     {% for e in snap.expenses_made or [] %}
         {% if (e.payment_type or 'naqd') == 'naqd' %}
         <div class="row indent"><span>− {{ (e.description or '—')[:18] }}</span><span class="right">{{ "{:,.0f}".format(e.amount or 0) }}</span></div>
         {% endif %}
     {% endfor %}
-    <div class="row"><span>JAMI harajat</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_expenses_total) }}</strong></span></div>
-    {% endif %}
+    <div class="row"><span>JAMI harajat</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_expenses_total or 0) }}</strong></span></div>
 
-    {% if (snap.cash_payments_out or 0) > 0 %}
     <div class="row"><strong>Naqd kontragentga:</strong><span></span></div>
     {% for p in snap.payments_made or [] %}
         {% if (p.payment_type or 'naqd') == 'naqd' %}
         <div class="row indent"><span>− {{ (p.partner_name or '—')[:18] }}</span><span class="right">{{ "{:,.0f}".format(p.amount or 0) }}</span></div>
         {% endif %}
     {% endfor %}
-    <div class="row"><span>JAMI to'lov</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_payments_out) }}</strong></span></div>
-    {% endif %}
+    <div class="row"><span>JAMI to'lov</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_payments_out or 0) }}</strong></span></div>
 
     <div class="row net-row"><span>QOLDIQ NAQD</span><span class="right">{{ "{:,.0f}".format(snap.cash_remaining or 0) }}</span></div>
     <div class="receipt-line center" style="font-size:9px; color:#666;">

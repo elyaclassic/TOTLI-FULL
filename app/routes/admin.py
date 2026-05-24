@@ -166,3 +166,102 @@ async def admin_reopen_period(
     db.delete(cp)
     db.commit()
     return RedirectResponse(url="/admin/periods?reopened=" + period, status_code=303)
+
+
+# ==========================================
+# VALYUTA KURSI CRUD (B2)
+# ==========================================
+
+@router.get("/admin/exchange-rates", response_class=HTMLResponse)
+async def admin_exchange_rates(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Kurs tarixi ro'yxati + yangi kurs qo'shish formasi."""
+    from app.models.database import ExchangeRate
+    from app.services.currency_service import get_rate
+    from datetime import date as _date
+    rates = db.query(ExchangeRate).order_by(ExchangeRate.effective_date.desc(), ExchangeRate.id.desc()).limit(200).all()
+    # Joriy kurs (bugungi)
+    today = _date.today()
+    current_usd = get_rate(db, "USD", "UZS", today)
+    return templates.TemplateResponse("admin/exchange_rates.html", {
+        "request": request,
+        "current_user": current_user,
+        "rates": rates,
+        "current_usd": current_usd,
+        "today_iso": today.isoformat(),
+        "page_title": "Valyuta kursi",
+    })
+
+
+@router.post("/admin/exchange-rates/create")
+async def admin_exchange_rate_create(
+    request: Request,
+    from_currency: str = Form(...),
+    to_currency: str = Form(...),
+    rate: float = Form(...),
+    effective_date: str = Form(...),
+    note: str = Form(""),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Yangi kurs qo'shish."""
+    from app.models.database import ExchangeRate
+    from datetime import datetime as _dt
+    fc = (from_currency or "").upper().strip()[:3]
+    tc = (to_currency or "").upper().strip()[:3]
+    if not fc or not tc or fc == tc or rate <= 0:
+        return RedirectResponse(url="/admin/exchange-rates?error=invalid", status_code=303)
+    try:
+        eff = _dt.strptime(effective_date, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return RedirectResponse(url="/admin/exchange-rates?error=invalid_date", status_code=303)
+    r = ExchangeRate(
+        from_currency=fc, to_currency=tc, rate=float(rate),
+        effective_date=eff, note=(note or "")[:300],
+        user_id=current_user.id,
+    )
+    db.add(r)
+    db.commit()
+    logger.info("Kurs qo'shildi: %s/%s = %s @ %s (user=%s)", fc, tc, rate, eff, current_user.username)
+    return RedirectResponse(url="/admin/exchange-rates?info=added", status_code=303)
+
+
+@router.get("/api/currency/rate")
+async def api_currency_rate(
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """JSON API — JS frontend uchun kursni olish. /api/currency/rate?from=USD&to=UZS"""
+    from app.services.currency_service import get_rate
+    from datetime import datetime as _dt
+    q = request.query_params
+    from_curr = (q.get("from") or "USD").upper()
+    to_curr = (q.get("to") or "UZS").upper()
+    on_date = q.get("on_date")
+    target = None
+    if on_date:
+        try:
+            target = _dt.strptime(on_date[:10], "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            target = None
+    rate = get_rate(db, from_curr, to_curr, target)
+    return JSONResponse({"from": from_curr, "to": to_curr, "rate": rate})
+
+
+@router.post("/admin/exchange-rates/delete/{rate_id}")
+async def admin_exchange_rate_delete(
+    rate_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Kursni o'chirish (xato kiritilgan bo'lsa)."""
+    from app.models.database import ExchangeRate
+    r = db.query(ExchangeRate).filter(ExchangeRate.id == rate_id).first()
+    if r:
+        db.delete(r)
+        db.commit()
+        logger.info("Kurs o'chirildi: id=%s %s/%s=%s (user=%s)", rate_id, r.from_currency, r.to_currency, r.rate, current_user.username)
+    return RedirectResponse(url="/admin/exchange-rates?info=deleted", status_code=303)

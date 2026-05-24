@@ -68,15 +68,34 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
             except ValueError:
                 pass
         else:
-            # Default: kelajakdagi sanali delivery'lar ko'rinmaydi (overdue va bugungi qoladi).
-            # planned_date NULL bo'lsa eski (legacy) yozuv — qoldiramiz.
-            from datetime import date as _date
-            from sqlalchemy import or_
+            # Default ko'rinish: oxirgi 3 kun ichidagi aktivlar (pending/picked_up/in_progress)
+            # + bugungi tugatilganlar (delivered/cancelled/failed). Eski yopilmagan
+            # yetkazishlar avtomatik yashiriladi — DBda saqlanadi, lekin haydovchi UI'sini
+            # to'ldirib yurmaydi. Aniq sanadagi tarixni ko'rish uchun ?date= ishlatiladi.
+            from datetime import date as _date, timedelta
+            from sqlalchemy import or_, and_
             today = _date.today()
+            active_cutoff = today - timedelta(days=2)  # 3 kunlik oyna: today, -1, -2
             q = q.filter(
                 or_(
-                    Delivery.planned_date == None,
-                    sa_func.date(Delivery.planned_date) <= today,
+                    and_(
+                        Delivery.status.in_(["pending", "picked_up", "in_progress"]),
+                        or_(
+                            and_(
+                                Delivery.planned_date != None,
+                                sa_func.date(Delivery.planned_date) >= active_cutoff,
+                                sa_func.date(Delivery.planned_date) <= today,
+                            ),
+                            and_(
+                                Delivery.planned_date == None,
+                                sa_func.date(Delivery.created_at) >= active_cutoff,
+                            ),
+                        ),
+                    ),
+                    and_(
+                        Delivery.status.in_(["delivered", "cancelled", "failed"]),
+                        sa_func.date(Delivery.created_at) == today,
+                    ),
                 )
             )
         deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
