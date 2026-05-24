@@ -38,11 +38,29 @@
         </div>
     </div>
 
+    <!-- Sana filtri -->
+    <form method="get" class="row g-2 mb-3 align-items-end" style="max-width:720px;">
+        <div class="col-auto">
+            <label class="form-label small mb-1">Dan</label>
+            <input type="date" name="date_from" value="{{ filter_date_from or '' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Gacha</label>
+            <input type="date" name="date_to" value="{{ filter_date_to or '' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filtr</button>
+            {% if filter_date_from or filter_date_to %}
+            <a href="/finance/harajatlar" class="btn btn-sm btn-outline-secondary"><i class="bi bi-x-circle"></i> Tozalash</a>
+            {% endif %}
+        </div>
+    </form>
+
     <!-- Mini stats -->
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="mini-stat">
             <div class="num text-danger">{{ "{:,.0f}".format(stats.today_expense|default(0)) }}</div>
-            <div class="lbl">Bugungi chiqim (so'm)</div>
+            <div class="lbl">Bugungi chiqim (so'm)<br><small class="text-muted" style="font-size:10px;">audit moslash hisobga olinmaydi</small></div>
         </div>
     </div>
 

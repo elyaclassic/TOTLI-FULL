@@ -284,7 +284,7 @@ async def finance_harajatlar(
     ensure_payments_status_column(db)
     cash_registers = db.query(CashRegister).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
-    expense_docs = (
+    expense_docs_q = (
         db.query(ExpenseDoc)
         .filter(ExpenseDoc.status != "deleted")
         .options(
@@ -292,10 +292,22 @@ async def finance_harajatlar(
             joinedload(ExpenseDoc.direction),
             joinedload(ExpenseDoc.department),
         )
-        .order_by(ExpenseDoc.date.desc())
-        .limit(100)
-        .all()
     )
+    _df_main = str(date_from or "").strip()[:10] if date_from else ""
+    _dt_main = str(date_to or "").strip()[:10] if date_to else ""
+    if _df_main:
+        try:
+            df_x = datetime.strptime(_df_main, "%Y-%m-%d").date()
+            expense_docs_q = expense_docs_q.filter(ExpenseDoc.date >= datetime.combine(df_x, datetime.min.time()))
+        except ValueError:
+            pass
+    if _dt_main:
+        try:
+            dt_x = datetime.strptime(_dt_main, "%Y-%m-%d").date()
+            expense_docs_q = expense_docs_q.filter(ExpenseDoc.date < datetime.combine(dt_x + timedelta(days=1), datetime.min.time()))
+        except ValueError:
+            pass
+    expense_docs = expense_docs_q.order_by(ExpenseDoc.date.desc()).limit(100).all()
     purchases_with_expenses_q = (
         db.query(Purchase)
         .options(
@@ -463,15 +475,23 @@ async def finance_harajatlar(
     all_outflows.sort(key=lambda x: x["date"] or datetime.min, reverse=True)
     all_outflows = all_outflows[:200]
     today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+    # audit_correction — kassa balansini moslash, real harajat emas (istisno qilinadi)
     try:
         _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
         today_expense = db.query(Payment).filter(
             Payment.type == "expense",
             Payment.date >= today,
+            Payment.date < tomorrow,
+            or_(Payment.category != "audit_correction", Payment.category.is_(None)),
             _status_ok
         ).all()
     except OperationalError:
-        today_expense = db.query(Payment).filter(Payment.type == "expense", Payment.date >= today).all()
+        today_expense = db.query(Payment).filter(
+            Payment.type == "expense",
+            Payment.date >= today,
+            Payment.date < tomorrow,
+        ).all()
     stats = {
         "today_income": 0,
         "today_expense": sum(p.amount for p in today_expense),
