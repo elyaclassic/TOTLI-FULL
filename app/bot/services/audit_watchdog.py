@@ -674,12 +674,12 @@ def audit_digest():
             ExpenseDoc.status == "draft",
             ExpenseDoc.created_at < stale_cutoff,
         ).count()
-        # Bug 5 — waiting_production 24 soatdan ko'p kutgan orderlar
+        # Bug 5 — waiting_production 24 soatdan ko'p kutgan orderlar (manba bo'yicha)
         stale_wp_cutoff = now - timedelta(hours=24)
-        stale_wp = db.query(Order).filter(
+        stale_wp_rows = db.query(Order).filter(
             Order.status == "waiting_production",
             Order.created_at < stale_wp_cutoff,
-        ).count()
+        ).order_by(Order.created_at).all()
         stale_parts = []
         if stale_orders:
             stale_parts.append(f"sotuv: {stale_orders}")
@@ -692,11 +692,33 @@ def audit_digest():
                 f"<b>📄 {STALE_DRAFT_HOURS} soat+ tasdiqlanmagan draft:</b>\n• "
                 + ", ".join(stale_parts)
             )
-        if stale_wp:
-            sections.append(
-                f"<b>⏳ 24 soat+ ishlab chiqarish kutmoqda:</b> {stale_wp} ta sotuv\n"
-                f"  • Operator unutgan yoki recipe yo'q. /supervisor/agent-orders?status=waiting_production"
-            )
+        if stale_wp_rows:
+            # Manba bo'yicha guruh — to'g'ri sahifaga link berish uchun
+            by_src: Dict[str, list] = {}
+            for o in stale_wp_rows:
+                src = (o.source or "web").lower()
+                by_src.setdefault(src, []).append(o)
+            src_links = {
+                "agent": "/supervisor/agent-orders?status=waiting_production",
+                "web":   "/sales/list?status=waiting_production",
+                "pos":   "/sales/list?status=waiting_production",
+            }
+            blocks = []
+            for src, rows in by_src.items():
+                link = src_links.get(src, "/sales/list?status=waiting_production")
+                lines = [f"<b>⏳ 24 soat+ kutmoqda ({src}, {len(rows)} ta):</b>"]
+                for o in rows[:8]:
+                    age_days = (now - o.created_at).days if o.created_at else 0
+                    partner_name = "—"
+                    if o.partner_id:
+                        p = db.query(Partner).filter(Partner.id == o.partner_id).first()
+                        partner_name = p.name if p else f"#{o.partner_id}"
+                    lines.append(f"• <b>{o.number}</b> ({age_days} kun) — {partner_name} — {fmt(o.total or 0)}")
+                if len(rows) > 8:
+                    lines.append(f"  ... va yana {len(rows) - 8} ta")
+                lines.append(f"  → {link}")
+                blocks.append("\n".join(lines))
+            sections.append("\n\n".join(blocks))
 
         # --- Manfiy kassa balanslari ---
         try:
