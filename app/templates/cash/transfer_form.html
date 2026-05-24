@@ -94,7 +94,7 @@
                   <div class="row g-2">
                     <div class="col-md-6">
                       <label class="form-label small"><span id="rateLabel">Kurs (1 USD = ? UZS)</span></label>
-                      <input type="number" name="exchange_rate" id="rateInp" class="form-control" step="0.000001" min="0" placeholder="Avtomatik to'ldiriladi">
+                      <input type="number" name="exchange_rate" id="rateInp" class="form-control" step="0.01" min="0" placeholder="Avtomatik to'ldiriladi">
                       <small class="text-muted">Bo'sh qoldirsangiz, bugungi kurs avtomatik qo'llanadi.</small>
                     </div>
                     <div class="col-md-6">
@@ -186,7 +186,13 @@
                 var a = parseFloat(amountInp.value) || 0;
                 var r = parseFloat(rateInp.value) || 0;
                 if (a > 0 && r > 0) {
-                    toAmountInp.value = Math.round(a * r * 100) / 100;
+                    var from = getCurr(fromSel);
+                    // Kurs har doim foreign/UZS direction (masalan 1 USD = 12000 UZS)
+                    if (from === 'UZS') {
+                        toAmountInp.value = Math.round(a / r * 100) / 100;
+                    } else {
+                        toAmountInp.value = Math.round(a * r * 100) / 100;
+                    }
                 }
             }
             function refreshCurrencyUI() {
@@ -199,18 +205,29 @@
                     if (toAmountInp) toAmountInp.value = '';
                     return;
                 }
-                // Cross-currency
                 if (crossBlock) crossBlock.style.display = 'block';
                 if (fromBadge) fromBadge.textContent = from;
                 if (toBadge) toBadge.textContent = to;
                 if (fromLabel2) fromLabel2.textContent = from;
                 if (toLabel2) toLabel2.textContent = to;
                 if (toLabel3) toLabel3.textContent = to;
-                // Avtomatik kurs olish
-                fetchRate(from, to).then(function(rate) {
-                    if (rate && rateInp && !rateInp.value) {
-                        rateInp.value = rate;
-                        recalcToAmount();
+                var foreignCurr = (from === 'UZS') ? to : from;
+                var rateLabel = document.getElementById('rateLabel');
+                fetchRate(foreignCurr, 'UZS').then(function(rate) {
+                    if (rate) {
+                        if (rateLabel) {
+                            var rateStr = (rate % 1 === 0) ? rate.toLocaleString('ru-RU') : rate.toFixed(2);
+                            rateLabel.textContent = 'Kurs (1 ' + foreignCurr + ' = ' + rateStr + ' UZS)';
+                        }
+                        if (rateInp) {
+                            rateInp.placeholder = String(rate);
+                            if (!rateInp.value) {
+                                rateInp.value = rate;
+                                recalcToAmount();
+                            }
+                        }
+                    } else if (rateLabel) {
+                        rateLabel.textContent = 'Kurs (1 ' + foreignCurr + ' = ? UZS) — kurs topilmadi';
                     }
                 });
             }
