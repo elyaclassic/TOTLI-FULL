@@ -56,11 +56,19 @@
         </div>
     </form>
 
-    <!-- Mini stats -->
+    <!-- Mini stats — 2 raqam: harajat hujjati va boshqa chiqimlar -->
     <div class="d-flex gap-3 mb-3 flex-wrap">
         <div class="mini-stat">
+            <div class="num text-danger">{{ "{:,.0f}".format(stats.today_expense_docs|default(0)) }}</div>
+            <div class="lbl">Harajat hujjati (HD)<br><small class="text-muted" style="font-size:10px;">{% if filter_date_from or filter_date_to %}filterga ko'ra{% else %}bugun{% endif %}</small></div>
+        </div>
+        <div class="mini-stat">
+            <div class="num" style="color:#f59f00;">{{ "{:,.0f}".format(stats.today_expense_other|default(0)) }}</div>
+            <div class="lbl">Boshqa chiqimlar (PAY)<br><small class="text-muted" style="font-size:10px;">ad-hoc, oylik, avans, xarid va h.k.</small></div>
+        </div>
+        <div class="mini-stat">
             <div class="num text-danger">{{ "{:,.0f}".format(stats.today_expense|default(0)) }}</div>
-            <div class="lbl">Bugungi chiqim (so'm)<br><small class="text-muted" style="font-size:10px;">audit moslash hisobga olinmaydi</small></div>
+            <div class="lbl">JAMI chiqim (so'm)<br><small class="text-muted" style="font-size:10px;">audit moslash hisobga olinmaydi</small></div>
         </div>
     </div>
 
@@ -131,19 +139,6 @@
                 </tbody>
             </table>
         </div>
-    </div>
-
-    <!-- Date filter card -->
-    <div class="filter-card mb-3">
-        <form method="get" action="/finance/harajatlar" class="d-flex align-items-center gap-2 flex-wrap">
-            <i class="bi bi-funnel text-muted"></i>
-            <span class="small fw-semibold text-muted me-1">Sana bo'yicha filtr:</span>
-            <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto;" value="{{ filter_date_from or '' }}" title="Sana dan">
-            <span class="small text-muted">—</span>
-            <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto;" value="{{ filter_date_to or '' }}" title="Sana gacha">
-            <button type="submit" class="top-btn btn btn-primary"><i class="bi bi-search"></i> Qidirish</button>
-            <a href="/finance/harajatlar" class="top-btn btn btn-outline-secondary">Tozalash</a>
-        </form>
     </div>
 
     <!-- Barcha chiqimlar -->

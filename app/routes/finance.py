@@ -474,27 +474,55 @@ async def finance_harajatlar(
         })
     all_outflows.sort(key=lambda x: x["date"] or datetime.min, reverse=True)
     all_outflows = all_outflows[:200]
-    today = datetime.now().date()
-    tomorrow = today + timedelta(days=1)
+    # Stat oralig'i: filter bo'lsa filter, aks holda bugun
+    if _df_main:
+        try:
+            stat_from = datetime.strptime(_df_main, "%Y-%m-%d").date()
+        except ValueError:
+            stat_from = datetime.now().date()
+    else:
+        stat_from = datetime.now().date()
+    if _dt_main:
+        try:
+            stat_to_excl = datetime.strptime(_dt_main, "%Y-%m-%d").date() + timedelta(days=1)
+        except ValueError:
+            stat_to_excl = stat_from + timedelta(days=1)
+    else:
+        stat_to_excl = stat_from + timedelta(days=1)
+
     # audit_correction — kassa balansini moslash, real harajat emas (istisno qilinadi)
     try:
         _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
-        today_expense = db.query(Payment).filter(
+        period_payments = db.query(Payment).filter(
             Payment.type == "expense",
-            Payment.date >= today,
-            Payment.date < tomorrow,
+            Payment.date >= stat_from,
+            Payment.date < stat_to_excl,
             or_(Payment.category != "audit_correction", Payment.category.is_(None)),
             _status_ok
         ).all()
     except OperationalError:
-        today_expense = db.query(Payment).filter(
+        period_payments = db.query(Payment).filter(
             Payment.type == "expense",
-            Payment.date >= today,
-            Payment.date < tomorrow,
+            Payment.date >= stat_from,
+            Payment.date < stat_to_excl,
         ).all()
+    # Payment'lardan qaysilari ExpenseDoc bilan bog'langan (HD-...)
+    payment_ids = [p.id for p in period_payments if p.id]
+    hd_payment_ids = set()
+    if payment_ids:
+        for row in db.query(ExpenseDoc.payment_id).filter(
+            ExpenseDoc.payment_id.in_(payment_ids),
+            ExpenseDoc.status != "deleted",
+        ).all():
+            if row[0]:
+                hd_payment_ids.add(row[0])
+    docs_sum = sum(float(p.amount or 0) for p in period_payments if p.id in hd_payment_ids)
+    other_sum = sum(float(p.amount or 0) for p in period_payments if p.id not in hd_payment_ids)
     stats = {
         "today_income": 0,
-        "today_expense": sum(p.amount for p in today_expense),
+        "today_expense": docs_sum + other_sum,
+        "today_expense_docs": docs_sum,
+        "today_expense_other": other_sum,
     }
     return templates.TemplateResponse("finance/harajatlar.html", {
         "request": request,
