@@ -222,11 +222,13 @@ async def finance(
         for row in cq:
             stats_map.setdefault(row.cash_register_id, {"income": 0.0, "expense": 0.0})
             stats_map[row.cash_register_id][row.type] = float(row.total or 0)
+        as_of = dt_parsed or df_parsed
         for cash in cash_registers:
             s = stats_map.get(cash.id, {"income": 0.0, "expense": 0.0})
+            bal_at_end, _, _ = _cash_balance_formula_at(db, cash.id, as_of)
             cash_data.append({
                 "cash": cash,
-                "balance": s["income"] - s["expense"],
+                "balance": bal_at_end,
                 "income": s["income"],
                 "expense": s["expense"],
                 "is_filtered": True,
