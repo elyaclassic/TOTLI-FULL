@@ -200,12 +200,12 @@
                             <th class="text-center" style="width:40px;">
                                 <input type="checkbox" class="form-check-input" id="advanceSelectAll" title="Barchasini tanlash">
                             </th>
-                            <th>Sana</th>
-                            <th>Xodim</th>
-                            <th>Summa (so'm)</th>
-                            <th>Kassa</th>
-                            <th>Izoh</th>
-                            <th>Holat</th>
+                            <th class="sortable" data-type="num">Sana <span class="sort-ind"></span></th>
+                            <th class="sortable" data-type="str">Xodim <span class="sort-ind"></span></th>
+                            <th class="sortable" data-type="num">Summa (so'm) <span class="sort-ind"></span></th>
+                            <th class="sortable" data-type="str">Kassa <span class="sort-ind"></span></th>
+                            <th class="sortable" data-type="str">Izoh <span class="sort-ind"></span></th>
+                            <th class="sortable" data-type="num">Holat <span class="sort-ind"></span></th>
                             <th style="width:120px;">Amallar</th>
                         </tr>
                     </thead>
@@ -215,15 +215,15 @@
                             <td class="text-center">
                                 <input type="checkbox" form="advancesBulkForm" name="advance_ids" value="{{ a.id }}" class="form-check-input advance-row-cb">
                             </td>
-                            <td class="muted-cell">{{ a.advance_date.strftime('%d.%m.%Y') }}</td>
-                            <td>
+                            <td class="muted-cell" data-sort="{{ a.advance_date.strftime('%Y%m%d') }}">{{ a.advance_date.strftime('%d.%m.%Y') }}</td>
+                            <td data-sort="{{ (a.employee.full_name or '')|lower }}">
                                 {{ a.employee.full_name }}
                                 <span class="muted-cell">({{ a.employee.code }})</span>
                             </td>
-                            <td class="sum-cell">{{ "{:,.0f}".format(a.amount) }}</td>
-                            <td class="muted-cell">{% if a.cash_register %}{{ a.cash_register.name or a.cash_register.code or '-' }}{% else %}-{% endif %}</td>
-                            <td class="muted-cell">{{ a.note or '-' }}</td>
-                            <td>
+                            <td class="sum-cell" data-sort="{{ a.amount }}">{{ "{:,.0f}".format(a.amount) }}</td>
+                            <td class="muted-cell" data-sort="{% if a.cash_register %}{{ (a.cash_register.name or a.cash_register.code or '')|lower }}{% endif %}">{% if a.cash_register %}{{ a.cash_register.name or a.cash_register.code or '-' }}{% else %}-{% endif %}</td>
+                            <td class="muted-cell" data-sort="{{ (a.note or '')|lower }}">{{ a.note or '-' }}</td>
+                            <td data-sort="{{ 1 if a.confirmed_at else 0 }}">
                                 {% if a.confirmed_at %}
                                 <span class="badge-done">Tasdiqlangan</span>
                                 {% else %}
@@ -280,6 +280,53 @@
             var q = this.value.toLowerCase();
             table.querySelectorAll('tbody tr').forEach(function(row) {
                 row.style.display = row.textContent.toLowerCase().includes(q) ? '' : 'none';
+            });
+        });
+    }
+
+    // Ustunlar bo'yicha saralash
+    if (table) {
+        var ths = table.querySelectorAll('th.sortable');
+        var state = { idx: null, dir: 0 };
+        ths.forEach(function(th) {
+            th.style.cursor = 'pointer';
+            th.style.userSelect = 'none';
+            th.addEventListener('click', function() {
+                var colIdx = Array.prototype.indexOf.call(th.parentNode.children, th);
+                if (state.idx === colIdx) {
+                    state.dir = state.dir === 1 ? -1 : 1;
+                } else {
+                    state.idx = colIdx;
+                    state.dir = 1;
+                }
+                var type = th.getAttribute('data-type') || 'str';
+                var tbody = table.querySelector('tbody');
+                var rows = Array.prototype.filter.call(
+                    tbody.querySelectorAll('tr'),
+                    function(r) { return r.cells.length > 1; }
+                );
+                rows.sort(function(a, b) {
+                    var aCell = a.cells[colIdx];
+                    var bCell = b.cells[colIdx];
+                    if (!aCell || !bCell) return 0;
+                    var aVal = aCell.getAttribute('data-sort');
+                    var bVal = bCell.getAttribute('data-sort');
+                    if (aVal === null) aVal = aCell.textContent.trim();
+                    if (bVal === null) bVal = bCell.textContent.trim();
+                    if (type === 'num') {
+                        var aN = parseFloat(aVal) || 0;
+                        var bN = parseFloat(bVal) || 0;
+                        return (aN - bN) * state.dir;
+                    }
+                    return aVal.localeCompare(bVal, 'uz') * state.dir;
+                });
+                rows.forEach(function(r) { tbody.appendChild(r); });
+                ths.forEach(function(t) {
+                    var ind = t.querySelector('.sort-ind');
+                    if (ind) ind.textContent = '';
+                });
+                var ind = th.querySelector('.sort-ind');
+                if (ind) ind.textContent = state.dir === 1 ? ' ▲' : ' ▼';
             });
         });
     }
