@@ -1,0 +1,353 @@
+/*
+ * mobile-fixes.css — Mobil brauzer uchun tuzatishlar
+ * Faqat mobil (max-width: 767px) ga ta'sir qiladi.
+ * Desktop ko'rinishi o'zgarmaydi.
+ * 2026-05-16
+ */
+
+/* ================================================
+   1. GLOBAL — barcha input/select to'liq kenglik
+   ================================================ */
+@media (max-width: 767px) {
+
+    /* Barcha date va datetime inputlar */
+    input[type="date"],
+    input[type="datetime-local"],
+    input[type="time"] {
+        width: 100% !important;
+        min-width: auto !important;
+        max-width: 100% !important;
+    }
+
+    /* Barcha select inputlar */
+    select.form-select,
+    select.form-select-sm {
+        width: 100% !important;
+        min-width: auto !important;
+        max-width: 100% !important;
+    }
+
+    /* Fixed width inline style bilan yozilgan inputlar */
+    input.form-control[style*="width"],
+    input.form-control-sm[style*="width"],
+    select[style*="width"],
+    textarea[style*="width"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: auto !important;
+    }
+
+    /* Barcha flex-nowrap → mobilda wrap bo'lsin */
+    .flex-nowrap {
+        flex-wrap: wrap !important;
+    }
+
+    /* Filtr formasidagi d-flex — wrap bo'lsin */
+    .filter-card form,
+    .filter-card .d-flex,
+    form.d-flex,
+    .card-body > form.d-flex,
+    .card-body > .d-flex {
+        flex-wrap: wrap !important;
+    }
+
+    /* Filter forma ichidagi elementlar to'liq kenglik */
+    .filter-card form > *,
+    .filter-card .d-flex > *,
+    form.d-flex > input,
+    form.d-flex > select,
+    form.d-flex > .input-group,
+    form.d-flex > .btn,
+    form.d-flex > label,
+    form.d-flex > a.btn,
+    form.d-flex > div {
+        flex: 1 1 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* d-flex ichidagi input/select — min-width override */
+    .d-flex input,
+    .d-flex select,
+    .d-flex .form-control,
+    .d-flex .form-select {
+        min-width: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Inline style min-width lar — keng qamrov */
+    [style*="min-width:"],
+    [style*="min-width: "] {
+        min-width: 0 !important;
+    }
+
+    /* Inline style width: auto — to'liq kenglik */
+    select[style*="width:auto"],
+    select[style*="width: auto"],
+    input[style*="width:auto"],
+    input[style*="width: auto"] {
+        width: 100% !important;
+    }
+
+    /* col-md-* — mobilda to'liq kenglik */
+    .filter-card .row > [class*="col-md-"],
+    .filter-card .row > [class*="col-lg-"] {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+
+    /* Jadval min-width ni olib tashlaymiz */
+    .data-table .table,
+    .table {
+        min-width: auto !important;
+    }
+
+    /* Barcha jadvallar scroll bo'lsin */
+    .table-responsive {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Jadval o'ramagan bo'lsa ham scroll */
+    .card-body > .table,
+    .card-body > table {
+        display: block;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Tugma o'lchamlari — touch uchun */
+    .btn-act {
+        min-width: 44px !important;
+        min-height: 44px !important;
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 8px !important;
+        font-size: 1rem !important;
+    }
+
+    .btn-sm {
+        min-height: 40px !important;
+        padding: 8px 12px !important;
+        font-size: 0.875rem !important;
+    }
+
+    /* Tugma guruhlari — wrap bo'lsin */
+    .btn-group:not(.btn-group-radio) {
+        flex-wrap: wrap !important;
+        width: 100% !important;
+    }
+
+    .btn-group:not(.btn-group-radio) .btn {
+        flex: 1 1 auto !important;
+        min-height: 40px !important;
+    }
+
+    /* Page header — tugmalar pastga tushsin */
+    .page-header {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 8px !important;
+    }
+
+    .page-header .btn,
+    .page-header > a.btn {
+        width: 100% !important;
+        min-height: 44px !important;
+        font-size: 1rem !important;
+    }
+
+    /* Filtr tugmalari (status, type) */
+    .status-filter-btn,
+    .type-filter-btn {
+        min-height: 36px !important;
+        padding: 6px 10px !important;
+    }
+
+    /* Qidiruv input */
+    input[type="search"],
+    input[name="q"],
+    input[id*="search"],
+    input[id*="Search"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: auto !important;
+    }
+
+    /* max-width:320px va shunga o'xshash — override */
+    [style*="max-width: 320px"],
+    [style*="max-width:320px"],
+    [style*="max-width: 280px"],
+    [style*="max-width: 200px"],
+    [style*="max-width: 160px"] {
+        max-width: 100% !important;
+    }
+
+    /* Icon boxes scaling */
+    [style*="width:40px"][style*="height:40px"],
+    [style*="width: 40px"][style*="height: 40px"] {
+        width: 32px !important;
+        height: 32px !important;
+        min-width: 32px !important;
+    }
+}
+
+
+/* ================================================
+   2. ISHLAB CHIQARISH (production/orders.html)
+   ================================================ */
+@media (max-width: 767px) {
+
+    /* Karta harakatlar — tugmalar yetarli o'lcham */
+    .production-order-card .prod-actions .btn-sm,
+    .production-order-card .prod-actions .btn {
+        min-height: 44px !important;
+        padding: 8px 14px !important;
+        font-size: 0.9rem !important;
+        width: 100% !important;
+    }
+
+    .production-order-card .prod-actions .btn-act {
+        min-height: 44px !important;
+        min-width: 44px !important;
+        padding: 8px !important;
+        width: auto !important;
+    }
+
+    /* Select (uskuna, operator) — to'liq kenglik */
+    .production-order-card .prod-actions select,
+    .production-order-card select.form-select-sm {
+        min-width: 100% !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        height: 44px !important;
+        font-size: 0.9rem !important;
+        margin-bottom: 6px;
+    }
+
+    /* Harakatlar formasi — ustma-ust */
+    .production-order-card .prod-actions {
+        flex-direction: column !important;
+        gap: 8px !important;
+    }
+
+    .production-order-card .prod-actions form.d-inline {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 6px;
+        width: 100%;
+    }
+
+    /* Karta matnlari */
+    .production-order-card .prod-row {
+        font-size: 0.95rem !important;
+    }
+
+    .production-order-card .card-body {
+        padding: 14px !important;
+    }
+
+    /* Yangi buyurtma tugmasi to'liq kenglik */
+    .production-orders-wrap .page-header .btn {
+        width: 100%;
+        min-height: 48px;
+        font-size: 1rem;
+    }
+
+    /* Filtr — production search input */
+    .production-orders-wrap input[style*="width: 160px"],
+    .production-orders-wrap input[style*="width:160px"] {
+        width: 100% !important;
+    }
+}
+
+
+/* ================================================
+   3. AGENTS (agent detail sahifasi)
+   ================================================ */
+@media (max-width: 767px) {
+
+    /* Sana filtri — yonma-yondan ustma-ust */
+    #orderDateFilterForm,
+    form#orderDateFilterForm {
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+
+    #orderDateFilterForm input[type="date"],
+    #orderDateFrom, #orderDateTo {
+        width: 100% !important;
+        min-width: auto !important;
+        flex: 1 1 100% !important;
+    }
+
+    #orderDateFilterForm .btn {
+        width: 100% !important;
+        min-height: 44px !important;
+    }
+}
+
+
+/* ================================================
+   4. FINANCE (kassa, harajat)
+   ================================================ */
+@media (max-width: 767px) {
+
+    /* Kirim/chiqim radio tugmalar */
+    .finance-type-group,
+    .btn-group.w-100 {
+        flex-wrap: nowrap !important; /* radio uchun yonma-yon yaxshi */
+    }
+
+    .btn-group.w-100 .btn {
+        min-height: 44px !important;
+        font-size: 0.9rem !important;
+    }
+}
+
+
+/* ================================================
+   5. HISOBOTLAR (reports)
+   ================================================ */
+@media (max-width: 767px) {
+
+    /* Hisobot kartalar — col-6 o'rniga to'liq */
+    .reports-grid .col-6 {
+        flex: 0 0 100% !important;
+        max-width: 100% !important;
+    }
+
+    /* Z-hisobot modal — to'liq ekran */
+    .modal-lg {
+        max-width: calc(100% - 16px) !important;
+    }
+
+    /* Sold products search */
+    #searchInput,
+    input[style*="width:200px"],
+    input[style*="width: 200px"] {
+        width: 100% !important;
+        max-width: 100% !important;
+        display: block !important;
+    }
+}
+
+
+/* ================================================
+   6. SIDEBAR — 768px bug fix
+   ================================================ */
+@media (min-width: 768px) {
+    .mobile-header {
+        display: none !important;
+    }
+}
+
+@media (max-width: 767px) {
+    .mobile-header {
+        display: flex !important;
+    }
+}

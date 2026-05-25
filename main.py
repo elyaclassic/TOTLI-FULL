@@ -1,3 +1,4 @@
+# TOTLI BI — Copyright (c) 2026 Elyor Uzakbayev <e999922555@gmail.com>. All rights reserved. See LICENSE.
 # reload: 2026-04-10 audit watchdog
 # --- .env ni eng birinchi yuklash (boshqa importlar undan oldin env o'qiydi) ---
 from dotenv import load_dotenv
@@ -341,11 +342,23 @@ async def startup():
         await start_bot()
     except Exception as e:
         print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
-    try:
-        from app.bot.claude_remote import start_claude_bot
-        await start_claude_bot()
-    except Exception as e:
-        print("[Startup] Claude remote bot ishga tushmadi:", e)
+    # Senior/Expert botlar endi ALOHIDA jarayonda (scripts/senior_bots_standalone.py)
+    # — server reload/crash ularni o'ldirmasin, watchdog jarayon-tirikligini bilsin.
+    # BOTS_IN_PROCESS=1 .env'da bo'lsagina uvicorn ichida ishga tushadi (rollback).
+    # AKS HOLDA standalone bilan birga ishlatsa: bir token 2 getUpdates -> 409.
+    if os.getenv("BOTS_IN_PROCESS", "0") == "1":
+        try:
+            from app.bot.senior_bot import start_senior_bot
+            await start_senior_bot()
+        except Exception as e:
+            print("[Startup] Senior bot ishga tushmadi:", e)
+        try:
+            from app.bot.expert_bots import start_expert_bots
+            await start_expert_bots()
+        except Exception as e:
+            print("[Startup] Expert botlar ishga tushmadi:", e)
+    else:
+        print("[Startup] Senior/Expert botlar standalone rejimda (uvicorn ichida emas)")
     print("TOTLI HOLVA Business System ishga tushdi!")
     _mp = os.path.abspath(__file__)
     print("  main.py:", _mp)

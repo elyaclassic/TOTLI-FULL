@@ -1,0 +1,52 @@
+{# Kalkulyator widget — F4 yoki 🧮 tugma orqali ochiladi. Foydalanish: <input data-calc> #}
+<style>
+  .input-calc-wrap input[type="number"]::-webkit-outer-spin-button,
+  .input-calc-wrap input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  .input-calc-wrap input[type="number"] { -moz-appearance: textfield; }
+</style>
+<div class="modal fade" id="inputCalcModal" tabindex="-1" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered" style="max-width:340px;">
+    <div class="modal-content" style="border-radius:14px;border:none;box-shadow:0 10px 40px rgba(0,0,0,.2);">
+      <div class="modal-header py-2 px-3 border-0">
+        <h6 class="modal-title fw-bold mb-0"><i class="bi bi-calculator"></i> Kalkulyator</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pt-0">
+        <input type="text" id="inputCalcDisplay" class="form-control form-control-lg text-end fw-bold mb-2"
+               style="font-size:1.5rem;background:#f8f9fa;border-radius:10px;" autocomplete="off">
+        <div id="inputCalcGrid" class="d-grid gap-2" style="grid-template-columns:repeat(4,1fr);">
+          <button type="button" class="btn btn-outline-danger" data-act="C">C</button>
+          <button type="button" class="btn btn-outline-secondary" data-act="CE">CE</button>
+          <button type="button" class="btn btn-outline-secondary" data-act="(">(</button>
+          <button type="button" class="btn btn-outline-secondary" data-act=")">)</button>
+          <button type="button" class="btn btn-light" data-num="7">7</button>
+          <button type="button" class="btn btn-light" data-num="8">8</button>
+          <button type="button" class="btn btn-light" data-num="9">9</button>
+          <button type="button" class="btn btn-outline-primary" data-op="/">÷</button>
+          <button type="button" class="btn btn-light" data-num="4">4</button>
+          <button type="button" class="btn btn-light" data-num="5">5</button>
+          <button type="button" class="btn btn-light" data-num="6">6</button>
+          <button type="button" class="btn btn-outline-primary" data-op="*">×</button>
+          <button type="button" class="btn btn-light" data-num="1">1</button>
+          <button type="button" class="btn btn-light" data-num="2">2</button>
+          <button type="button" class="btn btn-light" data-num="3">3</button>
+          <button type="button" class="btn btn-outline-primary" data-op="-">−</button>
+          <button type="button" class="btn btn-light" data-num="0">0</button>
+          <button type="button" class="btn btn-light" data-num=".">.</button>
+          <button type="button" class="btn btn-outline-secondary" data-act="BACK">⌫</button>
+          <button type="button" class="btn btn-outline-primary" data-op="+">+</button>
+        </div>
+        <div class="text-muted small mt-2 text-center">Enter — qabul · Esc — bekor</div>
+      </div>
+      <div class="modal-footer border-0 py-2">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Bekor</button>
+        <button type="button" class="btn btn-primary" id="inputCalcAccept">
+          <i class="bi bi-check-lg"></i> Qabul qilish (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

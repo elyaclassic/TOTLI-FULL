@@ -51,6 +51,24 @@
                     <span class="badge bg-warning text-dark">Yangi</span>
                     {% elif order.status == 'waiting_production' %}
                     <span class="badge bg-secondary"><i class="bi bi-hourglass-split"></i> Production kutmoqda</span>
+                    {% if missing_items.get(order.id) %}
+                    <div class="small mt-1" style="background:#fff3cd;border-left:3px solid #ff9800;padding:4px 8px;border-radius:3px;">
+                        <strong style="color:#b35900;"><i class="bi bi-exclamation-triangle-fill"></i> Yetishmaydi:</strong>
+                        {% for m in missing_items[order.id] %}
+                        <div style="margin-left:18px;">
+                            <span style="color:#d32f2f;font-weight:600;">{{ m.product }}</span>
+                            — kerak <strong>{{ m.need|round(1) }}</strong>, bor <strong>{{ m.have|round(1) }}</strong>,
+                            yetmaydi: <strong style="color:#d32f2f;">−{{ m.missing|round(1) }}</strong>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                    {% if production_info.get(order.id) %}
+                    <div class="small text-muted mt-1" title="Ishlab chiqarish boshlangan">
+                        <i class="bi bi-gear"></i>
+                        {% for s in production_info[order.id] %}{{ s }}{% if not loop.last %}<br>{% endif %}{% endfor %}
+                    </div>
+                    {% endif %}
                     {% elif order.status == 'confirmed' %}
                     <span class="badge bg-info">Tasdiqlangan</span>
                     {% elif order.status == 'completed' %}

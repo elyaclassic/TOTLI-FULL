@@ -1520,6 +1520,10 @@ async def agent_order_exchange(order_id: int, request: Request, db: Session = De
             oi.order_id = ret_order.id
             db.add(oi)
 
+        # OBMEN balans logikasi: mijoz faqat farqni qarz oladi (yangi − qaytarilgan).
+        # Agar qaytarilgan tovar yangi tovardan qimmatroq bo'lsa — debt=0 (mijoz hech narsa qarzdor emas;
+        # farqni alohida tovar yoki to'lov bilan qoplash kerak).
+        obmen_debt = max(0.0, new_total - ret_subtotal)
         new_order = Order(
             number=f"{prefix}-{seq_start + 1:03d}", date=today, type="sale",
             partner_id=parent.partner_id, warehouse_id=parent.warehouse_id,
@@ -1527,9 +1531,10 @@ async def agent_order_exchange(order_id: int, request: Request, db: Session = De
             subtotal=new_subtotal,
             discount_percent=partner_discount,
             discount_amount=new_subtotal * partner_discount / 100,
-            total=new_total, paid=0, debt=new_total,
+            total=new_total, paid=0, debt=obmen_debt,
             status="draft", payment_type="naqd",
-            note=f"OBMEN chiqarish: parent={parent.number}, return={ret_order.number}. Agent: {agent.code}",
+            note=f"OBMEN chiqarish: parent={parent.number}, return={ret_order.number}, farq={obmen_debt:.0f}. Agent: {agent.code}",
+            parent_order_id=ret_order.id,
         )
         db.add(new_order)
         db.flush()
@@ -1743,6 +1748,8 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
             oi.order_id = ret_order.id
             db.add(oi)
 
+        # OBMEN balans: mijoz faqat farq summasiga qarz oladi (yangi − qaytarilgan).
+        obmen_debt = max(0.0, new_total - ret_subtotal)
         new_order = Order(
             number=f"{prefix}-{seq_start + 1:03d}", date=today, type="sale",
             partner_id=partner_id, warehouse_id=new_warehouse_id,
@@ -1750,9 +1757,9 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
             subtotal=new_subtotal,
             discount_percent=partner_discount,
             discount_amount=new_subtotal * partner_discount / 100,
-            total=new_total, paid=0, debt=new_total,
+            total=new_total, paid=0, debt=obmen_debt,
             status="draft", payment_type="naqd",
-            note=f"OBMEN chiqarish (tarixsiz, sales doctor): {note_user}. return={ret_order.number}. Agent: {agent.code}",
+            note=f"OBMEN chiqarish (tarixsiz, sales doctor): {note_user}. return={ret_order.number}, farq={obmen_debt:.0f}. Agent: {agent.code}",
             parent_order_id=ret_order.id,
         )
         db.add(new_order)

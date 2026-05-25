@@ -979,11 +979,16 @@ async def inventory_new_page(
 async def inventory_create_draft(
     warehouse_id: int = Form(...),
     force_new: int = Form(0),
+    type: str = Form("inventory"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    ensure_stock_adjustment_doc_type_column(db)
+    if type not in ("inventory", "stock_entry"):
+        type = "inventory"
     wh = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
     if not wh:
         return RedirectResponse(url="/inventory/new?message=Ombor topilmadi.", status_code=303)
@@ -1007,6 +1012,7 @@ async def inventory_create_draft(
         warehouse_id=warehouse_id,
         user_id=current_user.id,
         status="draft",
+        type=type,
         total_tannarx=0,
         total_sotuv=0,
     )
@@ -1413,6 +1419,8 @@ async def inventory_confirm(
 ):
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    ensure_stock_adjustment_doc_type_column(db)
     doc = db.query(StockAdjustmentDoc).filter(StockAdjustmentDoc.id == doc_id).first()
     if not doc or doc.status != "draft" or not doc.warehouse_id:
         return RedirectResponse(url="/inventory", status_code=303)
@@ -1432,10 +1440,24 @@ async def inventory_confirm(
         parsed = _parse_doc_date(doc_date_str)
         if parsed:
             doc.date = parsed
-    # INV-PENDING = tovar qoldiqlari hujjati (miqdor QO'SHILADI)
-    # Oddiy inventarizatsiya = qoldiq YANGILANADI (SET)
-    is_stock_entry = bool(doc.number and doc.number.startswith("INV-PENDING"))
-    if is_stock_entry and doc.date:
+    # Tur doc.type'dan; POST'da posted type tasdig'i (xato turdan defense)
+    posted_type = (form.get("type") or "").strip()
+    doc_type = (doc.type or "inventory")
+    if posted_type and posted_type != doc_type:
+        db.execute(
+            _text("UPDATE stock_adjustment_docs SET status='draft' WHERE id=:id"),
+            {"id": doc_id},
+        )
+        db.commit()
+        return RedirectResponse(
+            url=f"/inventory/{doc_id}/edit?message=Tur mos kelmadi, sahifani yangilang.",
+            status_code=303,
+        )
+    is_stock_entry = (doc_type == "stock_entry")
+    # Number generatsiya — har qanday turi uchun placeholderni real raqamga almashtirish
+    # (save handler bilan bir xil pattern, satr 1256). Avval faqat is_stock_entry uchun edi,
+    # shu sababli inventory tasdiqlanganda "INV-PENDING-{id}" placeholder qolib ketardi.
+    if doc.number and doc.number.startswith("INV-PENDING") and doc.date:
         date_str = doc.date.strftime("%Y%m%d")
         doc.number = _next_inventory_number(db, date_str)
     item_ids = form.getlist("item_id")
@@ -1515,8 +1537,11 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
     """Inventarizatsiya/tovar qoldiqlari hujjati uchun stock movementlarni yaratadi
     va Stock.quantity ni hujjat sanasidan keyingi harakatlar bilan birga yangilaydi.
     Returns: ishlangan itemlar soni.
-    Batch optimization: 4N query -> ~5 ta umumiy query (item soniga bog'liq emas)."""
-    from sqlalchemy import func as sqla_func, tuple_ as sqla_tuple
+
+    BASELINE: get_stock_at_date_batch (SUM<=doc_date) - quantity_after ishonchsiz.
+    """
+    from sqlalchemy import func as sqla_func
+    from app.utils.stock_at_date import get_stock_at_date_batch
     items_snapshot = [
         {
             "item": item,
@@ -1533,37 +1558,23 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
     whs = list({w for w, _ in pairs})
     pids = list({p for _, p in pairs})
 
-    # Batch 1: Stock rowlar (fallback + final update uchun)
+    # Stock rowlar (final overwrite uchun)
     stock_rows_by_pair: dict = {}
-    stock_sum_fallback: dict = {}
     if whs and pids:
         for s in db.query(Stock).filter(Stock.warehouse_id.in_(whs), Stock.product_id.in_(pids)).all():
-            key = (s.warehouse_id, s.product_id)
-            stock_rows_by_pair.setdefault(key, s)  # birinchi row
-            stock_sum_fallback[key] = stock_sum_fallback.get(key, 0.0) + float(s.quantity or 0)
+            stock_rows_by_pair.setdefault((s.warehouse_id, s.product_id), s)
 
-    # Batch 2: Har pair uchun oxirgi movement ID (doc_date dan oldin yoki teng)
-    last_mv_id_rows = (
-        db.query(
-            StockMovement.warehouse_id,
-            StockMovement.product_id,
-            sqla_func.max(StockMovement.id).label("max_id"),
-        )
-        .filter(
-            StockMovement.warehouse_id.in_(whs),
-            StockMovement.product_id.in_(pids),
-            StockMovement.created_at <= doc_date,
-        )
-        .group_by(StockMovement.warehouse_id, StockMovement.product_id)
-        .all()
-    ) if whs and pids else []
-    max_ids = [r.max_id for r in last_mv_id_rows if r.max_id]
-    last_mv_by_pair: dict = {}
-    if max_ids:
-        for mv in db.query(StockMovement).filter(StockMovement.id.in_(max_ids)).all():
-            last_mv_by_pair[(mv.warehouse_id, mv.product_id)] = mv
+    # BASELINE: warehouse bo'yicha guruhlab batch chaqirig'i (D2 fix)
+    old_qty_by_pair: dict = {}
+    pids_by_wh: dict = {}
+    for w, p in pairs:
+        pids_by_wh.setdefault(w, []).append(p)
+    for w, ps in pids_by_wh.items():
+        qmap = get_stock_at_date_batch(db, warehouse_id=w, product_ids=ps, cutoff=doc_date)
+        for p, q in qmap.items():
+            old_qty_by_pair[(w, p)] = float(q or 0)
 
-    # Batch 3: doc_date dan keyingi non-adjustment SUM(quantity_change) har pair uchun
+    # doc_date dan keyingi non-adjustment SUM(quantity_change) - mavjud
     after_changes_by_pair: dict = {}
     if whs and pids:
         for r in (
@@ -1583,14 +1594,9 @@ def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, curre
         ):
             after_changes_by_pair[(r.warehouse_id, r.product_id)] = float(r.delta or 0)
 
-    # Endi loop — DB ga so'rov YO'Q, faqat dictionary lookup
     for snap in items_snapshot:
         key = (snap["warehouse_id"], snap["product_id"])
-        last_mv = last_mv_by_pair.get(key)
-        if last_mv:
-            old_qty = float(last_mv.quantity_after or 0)
-        else:
-            old_qty = stock_sum_fallback.get(key, 0.0)
+        old_qty = old_qty_by_pair.get(key, 0.0)
         new_qty = snap["quantity"]
         if hasattr(snap["item"], "previous_quantity"):
             snap["item"].previous_quantity = old_qty

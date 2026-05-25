@@ -25,6 +25,12 @@ from app.models.database import (
     Warehouse,
 )
 from app.deps import require_auth, require_admin, require_admin_or_manager
+from app.utils.db_schema import ensure_agents_commission_percent_column
+
+try:
+    from app.config.maps_config import YANDEX_MAPS_API_KEY as _YANDEX_MAPS_API_KEY
+except Exception:
+    _YANDEX_MAPS_API_KEY = ""
 
 router = APIRouter(tags=["agents"])
 
@@ -90,6 +96,25 @@ async def agent_add(
     return RedirectResponse(url="/agents", status_code=303)
 
 
+@router.post("/agents/{agent_id}/commission")
+async def agent_commission_update(
+    request: Request,
+    agent_id: int,
+    commission_percent: float = Form(0.0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    if commission_percent < 0 or commission_percent > 100:
+        raise HTTPException(status_code=400, detail="Foiz 0 dan 100 gacha bo'lishi kerak")
+    ensure_agents_commission_percent_column(db)
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent topilmadi")
+    agent.commission_percent = commission_percent
+    db.commit()
+    return RedirectResponse(url=f"/agents/{agent_id}", status_code=303)
+
+
 @router.get("/agent", response_class=HTMLResponse)
 async def agent_app(request: Request):
     """Mobile agent app — token auth done client-side via localStorage."""
@@ -108,6 +133,7 @@ async def agent_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    ensure_agents_commission_percent_column(db)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent topilmadi")
@@ -169,29 +195,36 @@ async def agent_detail(
         .limit(50)
         .all()
     )
-    # Bugungi buyurtmalar — har doim hisoblanadi (filter sanasidan qat'iy nazar)
-    today_start = today
-    today_end = today.replace(hour=23, minute=59, second=59)
-    today_q = db.query(
+    # Tanlangan oraliq bo'yicha buyurtmalar (filter sanasiga ergashadi)
+    range_q = db.query(
         func.count(Order.id),
         func.coalesce(func.sum(Order.total), 0),
     ).filter(
         Order.agent_id == agent_id,
-        Order.date >= today_start,
-        Order.date <= today_end,
+        Order.date >= d_from,
+        Order.date <= d_to,
         Order.parent_order_id.is_(None),
         Order.status != "cancelled",
     ).first()
-    today_orders_count = int(today_q[0] or 0)
-    today_orders_total = float(today_q[1] or 0)
+    range_orders_count = int(range_q[0] or 0)
+    range_orders_total = float(range_q[1] or 0)
+    # Label uchun — bugun yoki oraliq
+    is_today_only = (d_from.date() == today.date() and d_to.date() == today.date())
+    if is_today_only:
+        range_label = "Bugun"
+    elif d_from.date() == d_to.date():
+        range_label = d_from.strftime("%d.%m.%Y")
+    else:
+        range_label = f"{d_from.strftime('%d.%m')}–{d_to.strftime('%d.%m')}"
 
     # Tasdiqlash modali uchun haydovchilar (faol)
     from app.models.database import Driver, Delivery
     drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
 
-    # Har order uchun haydovchi nomini olish (Delivery.driver_id orqali)
+    # Har order uchun haydovchi nomini va yetkazilgan vaqtini olish (Delivery.driver_id orqali)
     # Obmen parent uchun ham child sale ning haydovchisini ko'rsatish
     order_drivers = {}
+    order_delivered_at = {}  # order_id -> delivered_at datetime
     if orders:
         # Parent ID lar + child sale ID lar (obmen uchun)
         order_ids = [o.id for o in orders]
@@ -209,6 +242,21 @@ async def agent_detail(
                 parent_id = child_to_parent.get(dl.order_id)
                 if parent_id and parent_id not in order_drivers:
                     order_drivers[parent_id] = driver_map[dl.driver_id]
+            if dl.delivered_at:
+                if dl.order_id not in order_delivered_at:
+                    order_delivered_at[dl.order_id] = dl.delivered_at
+                parent_id = child_to_parent.get(dl.order_id)
+                if parent_id and parent_id not in order_delivered_at:
+                    order_delivered_at[parent_id] = dl.delivered_at
+
+    # Waiting_production buyurtmalar uchun yetishmayotgan mahsulotlar
+    missing_items = {}
+    from app.services.stock_service import compute_missing_items
+    for o in orders:
+        if o.status == "waiting_production":
+            m = compute_missing_items(db, o)
+            if m:
+                missing_items[o.id] = m
 
     return templates.TemplateResponse("agents/detail.html", {
         "request": request,
@@ -223,10 +271,14 @@ async def agent_detail(
         "active_drivers": drivers,
         "today_iso": datetime.now().date().isoformat(),
         "order_drivers": order_drivers,
-        "today_orders_count": today_orders_count,
-        "today_orders_total": today_orders_total,
+        "order_delivered_at": order_delivered_at,
+        "today_orders_count": range_orders_count,
+        "today_orders_total": range_orders_total,
+        "range_label": range_label,
+        "missing_items": missing_items,
         "current_user": current_user,
         "page_title": f"Agent: {agent.full_name}",
+        "yandex_maps_apikey": _YANDEX_MAPS_API_KEY,
         "date_from": d_from.strftime("%Y-%m-%d"),
         "date_to": d_to.strftime("%Y-%m-%d"),
     })
@@ -289,6 +341,7 @@ async def agent_order_new_form(
         "prices": prices,
         "default_price_type_id": DEFAULT_AGENT_PRICE_TYPE_ID,
         "current_user": current_user,
+        "today_iso": datetime.now().date().isoformat(),
         "page_title": f"Yangi buyurtma — {agent.full_name}",
     })
 
@@ -299,6 +352,7 @@ async def agent_order_create(
     agent_id: int,
     partner_id: int = Form(...),
     note: str = Form(""),
+    order_date: str = Form(""),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
@@ -355,8 +409,17 @@ async def agent_order_create(
     if not order_items:
         return RedirectResponse(url=f"/agents/{agent.id}/order/new?error=no_items", status_code=303)
 
-    today = datetime.now()
-    prefix = f"AGT-{today.strftime('%Y%m%d')}"
+    # Sana tanlash: foydalanuvchi kiritgan sana (kun) + hozirgi soat:minut (audit izi uchun)
+    now = datetime.now()
+    order_dt = now
+    if order_date:
+        try:
+            chosen = datetime.strptime(order_date, "%Y-%m-%d")
+            order_dt = chosen.replace(hour=now.hour, minute=now.minute, second=now.second, microsecond=now.microsecond)
+        except (ValueError, TypeError):
+            order_dt = now
+
+    prefix = f"AGT-{order_dt.strftime('%Y%m%d')}"
     last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
     try:
         seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
@@ -368,7 +431,7 @@ async def agent_order_create(
     total = subtotal - discount_amount
     order = Order(
         number=order_number,
-        date=today,
+        date=order_dt,
         type="sale",
         partner_id=partner.id,
         warehouse_id=warehouse.id,

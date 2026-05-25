@@ -59,8 +59,10 @@ async def finance(
     current_user: User = Depends(require_auth),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    cash_register_id: Optional[str] = None,
+    partner_id: Optional[str] = None,
 ):
-    """Moliya - kassa. So'nggi to'lovlar sana bo'yicha filtrlanishi mumkin."""
+    """Moliya - kassa. So'nggi to'lovlar sana, kassa va kontragent bo'yicha filtrlanishi mumkin."""
     ensure_payments_status_column(db)
     role = (current_user.role or "").strip()
     # Sotuvchi uchun cheklov: faqat biriktirilgan kassalar va mijozlar
@@ -111,6 +113,21 @@ async def finance(
             q = q.filter(Payment.date < datetime.combine(dt_parsed + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
+    # Kassa va kontragent filtrlari
+    filter_cash_id = None
+    filter_partner_id = None
+    try:
+        if cash_register_id and str(cash_register_id).strip():
+            filter_cash_id = int(cash_register_id)
+            q = q.filter(Payment.cash_register_id == filter_cash_id)
+    except (ValueError, TypeError):
+        filter_cash_id = None
+    try:
+        if partner_id and str(partner_id).strip():
+            filter_partner_id = int(partner_id)
+            q = q.filter(Payment.partner_id == filter_partner_id)
+    except (ValueError, TypeError):
+        filter_partner_id = None
     from app.utils.pagination import paginate, pagination_query_string
     _pg = paginate(q, request.query_params.get("page", 1), per_page=50)
     payments = _pg["items"]
@@ -205,11 +222,13 @@ async def finance(
         for row in cq:
             stats_map.setdefault(row.cash_register_id, {"income": 0.0, "expense": 0.0})
             stats_map[row.cash_register_id][row.type] = float(row.total or 0)
+        as_of = dt_parsed or df_parsed
         for cash in cash_registers:
             s = stats_map.get(cash.id, {"income": 0.0, "expense": 0.0})
+            bal_at_end, _, _ = _cash_balance_formula_at(db, cash.id, as_of)
             cash_data.append({
                 "cash": cash,
-                "balance": s["income"] - s["expense"],
+                "balance": bal_at_end,
                 "income": s["income"],
                 "expense": s["expense"],
                 "is_filtered": True,
@@ -236,6 +255,8 @@ async def finance(
         "has_date_filter": has_date_filter,
         "filter_date_from": filter_date_from,
         "filter_date_to": filter_date_to,
+        "filter_cash_id": filter_cash_id,
+        "filter_partner_id": filter_partner_id,
         "current_user": current_user,
         "page": _pg["page"],
         "per_page": _pg["per_page"],
@@ -243,7 +264,12 @@ async def finance(
         "total_pages": _pg["total_pages"],
         "items_count": _pg["items_count"],
         "base_url": "/finance",
-        "pagination_query": pagination_query_string({"date_from": filter_date_from, "date_to": filter_date_to}),
+        "pagination_query": pagination_query_string({
+            "date_from": filter_date_from,
+            "date_to": filter_date_to,
+            "cash_register_id": filter_cash_id or "",
+            "partner_id": filter_partner_id or "",
+        }),
         "page_title": "Moliya"
     })
 
@@ -255,12 +281,20 @@ async def finance_harajatlar(
     current_user: User = Depends(require_auth),
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    show_all: Optional[str] = None,
 ):
-    """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida)."""
+    """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida).
+
+    Default: faqat bugun. ?show_all=1 → barcha sanalar. ?date_from=..&date_to=.. → aniq oraliq.
+    """
     ensure_payments_status_column(db)
+    if date_from is None and date_to is None and show_all != "1":
+        _today_str = datetime.now().date().isoformat()
+        date_from = _today_str
+        date_to = _today_str
     cash_registers = db.query(CashRegister).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
-    expense_docs = (
+    expense_docs_q = (
         db.query(ExpenseDoc)
         .filter(ExpenseDoc.status != "deleted")
         .options(
@@ -268,10 +302,22 @@ async def finance_harajatlar(
             joinedload(ExpenseDoc.direction),
             joinedload(ExpenseDoc.department),
         )
-        .order_by(ExpenseDoc.date.desc())
-        .limit(100)
-        .all()
     )
+    _df_main = str(date_from or "").strip()[:10] if date_from else ""
+    _dt_main = str(date_to or "").strip()[:10] if date_to else ""
+    if _df_main:
+        try:
+            df_x = datetime.strptime(_df_main, "%Y-%m-%d").date()
+            expense_docs_q = expense_docs_q.filter(ExpenseDoc.date >= datetime.combine(df_x, datetime.min.time()))
+        except ValueError:
+            pass
+    if _dt_main:
+        try:
+            dt_x = datetime.strptime(_dt_main, "%Y-%m-%d").date()
+            expense_docs_q = expense_docs_q.filter(ExpenseDoc.date < datetime.combine(dt_x + timedelta(days=1), datetime.min.time()))
+        except ValueError:
+            pass
+    expense_docs = expense_docs_q.order_by(ExpenseDoc.date.desc()).limit(100).all()
     purchases_with_expenses_q = (
         db.query(Purchase)
         .options(
@@ -438,19 +484,55 @@ async def finance_harajatlar(
         })
     all_outflows.sort(key=lambda x: x["date"] or datetime.min, reverse=True)
     all_outflows = all_outflows[:200]
-    today = datetime.now().date()
+    # Stat oralig'i: filter bo'lsa filter, aks holda bugun
+    if _df_main:
+        try:
+            stat_from = datetime.strptime(_df_main, "%Y-%m-%d").date()
+        except ValueError:
+            stat_from = datetime.now().date()
+    else:
+        stat_from = datetime.now().date()
+    if _dt_main:
+        try:
+            stat_to_excl = datetime.strptime(_dt_main, "%Y-%m-%d").date() + timedelta(days=1)
+        except ValueError:
+            stat_to_excl = stat_from + timedelta(days=1)
+    else:
+        stat_to_excl = stat_from + timedelta(days=1)
+
+    # audit_correction — kassa balansini moslash, real harajat emas (istisno qilinadi)
     try:
         _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
-        today_expense = db.query(Payment).filter(
+        period_payments = db.query(Payment).filter(
             Payment.type == "expense",
-            Payment.date >= today,
+            Payment.date >= stat_from,
+            Payment.date < stat_to_excl,
+            or_(Payment.category != "audit_correction", Payment.category.is_(None)),
             _status_ok
         ).all()
     except OperationalError:
-        today_expense = db.query(Payment).filter(Payment.type == "expense", Payment.date >= today).all()
+        period_payments = db.query(Payment).filter(
+            Payment.type == "expense",
+            Payment.date >= stat_from,
+            Payment.date < stat_to_excl,
+        ).all()
+    # Payment'lardan qaysilari ExpenseDoc bilan bog'langan (HD-...)
+    payment_ids = [p.id for p in period_payments if p.id]
+    hd_payment_ids = set()
+    if payment_ids:
+        for row in db.query(ExpenseDoc.payment_id).filter(
+            ExpenseDoc.payment_id.in_(payment_ids),
+            ExpenseDoc.status != "deleted",
+        ).all():
+            if row[0]:
+                hd_payment_ids.add(row[0])
+    docs_sum = sum(float(p.amount or 0) for p in period_payments if p.id in hd_payment_ids)
+    other_sum = sum(float(p.amount or 0) for p in period_payments if p.id not in hd_payment_ids)
     stats = {
         "today_income": 0,
-        "today_expense": sum(p.amount for p in today_expense),
+        "today_expense": docs_sum + other_sum,
+        "today_expense_docs": docs_sum,
+        "today_expense_other": other_sum,
     }
     return templates.TemplateResponse("finance/harajatlar.html", {
         "request": request,
@@ -796,6 +878,11 @@ async def finance_payment_edit_post(
     payment.cash_register_id = cash_register_id
     payment.partner_id = pid
     payment.description = (description or "").strip() or ("Kirim" if type == "income" else "Chiqim")
+    # Tahrirdan keyin avtomatik qayta tasdiqlash — balansga qaytarish
+    was_cancelled = (getattr(payment, "status", "confirmed") == "cancelled")
+    if was_cancelled:
+        payment.status = "confirmed"
+        _payment_apply_balance(db, payment, +1)
     db.commit()
     return RedirectResponse(url="/finance?success=edited", status_code=303)
 
@@ -1482,6 +1569,7 @@ async def cash_transfer_create(
     if amount <= 0:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
 
+    # Cross-currency aniqlash
     from_cash = db.query(CashRegister).filter(CashRegister.id == from_cash_id).first()
     to_cash = db.query(CashRegister).filter(CashRegister.id == to_cash_id).first()
     if not from_cash or not to_cash:
@@ -1491,8 +1579,10 @@ async def cash_transfer_create(
     final_rate = None
     final_to_amount = None
     if from_curr != to_curr:
+        # Cross-currency: kurs kerak
         rate = exchange_rate
         if not rate or rate <= 0:
+            # Avtomatik kurs olish
             from app.services.currency_service import get_rate
             rate = get_rate(db, from_curr, to_curr)
             if rate <= 0:
@@ -1571,11 +1661,19 @@ async def cash_transfer_edit(
     if date:
         try:
             parsed = datetime.strptime(date[:10], "%Y-%m-%d")
-            if parsed.date() > datetime.now().date():
+            now = datetime.now()
+            today = now.date()
+            if parsed.date() > today:
                 return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
             if is_period_closed(db, parsed):
                 return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan."), status_code=303)
-            new_date = parsed.replace(hour=(t.date.hour if t.date else 0), minute=(t.date.minute if t.date else 0), second=(t.date.second if t.date else 0))
+            # Bugun = hozirgi vaqt; eski kun = 23:59:59. Sana o'zgarmagan bo'lsa, eski vaqt saqlanadi.
+            if t.date and parsed.date() == t.date.date():
+                new_date = t.date  # Sana o'zgarmadi — vaqtni saqlash
+            elif parsed.date() == today:
+                new_date = now
+            else:
+                new_date = parsed.replace(hour=23, minute=59, second=59)
         except ValueError:
             return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Sana formati notogri."), status_code=303)
 

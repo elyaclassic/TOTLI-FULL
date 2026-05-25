@@ -1,0 +1,362 @@
+from datetime import datetime
+
+import pytest
+
+from app.models.database import Order
+from app.services.sales_metrics import (
+    SALE_REALIZED,
+    sale_orders_query,
+    sale_revenue,
+)
+
+
+def _order(db, *, status, total, date, type_="sale", warehouse_id=None, partner_id=None):
+    o = Order(
+        type=type_, status=status, total=total, date=date,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+        number=f"T-{status}-{int(total)}-{date:%Y%m%d%H%M%S}",
+    )
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    return o
+
+
+def test_realized_includes_only_four_statuses(db):
+    d = datetime(2026, 5, 10)
+    for st in ("delivered", "completed", "confirmed", "out_for_delivery"):
+        _order(db, status=st, total=100, date=d)
+    for st in ("draft", "cancelled", "waiting_production", "pending"):
+        _order(db, status=st, total=999, date=d)
+    rows = sale_orders_query(
+        db, scope="realized", dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)
+    ).all()
+    assert sorted(o.status for o in rows) == ["completed", "confirmed", "delivered", "out_for_delivery"]
+
+
+def test_all_scope_includes_cancelled(db):
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=100, date=d)
+    _order(db, status="cancelled", total=50, date=d)
+    rows = sale_orders_query(
+        db, scope="all", dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)
+    ).all()
+    assert len(rows) == 2
+
+
+def test_non_sale_type_excluded(db):
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=100, date=d)
+    _order(db, status="completed", total=70, date=d, type_="return_sale")
+    assert sale_revenue(db, dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)) == 100.0
+
+
+def test_revenue_sums_realized_total(db):
+    d = datetime(2026, 5, 10)
+    _order(db, status="delivered", total=100, date=d)
+    _order(db, status="confirmed", total=200, date=d)
+    _order(db, status="cancelled", total=999, date=d)
+    _order(db, status="draft", total=999, date=d)
+    assert sale_revenue(db, dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)) == 300.0
+
+
+def test_date_boundary_inclusive(db):
+    _order(db, status="completed", total=10, date=datetime(2026, 5, 1, 0, 0, 0))
+    _order(db, status="completed", total=20, date=datetime(2026, 5, 31, 23, 59, 59))
+    _order(db, status="completed", total=99, date=datetime(2026, 6, 1, 0, 0, 0))
+    assert sale_revenue(
+        db, dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31, 23, 59, 59)
+    ) == 30.0
+
+
+def test_warehouse_filter(db):
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=100, date=d, warehouse_id=1)
+    _order(db, status="completed", total=200, date=d, warehouse_id=2)
+    assert sale_revenue(
+        db, dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31), warehouse_id=1
+    ) == 100.0
+
+
+def test_empty_range_returns_zero(db):
+    assert sale_revenue(
+        db, dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)
+    ) == 0.0
+
+
+def test_unknown_scope_raises(db):
+    with pytest.raises(ValueError):
+        sale_orders_query(
+            db, scope="bogus", dt_from=datetime(2026, 5, 1), dt_to=datetime(2026, 5, 31)
+        )
+
+
+def test_realized_constant_is_exactly_four(db):
+    assert set(SALE_REALIZED) == {"delivered", "completed", "confirmed", "out_for_delivery"}
+
+
+def test_profit_compute_uses_realized_scope(db):
+    from app.routes.reports import _compute_sales_and_cogs
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=500, date=d)
+    _order(db, status="confirmed", total=300, date=d)
+    _order(db, status="draft", total=999, date=d)        # realized emas
+    _order(db, status="cancelled", total=999, date=d)    # realized emas
+    _order(db, status="waiting_production", total=999, date=d)  # realized emas — eski filtr buni xato qo'shardi
+    sale_orders, revenue, cogs, sale_items = _compute_sales_and_cogs(
+        db, datetime(2026, 5, 1), datetime(2026, 5, 31, 23, 59, 59)
+    )
+    assert revenue == 800.0
+    assert {o.status for o in sale_orders} == {"completed", "confirmed"}
+
+
+def test_sold_products_status_filter_is_realized(db):
+    import inspect
+    from app.routes import reports
+    src = inspect.getsource(reports.sold_products_report)
+    assert 'Order.status.in_(("completed", "delivered"))' not in src
+    assert "Order.created_at >= d_from" not in src
+    assert "Order.created_at <= d_to" not in src
+    assert "SALE_REALIZED" in src
+    assert "Order.date >= d_from" in src
+
+
+def _product(db, *, name, purchase_price):
+    from app.models.database import Product
+    p = Product(name=name, code=f"P-{name}", is_active=True, purchase_price=purchase_price)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def _item(db, *, order, product, quantity, total):
+    from app.models.database import OrderItem
+    it = OrderItem(
+        order_id=order.id, product_id=product.id,
+        quantity=quantity, price=total / quantity if quantity else 0, total=total,
+    )
+    db.add(it)
+    db.commit()
+    return it
+
+
+def test_sold_products_report_realized_behavior(db, monkeypatch):
+    """REAL sold_products_report — realized scope (confirmed/out_for_delivery
+    kiradi, eski completed/delivered emas) + Order.date oynasi.
+
+    Eski filtr ("completed","delivered") ga qaytarilsa bu test BUZILADI:
+    confirmed/out_for_delivery order'lari yig'indidan chiqib, grand_sum
+    10000 → 6000 ga tushadi.
+    """
+    from app.routes import reports
+
+    pa = _product(db, name="Alfa", purchase_price=1000)
+    pb = _product(db, name="Beta", purchase_price=500)
+
+    d_in = datetime(2026, 5, 10)
+    d_out = datetime(2026, 6, 1)  # oyna tashqarisida (Order.date bo'yicha chiqib ketadi)
+
+    o_del = _order(db, status="delivered", total=2000, date=d_in)
+    _item(db, order=o_del, product=pa, quantity=2, total=2000)
+
+    o_conf = _order(db, status="confirmed", total=3000, date=d_in)
+    _item(db, order=o_conf, product=pa, quantity=3, total=3000)
+
+    o_ofd = _order(db, status="out_for_delivery", total=1000, date=d_in)
+    _item(db, order=o_ofd, product=pa, quantity=1, total=1000)
+
+    o_comp = _order(db, status="completed", total=4000, date=d_in)
+    _item(db, order=o_comp, product=pb, quantity=4, total=4000)
+
+    # Chiqarib tashlanishi kerak:
+    o_canc = _order(db, status="cancelled", total=5000, date=d_in)
+    _item(db, order=o_canc, product=pa, quantity=5, total=5000)
+
+    o_draft = _order(db, status="draft", total=7000, date=d_in)
+    _item(db, order=o_draft, product=pa, quantity=7, total=7000)
+
+    # Oyna tashqarisidagi (Order.date) realized order — chiqarib tashlanadi:
+    o_future = _order(db, status="completed", total=9000, date=d_out)
+    _item(db, order=o_future, product=pa, quantity=9, total=9000)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(reports.templates, "TemplateResponse", fake_tpl)
+
+    class _U:
+        role = "admin"
+
+    import asyncio
+    asyncio.run(
+        reports.sold_products_report(
+            request=None, date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, category_id=None, name_query=None,
+            db=db, current_user=_U(),
+        )
+    )
+
+    by_name = {it["product_name"]: it for it in captured["items"]}
+    assert set(by_name) == {"Alfa", "Beta"}
+    # Alfa: delivered(2) + confirmed(3) + out_for_delivery(1) = 6 dona, 6000 so'm
+    assert by_name["Alfa"]["quantity"] == 6.0
+    assert by_name["Alfa"]["total"] == 6000.0
+    # Beta: completed(4) = 4 dona, 4000 so'm
+    assert by_name["Beta"]["quantity"] == 4.0
+    assert by_name["Beta"]["total"] == 4000.0
+    # cancelled/draft/oyna-tashqarisi chiqarib tashlandi
+    assert captured["grand_qty"] == 10.0
+    assert captured["grand_sum"] == 10000.0
+
+
+def test_report_sales_total_excludes_cancelled(db, monkeypatch):
+    from app.routes import reports
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=1000, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(reports.templates, "TemplateResponse", fake_tpl)
+
+    class _U:
+        role = "admin"
+
+    import asyncio
+    asyncio.run(
+        reports.report_sales(
+            request=None, start_date="2026-05-01", end_date="2026-05-31",
+            warehouse_id=None, partner_id=None, db=db, current_user=_U(),
+        )
+    )
+    assert len(captured["orders"]) == 2
+    assert captured["total"] == 1000.0
+
+
+def test_sales_list_uses_shared_constant_no_literal(db):
+    import inspect
+    from app.routes import sales
+    src = inspect.getsource(sales.sales_list)
+    assert 'SALE_REALIZED' in src
+    assert '["completed", "delivered", "confirmed"]' not in src
+    assert 'pg["total_count"] - completed_count' not in src
+
+
+def test_sales_list_draft_count_is_real_and_filter_independent(db, monkeypatch):
+    from app.routes import sales
+    d = datetime(2026, 5, 10)
+    for i in range(2):
+        _order(db, status="draft", total=10 + i, date=d)
+    for i in range(3):
+        _order(db, status="completed", total=100 + i, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    captured = {}
+
+    def fake_tpl(name, ctx):
+        captured.update(ctx)
+        return "ok"
+
+    monkeypatch.setattr(sales.templates, "TemplateResponse", fake_tpl)
+
+    class _QP:
+        def get(self, key, default=None):
+            return default
+
+    class _Req:
+        query_params = _QP()
+
+    class _U:
+        role = "admin"
+        id = 1
+        username = "test_admin"
+
+    import asyncio
+
+    asyncio.run(
+        sales.sales_list(
+            request=_Req(), date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, status=None, sort_by=None, sort_dir=None,
+            page=None, db=db, current_user=_U(),
+        )
+    )
+    assert captured["draft_count"] == 2
+    assert captured["completed_count"] == 3
+
+    captured.clear()
+    asyncio.run(
+        sales.sales_list(
+            request=_Req(), date_from="2026-05-01", date_to="2026-05-31",
+            warehouse_id=None, status="cancelled", sort_by=None, sort_dir=None,
+            page=None, db=db, current_user=_U(),
+        )
+    )
+    # draft_count active status filtridan mustaqil (Task 5 bug aynan shu edi)
+    assert captured["draft_count"] == 2
+    assert len(captured["orders"]) == 1
+    assert captured["orders"][0].status == "cancelled"
+
+
+def test_report_sales_export_total_excludes_cancelled(db):
+    import openpyxl, io, asyncio
+    from app.routes import reports
+    d = datetime(2026, 5, 10)
+    _order(db, status="completed", total=1000, date=d)
+    _order(db, status="cancelled", total=400, date=d)
+
+    class _U:
+        role = "admin"
+
+    resp = asyncio.run(
+        reports.report_sales_export(
+            request=None, start_date="2026-05-01", end_date="2026-05-31",
+            warehouse_id=None, partner_id=None, db=db, current_user=_U(),
+        )
+    )
+    async def _collect():
+        chunks = []
+        async for c in resp.body_iterator:
+            chunks.append(c if isinstance(c, bytes) else c.encode())
+        return b"".join(chunks)
+
+    body = asyncio.run(_collect()) if hasattr(resp, "body_iterator") else resp.body
+    wb = openpyxl.load_workbook(io.BytesIO(body))
+    ws = wb.active
+    cells = [c.value for row in ws.iter_rows() for c in row]
+    # Ikkala order ham ro'yxatda (audit), lekin JAMI faqat realized (1000, 1400 emas)
+    assert any(c == 1000 for c in cells)        # completed qatori
+    assert any(c == 400 for c in cells)         # cancelled qatori ham ko'rinadi
+    assert 1400 not in cells                     # JAMI cancelled'siz
+    assert any(c == 1000.0 or c == 1000 for c in cells)
+
+
+def test_reconciliation_invariant_sales_equals_revenue(db):
+    """Buzilgan invariant: realized revenue (skalyar) == realized Order.total yig'indisi.
+
+    Refactordan keyin bir davr uchun bu ikkisi teng bo'lishi shart;
+    draft/cancelled tashqarida qoladi.
+    """
+    d = datetime(2026, 5, 10)
+    _order(db, status="delivered", total=1000, date=d)
+    _order(db, status="completed", total=500, date=d)
+    _order(db, status="confirmed", total=250, date=d)
+    _order(db, status="out_for_delivery", total=300, date=d)
+    _order(db, status="draft", total=777, date=d)
+    _order(db, status="cancelled", total=888, date=d)
+
+    dt_from, dt_to = datetime(2026, 5, 1), datetime(2026, 5, 31, 23, 59, 59)
+
+    rev = sale_revenue(db, dt_from=dt_from, dt_to=dt_to)
+    realized_sum = sum(
+        o.total
+        for o in sale_orders_query(db, scope="realized", dt_from=dt_from, dt_to=dt_to).all()
+    )
+    assert rev == realized_sum == 2050.0

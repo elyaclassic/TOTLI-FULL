@@ -109,19 +109,23 @@ async def report_sales(
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    q = db.query(Order).filter(
-        Order.type == "sale",
-        Order.date >= start_date,
-        Order.date <= end_date + " 23:59:59",
+    from app.services.sales_metrics import sale_orders_query, sale_revenue
+    dt_from = start_date
+    dt_to = end_date + " 23:59:59"
+    orders = (
+        sale_orders_query(
+            db, scope="all", dt_from=dt_from, dt_to=dt_to,
+            warehouse_id=warehouse_id, partner_id=partner_id,
+        )
+        .order_by(Order.date.desc())
+        .all()
     )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    if partner_id:
-        q = q.filter(Order.partner_id == partner_id)
-    orders = q.all()
     warehouses = db.query(Warehouse).order_by(Warehouse.name).all()
     partners = db.query(Partner).filter(Partner.type.in_(["customer", "both"])).order_by(Partner.name).all()
-    total = sum(o.total or 0 for o in orders)
+    total = sale_revenue(
+        db, dt_from=dt_from, dt_to=dt_to,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+    )
     return templates.TemplateResponse("reports/sales.html", {
         "request": request,
         "orders": orders,
@@ -159,16 +163,17 @@ async def report_sales_export(
         start_date = datetime.now().replace(day=1).strftime("%Y-%m-%d")
     if not end_date:
         end_date = datetime.now().strftime("%Y-%m-%d")
-    q = db.query(Order).filter(
-        Order.type == "sale",
-        Order.date >= start_date,
-        Order.date <= end_date + " 23:59:59",
+    from app.services.sales_metrics import sale_orders_query, sale_revenue
+    dt_from = start_date
+    dt_to = end_date + " 23:59:59"
+    orders = (
+        sale_orders_query(
+            db, scope="all", dt_from=dt_from, dt_to=dt_to,
+            warehouse_id=warehouse_id, partner_id=partner_id,
+        )
+        .order_by(Order.date.desc())
+        .all()
     )
-    if warehouse_id:
-        q = q.filter(Order.warehouse_id == warehouse_id)
-    if partner_id:
-        q = q.filter(Order.partner_id == partner_id)
-    orders = q.order_by(Order.date.desc()).all()
     wb = Workbook()
     ws = wb.active
     ws.title = "Savdo"
@@ -190,7 +195,10 @@ async def report_sales_export(
             float(o.total or 0),
             o.status or "",
         ])
-    total = sum(o.total or 0 for o in orders)
+    total = sale_revenue(
+        db, dt_from=dt_from, dt_to=dt_to,
+        warehouse_id=warehouse_id, partner_id=partner_id,
+    )
     ws.append(["", "", "", "", "JAMI:", total, ""])
     buf = io.BytesIO()
     wb.save(buf)
@@ -544,9 +552,10 @@ async def report_stock_source(
         .all()
     )
     confirmed_adj_ids, completed_production_ids, doc_dates = _load_movement_doc_filters(db, movements)
-    # Bir xil hujjat (document_type, document_id) uchun bitta qator — dublikat harakatlar birlashtiriladi
+    # Har bir movement alohida qator — dedupe (document_type, document_id) ledger drift'ga olib kelardi.
+    # Dublikat movement'lar duplicate flag bilan belgilanadi (eski race-condition bug audit izi).
     rows = []
-    seen_doc = set()  # (document_type, document_id)
+    seen_doc = {}  # (document_type, document_id) -> index of first occurrence
     transfers_by_id = {}  # keyed by document_id for wrong_warehouse check
     for m in movements:
         # Qoldiq tuzatish: faqat tasdiqlangan hujjat ko'rinsin
@@ -556,9 +565,9 @@ async def report_stock_source(
         if (m.document_type or "") == "Production" and m.document_id and m.document_id not in completed_production_ids:
             continue
         key = (m.document_type or "", m.document_id)
-        if key in seen_doc:
-            continue
-        seen_doc.add(key)
+        is_dup = key in seen_doc
+        if not is_dup:
+            seen_doc[key] = len(rows)
         if (m.document_type or "") == "StockAdjustmentDoc" and m.document_id and m.document_id in doc_dates and doc_dates[m.document_id]:
             display_date = doc_dates[m.document_id].strftime("%d.%m.%Y %H:%M")
         else:
@@ -573,6 +582,7 @@ async def report_stock_source(
             "quantity_change": float(m.quantity_change or 0),
             "quantity_after": float(m.quantity_after or 0),
             "movement_id": getattr(m, "id", None),
+            "is_duplicate": is_dup,
             "_sort_at": m.created_at if m.created_at else datetime.min,
         }
         # Ombordan omborga: hujjatda bu ombor ko'rsatilmagan bo'lsa ogohlantirish
@@ -594,12 +604,6 @@ async def report_stock_source(
     _check_production_quantity_mismatch(db, rows)
     # Tartib: haqiqiy vaqt bo'yicha (created_at), matn sanasi emas — oxirgi qator = hozirgi qoldiq
     rows.sort(key=lambda r: (r.get("_sort_at") or datetime.min, r.get("document_id") or 0))
-    # Qoldiq (harakatdan keyin) — ketma-ket yig'indi (sana tartibida)
-    if rows:
-        balance = 0.0
-        for r in rows:
-            balance += r["quantity_change"]
-            r["quantity_after"] = round(balance, 6)
     for r in rows:
         r.pop("_sort_at", None)
     current_stock = db.query(Stock).filter(
@@ -607,9 +611,44 @@ async def report_stock_source(
         Stock.product_id == product_id,
     ).all()
     current_qty = sum(float(s.quantity or 0) for s in current_stock)
+    # Backward-walk: bugungi Stock.quantity dan teskari yurib har qatorning quantity_after ni hisoblash.
+    # Bu yondashuv Qoldiq hisoboti bilan moslashtiriladi: INV qatori = INV'ga kiritilgan jismoniy son.
+    # Formula: r.quantity_after = current_stock - SUM(quantity_change of LATER rows)
+    if rows:
+        balance = float(current_qty)
+        for r in reversed(rows):
+            r["quantity_after"] = round(balance, 6)
+            balance -= r["quantity_change"]
+        implied_start = round(balance, 6)
+    else:
+        implied_start = 0.0
     # Dona mahsulotlar uchun ko'rsatishda butun son (216, 6), boshqalar uchun 3 xona kasr
     _unit_str = ((getattr(product, "unit", None) and (product.unit.name or "") or "") + " " + (getattr(product, "unit", None) and (product.unit.code or "") or "")).lower()
     is_dona = product and "dona" in _unit_str
+
+    # Statistika: kirim/chiqim/INV jami + drift (Stock vs ledger)
+    total_in = sum(r["quantity_change"] for r in rows if r["quantity_change"] > 0)
+    total_out = sum(r["quantity_change"] for r in rows if r["quantity_change"] < 0)
+    ledger_balance = round(total_in + total_out, 6)
+    drift = round(current_qty - ledger_balance, 6)
+    # Operatsiya turi bo'yicha yig'indi
+    type_totals = {}
+    for r in rows:
+        key = r.get("document_type") or "Other"
+        if key not in type_totals:
+            type_totals[key] = {"in": 0.0, "out": 0.0, "count": 0, "label": r.get("document_type_label") or key}
+        if r["quantity_change"] > 0:
+            type_totals[key]["in"] += r["quantity_change"]
+        else:
+            type_totals[key]["out"] += r["quantity_change"]
+        type_totals[key]["count"] += 1
+    # Tartibga solib (eng katta net o'zgarish birinchi)
+    type_totals_sorted = sorted(
+        type_totals.items(),
+        key=lambda kv: abs(kv[1]["in"] + kv[1]["out"]),
+        reverse=True,
+    )
+
     msg = request.query_params.get("msg") or ""
     error = request.query_params.get("error") or ""
     removed = request.query_params.get("removed")
@@ -620,6 +659,11 @@ async def report_stock_source(
         "movements": rows,
         "current_qty": current_qty,
         "is_dona": is_dona,
+        "total_in": total_in,
+        "total_out": total_out,
+        "ledger_balance": ledger_balance,
+        "drift": drift,
+        "type_totals": type_totals_sorted,
         "page_title": "Qoldiq manbai",
         "current_user": current_user,
         "msg": msg,
@@ -2352,12 +2396,10 @@ def _parse_profit_date_range(date_from: Optional[str], date_to: Optional[str]) -
 
 def _compute_sales_and_cogs(db: Session, dt_from: datetime, dt_to: datetime) -> tuple:
     """Returns: (sale_orders, revenue, cogs, sale_items)."""
-    sale_orders = (
-        db.query(Order)
-        .filter(Order.type == "sale", Order.status != "cancelled",
-                Order.date >= dt_from, Order.date <= dt_to)
-        .all()
-    )
+    from app.services.sales_metrics import sale_orders_query
+    sale_orders = sale_orders_query(
+        db, scope="realized", dt_from=dt_from, dt_to=dt_to
+    ).all()
     revenue = sum(float(o.total or 0) for o in sale_orders)
     sale_order_ids = [o.id for o in sale_orders]
     sale_items = []
@@ -2484,10 +2526,17 @@ async def report_profit(
     payments_income = _payment_sum("income")
     payments_expense = _payment_sum("expense")
 
+    # Savdo chegirmasi (skidka): subtotal − total yig'indisi. revenue allaqachon NET (chegirmali),
+    # shuning uchun hisobotda GROSS ko'rsatib, chegirmani alohida operatsion xarajat qatori qilamiz.
+    # SOF FOYDA o'zgarmaydi (gross − chegirma = net).
+    grand_discount = sum(max(0.0, float(o.subtotal or 0) - float(o.total or 0)) for o in sale_orders)
+    revenue = revenue + grand_discount               # GROSS daromad (chegirmasiz)
+    gross_profit = revenue - cogs                    # GROSS yalpi foyda
+
     # Yakuniy hisob + trend
     net_revenue = revenue - returns_total
-    operating_expenses = total_expenses + salary_total
-    net_profit = gross_profit - returns_total - operating_expenses
+    operating_expenses = total_expenses + salary_total + grand_discount  # chegirma qo'shildi
+    net_profit = gross_profit - returns_total - operating_expenses        # = eski (chegirma qisqaradi)
     daily_labels, daily_revenue, daily_profit = _compute_daily_trend(sale_orders, sale_items)
 
     return templates.TemplateResponse("reports/profit.html", {
@@ -2510,6 +2559,7 @@ async def report_profit(
         "salary_total": salary_total,
         "operating_expenses": operating_expenses,
         "expense_list": expense_list,
+        "grand_discount": grand_discount,
         # Natija
         "net_profit": net_profit,
         # To'lovlar
@@ -2574,6 +2624,8 @@ async def sold_products_report(
     _role = (getattr(current_user, "role", None) or "").strip().lower()
     show_profit = _role in ("admin", "manager", "rahbar", "raxbar")
 
+    from app.services.sales_metrics import SALE_REALIZED
+
     # Sotilgan mahsulotlar (OrderItem + Order).
     # Chegirma proportional: item.total * (order.total / order.subtotal).
     # Subtotal=0 yoki NULL bo'lsa — koeffitsient 1.0 (chegirma yo'q).
@@ -2594,9 +2646,9 @@ async def sold_products_report(
         .join(Order, Order.id == OrderItem.order_id)
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:
@@ -2613,9 +2665,9 @@ async def sold_products_report(
         db.query(func.coalesce(func.sum(Order.subtotal - Order.total), 0))
         .filter(
             Order.type == "sale",
-            Order.status.in_(("completed", "delivered")),
-            Order.created_at >= d_from,
-            Order.created_at <= d_to,
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
         )
     )
     if warehouse_id:
@@ -2851,6 +2903,13 @@ def _z_scan(date_from: _z_date, date_to: _z_date, user_filter: Optional[int] = N
                 primary["prev_closed_at"] = it.get("closed_at")
                 primary["diff_sales_count"] = cur_count - prev_count
                 primary["diff_sales_total"] = cur_total - prev_total
+                _cur_pb = {b.get("type"): float(b.get("sum") or 0) for b in (primary.get("payment_breakdown") or [])}
+                _prev_pb = {b.get("type"): float(b.get("sum") or 0) for b in (it.get("payment_breakdown") or [])}
+                primary["diff_payment_breakdown"] = [
+                    {"type": t, "sum": _cur_pb.get(t, 0.0) - _prev_pb.get(t, 0.0)}
+                    for t in ("naqd", "plastik", "terminal", "click")
+                    if abs(_cur_pb.get(t, 0.0) - _prev_pb.get(t, 0.0)) > 0.001
+                ]
             it["is_duplicate"] = True
         else:
             it["is_duplicate"] = False
@@ -3065,14 +3124,27 @@ async def report_z_report_detail(
     request: Request,
     fmt: str = "html",
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_manager),
+    current_user: User = Depends(require_auth),
 ):
     """Print uchun alohida sahifa (default) yoki JSON snapshot (?fmt=json).
 
     Eski Z-snapshot'larda `payments_made`/`expenses_made` yo'q bo'lsa,
     DB'dan dinamik to'ldiriladi (faqat shu Z'ning user_id va date bo'yicha).
+
+    Ruxsat: admin/manager — barcha Z; sotuvchi — faqat o'ziniki.
     """
     snap = _z_load_snapshot(z_id)
+    # Sotuvchi faqat o'zining Z-hisobotini ko'ra oladi
+    role = (current_user.role or "").strip()
+    if role not in ("admin", "manager"):
+        if not snap or int(snap.get("user_id") or 0) != int(current_user.id):
+            if fmt == "json":
+                return JSONResponse({"ok": False, "error": "Ruxsat yo'q"}, status_code=403)
+            return HTMLResponse(
+                "<div style='padding:40px;text-align:center;font-family:sans-serif;'>"
+                "<h2>Ruxsat yo'q</h2><p>Faqat o'zingizning Z-hisobotingizni ko'ra olasiz.</p></div>",
+                status_code=403,
+            )
     if not snap:
         if fmt == "json":
             return JSONResponse({"ok": False, "error": "Topilmadi"}, status_code=404)
@@ -3086,8 +3158,57 @@ async def report_z_report_detail(
     if "payments_made" not in snap or "expenses_made" not in snap:
         _z_fill_operations_from_db(db, snap)
 
+    # Naqd kassa hisoboti — eski snapshotlar uchun DB'dan to'ldirish.
+    # Bug'li yangi snapshotlarni ham tuzatish: agar cash_sales_total saqlangan bo'lsa-yu,
+    # uning qiymati 0 va sales_total > 0 bo'lsa — recompute (eski filter naqd vs cash bug izi).
+    _need_fill = "cash_sales_total" not in snap
+    if not _need_fill:
+        _saved_total = snap.get("cash_sales_total") or 0
+        _sales_total = snap.get("sales_total") or 0
+        if _saved_total == 0 and _sales_total > 0:
+            _need_fill = True
+    if _need_fill:
+        try:
+            from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+            target_d = datetime.strptime((snap.get("date") or "")[:10], "%Y-%m-%d").date()
+            uid = int(snap.get("user_id") or 0)
+            # closed_at ni vaqt qutisi sifatida ishlatamiz — operatsiyalarni shu momentgacha hisoblash
+            _closed_at_str = snap.get("closed_at") or ""
+            until_dt = None
+            try:
+                until_dt = datetime.fromisoformat(_closed_at_str) if _closed_at_str else None
+            except (ValueError, TypeError):
+                until_dt = None
+            if uid:
+                cs = compute_z_cash_summary(db, target_d, uid, until_dt=until_dt)
+                prev_rem, prev_zid = find_previous_z_remaining(
+                    user_id=uid,
+                    warehouse_id=snap.get("warehouse_id"),
+                    before_closed_at=_closed_at_str,
+                )
+                snap["cash_sales_pure"] = cs["cash_sales_pure"]
+                snap["cash_sales_split"] = cs["cash_sales_split"]
+                snap["cash_sales_total"] = cs["cash_sales_total"]
+                snap["cash_expenses_total"] = cs["cash_expenses_total"]
+                snap["cash_payments_out"] = cs["cash_payments_out"]
+                snap["previous_cash_remaining"] = prev_rem
+                snap["previous_z_id"] = prev_zid
+                snap["cash_remaining"] = (
+                    prev_rem + cs["cash_sales_total"]
+                    - cs["cash_expenses_total"] - cs["cash_payments_out"]
+                )
+        except (ValueError, TypeError, KeyError):
+            pass
+
     if fmt == "json":
         return JSONResponse({"ok": True, "snapshot": snap})
+    if fmt in ("receipt", "chek"):
+        return templates.TemplateResponse("reports/z_report_receipt.html", {
+            "request": request,
+            "page_title": snap.get("z_id") or z_id,
+            "current_user": current_user,
+            "snap": snap,
+        })
     return templates.TemplateResponse("reports/z_report_detail.html", {
         "request": request,
         "page_title": snap.get("z_id") or z_id,

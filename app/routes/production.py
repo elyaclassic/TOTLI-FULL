@@ -246,28 +246,61 @@ def _calculate_total_material_cost(db: Session, items_actual: list) -> float:
     return total
 
 
-def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, output_units: float, cost_per_unit: float) -> None:
-    """Tayyor mahsulotning Stock.cost_price va Product.purchase_price ni weighted average bilan yangilaydi."""
+def _log_price_history(db: Session, product, old_pp: float, new_pp: float) -> None:
+    """Production-driven purchase_price o'zgarishini tarixga yozadi (sukutda emas).
+    O'zi unique PRC-YYYYMMDD-NNN raqam generatsiya qiladi (doc_number UNIQUE constraint;
+    PRC- prefiks qo'lda PN- tahrirdan ajratadi)."""
+    if abs((old_pp or 0) - (new_pp or 0)) < 1e-6:
+        return
+    from app.models.database import ProductPriceHistory
+    prefix = f"PRC-{datetime.now().strftime('%Y%m%d')}-"
+    last = (
+        db.query(ProductPriceHistory)
+        .filter(ProductPriceHistory.doc_number.like(f"{prefix}%"))
+        .order_by(ProductPriceHistory.id.desc())
+        .first()
+    )
+    try:
+        num = (int(last.doc_number.rsplit("-", 1)[-1]) + 1) if last and last.doc_number else 1
+    except (ValueError, IndexError):
+        num = 1
+    db.add(ProductPriceHistory(
+        doc_number=f"{prefix}{num:03d}",
+        product_id=product.id,
+        price_type_id=None,
+        old_purchase_price=float(old_pp or 0),
+        new_purchase_price=float(new_pp or 0),
+        old_sale_price=float(product.sale_price or 0),
+        new_sale_price=float(product.sale_price or 0),
+        changed_by_id=None,
+    ))
+
+
+def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_unit: float) -> None:
+    """Tayyor mahsulot Product.purchase_price + Stock.cost_price ni production'ning
+    dona-boshiga material narxiga (cost_per_unit) flat tayinlaydi. Weighted-avg/self-feedback YO'Q
+    (eski cheksiz-surilish bug'i ildizi). Har o'zgarish product_price_history'ga yoziladi."""
+    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
+    if not output_product:
+        return
+    cost = cost_per_unit
+    if not cost or cost <= 0:
+        return  # retsept/narx vaqtincha yo'q — eski qiymat saqlanadi (nolga tushirilmaydi)
     product_stock = db.query(Stock).filter(
         Stock.warehouse_id == out_wh_id,
         Stock.product_id == recipe.product_id,
     ).first()
-    if product_stock and hasattr(Stock, "cost_price"):
-        qty_old = (product_stock.quantity or 0) - output_units
-        cost_old = getattr(product_stock, "cost_price", None) or 0
-        if qty_old <= 0 or cost_old <= 0:
-            product_stock.cost_price = cost_per_unit
-        else:
-            product_stock.cost_price = (qty_old * cost_old + output_units * cost_per_unit) / (product_stock.quantity or 1)
-    output_product = db.query(Product).filter(Product.id == recipe.product_id).first()
-    if not output_product:
-        return
-    old_price = output_product.purchase_price or 0
-    old_qty = (product_stock.quantity - output_units) if product_stock else 0
-    if old_qty > 0 and old_price > 0 and output_units > 0:
-        output_product.purchase_price = (old_qty * old_price + output_units * cost_per_unit) / (old_qty + output_units)
-    elif cost_per_unit > 0:
-        output_product.purchase_price = cost_per_unit
+    old = output_product.purchase_price or 0
+    output_product.purchase_price = cost
+    if product_stock is not None and hasattr(Stock, "cost_price"):
+        product_stock.cost_price = cost
+    _log_price_history(db, output_product, old, cost)
+    db.flush()
+    if output_product.sale_price and cost > output_product.sale_price:
+        logger.warning(
+            "PRICE ANOMALY %s: tannarx %.0f > sotuv %.0f (xom ashyo narxi tekshirilsin)",
+            output_product.name, cost, output_product.sale_price,
+        )
 
 
 def _do_complete_production_stock(db: Session, production, recipe):
@@ -316,7 +349,7 @@ def _do_complete_production_stock(db: Session, production, recipe):
         "production_complete: OK #%s output=%s units cost=%.2f cost_per_unit=%.2f wh=%s",
         production.number, output_units, total_material_cost, cost_per_unit, out_wh_id,
     )
-    _update_output_cost_and_price(db, out_wh_id, recipe, output_units, cost_per_unit)
+    _update_output_cost_and_price(db, out_wh_id, recipe, cost_per_unit)
     return None
 
 
@@ -1717,7 +1750,13 @@ async def complete_production_stage(
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+        op_name = ""
+        if production.operator_id:
+            from app.models.database import Employee
+            emp = db.query(Employee).filter(Employee.id == production.operator_id).first()
+            if emp:
+                op_name = emp.full_name or ""
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"), operator_name=op_name)
     except Exception:
         pass
     try:
@@ -1742,16 +1781,25 @@ async def complete_production(
     production = db.query(Production).filter(Production.id == prod_id).first()
     if not production:
         raise HTTPException(status_code=404, detail="Topilmadi")
-    if production.status == "completed":
-        return RedirectResponse(url="/production/orders", status_code=303)
     recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
+    # Atomik UPDATE WHERE — double-confirm xavfini oldini olish.
+    # Stock harakatlari yozilishidan oldin status'ni atomik claim qilamiz; ikkinchi so'rov
+    # rowcount=0 oladi va early return qiladi (stock'ga tegmaydi).
+    from sqlalchemy import text as _text
+    max_stage = _recipe_max_stage(recipe)
+    claim = db.execute(
+        _text("UPDATE productions SET status='completed', current_stage=:cs WHERE id=:id AND status != 'completed'"),
+        {"id": prod_id, "cs": max_stage}
+    )
+    if claim.rowcount == 0:
+        return RedirectResponse(url="/production/orders", status_code=303)
+    db.refresh(production)
     err = _do_complete_production_stock(db, production, recipe)
     if err:
+        db.rollback()  # status'ni qaytarish — stock muvaffaqiyatsiz bo'lsa
         return err
-    production.status = "completed"
-    production.current_stage = _recipe_max_stage(recipe)
     db.commit()
     check_low_stock_and_notify(db)
     notify_managers_production_ready(db, production)
@@ -1761,7 +1809,13 @@ async def complete_production(
         p = db.query(Product).filter(Product.id == recipe.product_id).first()
         p_name = p.name if p else "Mahsulot"
         p_type = getattr(p, "type", "") or ""
-        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"))
+        op_name = ""
+        if production.operator_id:
+            from app.models.database import Employee
+            emp = db.query(Employee).filter(Employee.id == production.operator_id).first()
+            if emp:
+                op_name = emp.full_name or ""
+        notify_production_ready(production.number, p_name, production.quantity or 0, is_semi=(p_type == "yarim_tayyor"), operator_name=op_name)
     except Exception:
         pass
     try:

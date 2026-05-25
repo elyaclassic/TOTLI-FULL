@@ -8,6 +8,7 @@ $ROOT = "D:\TOTLI BI"
 $LOG = "$ROOT\watchdog.log"
 $SERVER_RUNNER = "$ROOT\_server_runner.bat"
 $BOT_RUNNER = "$ROOT\external\telegram_sheets_bot\_bot_runner.bat"
+$SENIOR_BOTS_RUNNER = "$ROOT\scripts\_senior_bots_runner.bat"
 $ENV_FILE = "$ROOT\.env"
 
 function Write-WLog($msg) {
@@ -104,7 +105,31 @@ if (-not $bot_ok) {
     }
 }
 
-# 3. Log rotation (1 MB)
+# 3. Senior/Expert botlar (standalone jarayon) tekshirish
+$senior_ok = $false
+try {
+    $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction Stop |
+        Where-Object { $_.CommandLine -match 'senior_bots_standalone' }
+    if ($procs) { $senior_ok = $true }
+} catch {}
+
+if (-not $senior_ok) {
+    Write-WLog "SENIOR BOTS OFF -- restarting"
+    if (Start-Hidden $SENIOR_BOTS_RUNNER "senior_bots") {
+        Start-Sleep -Seconds 12
+        $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match 'senior_bots_standalone' }
+        if ($procs) {
+            Write-WLog "SENIOR BOTS UP after restart"
+            Send-Notify "Senior/Expert botlar ochib qolgan edi - qayta ishga tushirildi"
+        } else {
+            Write-WLog "SENIOR BOTS restart failed"
+            Send-Notify "Senior/Expert botlar qayta ishga tushirilmadi! Qolda tekshiring."
+        }
+    }
+}
+
+# 4. Log rotation (1 MB)
 if (Test-Path $LOG) {
     $size = (Get-Item $LOG).Length
     if ($size -gt 1048576) {

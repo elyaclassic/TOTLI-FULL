@@ -214,3 +214,32 @@ def ensure_perf_indexes_20260507(db: Session) -> None:
             db.commit()
         except Exception:
             db.rollback()
+
+
+def ensure_stock_adjustment_doc_type_column(db: Session) -> None:
+    """stock_adjustment_docs jadvalida type ustuni yo'q bo'lsa qo'shadi."""
+    try:
+        db.execute(text(
+            "ALTER TABLE stock_adjustment_docs "
+            "ADD COLUMN type VARCHAR(20) DEFAULT 'inventory'"
+        ))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
+def ensure_agents_commission_percent_column(db: Session) -> None:
+    """Agar agents jadvalida commission_percent ustuni bo'lmasa, qo'shadi."""
+    try:
+        db.execute(text("ALTER TABLE agents ADD COLUMN commission_percent FLOAT DEFAULT 0.0"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()

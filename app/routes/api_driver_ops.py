@@ -68,47 +68,81 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
             except ValueError:
                 pass
         else:
-            # Default: kelajakdagi sanali delivery'lar ko'rinmaydi (overdue va bugungi qoladi).
-            # planned_date NULL bo'lsa eski (legacy) yozuv — qoldiramiz.
-            from datetime import date as _date
-            from sqlalchemy import or_
+            # Default ko'rinish: oxirgi 3 kun ichidagi aktivlar (pending/picked_up/in_progress)
+            # + bugungi tugatilganlar (delivered/cancelled/failed). Eski yopilmagan
+            # yetkazishlar avtomatik yashiriladi — DBda saqlanadi, lekin haydovchi UI'sini
+            # to'ldirib yurmaydi. Aniq sanadagi tarixni ko'rish uchun ?date= ishlatiladi.
+            from datetime import date as _date, timedelta
+            from sqlalchemy import or_, and_
             today = _date.today()
+            active_cutoff = today - timedelta(days=2)  # 3 kunlik oyna: today, -1, -2
             q = q.filter(
                 or_(
-                    Delivery.planned_date == None,
-                    sa_func.date(Delivery.planned_date) <= today,
+                    and_(
+                        Delivery.status.in_(["pending", "picked_up", "in_progress"]),
+                        or_(
+                            and_(
+                                Delivery.planned_date != None,
+                                sa_func.date(Delivery.planned_date) >= active_cutoff,
+                                sa_func.date(Delivery.planned_date) <= today,
+                            ),
+                            and_(
+                                Delivery.planned_date == None,
+                                sa_func.date(Delivery.created_at) >= active_cutoff,
+                            ),
+                        ),
+                    ),
+                    and_(
+                        Delivery.status.in_(["delivered", "cancelled", "failed"]),
+                        sa_func.date(Delivery.created_at) == today,
+                    ),
                 )
             )
         deliveries = q.order_by(Delivery.created_at.desc()).limit(QUERY_LIMIT_DEFAULT).all()
+
+        # Har Delivery alohida kartochka — buyurtma va almashtirish aralashmaydi.
+        # Bir mijozga bir kunda 2 hujjat bo'lsa (masalan: buyurtma + almashtirish),
+        # haydovchi har birini alohida "Yetkazildi" qilishi kerak (SD uslubi).
         result = []
         for d in deliveries:
             order = db.query(Order).filter(Order.id == d.order_id).first() if d.order_id else None
             partner = None
             if order and order.partner_id:
                 partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-            # Buyurtma mahsulotlari
             items = []
+            total = float(order.total or 0) if order else 0.0
+            paid = float(order.paid or 0) if order else 0.0
             if order:
                 for oi in order.items:
                     prod = oi.product
                     items.append({
-                        "product_id": oi.product_id,  # Bug fix: ishonchli ID — nom o'rniga
+                        "product_id": oi.product_id,
                         "name": prod.name if prod else f"#{oi.product_id}",
                         "quantity": float(oi.quantity or 0),
                         "price": float(oi.price or 0),
                         "total": float(oi.total or 0),
+                        "order_number": order.number,
                     })
-            # Lokatsiya — delivery da bo'lsa delivery dan, yo'qsa partner dan
-            lat = d.latitude
-            lng = d.longitude
-            if not lat and partner:
-                lat = partner.latitude
-            if not lng and partner:
-                lng = partner.longitude
+            lat = d.latitude or (partner.latitude if partner else None)
+            lng = d.longitude or (partner.longitude if partner else None)
+            order_type = (order.type or "sale") if order else "sale"
+            # Tur belgilash:
+            #   sale  + parent_order_id=None  → BUYURTMA (oddiy sotuv)
+            #   sale  + parent_order_id≠None  → ALMASHTIRISH (almashtirish yangi tomon)
+            #   return_sale + parent_order_id≠None → ALMASHTIRISH (almashtirish qaytarish tomon)
+            #   return_sale + parent_order_id=None → QAYTARISH (sof qaytarish)
+            has_parent = bool(order and order.parent_order_id)
+            if has_parent:
+                order_type_display = "obmen"
+            else:
+                order_type_display = order_type
             result.append({
                 "id": d.id,
+                "delivery_ids": [d.id],
+                "combined_count": 1,
                 "number": d.number,
-                "order_number": d.order_number or (order.number if order else ""),
+                "order_number": order.number if order else (d.order_number or ""),
+                "order_type": order_type_display,
                 "delivery_address": d.delivery_address or (partner.address if partner else ""),
                 "partner_name": partner.name if partner else "",
                 "partner_phone": partner.phone if partner else "",
@@ -119,9 +153,9 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 "planned_date": d.planned_date.isoformat() if d.planned_date else "",
                 "delivered_at": d.delivered_at.isoformat() if d.delivered_at else "",
                 "notes": d.notes or "",
-                "total": float(order.total or 0) if order else 0,
-                "paid": float(order.paid or 0) if order else 0,
-                "debt": max(float(order.total or 0) - float(order.paid or 0), 0) if order else 0,
+                "total": total,
+                "paid": paid,
+                "debt": max(total - paid, 0),
                 "latitude": lat,
                 "longitude": lng,
                 "items": items,
@@ -223,24 +257,29 @@ async def driver_delivery_status(
 
         if new_status == "failed" and delivery.order_id:
             order = db.query(Order).filter(Order.id == delivery.order_id).first()
-            if order and order.status == "confirmed" and not (order.paid or 0) > 0:
-                for it in order.items:
-                    wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
-                    if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
-                        continue
-                    create_stock_movement(
-                        db=db,
-                        warehouse_id=wh_id,
-                        product_id=it.product_id,
-                        quantity_change=+float(it.quantity or 0),
-                        operation_type="delivery_failed",
-                        document_type="Sale",
-                        document_id=order.id,
-                        document_number=order.number,
-                        user_id=getattr(driver, 'employee_id', None),
-                        note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
-                        created_at=datetime.now(),
-                    )
+            # 2026-05-12 flow: dispatch'dan keyin order.status = 'out_for_delivery'.
+            # Eski 'confirmed' holat ham qoldirilgan (backward compat).
+            if order and order.status in ("confirmed", "out_for_delivery") and not (order.paid or 0) > 0:
+                # Faqat 'out_for_delivery' bo'lsa stock dispatch'da chiqarilgan — qaytarish kerak.
+                # 'confirmed' bo'lsa stock hali chiqarilmagan — qaytarish shart emas.
+                if order.status == "out_for_delivery":
+                    for it in order.items:
+                        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+                        if not wh_id or not it.product_id or not (it.quantity or 0) > 0:
+                            continue
+                        create_stock_movement(
+                            db=db,
+                            warehouse_id=wh_id,
+                            product_id=it.product_id,
+                            quantity_change=+float(it.quantity or 0),
+                            operation_type="delivery_failed",
+                            document_type="Sale",
+                            document_id=order.id,
+                            document_number=order.number,
+                            user_id=getattr(driver, 'employee_id', None),
+                            note=f"Yetkazish muvaffaqiyatsiz: {order.number}",
+                            created_at=datetime.now(),
+                        )
                 order.status = "cancelled"
 
         if new_status == "delivered":
@@ -255,8 +294,25 @@ async def driver_delivery_status(
             partner_id = order.partner_id if order else None
             total_paid = (naqd or 0) + (plastik or 0)
 
+            # Idempotency: buyurtmaga allaqachon Payment yaratilgan bo'lsa (eski delivery'dan) — yangi
+            # Payment yaratmaymiz. Bu supervisor edit + reconfirm flow'ida dublikat to'lovni to'sadi.
+            existing_paid = 0.0
+            if order and order.id:
+                existing_paid = float(db.query(sa_func.coalesce(sa_func.sum(Payment.amount), 0)).filter(
+                    Payment.order_id == order.id, Payment.type == "income"
+                ).scalar() or 0)
+            order_total = float(order.total or 0) if order else 0
+            skip_new_payment = existing_paid >= order_total - 0.01 and order_total > 0
+
             for pay_type, pay_amount in [("naqd", naqd or 0), ("plastik", plastik or 0)]:
                 if pay_amount <= 0:
+                    continue
+                if skip_new_payment:
+                    logger.warning(
+                        f"Delivery {delivery.id}/{delivery.number}: Payment dublikat'i to'sildi "
+                        f"(order={order.number if order else '?'}, existing_paid={existing_paid}, "
+                        f"order_total={order_total}, new={pay_amount})"
+                    )
                     continue
                 cash_register = db.query(CashRegister).filter(
                     CashRegister.payment_type == pay_type,
@@ -307,8 +363,29 @@ async def driver_delivery_status(
                             if order.previous_partner_balance is None:
                                 order.previous_partner_balance = float(partner_obj.balance or 0)
                             partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
+                    # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi —
+                    # endi (yetkazilganda, to'g'ri vaqt) omborga kirim qilamiz va
+                    # bog'langan child sotuvni tasdiqlaymiz. Atomik rowcount==1 bilan
+                    # himoyalangan — endpoint qayta chaqirilsa qayta ishlamaydi.
+                    if (order.type or "") == "return_sale":
+                        from app.services.stock_service import apply_return_stock_addition
+                        apply_return_stock_addition(
+                            db, order, None,
+                            note_prefix="Obmen qaytarish (Vozvrat kirim)",
+                            user_id=getattr(driver, "employee_id", None),
+                        )
+                        db.execute(
+                            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+                            {"uid": getattr(driver, "employee_id", None), "pid": order.id},
+                        )
                     # SQLAlchemy obyektini refresh — yangi status ko'rinsin
                     db.refresh(order)
+
+        # Sibling propagation OLIB TASHLANDI (2026-05-23):
+        # Eski grouping UI uchun ishlatilgan — bitta Yetkazildi barchasini birga yopardi.
+        # Endi har Delivery alohida kartochka (SD uslubi) — har biri o'z statusiga ega.
+        # Buyurtma+almashtirish bir mijozga bo'lsa, driver har birini alohida tasdiqlaydi.
 
         db.commit()
         try:

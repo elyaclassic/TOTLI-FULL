@@ -37,11 +37,7 @@
         </form>
     </div>
 
-    <!-- Mini stat cards -->
-    {% set total_count = purchases|length %}
-    {% set confirmed_count = purchases|selectattr('status', 'equalto', 'confirmed')|list|length %}
-    {% set draft_count = purchases|selectattr('status', 'equalto', 'draft')|list|length %}
-    {% set total_sum = purchases|sum(attribute='total', start=0) %}
+    <!-- Mini stat cards (to'liq filtrlangan jami — barcha sahifalar bo'ylab) -->
     <div class="row g-3 mb-3">
         <div class="col-6 col-md-3">
             <div class="mini-stat">
@@ -51,19 +47,19 @@
         </div>
         <div class="col-6 col-md-3">
             <div class="mini-stat">
-                <div class="num" style="color:#2e7d32;">{{ "{:,.0f}".format(purchases|sum(attribute='total', start=0)) }}</div>
+                <div class="num" style="color:#2e7d32;">{{ "{:,.0f}".format(total_summa or 0) }}</div>
                 <div class="lbl"><i class="bi bi-cash-stack me-1"></i>Jami summa (so'm)</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="mini-stat">
-                <div class="num" style="color:#065f46;">{{ confirmed_count }}</div>
+                <div class="num" style="color:#065f46;">{{ total_confirmed }}</div>
                 <div class="lbl"><i class="bi bi-check-circle me-1"></i>Tasdiqlangan</div>
             </div>
         </div>
         <div class="col-6 col-md-3">
             <div class="mini-stat">
-                <div class="num" style="color:#856404;">{{ draft_count }}</div>
+                <div class="num" style="color:#856404;">{{ total_draft }}</div>
                 <div class="lbl"><i class="bi bi-pencil-square me-1"></i>Qoralama</div>
             </div>
         </div>
@@ -159,6 +155,20 @@
                         </tr>
                         {% endfor %}
                     </tbody>
+                    {% if purchases %}
+                    <tfoot style="position: sticky; bottom: 0; background: #f8f9fa; z-index: 2; box-shadow: 0 -1px 0 rgba(0,0,0,0.08);">
+                        <tr>
+                            <td colspan="5" class="text-end fw-bold py-2">Filtrlangan jami:</td>
+                            <td class="sum-cell fw-bold" style="color:#065f46;">
+                                {{ "{:,.0f}".format(total_summa or 0) }}
+                                <span class="text-muted fw-normal" style="font-size:11px;">so'm</span>
+                            </td>
+                            <td colspan="2" class="text-muted" style="font-size:11px;">
+                                ({{ total_count }} kirim, barcha sahifalar)
+                            </td>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
                 </table>
             </div>
             {% include "components/pagination.html" %}

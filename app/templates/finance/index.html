@@ -102,9 +102,32 @@
 
 <!-- So'nggi to'lovlar -->
 <div class="card data-table">
-  <div class="card-header">
+  <div class="card-header flex-wrap gap-2">
     <span class="fw-bold"><i class="bi bi-clock-history text-primary"></i> So'nggi to'lovlar</span>
-    <form method="get" action="/finance" class="d-flex align-items-center gap-2 flex-nowrap">
+    {% set selected_partner = partners | selectattr('id', 'equalto', filter_partner_id) | first if filter_partner_id else None %}
+    <form method="get" action="/finance" class="d-flex align-items-center gap-2 flex-wrap">
+      <select name="cash_register_id" class="form-select form-select-sm" style="width:auto;border-radius:10px;min-width:140px;" title="Kassa">
+        <option value="">— Hamma kassa —</option>
+        {% for c in cash_registers %}
+        <option value="{{ c.id }}" {% if filter_cash_id and filter_cash_id|int == c.id|int %}selected{% endif %}>{{ c.name }}</option>
+        {% endfor %}
+      </select>
+      <div class="ss-wrap" style="position:relative;min-width:200px;">
+        <input type="hidden" name="partner_id" id="finFilterPartnerId" value="{{ filter_partner_id or '' }}">
+        <input type="text" class="form-control form-control-sm" id="finFilterPartnerSearch"
+               placeholder="— Hamma kontragent —" autocomplete="off"
+               style="border-radius:10px;" value="{{ selected_partner.name if selected_partner else '' }}">
+        <div class="ss-dropdown" id="finFilterPartnerDropdown"
+             style="position:absolute;top:100%;left:0;right:0;max-height:280px;overflow-y:auto;background:#fff;border:1px solid #ced4da;border-radius:0 0 10px 10px;z-index:1060;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);min-width:240px;">
+          <div class="ss-opt-f" data-id="" data-name="" style="padding:8px 12px;cursor:pointer;font-size:14px;color:#999;">— Hamma kontragent —</div>
+          {% for p in partners %}
+          <div class="ss-opt-f" data-id="{{ p.id }}" data-name="{{ p.name }}{% if p.phone %} {{ p.phone }}{% endif %}"
+               style="padding:8px 12px;cursor:pointer;font-size:14px;">
+            {{ p.name }}{% if p.phone %} <small style="color:#888;">{{ p.phone }}</small>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </div>
       <input type="date" name="date_from" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_from or '' }}" title="Sana dan">
       <span class="text-muted small">—</span>
       <input type="date" name="date_to" class="form-control form-control-sm" style="width:auto;border-radius:10px;" value="{{ filter_date_to or '' }}" title="Sana gacha">
@@ -138,7 +161,14 @@
           {% set p_status = payment.status|default('confirmed', true) %}
           <tr class="{% if p_status == 'cancelled' %}opacity-50{% endif %}">
             <td class="text-muted">{{ loop.index }}</td>
-            <td class="muted-cell">{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '—' }}</td>
+            <td class="muted-cell">
+              {{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '—' }}
+              {% if payment.created_at and payment.date and payment.created_at.strftime('%Y-%m-%d') != payment.date.strftime('%Y-%m-%d') %}
+              <br><small class="text-muted" style="font-size:11px;" title="Pul mijozdan olingan kun (haydovchi/agent). Tasdiq sanasi yuqorida.">
+                <i class="bi bi-clock-history"></i> Pul olingan: {{ payment.created_at.strftime('%d.%m.%Y') }}
+              </small>
+              {% endif %}
+            </td>
             <td class="muted-cell">{% if payment.cash_register %}{{ payment.cash_register.name or 'Kassa ' ~ payment.cash_register_id }}{% else %}—{% endif %}</td>
             <td>
               {% if payment.type == 'income' %}
@@ -170,18 +200,15 @@
             <td>
               <div class="d-flex gap-1">
                 {% if p_status == 'cancelled' %}
-                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash?');">
-                  <button type="submit" class="btn-act" title="Tasdiqlash"><i class="bi bi-check-circle"></i></button>
+                <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Qayta tasdiqlash?');">
+                  <button type="submit" class="btn-act" style="color:#28a745;" title="Qayta tasdiqlash"><i class="bi bi-check-circle"></i></button>
                 </form>
+                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                 {% else %}
                 <form method="post" action="/finance/payment/{{ payment.id }}/cancel" class="d-inline" onsubmit="return confirm('Tasdiqni bekor qilish?');">
-                  <button type="submit" class="btn-act warning" title="Bekor qilish"><i class="bi bi-x-circle"></i></button>
+                  <button type="submit" class="btn-act warning" title="Tasdiqni bekor qilish (keyin tahrirlash mumkin)"><i class="bi bi-x-circle"></i></button>
                 </form>
-                {% endif %}
-                {% if p_status == 'confirmed' %}
                 <a href="/finance/payment/{{ payment.id }}/edit?view=1" class="btn-act" title="Ko'rish"><i class="bi bi-eye"></i></a>
-                {% else %}
-                <a href="/finance/payment/{{ payment.id }}/edit" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
                 {% endif %}
                 <form method="post" action="/finance/payment/{{ payment.id }}/delete" class="d-inline" onsubmit="return confirm('O\'chirish?');">
                   <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
@@ -244,21 +271,20 @@ document.addEventListener('DOMContentLoaded', function() {
               <input type="date" class="form-control" name="payment_date" id="paymentDateInput" style="border-radius:10px;">
             </div>
             <div class="col-12">
-              <label class="form-label fw-semibold">Summa *</label>
-              <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" style="border-radius:10px;">
+              <label class="form-label fw-semibold">Summa * <small class="text-muted fw-normal">(F4 — kalkulyator)</small></label>
+              <input type="number" class="form-control form-control-lg" name="amount" required step="any" min="0" data-calc style="border-radius:10px;">
             </div>
             <div class="col-12">
               <label class="form-label fw-semibold">Kontragent *</label>
+              <input type="text" class="form-control" id="finPartnerSearch" placeholder="Nomi, telefon yoki kod bo'yicha qidiring..." autocomplete="off" style="border-radius:10px;">
               <input type="hidden" name="partner_id" id="finPartnerIdInput">
-              <div class="ss-wrap" style="position:relative;width:100%;">
-                <input type="text" class="form-control" id="finPartnerSearch" placeholder="Kontragent qidirish..." autocomplete="off" style="border-radius:10px;">
-                <div class="ss-dropdown" id="finPartnerDropdown" style="position:absolute;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:#fff;border:1px solid #ced4da;border-top:none;border-radius:0 0 10px 10px;z-index:1060;display:none;box-shadow:0 4px 12px rgba(0,0,0,.15);">
-                  <div class="ss-opt" data-id="" data-name="" style="padding:8px 12px;cursor:pointer;font-size:14px;color:#999;">— Tanlanmagan —</div>
-                  {% for p in partners or [] %}
-                  <div class="ss-opt" data-id="{{ p.id }}" data-name="{{ p.display_name }}{% if p.code %} ({{ p.code }}){% endif %}" style="padding:8px 12px;cursor:pointer;font-size:14px;">{{ p.display_name }}{% if p.code %} <small style="color:#888;">({{ p.code }})</small>{% endif %}</div>
-                  {% endfor %}
-                </div>
-              </div>
+              <div id="finPartnerResults" class="list-group" style="position:fixed;z-index:99999;max-height:300px;overflow-y:auto;overflow-x:hidden;display:none;background:#fff;border:1px solid #dee2e6;border-radius:.5rem;box-shadow:0 4px 16px rgba(0,0,0,.15);"></div>
+              <select id="finPartnerSelect" style="display:none;">
+                <option value="">—</option>
+                {% for p in partners or [] %}
+                <option value="{{ p.id }}" data-name="{{ p.display_name }}" data-phone="{{ p.phone or '' }}" data-code="{{ p.code or '' }}">{{ p.display_name }}</option>
+                {% endfor %}
+              </select>
               <small class="text-muted" id="expenseCounterpartyHint" style="display:none;"><i class="bi bi-info-circle"></i> Oylik to'lovi uchun kontragent tanlanmaydi (ixtiyoriy).</small>
             </div>
             <div class="col-12">
@@ -294,8 +320,9 @@ function filterFinTable(q) {
     tr.style.display = (!q || txt.includes(q)) ? '' : 'none';
   });
 }
-// Form validatsiya
-document.querySelector('#addPaymentModal form').addEventListener('submit', function(e) {
+// Form validatsiya (null-guard: element yo'q bo'lsa skript o'lmaydi)
+var _payForm = document.querySelector('#addPaymentModal form');
+if (_payForm) _payForm.addEventListener('submit', function(e) {
   var pid = document.getElementById('finPartnerIdInput').value;
   var amt = document.querySelector('#addPaymentModal input[name="amount"]').value;
   if (!pid || pid === '0' || pid === '') {
@@ -311,7 +338,8 @@ document.querySelector('#addPaymentModal form').addEventListener('submit', funct
   }
 });
 // Modal ochilganda sana maydonini bugungi sana bilan to'ldirish
-document.getElementById('addPaymentModal').addEventListener('show.bs.modal', function() {
+var _payModal = document.getElementById('addPaymentModal');
+if (_payModal) _payModal.addEventListener('show.bs.modal', function() {
   var dateInput = document.getElementById('paymentDateInput');
   if (dateInput && !dateInput.value) {
     var today = new Date();
@@ -321,26 +349,13 @@ document.getElementById('addPaymentModal').addEventListener('show.bs.modal', fun
     dateInput.value = y + '-' + m + '-' + d;
   }
 });
+// Filter typeahead — kontragent (yuqori formada)
 (function(){
-  var input = document.getElementById('finPartnerSearch');
-  var dropdown = document.getElementById('finPartnerDropdown');
-  var hidden = document.getElementById('finPartnerIdInput');
+  var input = document.getElementById('finFilterPartnerSearch');
+  var dropdown = document.getElementById('finFilterPartnerDropdown');
+  var hidden = document.getElementById('finFilterPartnerId');
   if(!input || !dropdown) return;
-  var allOpts = Array.from(dropdown.querySelectorAll('.ss-opt'));
-
-  input.addEventListener('focus', function(){ filter(); dropdown.style.display='block'; });
-  input.addEventListener('input', function(){ hidden.value=''; filter(); dropdown.style.display='block'; });
-  document.addEventListener('click', function(e){ if(!e.target.closest('.ss-wrap')) dropdown.style.display='none'; });
-
-  allOpts.forEach(function(opt){
-    opt.addEventListener('click', function(){
-      hidden.value = opt.getAttribute('data-id');
-      input.value = opt.getAttribute('data-name');
-      dropdown.style.display = 'none';
-    });
-    opt.addEventListener('mouseenter', function(){ opt.style.background='#0d6efd'; opt.style.color='#fff'; });
-    opt.addEventListener('mouseleave', function(){ opt.style.background=''; opt.style.color=''; });
-  });
+  var allOpts = Array.from(dropdown.querySelectorAll('.ss-opt-f'));
 
   function filter(){
     var q = (input.value||'').toLowerCase();
@@ -349,6 +364,88 @@ document.getElementById('addPaymentModal').addEventListener('show.bs.modal', fun
       opt.style.display = (!q || name.indexOf(q)!==-1) ? '' : 'none';
     });
   }
+  input.addEventListener('focus', function(){ filter(); dropdown.style.display='block'; });
+  input.addEventListener('input', function(){ hidden.value=''; filter(); dropdown.style.display='block'; });
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('#finFilterPartnerSearch') && !e.target.closest('#finFilterPartnerDropdown'))
+      dropdown.style.display='none';
+  });
+  allOpts.forEach(function(opt){
+    opt.addEventListener('mousedown', function(e){ e.preventDefault(); });
+    opt.addEventListener('click', function(){
+      hidden.value = opt.getAttribute('data-id');
+      input.value = opt.getAttribute('data-name') || '';
+      dropdown.style.display = 'none';
+    });
+    opt.addEventListener('mouseenter', function(){ opt.style.background='#0d6efd'; opt.style.color='#fff'; });
+    opt.addEventListener('mouseleave', function(){ opt.style.background=''; opt.style.color=''; });
+  });
+})();
+
+// Kontragent qidirish — purchases/new dagi ISHLAYDIGAN pattern (yashirin select + results, position:fixed)
+(function(){
+  var partnerInput = document.getElementById('finPartnerSearch');
+  var partnerIdHidden = document.getElementById('finPartnerIdInput');
+  var searchResults = document.getElementById('finPartnerResults');
+  var partnerSelect = document.getElementById('finPartnerSelect');
+  if (!partnerInput || !partnerSelect || !searchResults) return;
+
+  function placeResults(){
+    var r = partnerInput.getBoundingClientRect();
+    searchResults.style.top = (r.bottom + 2) + 'px';
+    searchResults.style.left = r.left + 'px';
+    searchResults.style.width = r.width + 'px';
+  }
+  partnerInput.addEventListener('input', function() {
+    var searchTerm = (this.value || '').trim().toLowerCase();
+    searchResults.style.display = 'none';
+    searchResults.innerHTML = '';
+    partnerIdHidden.value = '';
+    if (!searchTerm) return;
+    var options = Array.from(partnerSelect.options).slice(1);
+    var matches = options.filter(function(opt) {
+      var name = (opt.dataset.name || '').toLowerCase();
+      var phone = (opt.dataset.phone || '').toLowerCase();
+      var code = (opt.dataset.code || '').toLowerCase();
+      var id = (opt.value || '').toString();
+      return name.indexOf(searchTerm) !== -1 || phone.indexOf(searchTerm) !== -1 ||
+        code.indexOf(searchTerm) !== -1 || id === searchTerm;
+    });
+    if (matches.length > 0) {
+      matches.slice(0, 50).forEach(function(opt) {
+        var item = document.createElement('a');
+        item.href = '#';
+        item.className = 'list-group-item list-group-item-action';
+        var nm = document.createElement('strong');
+        nm.textContent = opt.dataset.name || '';
+        var bd = document.createElement('span');
+        bd.className = 'badge bg-secondary ms-1';
+        bd.textContent = '#' + opt.value + (opt.dataset.code ? ' ' + opt.dataset.code : '');
+        item.appendChild(nm); item.appendChild(document.createTextNode(' ')); item.appendChild(bd);
+        item.addEventListener('click', function(e) {
+          e.preventDefault();
+          partnerInput.value = opt.dataset.name || '';
+          partnerIdHidden.value = opt.value;
+          searchResults.style.display = 'none';
+        });
+        searchResults.appendChild(item);
+      });
+      placeResults();
+      searchResults.style.display = 'block';
+    } else {
+      var none = document.createElement('div');
+      none.className = 'list-group-item text-muted';
+      none.textContent = 'Topilmadi.';
+      searchResults.appendChild(none);
+      placeResults();
+      searchResults.style.display = 'block';
+    }
+  });
+  window.addEventListener('resize', function(){ if(searchResults.style.display==='block') placeResults(); });
+  window.addEventListener('scroll', function(){ if(searchResults.style.display==='block') placeResults(); }, true);
+  document.addEventListener('click', function(e) {
+    if (!partnerInput.contains(e.target) && !searchResults.contains(e.target)) searchResults.style.display = 'none';
+  });
 })();
 </script>
 {% endblock %}

@@ -64,6 +64,44 @@
         </div>
         <div class="card-body p-0">
             {% if doc %}
+            {% if doc.status == 'draft' %}
+            <div class="px-3 pt-3">
+                <p class="text-muted small mb-2">
+                    <i class="bi bi-pencil"></i> Bu hujjat <strong>qoralama</strong> — qator qo'shish/o'chirish mumkin. Tasdiqlangach o'zgartirib bo'lmaydi.
+                </p>
+            </div>
+            <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ doc.id }}/items/add" id="addItemForm">
+                <div class="filter-card mx-3 mb-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4 position-relative">
+                            <label class="form-label small">Kontragent</label>
+                            <input type="text" id="addPartnerSearch" class="form-control form-control-sm" placeholder="Nomi yoki telefon..." autocomplete="off">
+                            <input type="hidden" name="partner_id" id="addPartnerId" value="" required>
+                            <div id="addPartnerResults" class="list-group position-absolute" style="z-index:1000; max-height:220px; overflow-y:auto; display:none; left:0; right:0; box-shadow:0 4px 8px rgba(0,0,0,.1);"></div>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Tur</label>
+                            <select id="addBalanceType" class="form-select form-select-sm">
+                                <option value="1">Uning qarzi</option>
+                                <option value="-1">Bizning qarzimiz</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small">Summa (so'm)</label>
+                            <input type="number" id="addBalanceInput" name="balance" class="form-control form-control-sm" step="0.01" min="0" placeholder="100000" required>
+                        </div>
+                        <div class="col-md-2">
+                            <button type="submit" class="btn btn-primary btn-sm w-100"><i class="bi bi-plus-circle"></i> Qator qo'shish</button>
+                        </div>
+                    </div>
+                </div>
+                <select id="addPartnerList" style="display:none;">
+                    {% for p in partners %}
+                    <option value="{{ p.id }}" data-name="{{ p.name }}" data-phone="{{ p.phone or '' }}">{{ p.name }}{% if p.phone %} — {{ p.phone }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            {% endif %}
             <table class="table mb-0">
                 <thead>
                     <tr>
@@ -71,6 +109,7 @@
                         <th>Kontragent</th>
                         <th class="text-end">Summa (so'm)</th>
                         <th>Tur</th>
+                        {% if doc.status == 'draft' %}<th style="width:50px;"></th>{% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -89,9 +128,16 @@
                             <span class="text-muted">0</span>
                             {% endif %}
                         </td>
+                        {% if doc.status == 'draft' %}
+                        <td>
+                            <form method="post" action="/qoldiqlar/kontragent/hujjat/{{ doc.id }}/items/{{ item.id }}/delete" class="d-inline" onsubmit="return confirm('Qatorni o\'chirmoqchimisiz?');">
+                                <button type="submit" class="btn btn-sm btn-outline-danger" title="O'chirish"><i class="bi bi-trash"></i></button>
+                            </form>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% else %}
-                    <tr><td colspan="4" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
+                    <tr><td colspan="{{ 5 if doc.status == 'draft' else 4 }}" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
@@ -262,6 +308,77 @@
             e.preventDefault();
             alert('Kamida bitta kontragent qo\'shing.');
         }
+    });
+})();
+
+// Draft hujjatga yangi qator qo'shish (addItemForm)
+(function() {
+    var form = document.getElementById('addItemForm');
+    if (!form) return;
+    var search = document.getElementById('addPartnerSearch');
+    var hiddenId = document.getElementById('addPartnerId');
+    var results = document.getElementById('addPartnerResults');
+    var list = document.getElementById('addPartnerList');
+    var typeSelect = document.getElementById('addBalanceType');
+    var balanceInput = document.getElementById('addBalanceInput');
+
+    function clearResults() {
+        while (results.firstChild) results.removeChild(results.firstChild);
+    }
+
+    function showList(term) {
+        term = (term || '').trim().toLowerCase();
+        clearResults();
+        hiddenId.value = '';
+        if (!term) { results.style.display = 'none'; return; }
+        var opts = Array.from(list.options);
+        var matches = opts.filter(function(opt) {
+            var name = (opt.dataset.name || '').toLowerCase();
+            var phone = (opt.dataset.phone || '').toLowerCase();
+            return name.indexOf(term) !== -1 || phone.indexOf(term) !== -1;
+        }).slice(0, 30);
+        if (matches.length > 0) {
+            matches.forEach(function(opt) {
+                var a = document.createElement('a');
+                a.href = '#'; a.className = 'list-group-item list-group-item-action';
+                a.textContent = (opt.dataset.name || '') + (opt.dataset.phone ? ' — ' + opt.dataset.phone : '');
+                a.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    search.value = opt.dataset.name + (opt.dataset.phone ? ' — ' + opt.dataset.phone : '');
+                    hiddenId.value = opt.value;
+                    results.style.display = 'none';
+                });
+                results.appendChild(a);
+            });
+            results.style.display = 'block';
+        } else {
+            var d = document.createElement('div');
+            d.className = 'list-group-item text-muted';
+            d.textContent = 'Topilmadi.';
+            results.appendChild(d);
+            results.style.display = 'block';
+        }
+    }
+    search.addEventListener('focus', function() { if (!hiddenId.value) showList(this.value); });
+    search.addEventListener('input', function() { hiddenId.value = ''; showList(this.value); });
+    document.addEventListener('click', function(e) {
+        if (results && !search.contains(e.target) && !results.contains(e.target)) results.style.display = 'none';
+    });
+
+    form.addEventListener('submit', function(e) {
+        if (!hiddenId.value) {
+            e.preventDefault();
+            alert('Kontragentni ro\'yxatdan tanlang.');
+            return;
+        }
+        var amount = parseFloat(balanceInput.value) || 0;
+        if (amount <= 0) {
+            e.preventDefault();
+            alert('Summani kiriting (0 dan katta).');
+            return;
+        }
+        var typeMul = typeSelect ? parseInt(typeSelect.value, 10) : 1;
+        balanceInput.value = typeMul === -1 ? -Math.abs(amount) : Math.abs(amount);
     });
 })();
 </script>

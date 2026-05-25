@@ -26,10 +26,38 @@
             {% if not transfer or transfer.status != 'confirmed' %}
             <button type="submit" form="docForm" class="btn btn-primary btn-sm"><i class="bi bi-save"></i> {% if transfer and transfer.status == 'draft' %}Saqlash (qoralama){% else %}Saqlash{% endif %}</button>
             {% if transfer and transfer.status in ('draft', 'pending_approval') %}
-            <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm" id="confirmForm" class="d-inline" onsubmit="return confirm('Hujjatni tasdiqlash — ombordagi qoldiqlar o\'zgaradi. Davom etasizmi?');">
+            <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm" id="confirmForm" class="d-inline">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
-                <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
+                <button type="submit" class="btn btn-success btn-sm" id="confirmBtn"><i class="bi bi-check-lg"></i> Tasdiqlash</button>
             </form>
+            <script>
+            (function() {
+                var confirmForm = document.getElementById('confirmForm');
+                var docForm = document.getElementById('docForm');
+                if (!confirmForm || !docForm) return;
+                var bypassed = false;
+                confirmForm.addEventListener('submit', async function(e) {
+                    if (bypassed) return;
+                    e.preventDefault();
+                    if (!confirm('Hujjatni tasdiqlash — ombordagi qoldiqlar o\'zgaradi. Davom etasizmi?')) return;
+                    var btn = document.getElementById('confirmBtn');
+                    if (btn) { btn.disabled = true; btn.textContent = '⏳ Saqlanmoqda...'; }
+                    try {
+                        var saveResp = await fetch(docForm.action, { method: 'POST', body: new FormData(docForm), redirect: 'follow' });
+                        if (!saveResp.ok && saveResp.status !== 303) {
+                            alert('Saqlashda xato: ' + saveResp.status);
+                            if (btn) { btn.disabled = false; btn.textContent = '✓ Tasdiqlash'; }
+                            return;
+                        }
+                        bypassed = true;
+                        confirmForm.submit();
+                    } catch (err) {
+                        alert('Xato: ' + err.message);
+                        if (btn) { btn.disabled = false; btn.textContent = '✓ Tasdiqlash'; }
+                    }
+                });
+            })();
+            </script>
             {% endif %}
             {% endif %}
             {% if transfer %}
@@ -237,9 +265,9 @@
 (function() {
     var showTannarx = {{ 'true' if show_tannarx else 'false' }};
     var hasTarixColumn = {{ 'true' if (transfer and transfer.from_warehouse_id) else 'false' }};
-    var stockByWhProduct = {{ stock_by_warehouse_product | tojson | safe }};
-    var stockCostByWhProduct = {{ (stock_cost_by_warehouse_product or {}) | tojson | safe }};
-    var products = {{ products_list | tojson | safe }};
+    var stockByWhProduct = {{ stock_by_warehouse_product | tojson }};
+    var stockCostByWhProduct = {{ (stock_cost_by_warehouse_product or {}) | tojson }};
+    var products = {{ products_list | tojson }};
     var fromWh = document.getElementById('fromWh');
     var toWh = document.getElementById('toWh');
     var itemsBody = document.getElementById('itemsBody');

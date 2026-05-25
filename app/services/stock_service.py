@@ -168,12 +168,18 @@ def delete_stock_movements_for_document(db: Session, document_type: str, documen
     return deleted
 
 
-def apply_return_stock_addition(db: Session, order, current_user, note_prefix: str = "Qaytarish") -> None:
+def apply_return_stock_addition(db: Session, order, current_user, note_prefix: str = "Qaytarish",
+                                user_id: int = None) -> None:
     """Return order itemlari uchun "return_sale" StockMovementlarini yaratadi (stock kirim).
 
     Vozvrat omborga (yoki order.warehouse_id ga) qaytgan tovar kiradi. Stock check
-    kerak emas — bu kirim hujjati."""
+    kerak emas — bu kirim hujjati.
+
+    user_id: agar berilsa, current_user.id o'rniga shu ishlatiladi (haydovchi
+    kontekstida current_user yo'q — Driver.employee_id beriladi)."""
     from datetime import datetime as _dt
+    if user_id is None and current_user is not None:
+        user_id = current_user.id
     valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
     for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
@@ -188,10 +194,44 @@ def apply_return_stock_addition(db: Session, order, current_user, note_prefix: s
             document_type="Sale",
             document_id=order.id,
             document_number=order.number,
-            user_id=current_user.id if current_user else None,
+            user_id=user_id,
             note=f"{note_prefix}: {order.number}",
             created_at=order.date or _dt.now(),
         )
+
+
+def compute_missing_items(db: Session, order) -> list:
+    """Order itemlari uchun ombordagi yetishmaydigan miqdorni hisoblaydi.
+
+    Foydalanuvchi waiting_production status sababini bilishi uchun ishlatiladi.
+
+    Qaytaradi: [{product, product_id, need, have, missing, warehouse_id}, ...]
+    """
+    from app.models.database import Stock
+    missing = []
+    for it in (order.items or []):
+        if not it.product_id or not (it.quantity or 0) > 0:
+            continue
+        wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
+        if not wh_id:
+            continue
+        stock = db.query(Stock).filter(
+            Stock.warehouse_id == wh_id, Stock.product_id == it.product_id
+        ).first()
+        have = float(stock.quantity or 0) if stock else 0.0
+        need = float(it.quantity or 0)
+        gap = need - have
+        if gap > 0.01:
+            pname = it.product.name if it.product else f"#{it.product_id}"
+            missing.append({
+                "product": pname,
+                "product_id": it.product_id,
+                "need": need,
+                "have": have,
+                "missing": gap,
+                "warehouse_id": wh_id,
+            })
+    return missing
 
 
 def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: str = "Sotuv") -> None:

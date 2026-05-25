@@ -28,7 +28,7 @@
     <div class="card-header fw-bold"><i class="bi bi-plus-circle"></i> Yangi kurs qo'shish</div>
     <div class="card-body">
         <form method="post" action="/admin/exchange-rates/create" class="row g-3 align-items-end">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
             <div class="col-md-2">
                 <label class="form-label small">Manba</label>
                 <select name="from_currency" class="form-select" required>
@@ -95,7 +95,7 @@
                 <td class="text-muted small">{{ r.created_at.strftime('%d.%m.%Y %H:%M') if r.created_at else '—' }}</td>
                 <td>
                     <form method="post" action="/admin/exchange-rates/delete/{{ r.id }}" style="display:inline;" onsubmit="return confirm('Kursni o\'chirmoqchimisiz? Bu amal qaytarib bo\'lmaydi.');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+                        {% if csrf_token %}<input type="hidden" name="csrf_token" value="{{ csrf_token }}">{% endif %}
                         <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" title="O'chirish">
                             <i class="bi bi-trash"></i>
                         </button>

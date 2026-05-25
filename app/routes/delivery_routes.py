@@ -438,6 +438,40 @@ async def supervisor_agent_orders(
     if status and status != "all":
         q = q.filter(Order.status == status)
     orders = q.order_by(Order.created_at.desc()).limit(100).all()
+    # Topilma 2A: waiting_production buyurtma uchun qaysi Production (qaysi mahsulot) ko'rsatilsin
+    from app.models.database import Production as _Production, Stock as _Stock
+    production_info = {}
+    missing_items = {}  # {order_id: [{product, need, have, missing}]}
+    _wp_orders = [o for o in orders if o.status == "waiting_production"]
+    _wp_ids = [o.id for o in _wp_orders]
+    if _wp_ids:
+        for p in db.query(_Production).options(joinedload(_Production.recipe)).filter(
+            _Production.order_id.in_(_wp_ids)
+        ).all():
+            rn = getattr(getattr(p, "recipe", None), "name", None) or "—"
+            production_info.setdefault(p.order_id, []).append(
+                f"{p.number} · {rn} · {float(p.quantity or 0):g} · {p.status}"
+            )
+        # Yetishmayotgan mahsulotlarni hisoblash (har order uchun)
+        for o in _wp_orders:
+            missing = []
+            for it in (o.items or []):
+                if not it.product_id or not (it.quantity or 0) > 0:
+                    continue
+                wh_id = it.warehouse_id or o.warehouse_id
+                if not wh_id:
+                    continue
+                stock = db.query(_Stock).filter(
+                    _Stock.warehouse_id == wh_id, _Stock.product_id == it.product_id
+                ).first()
+                have = float(stock.quantity or 0) if stock else 0.0
+                need = float(it.quantity or 0)
+                gap = need - have
+                if gap > 0.01:
+                    pname = it.product.name if it.product else f"#{it.product_id}"
+                    missing.append({"product": pname, "need": need, "have": have, "missing": gap})
+            if missing:
+                missing_items[o.id] = missing
     drivers = db.query(Driver).filter(Driver.is_active == True).all()
     agents = db.query(Agent).filter(Agent.is_active == True).all()
     draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
@@ -451,6 +485,8 @@ async def supervisor_agent_orders(
         "current_status": status,
         "draft_count": draft_count,
         "waiting_count": waiting_count,
+        "production_info": production_info,
+        "missing_items": missing_items,
         "page_title": "Agent buyurtmalari",
     })
 
@@ -469,8 +505,9 @@ async def supervisor_confirm_agent_order(
       2) dispatch (/sales/{id}/dispatch) → stock chiqarish + Delivery yaratish
       3) driver "Yetkazdim" → partner balance + delivered
 
-    Istisno: return_sale (obmen qaytarish) eski oqimda qoladi —
-    qaytgan tovar jismonan tasdiq paytida keladi → apply_return_stock_addition.
+    return_sale (obmen qaytarish) ham endi oddiy sotuv kabi dispatch → driver
+    oqimidan o'tadi. Qaytgan tovar jismonan haydovchi "Yetkazdim" bosganda keladi
+    (apply_return_stock_addition shu yerda emas, api_driver_ops.py da chaqiriladi).
     """
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
@@ -501,20 +538,21 @@ async def supervisor_confirm_agent_order(
         return RedirectResponse(url="/supervisor/agent-orders?error=already_confirmed", status_code=303)
     db.refresh(order)
 
-    # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi, omborga kirim qilamiz.
-    # Bu yerda dispatch oqimi YO'Q — return confirmda yakunlanadi.
-    if order.type == "return_sale":
-        from app.services.stock_service import apply_return_stock_addition
-        apply_return_stock_addition(db, order, current_user, note_prefix="Obmen qaytarish (Vozvrat kirim)")
-        order.user_id = current_user.id
-        db.commit()
-        return RedirectResponse(
-            url="/supervisor/agent-orders?info=" + quote(f"{order.number} (obmen qaytarish) tasdiqlandi"),
-            status_code=303,
-        )
-
-    # Oddiy sotuv: faqat status va user_id. Stock/balance/Delivery — dispatch bosqichida.
+    # Oddiy sotuv VA obmen (return_sale): faqat status va user_id.
+    # Stock/balance/Delivery — dispatch bosqichida; obmen qaytgan tovar kirimi
+    # haydovchi "Yetkazdim" bosganda (api_driver_ops.py) amalga oshiriladi.
     order.user_id = current_user.id
+    # Obmen child (yangi sotuv) ham birga tasdiqlanadi — dispatch UI tugmasi
+    # ex_child.status=='confirmed' shartiga bog'liq (agents/detail.html).
+    # b881e3c'da bu blok early-return va apply_return_stock_addition bilan birga
+    # noto'g'ri o'chirilgan edi (regressiya, 2 orphan: AGT-20260518-005,
+    # AGT-20260519-011); endi tiklandi.
+    if order.type == "return_sale":
+        db.execute(
+            _text("UPDATE orders SET status='confirmed', user_id=:uid "
+                  "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+            {"uid": current_user.id, "pid": order.id},
+        )
     db.commit()
     try:
         from app.bot.services.audit_watchdog import audit_agent_order_confirm
@@ -596,7 +634,9 @@ async def supervisor_delete_agent_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent buyurtmasini o'chirish (faqat bekor qilingan yoki draft)."""
+    """Agent buyurtmasini o'chirish (faqat bekor qilingan yoki draft).
+    Obmen juftligi (return_sale + parent_order_id'li child sale) avtomatik birga o'chiriladi.
+    """
     from app.models.database import OrderItem as OI, Delivery as DeliveryModel
     order = db.query(Order).filter(Order.id == order_id, Order.source == "agent").first()
     if not order:
@@ -606,15 +646,46 @@ async def supervisor_delete_agent_order(
             url="/supervisor/agent-orders?error=confirmed_delete&detail=" + quote("Tasdiqlangan buyurtmani to'g'ridan-to'g'ri o'chirib bo'lmaydi. Avval bekor qiling."),
             status_code=303,
         )
-    # Cancelled bo'lsa StockMovement orphan bo'lib qolmasligi uchun tozalash
-    if order.status == "cancelled":
-        delete_stock_movements_for_document(db, "Sale", order.id)
-    # Bog'liq yetkazishlarni o'chirish
-    db.query(DeliveryModel).filter(DeliveryModel.order_id == order.id).delete()
-    # Order itemlarni o'chirish
-    db.query(OI).filter(OI.order_id == order.id).delete()
-    # Buyurtmani o'chirish
-    db.delete(order)
+
+    # Obmen juftligini topish (FK constraint uchun ikkalasini birga o'chirish kerak)
+    to_delete = [order]
+    if order.type == "return_sale":
+        # Parent ret_order: child sale topib qo'shish
+        child = db.query(Order).filter(Order.parent_order_id == order.id, Order.type == "sale").first()
+        if child:
+            if child.status not in ("draft", "cancelled"):
+                return RedirectResponse(
+                    url="/supervisor/agent-orders?error=obmen_pair&detail=" + quote(
+                        f"Bu obmen juftligi: child {child.number} status='{child.status}'. Avval ikkalasini bekor qiling."
+                    ),
+                    status_code=303,
+                )
+            to_delete.append(child)
+    elif order.parent_order_id:
+        # Child sale: parent ret_order topib qo'shish (agar mavjud bo'lsa va ham cancelled bo'lsa)
+        parent = db.query(Order).filter(Order.id == order.parent_order_id).first()
+        if parent and parent.status in ("draft", "cancelled"):
+            to_delete.append(parent)
+        elif parent:
+            return RedirectResponse(
+                url="/supervisor/agent-orders?error=obmen_pair&detail=" + quote(
+                    f"Bu obmen yangi sotuvi: parent {parent.number} status='{parent.status}'. Avval ikkalasini bekor qiling."
+                ),
+                status_code=303,
+            )
+
+    for o in to_delete:
+        if o.status == "cancelled":
+            delete_stock_movements_for_document(db, "Sale", o.id)
+        db.query(DeliveryModel).filter(DeliveryModel.order_id == o.id).delete()
+        db.query(OI).filter(OI.order_id == o.id).delete()
+
+    # Sale child avval o'chirilsin (FK constraint), keyin parent ret_order.
+    # SQLAlchemy executemany ni oldini olish uchun flush() har biri uchun chaqiriladi.
+    to_delete.sort(key=lambda o: 0 if o.parent_order_id else 1)
+    for o in to_delete:
+        db.delete(o)
+        db.flush()  # Majburiy: SQLAlchemy batch deletes ni qilmasin
     db.commit()
     return RedirectResponse(url="/supervisor/agent-orders", status_code=303)
 
@@ -643,10 +714,26 @@ def _get_pending_agent_payments(db):
 async def supervisor_agent_payments(
     request: Request,
     status: str = "all",
+    date_from: str = None,
+    date_to: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent va Haydovchi to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
+    # Sana filtri (default: bugun)
+    from datetime import datetime as _dt, date as _date
+    today = _date.today()
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+    except (ValueError, TypeError):
+        d_from = today
+    try:
+        d_to = _dt.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+    except (ValueError, TypeError):
+        d_to = today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+
     q = db.query(AgentPayment).order_by(AgentPayment.id.desc())
     if status == "pending":
         q = q.filter(AgentPayment.status == "pending")
@@ -659,9 +746,13 @@ async def supervisor_agent_payments(
         p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
         p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
 
-    # Haydovchi to'lovlari (Payment.category='delivery')
+    # Haydovchi to'lovlari (Payment.category='delivery') — sana filtri bilan
     from app.models.database import Payment as _Payment
-    dq = db.query(_Payment).filter(_Payment.category == "delivery").order_by(_Payment.id.desc())
+    dq = db.query(_Payment).filter(
+        _Payment.category == "delivery",
+        func.date(_Payment.date) >= d_from,
+        func.date(_Payment.date) <= d_to,
+    ).order_by(_Payment.id.desc())
     if status == "confirmed":
         dq = dq.filter(_Payment.status == "confirmed")
     driver_payments = dq.limit(QUERY_LIMIT_DEFAULT).all()
@@ -706,6 +797,11 @@ async def supervisor_agent_payments(
     driver_balances.sort(key=lambda x: -x["amount"])
     total_pending = sum(d["amount"] for d in driver_balances)
 
+    # Tanlangan davr jamisi (filtered driver_payments uchun)
+    range_total = sum(float(p.amount or 0) for p in driver_payments)
+    range_pending = sum(float(p.amount or 0) for p in driver_payments if p.status == "pending")
+    range_confirmed = sum(float(p.amount or 0) for p in driver_payments if p.status == "confirmed")
+
     return templates.TemplateResponse("supervisor/agent_payments.html", {
         "request": request,
         "payments": payments,
@@ -713,6 +809,11 @@ async def supervisor_agent_payments(
         "driver_balances": driver_balances,
         "total_pending": total_pending,
         "status_filter": status,
+        "date_from": d_from.isoformat(),
+        "date_to": d_to.isoformat(),
+        "range_total": range_total,
+        "range_pending": range_pending,
+        "range_confirmed": range_confirmed,
         "current_user": current_user,
     })
 
@@ -843,10 +944,13 @@ async def supervisor_confirm_driver_payment(
     if p.status != "pending":
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
 
-    # Atomik UPDATE WHERE
+    # Atomik UPDATE WHERE + Payment.date'ni tasdiqlangan vaqtga ko'chirish.
+    # created_at original audit izi sifatida o'zgarmaydi (haydovchi pul olgan vaqt).
+    now = datetime.now()
     claim = db.execute(
-        _text("UPDATE payments SET status='confirmed' WHERE id=:id AND status='pending' AND category='delivery'"),
-        {"id": payment_id},
+        _text("UPDATE payments SET status='confirmed', date=:now "
+              "WHERE id=:id AND status='pending' AND category='delivery'"),
+        {"id": payment_id, "now": now},
     )
     if claim.rowcount == 0:
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)

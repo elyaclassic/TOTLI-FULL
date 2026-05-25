@@ -398,11 +398,17 @@ def create_production_from_order(
             seq = 1
         number = f"{prefix}{str(seq).zfill(3)}"
         
+        # Ombor tanlash: recipe.default_warehouse_id birinchi (retsept egasi tanlagan),
+        # keyin "Xom ashyo" qidiruv (eski heuristika), oxirida order ombori fallback.
+        # Sabab: yarim_tayyor ingredientli retseptlar (masalan RULET IRIS LIST)
+        # yarim_tayyor omboridan olinishi kerak, "Xom ashyo" emas — recipe buni biladi.
+        rcp_input_wh = getattr(recipe, "default_warehouse_id", None)
+        rcp_output_wh = getattr(recipe, "default_output_warehouse_id", None)
         production = Production(
             number=number,
             recipe_id=recipe.id,
-            warehouse_id=raw_material_warehouse.id if raw_material_warehouse else order.warehouse_id,
-            output_warehouse_id=finished_warehouse_id,
+            warehouse_id=rcp_input_wh or (raw_material_warehouse.id if raw_material_warehouse else order.warehouse_id),
+            output_warehouse_id=rcp_output_wh or finished_warehouse_id,
             quantity=needed,
             status="draft",
             current_stage=start_stage,

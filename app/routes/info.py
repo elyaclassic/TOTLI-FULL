@@ -782,14 +782,21 @@ async def info_cash(request: Request, db: Session = Depends(get_db), current_use
     cash_registers = db.query(CashRegister).all()
     departments = db.query(Department).filter(Department.is_active == True).all()
     cash_computed_balance = {}
+    # Valyuta bo'yicha alohida jamlash (USD+UZS aralashtirmaslik)
+    totals_by_currency = {}
     for c in cash_registers:
-        cash_computed_balance[c.id] = _fs_cash_balance_formula(db, c.id)[0]
-    jami_balans = sum(cash_computed_balance.values())
+        bal = _fs_cash_balance_formula(db, c.id)[0]
+        cash_computed_balance[c.id] = bal
+        curr = (c.currency or "UZS").upper()
+        totals_by_currency.setdefault(curr, 0.0)
+        totals_by_currency[curr] += float(bal or 0)
+    jami_balans = totals_by_currency.get("UZS", 0.0)  # eski o'zgaruvchini saqlash (UZS-only)
     return templates.TemplateResponse("info/cash.html", {
         "request": request,
         "cash_registers": cash_registers,
         "cash_computed_balance": cash_computed_balance,
         "jami_balans": jami_balans,
+        "totals_by_currency": totals_by_currency,
         "departments": departments,
         "current_user": current_user,
         "page_title": "Kassalar",
@@ -803,6 +810,7 @@ async def info_cash_add(
     balance: float = Form(0),
     department_id: int = Form(None),
     payment_type: Optional[str] = Form(None),
+    currency: Optional[str] = Form("UZS"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -810,12 +818,16 @@ async def info_cash_add(
     pt = (payment_type or "").strip() or None
     if pt and pt not in ("naqd", "plastik", "click", "terminal"):
         pt = None
+    curr = (currency or "UZS").upper().strip()[:3]
+    if curr not in ("UZS", "USD", "EUR", "RUB"):
+        curr = "UZS"
     cash = CashRegister(
         name=name,
         balance=float(balance),
         opening_balance=float(balance),
         department_id=department_id if department_id else None,
         payment_type=pt,
+        currency=curr,
         is_active=True,
     )
     db.add(cash)
@@ -833,6 +845,7 @@ async def info_cash_edit(
     balance: float = Form(0),
     department_id: int = Form(None),
     payment_type: Optional[str] = Form(None),
+    currency: Optional[str] = Form("UZS"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -845,6 +858,9 @@ async def info_cash_edit(
     cash.department_id = department_id if department_id else None
     pt = (payment_type or "").strip() or None
     cash.payment_type = pt if pt in ("naqd", "plastik", "click", "terminal") else None
+    curr = (currency or "UZS").upper().strip()[:3]
+    if curr in ("UZS", "USD", "EUR", "RUB"):
+        cash.currency = curr
     sync_cash_balance(db, cash_id)
     db.commit()
     return RedirectResponse(url="/info/cash", status_code=303)

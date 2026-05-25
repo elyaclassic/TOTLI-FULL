@@ -29,6 +29,7 @@ def get_rate(db: Session, from_currency: str, to_currency: str, on_date: _date =
     if row:
         return float(row.rate or 0)
 
+    # Teskari yo'nalishni ham tekshirish: USD→UZS topilmasa, UZS→USD ni teskari qiymat qilib qaytarish
     reverse = (
         db.query(ExchangeRate)
         .filter(

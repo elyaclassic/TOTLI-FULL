@@ -92,6 +92,8 @@ async def qoldiqlar_page(
     current_user: User = Depends(require_auth),
 ):
     """Qoldiqlar sahifasi: kassa, tovar (forma spiska 1C), kontragent qoldiqlarini kiritish"""
+    from app.utils.db_schema import ensure_stock_adjustment_doc_type_column
+    ensure_stock_adjustment_doc_type_column(db)
     cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).all()
     warehouses = get_warehouses_for_user(db, current_user)
     products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
@@ -521,11 +523,19 @@ async def qoldiqlar_kontragent_hujjat_create(
     if not items_data:
         return RedirectResponse(url="/qoldiqlar/kontragent/hujjat/new", status_code=303)
 
-    count = db.query(PartnerBalanceDoc).filter(
-        PartnerBalanceDoc.date >= doc_date.replace(hour=0, minute=0, second=0),
-        PartnerBalanceDoc.date < doc_date.replace(hour=23, minute=59, second=59)
-    ).count()
-    number = f"KNT-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    # MAX(number) suffix asosida raqam — count() bug (deleted gaps, race condition) ni oldini olish
+    prefix = f"KNT-{doc_date.strftime('%Y%m%d')}-"
+    last = (
+        db.query(PartnerBalanceDoc)
+        .filter(PartnerBalanceDoc.number.like(f"{prefix}%"))
+        .order_by(PartnerBalanceDoc.number.desc())
+        .first()
+    )
+    try:
+        next_num = int(last.number.split("-")[-1]) + 1 if last else 1
+    except (ValueError, AttributeError):
+        next_num = 1
+    number = f"{prefix}{str(next_num).zfill(4)}"
 
     doc = PartnerBalanceDoc(
         number=number,
@@ -612,6 +622,307 @@ async def qoldiqlar_kontragent_hujjat_revert(
             partner.balance = item.previous_balance
     doc.status = "draft"
     db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
+
+
+@router.get("/balance-import", response_class=HTMLResponse)
+async def qoldiqlar_balance_import(
+    request: Request,
+    apply: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Sales Doctor balansy klientov JSON dan hisobot + draft hujjat yaratish.
+
+    JSON fayl: scripts/balance_import_20260520.json (sales doctor xlsx dan).
+    apply=False (default): hisobot. apply=True: draft hujjat yaratish.
+    """
+    from app.services.balance_import_data import SD_BALANCE_DATA
+    sd_rows = SD_BALANCE_DATA
+
+    def norm_name(s):
+        return "".join(c for c in (s or "").lower().strip() if c.isalnum())
+
+    def norm_phone(p):
+        d = "".join(c for c in (p or "") if c.isdigit())
+        return d[-9:] if len(d) >= 7 else ""
+
+    partners = db.query(Partner).filter(Partner.is_active == True).all()
+    by_name, by_phone = {}, {}
+    for p in partners:
+        nk = norm_name(p.name)
+        if nk:
+            by_name.setdefault(nk, []).append(p)
+        for ph in [p.phone, p.phone2]:
+            pk = norm_phone(ph or "")
+            if pk:
+                by_phone.setdefault(pk, []).append(p)
+
+    matched, multi, not_found = [], [], []
+    for sd in sd_rows:
+        cands = []
+        nk = norm_name(sd["name"])
+        pk = norm_phone(sd["phone"])
+        if nk in by_name:
+            cands.extend(by_name[nk])
+        if pk and pk in by_phone:
+            for c in by_phone[pk]:
+                if c not in cands:
+                    cands.append(c)
+        if len(cands) == 1:
+            matched.append((sd, cands[0]))
+        elif len(cands) > 1:
+            multi.append((sd, cands))
+        else:
+            not_found.append(sd)
+
+    # SIGNING TESKARI: SD "-" = mijoz qarzdor, TOTLI "+" = mijoz qarzdor
+    # Yangi TOTLI balans = -sd_summa, delta = target - hozirgi
+    diffs = [(sd, p, (-sd["summa"]) - p.balance) for sd, p in matched if abs((-sd["summa"]) - p.balance) > 0.5]
+
+    # Apply rejimida: draft hujjat yaratish
+    apply_msg = ""
+    if apply and diffs:
+        now = datetime.now()
+        prefix = f"KNT-{now.strftime('%Y%m%d')}-"
+        last = db.query(PartnerBalanceDoc).filter(PartnerBalanceDoc.number.like(f"{prefix}%")).order_by(PartnerBalanceDoc.number.desc()).first()
+        try:
+            next_num = int(last.number.split("-")[-1]) + 1 if last else 1
+        except (ValueError, AttributeError):
+            next_num = 1
+        number = f"{prefix}{str(next_num).zfill(4)}"
+        doc = PartnerBalanceDoc(number=number, date=now, user_id=current_user.id, status="draft")
+        db.add(doc)
+        db.flush()
+        for sd, p, delta in diffs:
+            db.add(PartnerBalanceDocItem(doc_id=doc.id, partner_id=p.id, balance=delta))
+        db.commit()
+        apply_msg = f'<div class="alert alert-success"><strong>✓ Qoralama hujjat yaratildi:</strong> <a href="/qoldiqlar/kontragent/hujjat/{doc.id}">{number}</a> — brauzerda ochib Tasdiqlash tugmasini bosing.</div>'
+
+    # HTML hisobot
+    html = ['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Balans import</title>',
+            '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">',
+            '<style>body{padding:20px;font-family:sans-serif;}table{font-size:.85rem;}.num{text-align:right;font-family:monospace;}</style>',
+            '</head><body><div class="container-fluid">',
+            '<h4>Balans import — Sales Doctor 20.05.2026</h4>',
+            apply_msg]
+    html.append(f'<p><b>Sales Doctor:</b> {len(sd_rows)} mijoz | <b>TOTLI BI aktiv:</b> {len(partners)} mijoz</p>')
+    html.append(f'<ul>')
+    html.append(f'<li>✓ Topilgan (yagona): <b>{len(matched)}</b></li>')
+    html.append(f'<li>? Bir nechta variant: <b>{len(multi)}</b></li>')
+    html.append(f'<li>✗ Topilmadi: <b>{len(not_found)}</b></li>')
+    html.append(f'<li>= Balans bir xil: <b>{len(matched) - len(diffs)}</b></li>')
+    html.append(f'<li>≠ Farq qiladi: <b>{len(diffs)}</b></li>')
+    total_delta = sum(d for _, _, d in diffs)
+    html.append(f'<li><b>JAMI DELTA:</b> {total_delta:,.0f} so\'m</li>')
+    html.append('</ul>')
+
+    if not apply and diffs:
+        html.append(f'<p><a href="/qoldiqlar/balance-import?apply=1" class="btn btn-warning" onclick="return confirm(\'{len(diffs)} ta mijoz uchun draft hujjat yarataymi?\')">✓ Qoralama hujjat yaratish</a></p>')
+
+    if diffs:
+        html.append('<h5>Farq qiluvchi mijozlar:</h5>')
+        html.append('<table class="table table-sm table-striped"><thead><tr><th>#</th><th>Nomi</th><th>Tel</th><th class="num">SD raw</th><th class="num">Maqsad (yangi)</th><th class="num">TOTLI hozir</th><th class="num">Delta (+/−)</th></tr></thead><tbody>')
+        for i, (sd, p, d) in enumerate(sorted(diffs, key=lambda x: abs(x[2]), reverse=True), 1):
+            target = -sd["summa"]
+            html.append(f'<tr><td>{i}</td><td>{(p.name or "-")[:35]}</td><td>{(p.phone or "-")[:15]}</td><td class="num text-muted">{sd["summa"]:,.0f}</td><td class="num"><b>{target:,.0f}</b></td><td class="num">{p.balance:,.0f}</td><td class="num"><b style="color:{"#dc3545" if d < 0 else "#198754"}">{d:+,.0f}</b></td></tr>')
+        html.append('</tbody></table>')
+
+    if not_found:
+        html.append(f'<h5>Topilmadi ({len(not_found)}):</h5><table class="table table-sm"><thead><tr><th>Nomi</th><th>Tel</th><th class="num">SD balans</th></tr></thead><tbody>')
+        for nf in not_found:
+            html.append(f'<tr><td>{nf["name"][:40]}</td><td>{nf["phone"]}</td><td class="num">{nf["summa"]:,.0f}</td></tr>')
+        html.append('</tbody></table>')
+
+    if multi:
+        html.append(f'<h5>Bir nechta variant ({len(multi)}):</h5>')
+        for sd, cands in multi:
+            html.append(f'<p><b>{sd["name"]}</b> (tel {sd["phone"]}, bal {sd["summa"]:,.0f}):<br>')
+            for c in cands:
+                html.append(f'&nbsp;&nbsp;→ <a href="/partners?id={c.id}">{c.name}</a> (tel {c.phone}, bal {c.balance:,.0f})<br>')
+            html.append('</p>')
+
+    html.append('</div></body></html>')
+    return HTMLResponse("".join(html))
+
+
+@router.get("/balance-import/multi", response_class=HTMLResponse)
+async def qoldiqlar_balance_import_multi(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """30 ta dublikat mijozlar uchun interaktiv tanlov sahifasi."""
+    from app.services.balance_import_data import SD_BALANCE_DATA
+
+    def norm_name(s):
+        return "".join(c for c in (s or "").lower().strip() if c.isalnum())
+
+    def norm_phone(p):
+        d = "".join(c for c in (p or "") if c.isdigit())
+        return d[-9:] if len(d) >= 7 else ""
+
+    partners = db.query(Partner).filter(Partner.is_active == True).all()
+    by_name, by_phone = {}, {}
+    for p in partners:
+        nk = norm_name(p.name)
+        if nk:
+            by_name.setdefault(nk, []).append(p)
+        for ph in [p.phone, p.phone2]:
+            pk = norm_phone(ph or "")
+            if pk:
+                by_phone.setdefault(pk, []).append(p)
+
+    multi_list = []
+    for sd in SD_BALANCE_DATA:
+        cands = []
+        nk = norm_name(sd["name"])
+        pk = norm_phone(sd["phone"])
+        if nk in by_name:
+            cands.extend(by_name[nk])
+        if pk and pk in by_phone:
+            for c in by_phone[pk]:
+                if c not in cands:
+                    cands.append(c)
+        if len(cands) > 1:
+            multi_list.append((sd, cands))
+
+    h = ['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dublikat tanlash</title>',
+         '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">',
+         '<style>body{padding:20px;font-family:sans-serif;}.sd-card{border:1px solid #dee2e6;border-radius:8px;padding:12px;margin-bottom:12px;background:#f8f9fa;}.sd-head{font-weight:600;margin-bottom:8px;}.cand-row{padding:6px 8px;border-radius:4px;margin:2px 0;background:white;}.cand-row:hover{background:#fffbe6;}.num{font-family:monospace;}</style>',
+         '</head><body><div class="container-fluid">',
+         '<h4>Dublikat mijozlar — qaysi TOTLI BI partneri to\'g\'ri?</h4>',
+         f'<p class="text-muted">Jami {len(multi_list)} ta dublikat. Har biri uchun to\'g\'ri partnerni tanlang yoki "Skip" qoldiring. Pastda "Saqlash" — draft hujjat yaratiladi.</p>',
+         '<form method="post" action="/qoldiqlar/balance-import/multi/apply">',
+         f'<input type="hidden" name="csrf_token" value="{getattr(request.state, "csrf_token", "") or ""}">']
+
+    for idx, (sd, cands) in enumerate(multi_list):
+        target = -sd["summa"]
+        h.append(f'<div class="sd-card">')
+        h.append(f'<div class="sd-head">{idx+1}. <b>{sd["name"]}</b> &middot; tel {sd["phone"]} &middot; SD raw <span class="num">{sd["summa"]:,.0f}</span> &middot; <b>maqsad balans: <span class="num">{target:,.0f}</span></b></div>')
+        # Skip variant
+        h.append(f'<div class="cand-row"><label class="d-flex align-items-center" style="cursor:pointer;"><input type="radio" name="choice_{idx}" value="skip" checked class="me-2"> <span class="text-muted">— Skip (o\'tkazib yuborish)</span></label></div>')
+        for c in cands:
+            delta = target - (c.balance or 0)
+            color = "#dc3545" if delta < 0 else ("#198754" if delta > 0 else "#6c757d")
+            h.append(f'<div class="cand-row"><label class="d-flex align-items-center" style="cursor:pointer;"><input type="radio" name="choice_{idx}" value="{c.id}" class="me-2"> <div class="flex-grow-1">#{c.id} <b>{c.name}</b> &middot; tel {c.phone or "-"}, {c.phone2 or ""} &middot; hozir <span class="num">{c.balance or 0:,.0f}</span> &middot; delta <b class="num" style="color:{color}">{delta:+,.0f}</b></div></label></div>')
+        h.append(f'<input type="hidden" name="sd_idx_{idx}" value="{idx}">')
+        h.append('</div>')
+
+    h.append('<div class="mt-3 mb-5"><button type="submit" class="btn btn-warning btn-lg">✓ Tanlanganlar uchun draft hujjat yaratish</button> <a href="/qoldiqlar" class="btn btn-outline-secondary btn-lg">Bekor</a></div>')
+    h.append('</form></div></body></html>')
+    return HTMLResponse("".join(h))
+
+
+@router.post("/balance-import/multi/apply")
+async def qoldiqlar_balance_import_multi_apply(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Dublikat tanlovlardan draft hujjat yaratish."""
+    from app.services.balance_import_data import SD_BALANCE_DATA
+    form = await request.form()
+
+    selected = []  # [(sd_row, partner)]
+    for key, val in form.items():
+        if not key.startswith("choice_"):
+            continue
+        if val == "skip" or not val:
+            continue
+        try:
+            idx = int(key[len("choice_"):])
+            pid = int(val)
+        except (ValueError, TypeError):
+            continue
+        if idx < 0 or idx >= len(SD_BALANCE_DATA):
+            continue
+        partner = db.query(Partner).filter(Partner.id == pid).first()
+        if partner:
+            selected.append((SD_BALANCE_DATA[idx], partner))
+
+    if not selected:
+        return HTMLResponse("<p>Hech narsa tanlanmagan.</p> <a href='/qoldiqlar/balance-import/multi'>Orqaga</a>")
+
+    diffs = []
+    for sd, p in selected:
+        target = -sd["summa"]
+        delta = target - (p.balance or 0)
+        if abs(delta) > 0.5:
+            diffs.append((sd, p, delta))
+
+    if not diffs:
+        return HTMLResponse("<p>Tanlanganlarning hech birida balans farqi yo'q.</p> <a href='/qoldiqlar/balance-import/multi'>Orqaga</a>")
+
+    now = datetime.now()
+    prefix = f"KNT-{now.strftime('%Y%m%d')}-"
+    last = db.query(PartnerBalanceDoc).filter(PartnerBalanceDoc.number.like(f"{prefix}%")).order_by(PartnerBalanceDoc.number.desc()).first()
+    try:
+        next_num = int(last.number.split("-")[-1]) + 1 if last else 1
+    except (ValueError, AttributeError):
+        next_num = 1
+    number = f"{prefix}{str(next_num).zfill(4)}"
+    doc = PartnerBalanceDoc(number=number, date=now, user_id=current_user.id, status="draft")
+    db.add(doc)
+    db.flush()
+    for sd, p, delta in diffs:
+        db.add(PartnerBalanceDocItem(doc_id=doc.id, partner_id=p.id, balance=delta))
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc.id}", status_code=303)
+
+
+@router.post("/kontragent/hujjat/{doc_id}/items/add")
+async def qoldiqlar_kontragent_hujjat_add_item(
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft kontragent hujjatiga yangi qator qo'shish"""
+    doc = db.query(PartnerBalanceDoc).filter(PartnerBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralama hujjatga qator qo'shish mumkin. Avval tasdiqni bekor qiling.")
+    form = await request.form()
+    try:
+        partner_id = int(form.get("partner_id") or 0)
+        balance = float((form.get("balance") or "").strip())
+    except (TypeError, ValueError):
+        return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}?msg=Noto%27g%27ri+qiymat", status_code=303)
+    if partner_id <= 0:
+        return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}?msg=Kontragent+tanlanmagan", status_code=303)
+    existing = db.query(PartnerBalanceDocItem).filter(
+        PartnerBalanceDocItem.doc_id == doc_id,
+        PartnerBalanceDocItem.partner_id == partner_id
+    ).first()
+    if existing:
+        return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}?msg=Bu+kontragent+allaqachon+qatorda+bor", status_code=303)
+    db.add(PartnerBalanceDocItem(doc_id=doc_id, partner_id=partner_id, balance=balance))
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
+
+
+@router.post("/kontragent/hujjat/{doc_id}/items/{item_id}/delete")
+async def qoldiqlar_kontragent_hujjat_delete_item(
+    doc_id: int,
+    item_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft kontragent hujjatidan qatorni o'chirish"""
+    doc = db.query(PartnerBalanceDoc).filter(PartnerBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralama hujjatdan qator o'chirish mumkin.")
+    item = db.query(PartnerBalanceDocItem).filter(
+        PartnerBalanceDocItem.id == item_id,
+        PartnerBalanceDocItem.doc_id == doc_id
+    ).first()
+    if item:
+        db.delete(item)
+        db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
 
 

@@ -5,9 +5,11 @@ Tier C3: production.py dagi delete logikasini markazlashtirish.
 """
 from sqlalchemy.orm import Session
 
+from datetime import datetime as _dt
+
 from app.models.database import (
     Production, Recipe, RecipeItem, RecipeStage,
-    Stock, StockMovement,
+    Stock, StockMovement, Order,
 )
 from app.services.document_service import DocumentError
 
@@ -19,7 +21,8 @@ def delete_production_atomic(db: Session, production: Production) -> dict:
     1. Tasdiqlangan (completed) buyurtma rad etiladi — avval revert kerak
     2. Stock movementlar teskari qaytariladi (stock tiklanadi)
     3. Production o'chiriladi
-    4. Atomik: xato bo'lsa rollback
+    4. Linked Order (agar waiting_production'da bo'lsa va boshqa aktiv PR yo'q) → confirmed'ga qaytariladi
+    5. Atomik: xato bo'lsa rollback
     """
     if production.status == "completed":
         raise DocumentError(
@@ -45,14 +48,49 @@ def delete_production_atomic(db: Session, production: Production) -> dict:
         for m in movements:
             db.delete(m)
 
+        # Linked order'ni waiting_production'dan qaytarish (orphan oldini olish)
+        order_id = production.order_id
+        pr_number = production.number
         db.delete(production)
+        if order_id:
+            _restore_orphan_order(db, order_id, deleted_pr_number=pr_number)
+
         db.commit()
-        return {"ok": True, "number": production.number}
+        return {"ok": True, "number": pr_number}
     except DocumentError:
         raise
     except Exception:
         db.rollback()
         raise
+
+
+def _restore_orphan_order(db: Session, order_id: int, deleted_pr_number: str) -> None:
+    """Production o'chirilganda, agar bog'liq Order waiting_production'da bo'lsa va
+    boshqa aktiv Production qolmagan bo'lsa — orderni confirmed'ga qaytarish.
+
+    Aktiv = status != 'cancelled' (cancelled PR'lar hisobga olinmaydi).
+    Admin keyin orderni qayta dispatch qilishi yoki cancel qilishi mumkin.
+    """
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order or order.status != "waiting_production":
+        return
+
+    other_active = db.query(Production).filter(
+        Production.order_id == order_id,
+        Production.status != "cancelled",
+    ).first()
+    if other_active:
+        return  # Boshqa aktiv PR bor, orderni o'zgartirmaymiz
+
+    note_extra = (
+        f"\n\n[AUTO-RESTORE {_dt.now().strftime('%Y-%m-%d %H:%M')}]: "
+        f"{deleted_pr_number} o'chirildi → waiting_production'dan confirmed'ga qaytarildi. "
+        f"Qayta dispatch qiling yoki cancel qiling."
+    )
+    order.status = "confirmed"
+    order.pending_driver_id = None
+    order.delivery_date = None
+    order.note = (order.note or "") + note_extra
 
 
 def delete_recipe_atomic(db: Session, recipe: Recipe) -> dict:

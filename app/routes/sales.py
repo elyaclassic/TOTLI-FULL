@@ -151,13 +151,14 @@ async def sales_list(
     orders = pg["items"]
 
     from sqlalchemy import func as sa_func
+    from app.services.sales_metrics import SALE_REALIZED
     stats_row = db.query(
         sa_func.coalesce(sa_func.sum(Order.total), 0),
         sa_func.coalesce(sa_func.sum(Order.debt), 0),
         sa_func.count(Order.id),
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "delivered", "confirmed"]),
+        Order.status.in_(SALE_REALIZED),
     )
     if date_from and date_from.strip():
         stats_row = stats_row.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -168,13 +169,22 @@ async def sales_list(
     total_sum, qarz_sum, completed_count = stats_row.one()
     total_sum = float(total_sum or 0)
     qarz_sum = float(qarz_sum or 0)
-    draft_count = pg["total_count"] - completed_count
+    draft_q = db.query(sa_func.count(Order.id)).filter(
+        Order.type == "sale", Order.status == "draft"
+    )
+    if date_from and date_from.strip():
+        draft_q = draft_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
+    if date_to and date_to.strip():
+        draft_q = draft_q.filter(Order.date <= date_to.strip()[:10] + " 23:59:59")
+    if wh_id is not None and wh_id > 0:
+        draft_q = draft_q.filter(Order.warehouse_id == wh_id)
+    draft_count = int(draft_q.scalar() or 0)
 
     pay_stats = db.query(Payment.payment_type, sa_func.sum(Payment.amount)).join(
         Order, Order.id == Payment.order_id
     ).filter(
         Order.type == "sale",
-        Order.status.in_(["completed", "delivered", "confirmed"]),
+        Order.status.in_(SALE_REALIZED),
         Payment.type == "income",
         Payment.status == "confirmed",
     )
@@ -202,7 +212,7 @@ async def sales_list(
         # Chegirma — subtotal − total (admin/manager qatori)
         chg_q = db.query(sa_func.coalesce(sa_func.sum(Order.subtotal - Order.total), 0)).filter(
             Order.type == "sale",
-            Order.status.in_(["completed", "delivered", "confirmed"]),
+            Order.status.in_(SALE_REALIZED),
         )
         if date_from and date_from.strip():
             chg_q = chg_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -221,7 +231,7 @@ async def sales_list(
             Product, Product.id == OrderItem.product_id
         ).filter(
             Order.type == "sale",
-            Order.status.in_(["completed", "delivered", "confirmed"]),
+            Order.status.in_(SALE_REALIZED),
         )
         if date_from and date_from.strip():
             tnx_q = tnx_q.filter(Order.date >= date_from.strip()[:10] + " 00:00:00")
@@ -371,6 +381,7 @@ async def sales_new(
         "product_warehouse_quantities": product_warehouse_quantities,
         "current_user": current_user,
         "page_title": "Yangi sotuv",
+        "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
     })
 
 
@@ -413,8 +424,27 @@ async def sales_create(
                 warehouse_ids.append(None)
         except (ValueError, TypeError):
             warehouse_ids.append(None)
+    # Sana — foydalanuvchi backdate qilishi mumkin (closed period va kelajak guard)
+    sale_date_str = (form.get("sale_date") or "").strip()
+    order_date = None
+    if sale_date_str:
+        for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                order_date = datetime.strptime(sale_date_str, fmt)
+                break
+            except ValueError:
+                continue
+    if order_date is None:
+        order_date = datetime.now()
+    if order_date > datetime.now():
+        order_date = datetime.now()  # kelajak rad — hozirgi vaqtga clamp
+    if is_period_closed(db, order_date):
+        return RedirectResponse(
+            url="/sales/new?error=" + quote("Tanlangan sana yopiq davrga to'g'ri keladi. Boshqa sana tanlang."),
+            status_code=303,
+        )
     last_order = db.query(Order).filter(Order.type == "sale").order_by(Order.id.desc()).first()
-    new_number = f"S-{datetime.now().strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
+    new_number = f"S-{order_date.strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
     order = Order(
         number=new_number,
         type="sale",
@@ -422,6 +452,7 @@ async def sales_create(
         warehouse_id=warehouse_id,
         price_type_id=price_type_id if price_type_id else None,
         status="draft",
+        date=order_date,
     )
     db.add(order)
     db.commit()
@@ -536,6 +567,11 @@ async def sales_edit(
     role = (getattr(current_user, "role", None) or "").strip().lower() if current_user else ""
     # Foyda/Zarar faqat admin yoki rahbar/raxbar ko'radi
     show_foyda_zarar = bool(role in ("admin", "rahbar", "raxbar"))
+    # Waiting production sababini ko'rsatish — qaysi mahsulot yetishmayapti
+    missing_items = []
+    if order.status == "waiting_production":
+        from app.services.stock_service import compute_missing_items
+        missing_items = compute_missing_items(db, order)
     return templates.TemplateResponse("sales/edit.html", {
         "request": request,
         "order": order,
@@ -549,6 +585,8 @@ async def sales_edit(
         "info_detail": info_detail,
         "foyda_zarar": foyda_zarar,
         "show_foyda_zarar": show_foyda_zarar,
+        "missing_items": missing_items,
+        "now_iso": datetime.now().strftime("%Y-%m-%dT%H:%M"),
     })
 
 
@@ -560,7 +598,10 @@ async def sales_add_item(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    # return_sale (obmen qaytarish) ham dispatch → driver oqimidan o'tadi.
+    order = db.query(Order).filter(
+        Order.id == order_id, Order.type.in_(("sale", "return_sale"))
+    ).first()
     if not order:
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     _check_order_access(order, current_user)
@@ -577,7 +618,17 @@ async def sales_add_item(
         prod = db.query(Product).filter(Product.id == product_id).first()
         price = (prod.sale_price or prod.purchase_price or 0) if prod else 0
     total_row = quantity * price
-    db.add(OrderItem(order_id=order_id, product_id=product_id, quantity=quantity, price=price, total=total_row))
+    # Bir xil mahsulot+narx allaqachon bo'lsa — yangi qator emas, soniga qo'shish
+    existing = db.query(OrderItem).filter(
+        OrderItem.order_id == order_id,
+        OrderItem.product_id == product_id,
+        OrderItem.price == price,
+    ).first()
+    if existing:
+        existing.quantity = (existing.quantity or 0) + quantity
+        existing.total = (existing.total or 0) + total_row
+    else:
+        db.add(OrderItem(order_id=order_id, product_id=product_id, quantity=quantity, price=price, total=total_row))
     order.subtotal = (order.subtotal or 0) + total_row
     order.total = (order.total or 0) + total_row
     db.commit()
@@ -632,11 +683,98 @@ async def sales_add_items(
                 prod = db.query(Product).filter(Product.id == pid).first()
                 price = (prod.sale_price or prod.purchase_price or 0) if prod else 0
         total_row = qty * price
-        db.add(OrderItem(order_id=order_id, product_id=pid, warehouse_id=order.warehouse_id, quantity=qty, price=price, total=total_row))
+        existing = db.query(OrderItem).filter(
+            OrderItem.order_id == order_id,
+            OrderItem.product_id == pid,
+            OrderItem.price == price,
+            OrderItem.warehouse_id == order.warehouse_id,
+        ).first()
+        if existing:
+            existing.quantity = (existing.quantity or 0) + qty
+            existing.total = (existing.total or 0) + total_row
+        else:
+            db.add(OrderItem(order_id=order_id, product_id=pid, warehouse_id=order.warehouse_id, quantity=qty, price=price, total=total_row))
         order.subtotal = (order.subtotal or 0) + total_row
         order.total = (order.total or 0) + total_row
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+
+
+@router.post("/{order_id}/update-item/{item_id}")
+async def sales_update_item(
+    order_id: int,
+    item_id: int,
+    quantity: float = Form(...),
+    price: float = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft sotuv qatorining miqdor/narxini yangilash. Faqat draft holatda."""
+    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    if not order or order.status != "draft":
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+    _check_order_access(order, current_user)
+    item = db.query(OrderItem).filter(OrderItem.id == item_id, OrderItem.order_id == order_id).first()
+    if not item:
+        return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
+    if not (0 < quantity < 1_000_000) or not (0 <= price < 1_000_000_000):
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=item&detail=" + quote("Miqdor yoki narx noto'g'ri."),
+            status_code=303,
+        )
+    new_total = quantity * price
+    delta = new_total - (item.total or 0)
+    item.quantity = quantity
+    item.price = price
+    item.total = new_total
+    order.subtotal = (order.subtotal or 0) + delta
+    order.total = (order.total or 0) + delta
+    db.commit()
+    return RedirectResponse(url=f"/sales/edit/{order_id}?message=item-updated", status_code=303)
+
+
+@router.post("/{order_id}/set-date")
+async def sales_set_date(
+    order_id: int,
+    sale_date: str = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Draft sotuv sanasini o'zgartirish (backdate). Faqat draft holatda.
+    Kelajak sana va closed period rad etiladi."""
+    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sotuv topilmadi")
+    if order.status != "draft":
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Faqat qoralama holatdagi sotuv sanasini o'zgartirib bo'ladi."),
+            status_code=303,
+        )
+    new_date = None
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            new_date = datetime.strptime((sale_date or "").strip(), fmt)
+            break
+        except ValueError:
+            continue
+    if new_date is None:
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Sana formati noto'g'ri."),
+            status_code=303,
+        )
+    if new_date > datetime.now():
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Kelajakdagi sana qabul qilinmaydi."),
+            status_code=303,
+        )
+    if is_period_closed(db, new_date):
+        return RedirectResponse(
+            url=f"/sales/edit/{order_id}?error=" + quote("Tanlangan sana yopiq davrga to'g'ri keladi."),
+            status_code=303,
+        )
+    order.date = new_date
+    db.commit()
+    return RedirectResponse(url=f"/sales/edit/{order_id}?message=date-updated", status_code=303)
 
 
 @router.post("/{order_id}/confirm")
@@ -759,6 +897,7 @@ async def sales_confirm(
 
 @router.post("/{order_id}/dispatch")
 async def sales_dispatch(
+    request: Request,
     order_id: int,
     delivery_date: str = Form(...),
     driver_id: int = Form(...),
@@ -816,6 +955,48 @@ async def sales_dispatch(
             url=f"/sales/edit/{order_id}?error=no_items",
             status_code=303,
         )
+
+    # Obmen qaytarish (return_sale): qaytgan tovar — stock chiqim YO'Q, stock
+    # yetishmovchilik tekshiruvi YO'Q. Faqat out_for_delivery + Delivery.
+    # Qaytgan tovar omborga kirimi haydovchi "Yetkazdim" bosganda (api_driver_ops.py).
+    if order.type == "return_sale":
+        r = db.execute(
+            _text("UPDATE orders SET status='out_for_delivery', delivery_date=:dd, "
+                  "dispatched_at=:now, pending_driver_id=:drv "
+                  "WHERE id=:id AND status='confirmed'"),
+            {"id": order_id, "dd": delivery_d, "now": _dt.now(), "drv": driver_id},
+        )
+        if r.rowcount == 0:
+            return RedirectResponse(url=f"/sales/edit/{order_id}?already=1", status_code=303)
+        prefix = f"DLV-{delivery_d.strftime('%Y%m%d')}"
+        last = (
+            db.query(Delivery)
+            .filter(Delivery.number.like(f"{prefix}%"))
+            .order_by(Delivery.id.desc())
+            .first()
+        )
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except Exception:
+            seq = 1
+        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None
+        db.add(Delivery(
+            number=f"{prefix}-{seq:04d}",
+            order_id=order.id,
+            order_number=order.number,
+            driver_id=driver_id,
+            delivery_address=(partner_obj.address or "") if partner_obj else "",
+            latitude=partner_obj.latitude if partner_obj else None,
+            longitude=partner_obj.longitude if partner_obj else None,
+            planned_date=delivery_d,
+            notes=f"OBMEN qaytarish — Mijoz: {partner_obj.name if partner_obj else ''}, Tel: {partner_obj.phone if partner_obj else ''}",
+            status="pending",
+        ))
+        db.commit()
+        referer = request.headers.get("referer", "")
+        if "/agents/" in referer:
+            return RedirectResponse(url=referer, status_code=303)
+        return RedirectResponse(url=f"/sales/edit/{order_id}?dispatched=1", status_code=303)
 
     # Stock yetarli yoki yo'qligini tekshirish (semi-finished fallback bilan)
     semi_warehouse = get_semi_finished_warehouse(db)
@@ -978,6 +1159,11 @@ async def sales_dispatch(
     except Exception:
         pass
 
+    # Agar foydalanuvchi agent detail sahifasidan kelgan bo'lsa, o'sha sahifaga qaytarish
+    # (browser back tugmasi yaxshi ishlasin — modal qayta ochilmasin).
+    referer = request.headers.get("referer", "")
+    if "/agents/" in referer:
+        return RedirectResponse(url=referer, status_code=303)
     return RedirectResponse(url=f"/sales/edit/{order_id}?dispatched=1", status_code=303)
 
 
@@ -1852,7 +2038,16 @@ async def sales_pos(
     # Harajat turlari (POS expense modal uchun)
     pos_expense_types = db.query(ExpenseType).order_by(ExpenseType.name).all()
     # Kassalar (inkasatsiya "Yangi yuborish" modali uchun)
-    pos_cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
+    # Sotuvchi faqat naqd pul ko'taradi va Asosiy kassaga (markaziy naqd) keltiradi —
+    # boshqa kassalarni (do'kon plastik, click, terminal) ko'rsatish keraksiz.
+    _cash_q = db.query(CashRegister).filter(CashRegister.is_active == True)
+    _role = (current_user.role or "").strip().lower()
+    if _role == "sotuvchi":
+        _cash_q = _cash_q.filter(
+            CashRegister.payment_type == "naqd",
+            CashRegister.name == "Asosiy kassa",
+        )
+    pos_cash_registers = _cash_q.order_by(CashRegister.name).all()
     return templates.TemplateResponse("sales/pos.html", {
         "request": request,
         "page_title": "Sotuv oynasi",
@@ -2162,7 +2357,9 @@ async def sales_pos_x_report(
         pass
 
     # OLDINGI KUNLARDAN HALI KELMAGAN PUL: oxirgi 7 kun ichida 2+ Z bo'lgan kunlar
-    # uchun (voluntary close + forced close) → farq = topshirilmagan naqd
+    # uchun (voluntary close + forced close) → farq = topshirilmagan naqd.
+    # CashTransfer (kassadan kassaga, FROM naqd POS kassa) — bu pulning topshirilgani
+    # demakdir. FIFO: eski kun avval qoplanadi.
     pending_prev_days = []
     try:
         from datetime import timedelta as _td
@@ -2186,6 +2383,63 @@ async def sales_pos_x_report(
                 "diff_sales_count": d_c,
                 "diff_sales_total": d_t,
             })
+
+        # CashTransfer'larni qoplash: pending kunlardan eski→yangi tartibda
+        if pending_prev_days:
+            naqd_cash_ids_local = []
+            try:
+                user_full_l = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == current_user.id).first()
+                user_cashes_l = list(getattr(user_full_l, "cash_registers_list", None) or []) if user_full_l else []
+                if role == "sotuvchi" and pos_wh:
+                    wh_dept_l = getattr(pos_wh, "department_id", None)
+                    cands = [c for c in user_cashes_l if getattr(c, "department_id", None) == wh_dept_l] if wh_dept_l else []
+                    if not cands and wh_dept_l:
+                        cands = db.query(CashRegister).filter(
+                            CashRegister.department_id == wh_dept_l,
+                            CashRegister.is_active == True,
+                        ).all()
+                else:
+                    cands = user_cashes_l
+                naqd_cash_ids_local = [c.id for c in cands if (c.payment_type or "").strip().lower() == "naqd"]
+            except Exception:
+                naqd_cash_ids_local = []
+
+            if naqd_cash_ids_local:
+                cutoff_dt = datetime.combine(target_date - _td(days=10), datetime.min.time())
+                transfers = db.query(CashTransfer).filter(
+                    CashTransfer.from_cash_id.in_(naqd_cash_ids_local),
+                    CashTransfer.status.in_(("in_transit", "completed")),
+                    CashTransfer.date >= cutoff_dt,
+                ).order_by(CashTransfer.date.asc()).all()
+                transfer_remaining = [float(t.amount or 0) for t in transfers]
+                transfer_dates = [t.date for t in transfers]
+
+                pending_prev_days.sort(key=lambda x: x["date"])
+                filtered = []
+                for pd_item in pending_prev_days:
+                    needed = float(pd_item["diff_sales_total"] or 0)
+                    if needed <= 0.01:
+                        continue
+                    first_closed_iso = pd_item.get("first_closed_at") or ""
+                    try:
+                        first_closed_dt = datetime.fromisoformat(first_closed_iso) if first_closed_iso else None
+                    except (ValueError, TypeError):
+                        first_closed_dt = None
+                    for i, td in enumerate(transfer_dates):
+                        if transfer_remaining[i] <= 0:
+                            continue
+                        if first_closed_dt and td < first_closed_dt:
+                            continue
+                        consumed = min(transfer_remaining[i], needed)
+                        transfer_remaining[i] -= consumed
+                        needed -= consumed
+                        if needed <= 0.01:
+                            break
+                    if needed > 0.01:
+                        pd_item["diff_sales_total"] = round(needed, 2)
+                        filtered.append(pd_item)
+                pending_prev_days = filtered
+                pending_prev_days.sort(key=lambda x: x["date"], reverse=True)
     except Exception:
         pass
 
@@ -2688,6 +2942,191 @@ async def sales_pos_z_report_check(
     })
 
 
+def _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh):
+    """POS smena snapshot ma'lumotini yasaydi (X va Z hisobot uchun umumiy chek).
+    z_id / closed_at / doc_title chaqiruvchida to'ldiriladi."""
+    from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+    from datetime import datetime as _dt
+    from sqlalchemy.orm import joinedload as _jl
+
+    base_q = db.query(Order).filter(func.date(Order.created_at) == target_date)
+    if role == "sotuvchi" and pos_wh:
+        base_q = base_q.filter(Order.warehouse_id == pos_wh.id)
+    completed = base_q.filter(Order.status.in_(("completed", "delivered"))).all()
+    cancelled = base_q.filter(Order.status == "cancelled").all()
+    sales = [o for o in completed if (o.type or "sale") == "sale"]
+    returns_o = [o for o in completed if o.type == "return_sale"]
+    sales_total = sum(float(o.total or 0) for o in sales)
+    returns_total = sum(float(o.total or 0) for o in returns_o)
+
+    by_type: dict = {}
+    sale_order_ids = [o.id for o in sales]
+    if sale_order_ids:
+        try:
+            pmt_q = db.query(Payment).filter(
+                Payment.type == "income",
+                or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                Payment.order_id.in_(sale_order_ids),
+            ).all()
+            cash_pt_map = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in db.query(CashRegister).all()}
+            sale_with_payments: set = set()
+            for p in pmt_q:
+                sale_with_payments.add(p.order_id)
+                pt = cash_pt_map.get(p.cash_register_id, "naqd")
+                if pt == "perechisleniye":
+                    pt = "bank"
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(p.amount or 0)
+            qarz_orders = [o for o in sales if o.id not in sale_with_payments]
+            if qarz_orders:
+                by_type["qarz"] = {"count": len(qarz_orders), "sum": sum(float(o.total or 0) for o in qarz_orders)}
+        except Exception:
+            for o in sales:
+                pt = (o.payment_type or "naqd").lower()
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(o.total or 0)
+
+    cash_snapshot: list = []
+    try:
+        from app.services.finance_service import cash_balance_formula
+        user_full = db.query(User).options(_jl(User.cash_registers_list)).filter(User.id == current_user.id).first()
+        user_cashes_z = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
+        wh_dept_id = getattr(pos_wh, "department_id", None) if pos_wh else None
+        if role == "sotuvchi" and wh_dept_id:
+            shop_cashes = [c for c in user_cashes_z if getattr(c, "department_id", None) == wh_dept_id]
+            if not shop_cashes:
+                shop_cashes = db.query(CashRegister).filter(
+                    CashRegister.department_id == wh_dept_id,
+                    CashRegister.is_active == True,
+                ).all()
+        else:
+            shop_cashes = user_cashes_z
+        for c in shop_cashes:
+            bal, inc, exp = cash_balance_formula(db, c.id)
+            cash_snapshot.append({"id": c.id, "name": c.name, "balance": float(bal or 0), "income": float(inc or 0), "expense": float(exp or 0)})
+    except Exception:
+        pass
+
+    payments_made: list = []
+    expenses_made: list = []
+    try:
+        op_rows = (
+            db.query(Payment)
+            .filter(
+                func.date(Payment.created_at) == target_date,
+                Payment.user_id == current_user.id,
+                Payment.type == "expense",
+                Payment.category.in_(("supplier_payment", "expense")),
+            )
+            .order_by(Payment.created_at)
+            .all()
+        )
+        for p in op_rows:
+            partner_name = ""
+            if p.partner_id:
+                pn = db.query(Partner.name).filter(Partner.id == p.partner_id).first()
+                partner_name = pn[0] if pn else ""
+            cash_name = ""
+            if p.cash_register_id:
+                cn = db.query(CashRegister.name).filter(CashRegister.id == p.cash_register_id).first()
+                cash_name = cn[0] if cn else ""
+            rec = {
+                "number": p.number or "",
+                "time": p.created_at.strftime("%H:%M") if p.created_at else "",
+                "amount": float(p.amount or 0),
+                "payment_type": (p.payment_type or "naqd"),
+                "cash_name": cash_name,
+                "partner_name": partner_name,
+                "description": p.description or "",
+            }
+            if (p.category or "").strip() == "supplier_payment":
+                payments_made.append(rec)
+            else:
+                expenses_made.append(rec)
+    except Exception:
+        pass
+
+    cash_summary = compute_z_cash_summary(db, target_date, current_user.id, until_dt=_dt.now())
+    prev_remaining, prev_zid = find_previous_z_remaining(
+        user_id=current_user.id,
+        warehouse_id=(pos_wh.id if pos_wh else None),
+        before_closed_at=_dt.now().isoformat(),
+    )
+    cash_remaining = (
+        prev_remaining
+        + cash_summary["cash_sales_total"]
+        - cash_summary["cash_expenses_total"]
+        - cash_summary["cash_payments_out"]
+    )
+
+    return {
+        "date": target_date.strftime("%Y-%m-%d"),
+        "user_id": current_user.id,
+        "user": current_user.full_name or current_user.username,
+        "role": role,
+        "warehouse_id": pos_wh.id if pos_wh else None,
+        "warehouse": pos_wh.name if pos_wh else "Barcha",
+        "sales_count": len(sales),
+        "sales_total": sales_total,
+        "returns_count": len(returns_o),
+        "returns_total": returns_total,
+        "cancelled_count": len(cancelled),
+        "cancelled_total": sum(float(o.total or 0) for o in cancelled),
+        "net_total": sales_total - returns_total,
+        "payment_breakdown": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in by_type.items()],
+        "cash_snapshot": cash_snapshot,
+        "order_numbers": [o.number for o in completed],
+        "payments_made": payments_made,
+        "payments_made_sum": sum(r["amount"] for r in payments_made),
+        "expenses_made": expenses_made,
+        "expenses_made_sum": sum(r["amount"] for r in expenses_made),
+        "cash_sales_pure": cash_summary["cash_sales_pure"],
+        "cash_sales_split": cash_summary["cash_sales_split"],
+        "cash_sales_total": cash_summary["cash_sales_total"],
+        "cash_expenses_total": cash_summary["cash_expenses_total"],
+        "cash_payments_out": cash_summary["cash_payments_out"],
+        "previous_cash_remaining": prev_remaining,
+        "previous_z_id": prev_zid,
+        "cash_remaining": cash_remaining,
+    }
+
+
+@router.get("/pos/x-report/receipt", response_class=HTMLResponse)
+async def sales_pos_x_report_receipt(
+    request: Request,
+    date: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """X-hisobot 80mm chek (Z-chek bilan bir xil go'zal format)."""
+    from datetime import date as date_type, datetime as dt
+    role = (current_user.role or "").strip()
+    if role not in ("sotuvchi", "admin", "manager"):
+        return HTMLResponse("Ruxsat yo'q", status_code=403)
+    target_date = date_type.today()
+    if date:
+        try:
+            parsed = dt.strptime(date[:10], "%Y-%m-%d").date()
+            if parsed <= date_type.today():
+                target_date = parsed
+        except ValueError:
+            pass
+    pos_wh = None
+    if role == "sotuvchi":
+        pos_wh = _get_pos_warehouse_for_user(db, current_user)
+        if not pos_wh:
+            return HTMLResponse("Sizga POS ombor biriktirilmagan", status_code=400)
+    snap = _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh)
+    snap["z_id"] = f"X-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}"
+    snap["closed_at"] = dt.now().isoformat()
+    snap["doc_title"] = "X-HISOBOT"
+    return templates.TemplateResponse("reports/z_report_receipt.html", {"request": request, "snap": snap})
+
+
 @router.post("/pos/z-report")
 async def sales_pos_z_report(
     request: Request,
@@ -2732,12 +3171,40 @@ async def sales_pos_z_report(
     returns_total = sum(float(o.total or 0) for o in returns_o)
 
     by_type: dict = {}
-    for o in sales:
-        pt = (o.payment_type or "naqd").lower()
-        if pt not in by_type:
-            by_type[pt] = {"count": 0, "sum": 0.0}
-        by_type[pt]["count"] += 1
-        by_type[pt]["sum"] += float(o.total or 0)
+    sale_order_ids = [o.id for o in sales]
+    if sale_order_ids:
+        try:
+            pmt_q = db.query(Payment).filter(
+                Payment.type == "income",
+                or_(Payment.status == "confirmed", Payment.status.is_(None)),
+                Payment.order_id.in_(sale_order_ids),
+            ).all()
+            cash_pt_map = {c.id: ((c.payment_type or "naqd").strip().lower()) for c in db.query(CashRegister).all()}
+            sale_with_payments: set = set()
+            for p in pmt_q:
+                sale_with_payments.add(p.order_id)
+                pt = cash_pt_map.get(p.cash_register_id, "naqd")
+                if pt == "perechisleniye":
+                    pt = "bank"
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(p.amount or 0)
+            # To'lovsiz buyurtmalar → qarz
+            qarz_orders = [o for o in sales if o.id not in sale_with_payments]
+            if qarz_orders:
+                by_type["qarz"] = {
+                    "count": len(qarz_orders),
+                    "sum": sum(float(o.total or 0) for o in qarz_orders),
+                }
+        except Exception:
+            # Fallback: Order.payment_type dan o'qish
+            for o in sales:
+                pt = (o.payment_type or "naqd").lower()
+                if pt not in by_type:
+                    by_type[pt] = {"count": 0, "sum": 0.0}
+                by_type[pt]["count"] += 1
+                by_type[pt]["sum"] += float(o.total or 0)
 
     cash_snapshot: list = []
     try:
@@ -2800,10 +3267,27 @@ async def sales_pos_z_report(
     except Exception:
         pass
 
+    # Naqd kassa hisoboti — savdo, harajat, to'lov + oldingi Z'dan boshlang'ich qoldiq
+    from app.utils.z_cash_summary import compute_z_cash_summary, find_previous_z_remaining
+    _close_dt = dt.now()
+    _now_iso = _close_dt.isoformat()
+    cash_summary = compute_z_cash_summary(db, target_date, current_user.id, until_dt=_close_dt)
+    prev_remaining, prev_zid = find_previous_z_remaining(
+        user_id=current_user.id,
+        warehouse_id=(pos_wh.id if pos_wh else None),
+        before_closed_at=_now_iso,
+    )
+    cash_remaining = (
+        prev_remaining
+        + cash_summary["cash_sales_total"]
+        - cash_summary["cash_expenses_total"]
+        - cash_summary["cash_payments_out"]
+    )
+
     snapshot = {
         "z_id": f"Z-{target_date.strftime('%Y%m%d')}-U{current_user.id}-{dt.now().strftime('%H%M%S')}",
         "date": target_date.strftime("%Y-%m-%d"),
-        "closed_at": dt.now().isoformat(),
+        "closed_at": _now_iso,
         "user_id": current_user.id,
         "user": current_user.full_name or current_user.username,
         "role": role,
@@ -2823,6 +3307,15 @@ async def sales_pos_z_report(
         "payments_made_sum": sum(r["amount"] for r in payments_made),
         "expenses_made": expenses_made,
         "expenses_made_sum": sum(r["amount"] for r in expenses_made),
+        # Naqd kassa hisoboti
+        "cash_sales_pure": cash_summary["cash_sales_pure"],
+        "cash_sales_split": cash_summary["cash_sales_split"],
+        "cash_sales_total": cash_summary["cash_sales_total"],
+        "cash_expenses_total": cash_summary["cash_expenses_total"],
+        "cash_payments_out": cash_summary["cash_payments_out"],
+        "previous_cash_remaining": prev_remaining,
+        "previous_z_id": prev_zid,
+        "cash_remaining": cash_remaining,
     }
 
     out_path = None

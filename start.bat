@@ -8,6 +8,8 @@ title TOTLI HOLVA Business System
 set BIND_HOST=0.0.0.0
 set DISPLAY_HOST=10.243.165.156
 set PORT=8080
+set SSL_CERT=%~dp0cert.pem
+set SSL_KEY=%~dp0key.pem
 :: ========== TELEGRAM BOT ==========
 :: BotFather dan olingan token (@BotFather -> /newbot)
 :: Token ni .env faylida yoki quyida kiriting:
@@ -25,6 +27,12 @@ set BOT_LOG_FILE=%BOT_DIR%\bot.log
 set BOT_RUNNER_FILE=%BOT_DIR%\_bot_runner.bat
 set BOT_LOCK_PORT=47891
 :: ====================================================
+
+:: ========== SENIOR/EXPERT BOTLAR (standalone) ==========
+set SENIOR_BOTS_RUNNER=%WORK_DIR%\scripts\_senior_bots_runner.bat
+set SENIOR_BOTS_LOG=%WORK_DIR%\senior_bots.log
+set SENIOR_BOTS_LOCK_PORT=47892
+:: =======================================================
 
 cd /d "%~dp0"
 
@@ -97,10 +105,11 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%PORT% " ^| findstr 
 
 if "%STARTED%"=="1" (
     call :start_bot_if_needed
+    call :start_senior_bots_if_needed
     echo.
     echo ========================================
     echo   [OK] Server ishga tushdi (orqa fonda)
-    echo   Brauzer: http://%DISPLAY_HOST%:%PORT%
+    echo   Brauzer: https://%DISPLAY_HOST%:%PORT%
     echo   Loglar:  %LOG_FILE%
     if "!BOT_STARTED_NOW!"=="1" echo   [OK] Telegram Sheets Bot ham ishga tushdi
     if "!BOT_ALREADY!"=="1"     echo   [!] Telegram Sheets Bot allaqachon ishlayapti
@@ -122,6 +131,7 @@ if "%STARTED%"=="1" (
 :server_running
 :: Server ishlayapti — bot ham ishlayaptimi tekshirib, kerak bo'lsa boshlash
 call :start_bot_if_needed
+call :start_senior_bots_if_needed
 echo.
 echo ========================================
 echo   [!] Server allaqachon ishlayapti
@@ -147,11 +157,13 @@ echo.
 echo Server va bot qayta ishga tushirilmoqda...
 call :kill_server
 call :kill_bot
+call :kill_senior_bots
 timeout /t 2 /nobreak >nul
 echo Yangi server ishga tushirilmoqda...
 call :start_server
 timeout /t 3 /nobreak >nul
 call :start_bot_if_needed
+call :start_senior_bots_if_needed
 echo [OK] Server qayta ishga tushdi.
 if "!BOT_STARTED_NOW!"=="1" echo [OK] Telegram Sheets Bot ham qayta ishga tushdi.
 if "!BOT_FAILED!"=="1"      echo [X] Bot ishga tushmadi: %BOT_LOG_FILE%
@@ -166,6 +178,7 @@ echo.
 echo Server va bot to'xtatilmoqda...
 call :kill_server
 call :kill_bot
+call :kill_senior_bots
 echo [OK] Server va bot to'xtatildi.
 echo.
 pause
@@ -286,6 +299,32 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%BOT_LOCK_PORT% " ^|
 )
 :: 2) Zahira: WMIC orqali telegram_sheets_bot src.main ishlatayotgan python jarayonlarini topish
 for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%telegram_sheets_bot%%src.main%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do (
+    taskkill /PID %%a /F /T >nul 2>&1
+)
+timeout /t 1 /nobreak >nul
+goto :eof
+
+:: ====== YORDAMCHI: Senior/Expert botlar (standalone) ishga tushirish ======
+:start_senior_bots_if_needed
+:: Allaqachon ishlayaptimi? (lock port 47892 - listen bo'lsa)
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%SENIOR_BOTS_LOCK_PORT% " ^| findstr "LISTENING"') do goto :eof
+:: Zahira: jarayon CommandLine bo'yicha (eski nusxa listen qilmagan bo'lishi mumkin)
+for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%senior_bots_standalone%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do goto :eof
+:: Statik runner - VBS yashirin oyna
+> "%TEMP%\totli_start_senior.vbs" (
+    echo Set WshShell = CreateObject^("WScript.Shell"^)
+    echo WshShell.Run """%SENIOR_BOTS_RUNNER%""", 0, False
+)
+cscript //nologo "%TEMP%\totli_start_senior.vbs"
+del "%TEMP%\totli_start_senior.vbs" 2>nul
+goto :eof
+
+:: ====== YORDAMCHI: Senior/Expert botlarni o'chirish ======
+:kill_senior_bots
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%SENIOR_BOTS_LOCK_PORT% " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F /T >nul 2>&1
+)
+for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%senior_bots_standalone%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do (
     taskkill /PID %%a /F /T >nul 2>&1
 )
 timeout /t 1 /nobreak >nul

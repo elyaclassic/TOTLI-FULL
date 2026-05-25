@@ -49,6 +49,7 @@ _state: dict = {}
 _bot: Optional[Bot] = None
 _dp: Optional[Dispatcher] = None
 _task: Optional[asyncio.Task] = None
+_bot_username: str = "claudeyordamchi_bot"
 
 
 def _audit(user_id: int, kind: str, payload: str = "") -> None:
@@ -114,6 +115,15 @@ async def _send_long(message: Message, text: str) -> None:
         except Exception as e:
             logger.error(f"send_long: {e}")
             break
+
+
+async def _autodelete(msg, delay: int = 6) -> None:
+    """Botning o'z xabarini delay soniyadan keyin o'chiradi (admin huquqsiz)."""
+    try:
+        await asyncio.sleep(delay)
+        await msg.delete()
+    except Exception:
+        pass
 
 
 def subprocess_quote_windows(args) -> str:
@@ -311,6 +321,18 @@ def _register_handlers(dp: Dispatcher) -> None:
             _audit(uid, "denied_photo")
             return
         if not _is_authed(uid):
+            if message.chat.type != "private":
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+                try:
+                    await message.bot.send_message(uid, "Avval PIN kiriting (faqat raqam):")
+                except Exception:
+                    pass
+                notice = await message.answer(f"👉 PIN'ni shaxsiy chatda kiriting: @{_bot_username}")
+                asyncio.create_task(_autodelete(notice, 6))
+                return
             await message.answer("Avval PIN kiriting (matn xabar bilan).")
             return
 
@@ -369,13 +391,36 @@ def _register_handlers(dp: Dispatcher) -> None:
             if not PIN:
                 await message.answer("PIN konfigda yo'q. .env da CLAUDE_BOT_PIN o'rnating.")
                 return
+            if message.chat.type != "private":
+                # PIN guruhga tushmasin — qabul qilmaymiz, DM ga yo'naltiramiz
+                try:
+                    await message.delete()  # bot guruh admini bo'lsa PIN xabari o'chadi
+                except Exception:
+                    pass
+                try:
+                    await message.bot.send_message(uid, "PIN kiriting (faqat raqam):")
+                except Exception:
+                    pass
+                notice = await message.answer(f"👉 PIN'ni shaxsiy chatda kiriting: @{_bot_username}")
+                asyncio.create_task(_autodelete(notice, 6))
+                return
             if text == PIN:
                 _set_authed(uid)
                 _audit(uid, "auth_ok")
-                await message.answer("✓ PIN qabul qilindi. Endi savol yozing.\n12 soat ichida qayta PIN so'ralmaydi.")
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+                ok = await message.answer("✓ PIN qabul qilindi. Endi savol yozing.\n12 soat ichida qayta PIN so'ralmaydi.")
+                asyncio.create_task(_autodelete(ok, 6))
             else:
                 _audit(uid, "auth_fail")
-                await message.answer("PIN noto'g'ri. Qayta urinib ko'ring.")
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
+                bad = await message.answer("PIN noto'g'ri. Qayta urinib ko'ring.")
+                asyncio.create_task(_autodelete(bad, 6))
             return
 
         try:
@@ -436,6 +481,9 @@ async def start_claude_bot():
         await bot.delete_webhook(drop_pending_updates=True)
         _task = asyncio.create_task(_run_polling(dp, bot))
         me = await bot.get_me()
+        global _bot_username
+        if me.username:
+            _bot_username = me.username
         print(f"[Claude Bot] @{me.username} ishga tushdi (owner={OWNER_ID}, cwd={CWD})")
     except Exception as e:
         print(f"[Claude Bot] Ishga tushirishda xato: {e}")

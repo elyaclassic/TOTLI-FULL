@@ -294,6 +294,13 @@ class TestProductionService:
         with pytest.raises(DocumentError, match="Tasdiqni bekor qilish"):
             delete_production_atomic(None, FakeProduction())
 
+    def test_restore_orphan_order_signature(self):
+        """_restore_orphan_order helper mavjud va to'g'ri signaturda."""
+        from app.services.production_service import _restore_orphan_order
+        import inspect
+        sig = inspect.signature(_restore_orphan_order)
+        assert list(sig.parameters.keys()) == ["db", "order_id", "deleted_pr_number"]
+
 
 class TestFinanceService:
     """Tier C3 — finance_service.py atomik operatsiyalar."""

@@ -11,6 +11,7 @@
             }
             #posXReportPrintable .modal-header,
             #posXReportPrintable .modal-footer,
+            #posXReportPrintable #posXReportControls,
             #posXReportPrintable .btn-close { display: none !important; }
             #posXReportPrintable .bg-primary { background: #fff !important; color: #000 !important; }
         }
@@ -383,7 +384,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Summa (so'm) *</label>
-                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0" data-calc>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Izoh</label>
@@ -431,7 +432,7 @@
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Summa (so'm) *</label>
-                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0">
+                            <input type="number" name="amount" class="form-control form-control-lg text-end" step="1000" min="1000" required placeholder="0" data-calc>
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Izoh</label>

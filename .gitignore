@@ -104,7 +104,27 @@ claude-skills-main/
 
 # Claude Code local state (har bir kompyuterga xos)
 .claude/settings.local.json
+.claude/settings.local.json.bak.*
 .claude/scheduled_tasks.lock
+.claude/worktrees/
+
+# Claude sessiya jurnallari (maxfiy, lokal)
+claude_logs/
+conversations/
+
+# DB backuplar (qo'lda olinganlari — repo'ga emas)
+*.db.bak
+*.db.*.bak
+totli_holva.db.pre-*.bak
+
+# Tasodifiy redirect captura ("> 0" kabi)
+/0
+/scripts/0
+
+# Flutter iOS auto-generated (har machinaga xos)
+totli_mobile/ios/Flutter/Generated.xcconfig
+totli_mobile/ios/Flutter/flutter_export_environment.sh
+totli_mobile/ios/Runner/GeneratedPluginRegistrant.m
 
 # Runtime ma'lumotlar (har machinaga xos, gitga kirmaydi)
 /backups/

@@ -159,10 +159,13 @@
                     })
                     .catch(function() {});
             }
+            // Cross-currency aniqlash + avtomatik kurs
             var crossBlock = document.getElementById('crossCurrBlock');
             var fromBadge = document.getElementById('fromCurrBadge');
             var toBadge = document.getElementById('toCurrBadge');
             var fromLabel = document.getElementById('fromCurrLabel');
+            var fromLabel2 = document.getElementById('fromCurrLabel2');
+            var toLabel2 = document.getElementById('toCurrLabel2');
             var toLabel3 = document.getElementById('toCurrLabel3');
             var rateInp = document.getElementById('rateInp');
             var amountInp = document.getElementById('amountInp');
@@ -184,6 +187,7 @@
                 var r = parseFloat(rateInp.value) || 0;
                 if (a > 0 && r > 0) {
                     var from = getCurr(fromSel);
+                    // Kurs har doim foreign/UZS direction (masalan 1 USD = 12000 UZS)
                     if (from === 'UZS') {
                         toAmountInp.value = Math.round(a / r * 100) / 100;
                     } else {
@@ -204,6 +208,8 @@
                 if (crossBlock) crossBlock.style.display = 'block';
                 if (fromBadge) fromBadge.textContent = from;
                 if (toBadge) toBadge.textContent = to;
+                if (fromLabel2) fromLabel2.textContent = from;
+                if (toLabel2) toLabel2.textContent = to;
                 if (toLabel3) toLabel3.textContent = to;
                 var foreignCurr = (from === 'UZS') ? to : from;
                 var rateLabel = document.getElementById('rateLabel');
@@ -375,13 +381,7 @@
             <dt class="col-sm-3">Qayerga</dt>
             <dd class="col-sm-9">{{ transfer.to_cash.name if transfer.to_cash else '—' }}</dd>
             <dt class="col-sm-3">Summa</dt>
-            <dd class="col-sm-9 sum-cell">{{ "{:,.0f}".format(transfer.amount or 0) }} {{ transfer.from_cash.currency if transfer.from_cash and transfer.from_cash.currency else "so'm" }}</dd>
-            {% if transfer.exchange_rate and transfer.to_amount %}
-            <dt class="col-sm-3">Kurs</dt>
-            <dd class="col-sm-9">{{ "{:,.2f}".format(transfer.exchange_rate) }}</dd>
-            <dt class="col-sm-3">Qabul qilingan</dt>
-            <dd class="col-sm-9 sum-cell">{{ "{:,.2f}".format(transfer.to_amount or 0) }} {{ transfer.to_cash.currency if transfer.to_cash and transfer.to_cash.currency else "UZS" }}</dd>
-            {% endif %}
+            <dd class="col-sm-9 sum-cell">{{ "{:,.0f}".format(transfer.amount or 0) }} so'm</dd>
             <dt class="col-sm-3">Jo'natuvchi</dt>
             <dd class="col-sm-9">{{ transfer.user.full_name or transfer.user.username if transfer.user else '—' }}</dd>
             {% if transfer.approved_by %}

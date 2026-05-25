@@ -37,7 +37,7 @@ async def partners_list(
     current_user: User = Depends(require_auth),
 ):
     from app.utils.sort_helpers import parse_sort, apply_sort
-    query = db.query(Partner)
+    query = db.query(Partner).filter(Partner.is_active == True)
     if type != "all":
         query = query.filter(Partner.type == type)
     # Saralash (whitelist orqali, SQL injection himoyasi)
@@ -159,7 +159,32 @@ async def partner_detail_json(
         "pinfl": p.pinfl or "",
         "contract_number": p.contract_number or "",
         "contract_date": str(p.contract_date) if p.contract_date else "",
+        "extra_agent_ids": [pa.agent_id for pa in (p.partner_agents or []) if pa.agent_id],
+        "agents": _build_partner_agents_payload(p),
     }
+
+
+def _build_partner_agents_payload(p) -> list[dict]:
+    """Agent ro'yxati: asosiy (Partner.agent_id) + qo'shimcha (PartnerAgent).
+    Eski Partner.agent_id partner_agents'da bo'lmasa, birinchi sifatida qo'shiladi."""
+    result = []
+    pa_list = list(p.partner_agents or [])
+    pa_agent_ids = {pa.agent_id for pa in pa_list if pa.agent_id}
+    if p.agent_id and p.agent_id not in pa_agent_ids:
+        result.append({
+            "agent_id": p.agent_id,
+            "visit_type": "weekly",
+            "visit_days": str(p.visit_day) if p.visit_day is not None else "",
+            "position": 1,
+        })
+    for pa in sorted(pa_list, key=lambda x: (x.position or 99, x.id)):
+        result.append({
+            "agent_id": pa.agent_id,
+            "visit_type": pa.visit_type or "weekly",
+            "visit_days": pa.visit_days or "",
+            "position": pa.position or 2,
+        })
+    return result
 
 
 @router.post("/edit/{partner_id}")
@@ -280,8 +305,264 @@ async def partner_edit(
             partner.contract_date = dt.strptime(contract_date_raw, "%Y-%m-%d").date()
         except (ValueError, TypeError):
             pass
+    # Agentlar to'liq ro'yxati (per-agent visit_type + visit_days)
+    # Form maydonlari: agent_ids[], visit_types[], visit_days_csv[]
+    # Birinchi agent (position=1) — asosiy (Partner.agent_id legacy), keyingilari qo'shimcha
+    from app.models.database import PartnerAgent
+    agent_ids_raw = form.getlist("agent_ids")
+    visit_types_raw = form.getlist("visit_types")
+    visit_days_raw = form.getlist("visit_days_csv")
+
+    parsed_rows = []
+    for i, aid_raw in enumerate(agent_ids_raw):
+        try:
+            aid = int(aid_raw)
+            if aid <= 0:
+                continue
+        except (ValueError, TypeError):
+            continue
+        if any(r[0] == aid for r in parsed_rows):
+            continue  # duplicate skip
+        vtype = (visit_types_raw[i] if i < len(visit_types_raw) else "weekly") or "weekly"
+        vdays = (visit_days_raw[i] if i < len(visit_days_raw) else "") or ""
+        parsed_rows.append((aid, vtype, vdays, i + 1))
+
+    # Eski partner_agents ni butunlay o'chirib qaytadan yozish
+    db.query(PartnerAgent).filter(PartnerAgent.partner_id == partner_id).delete()
+    # Asosiy agent — birinchi qatordan (legacy Partner.agent_id va visit_day uchun)
+    if parsed_rows:
+        first_aid, first_vtype, first_vdays, _ = parsed_rows[0]
+        partner.agent_id = first_aid
+        first_day_list = [d for d in first_vdays.split(",") if d.strip()]
+        try:
+            partner.visit_day = int(first_day_list[0]) if first_day_list else None
+        except (ValueError, TypeError):
+            partner.visit_day = None
+        # Qo'shimcha agentlar (position 2+) — partner_agents jadvalga
+        for aid, vtype, vdays, pos in parsed_rows[1:]:
+            db.add(PartnerAgent(
+                partner_id=partner_id,
+                agent_id=aid,
+                visit_type=vtype,
+                visit_days=vdays,
+                position=pos,
+            ))
+    else:
+        partner.agent_id = None
+        partner.visit_day = None
     db.commit()
     return RedirectResponse(url="/partners", status_code=303)
+
+
+@router.get("/duplicates", response_class=HTMLResponse)
+async def partner_duplicates(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Dublikat partnerlarni topib guruhlash (nom yoki telefon bo'yicha)."""
+    def norm_name(s):
+        return "".join(c for c in (s or "").lower().strip() if c.isalnum())
+
+    def norm_phone(p):
+        d = "".join(c for c in (p or "") if c.isdigit())
+        return d[-9:] if len(d) >= 7 else ""
+
+    partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.id).all()
+
+    # Union-Find guruhlash: nom (norm) va telefon (norm)
+    parent = {}
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for p in partners:
+        parent[p.id] = p.id
+
+    key_to_pid = {}
+    for p in partners:
+        keys = []
+        nk = norm_name(p.name)
+        if nk and len(nk) >= 3:
+            keys.append(("n", nk))
+        for ph in (p.phone, p.phone2):
+            pk = norm_phone(ph or "")
+            if pk:
+                keys.append(("p", pk))
+        for k in keys:
+            if k in key_to_pid:
+                union(p.id, key_to_pid[k])
+            else:
+                key_to_pid[k] = p.id
+
+    # Guruhlarni yig'ish
+    from collections import defaultdict
+    groups_map = defaultdict(list)
+    for p in partners:
+        groups_map[find(p.id)].append(p)
+
+    # Faqat 2+ a'zo bo'lgan guruhlar
+    duplicate_groups = [v for v in groups_map.values() if len(v) > 1]
+
+    # Filtr: faqat Sales Doctor mijozlari bilan bog'liq guruhlar (?source=sd)
+    sd_only = request.query_params.get("source") == "sd"
+    if sd_only:
+        try:
+            from app.services.balance_import_data import SD_BALANCE_DATA
+        except ImportError:
+            SD_BALANCE_DATA = []
+        sd_keys = set()
+        for sd in SD_BALANCE_DATA:
+            nk = norm_name(sd["name"])
+            if nk and len(nk) >= 3:
+                sd_keys.add(("n", nk))
+            pk = norm_phone(sd["phone"])
+            if pk:
+                sd_keys.add(("p", pk))
+        def group_matches_sd(g):
+            for pp in g:
+                nk = norm_name(pp.name)
+                if ("n", nk) in sd_keys:
+                    return True
+                for ph in (pp.phone, pp.phone2):
+                    pk = norm_phone(ph or "")
+                    if pk and ("p", pk) in sd_keys:
+                        return True
+            return False
+        duplicate_groups = [g for g in duplicate_groups if group_matches_sd(g)]
+
+    # Eng katta absolyut balansli partnerni birinchi qo'yish (ehtimol primary)
+    for g in duplicate_groups:
+        g.sort(key=lambda x: -abs(x.balance or 0))
+    duplicate_groups.sort(key=lambda g: -sum(abs(p.balance or 0) for p in g))
+
+    h = ['<!DOCTYPE html><html><head><meta charset="utf-8"><title>Dublikat partnerlar</title>',
+         '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">',
+         '<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">',
+         '<style>body{padding:20px;font-family:sans-serif;}.dup-group{border:1px solid #dee2e6;border-radius:8px;padding:12px;margin-bottom:12px;background:#f8f9fa;}.cand-row{padding:6px 8px;border-radius:4px;margin:2px 0;background:white;display:flex;align-items:center;gap:8px;}.num{font-family:monospace;}.muted{color:#6c757d;}</style>',
+         '</head><body><div class="container-fluid">',
+         '<div class="mb-3"><a href="/partners" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Kontragentlarga qaytish</a></div>',
+         '<h4>Dublikat partnerlar</h4>',
+         '<div class="mb-3">',
+         f'<a href="/partners/duplicates" class="btn btn-sm {"btn-primary" if not sd_only else "btn-outline-primary"}">Barchasi</a> ',
+         f'<a href="/partners/duplicates?source=sd" class="btn btn-sm {"btn-primary" if sd_only else "btn-outline-primary"}">Faqat Sales Doctor mijozlari</a>',
+         '</div>',
+         f'<p class="text-muted">Topildi: <b>{len(duplicate_groups)}</b> ta guruh, jami <b>{sum(len(g) for g in duplicate_groups)}</b> partner.</p>',
+         '<div class="alert alert-info small mb-3">',
+         '<b>Belgilar:</b> <span class="badge bg-light text-dark">◉ radio</span> — primary (asosiy partner, qabul qiladi). ',
+         '<span class="badge bg-light text-dark">☑ checkbox</span> — merge qilinsinmi? Default barchasi belgilangan. ',
+         '<b>Saqlash uchun</b> — qaysi partnerni alohida qoldirmoqchi bo\'lsangiz checkbox\'ni o\'chiring (masalan boshqa filial bo\'lsa).',
+         '</div>',
+         '<p class="alert alert-warning small"><b>Ehtiyot:</b> merge qaytarib bo\'lmaydi. Har guruhni diqqat bilan tekshiring.</p>']
+
+    csrf_token = getattr(request.state, "csrf_token", "") or ""
+    for gi, group in enumerate(duplicate_groups):
+        total_bal = sum(p.balance or 0 for p in group)
+        h.append('<div class="dup-group">')
+        h.append(f'<div><b>Guruh {gi+1}</b> &middot; {len(group)} partner &middot; jami balans <span class="num">{total_bal:,.0f}</span></div>')
+        h.append(f'<form method="post" action="/partners/merge" class="mt-2" onsubmit="return confirm(\'Guruh {gi+1}: tanlangan primary\\\'ga merge qilamizmi? Qaytarib bo\\\'lmaydi.\');">')
+        h.append(f'<input type="hidden" name="csrf_token" value="{csrf_token}">')
+        for i, p in enumerate(group):
+            checked = "checked" if i == 0 else ""
+            phones = [p.phone, p.phone2]
+            ph_str = ", ".join(x for x in phones if x) or "—"
+            bal_color = "#dc3545" if (p.balance or 0) > 0 else ("#198754" if (p.balance or 0) < 0 else "#6c757d")
+            h.append(f'<div class="cand-row">')
+            h.append(f'<input type="radio" name="primary_id" value="{p.id}" {checked} title="Primary (asosiy)">')
+            h.append(f'<input type="checkbox" name="member_id" value="{p.id}" checked title="Merge qilinsinmi?" class="merge-cb">')
+            h.append(f'<div class="flex-grow-1"><b>#{p.id} {p.name}</b> &middot; <span class="muted">tel</span> {ph_str} &middot; <span class="muted">manzil</span> {(p.address or "-")[:25]} &middot; <span class="muted">balans</span> <b class="num" style="color:{bal_color}">{p.balance or 0:,.0f}</b> &middot; <span class="muted">tip</span> {p.type or "-"}</div>')
+            h.append('</div>')
+        h.append('<button type="submit" class="btn btn-warning btn-sm mt-2">⚐ Merge qilish (tanlangan primary)</button>')
+        h.append('</form></div>')
+
+    if not duplicate_groups:
+        h.append('<div class="alert alert-success">Dublikat topilmadi!</div>')
+
+    h.append('</div></body></html>')
+    return HTMLResponse("".join(h))
+
+
+@router.post("/merge")
+async def partner_merge(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Tanlangan primary partnerga qolganlarni merge qilish."""
+    from sqlalchemy import inspect, text
+    from app.models.database import PartnerAgent
+
+    form = await request.form()
+    try:
+        primary_id = int(form.get("primary_id") or 0)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="primary_id noto'g'ri")
+    if primary_id <= 0:
+        raise HTTPException(status_code=400, detail="primary tanlanmagan")
+
+    member_ids_raw = form.getlist("member_id")
+    other_ids = []
+    for x in member_ids_raw:
+        try:
+            mid = int(x)
+            if mid != primary_id and mid > 0:
+                other_ids.append(mid)
+        except (ValueError, TypeError):
+            continue
+    if not other_ids:
+        return RedirectResponse(url="/partners/duplicates?msg=hech+nima+merge+qilinmadi", status_code=303)
+
+    primary = db.query(Partner).filter(Partner.id == primary_id).first()
+    others = db.query(Partner).filter(Partner.id.in_(other_ids)).all()
+    if not primary or len(others) != len(other_ids):
+        raise HTTPException(status_code=404, detail="Partner topilmadi")
+
+    # 1) Balanslar qo'shish
+    for o in others:
+        primary.balance = (primary.balance or 0) + (o.balance or 0)
+
+    # 2) partner_agents — UniqueConstraint(partner_id, agent_id) — alohida ishlatish
+    existing_agents = {pa.agent_id for pa in db.query(PartnerAgent).filter(PartnerAgent.partner_id == primary_id).all()}
+    for o_id in other_ids:
+        for pa in db.query(PartnerAgent).filter(PartnerAgent.partner_id == o_id).all():
+            if pa.agent_id in existing_agents:
+                db.delete(pa)
+            else:
+                pa.partner_id = primary_id
+                existing_agents.add(pa.agent_id)
+
+    # 3) Boshqa barcha jadvallar — generic UPDATE foreign key
+    db.flush()
+    inspector = inspect(db.bind)
+    other_ids_csv = ",".join(str(x) for x in other_ids)
+    for table_name in inspector.get_table_names():
+        if table_name in ("partners", "partner_agents"):
+            continue
+        try:
+            fks = inspector.get_foreign_keys(table_name)
+        except Exception:
+            continue
+        for fk in fks:
+            if fk.get("referred_table") == "partners":
+                col = fk["constrained_columns"][0]
+                db.execute(text(
+                    f'UPDATE {table_name} SET {col} = {primary_id} WHERE {col} IN ({other_ids_csv})'
+                ))
+
+    # 4) Eski partnerlar — soft-delete
+    for o in others:
+        o.is_active = False
+        if not (o.name or "").startswith("[→#"):
+            o.name = f"[→#{primary_id}] {o.name}"
+
+    db.commit()
+    return RedirectResponse(url=f"/partners/duplicates?merged=1&primary={primary_id}", status_code=303)
 
 
 @router.post("/bulk-assign-agent")

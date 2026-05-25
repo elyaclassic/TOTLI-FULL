@@ -429,5 +429,15 @@
     if (deptFilter)  deptFilter.addEventListener('change', applyFilters);
     if (salaryFilter) salaryFilter.addEventListener('change', applyFilters);
 })();
+
+// ?add=1 bo'lsa "Yaratish" modalini avtomatik ochish (GET /employees/add redirect)
+(function() {
+    if (new URLSearchParams(location.search).get('add') === '1') {
+        var m = document.getElementById('addEmployeeModal');
+        if (m && window.bootstrap && bootstrap.Modal) {
+            new bootstrap.Modal(m).show();
+        }
+    }
+})();
 </script>
 {% endblock %}

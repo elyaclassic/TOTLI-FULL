@@ -169,7 +169,7 @@ async def admin_reopen_period(
 
 
 # ==========================================
-# VALYUTA KURSI CRUD
+# VALYUTA KURSI CRUD (B2)
 # ==========================================
 
 @router.get("/admin/exchange-rates", response_class=HTMLResponse)
@@ -183,6 +183,7 @@ async def admin_exchange_rates(
     from app.services.currency_service import get_rate
     from datetime import date as _date
     rates = db.query(ExchangeRate).order_by(ExchangeRate.effective_date.desc(), ExchangeRate.id.desc()).limit(200).all()
+    # Joriy kurs (bugungi)
     today = _date.today()
     current_usd = get_rate(db, "USD", "UZS", today)
     return templates.TemplateResponse("admin/exchange_rates.html", {

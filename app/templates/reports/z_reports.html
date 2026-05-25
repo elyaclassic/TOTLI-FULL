@@ -170,6 +170,12 @@
                                      title="Oldingi Z {{ (x.prev_closed_at or '')[11:19] }} dan keyin qo'shilgan summa">
                                     +{{ "{:,.0f}".format(x.diff_sales_total) }}
                                 </div>
+                                {% if x.diff_payment_breakdown %}
+                                <div class="small text-muted"
+                                     title="Qo'shilgan summa to'lov turi bo'yicha">
+                                    {% for d in x.diff_payment_breakdown %}{{ d.type }} +{{ "{:,.0f}".format(d.sum) }}{% if not loop.last %} · {% endif %}{% endfor %}
+                                </div>
+                                {% endif %}
                                 {% endif %}
                             </td>
                             <td class="text-end z-amount minus">

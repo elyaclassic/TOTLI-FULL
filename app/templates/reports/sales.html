@@ -97,7 +97,7 @@
                 <tbody>
                     {% if orders %}
                         {% for order in orders %}
-                        <tr>
+                        <tr{% if order.status == 'cancelled' %} class="text-muted" style="opacity:.55;text-decoration:line-through"{% endif %}>
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td><code class="num-cell">{{ order.number }}</code></td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') }}</td>
@@ -109,6 +109,8 @@
                                     <span class="badge-done">Bajarildi</span>
                                 {% elif order.status == 'draft' %}
                                     <span class="badge-draft">Qoralama</span>
+                                {% elif order.status == 'cancelled' %}
+                                    <span class="badge-cancelled">Bekor qilingan</span>
                                 {% else %}
                                     <span class="badge-inactive">{{ order.status }}</span>
                                 {% endif %}

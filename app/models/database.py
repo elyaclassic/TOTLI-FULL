@@ -8,10 +8,16 @@ logger = logging.getLogger("database")
 
 Base = declarative_base()
 
-# Loyiha ildizidagi baza (qayerdan ishga tushirilmasa ham bir xil fayl)
+# Loyiha ildizidagi baza (qayerdan ishga tushirilmasa ham bir xil fayl).
+# TOTLI_DB_FILE env-var bilan ustun yoziladi (dev sandbox uchun: totli_holva_dev.db).
 _root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_db_path = os.path.join(_root, "totli_holva.db")
+_db_filename = os.environ.get("TOTLI_DB_FILE", "totli_holva.db")
+if os.path.isabs(_db_filename):
+    _db_path = _db_filename
+else:
+    _db_path = os.path.join(_root, _db_filename)
 DATABASE_URL = f"sqlite:///{_db_path}"
+logger.info(f"DATABASE: {_db_path}")
 
 engine = create_engine(
     DATABASE_URL,
@@ -450,6 +456,7 @@ class StockAdjustmentDoc(Base):
     total_tannarx = Column(Float, default=0)   # Jami summa tannarx (so'm)
     total_sotuv = Column(Float, default=0)     # Jami sotuv summa (so'm)
     created_at = Column(DateTime, default=datetime.now)
+    type = Column(String(20), default="inventory", nullable=True)  # 'inventory' (SET) | 'stock_entry' (ADD)
 
     warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
     user = relationship("User")
@@ -891,6 +898,12 @@ class Partner(Base):
 
     orders = relationship("Order", back_populates="partner")
     payments = relationship("Payment", back_populates="partner")
+    partner_agents = relationship(
+        "PartnerAgent",
+        backref="partner",
+        cascade="all, delete-orphan",
+        order_by="PartnerAgent.position",
+    )
 
     @property
     def display_name(self) -> str:
@@ -1067,6 +1080,27 @@ class Payment(Base):
     
     partner = relationship("Partner", back_populates="payments")
     cash_register = relationship("CashRegister", foreign_keys=[cash_register_id])
+
+
+class PartnerAgent(Base):
+    """Kontragentga biriktirilgan agentlar (N:N + per-agent tashrif).
+
+    Spec: docs/superpowers/specs/2026-05-19-multi-agent-partner-design.md
+    visit_days = CSV kun raqamlari "0,2,4" (Du=0..Yak=6, Partner.visit_day bilan izchil).
+    """
+    __tablename__ = "partner_agents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=False, index=True)
+    agent_id = Column(Integer, ForeignKey("agents.id"), nullable=False, index=True)
+    visit_type = Column(String(20), nullable=True)
+    visit_days = Column(String(50), nullable=True)
+    position = Column(Integer, default=1, nullable=False)
+    created_at = Column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("partner_id", "agent_id", name="uq_partner_agent"),
+    )
 
 
 # ==========================================
@@ -1386,6 +1420,7 @@ class Agent(Base):
     # set bo'lsa faqat PIN qabul qilinadi (bcrypt hash)
     pin_hash = Column(String(255), nullable=True)
     pin_set_at = Column(DateTime, nullable=True)
+    commission_percent = Column(Float, default=0.0, nullable=True)
 
     locations = relationship("AgentLocation", back_populates="agent", order_by="AgentLocation.recorded_at.desc()")
     routes = relationship("Route", back_populates="agent")
@@ -1937,41 +1972,6 @@ def ensure_visit_feedback_columns():
         logger.error(f"ensure_visit_feedback_columns: {e}")
 
 
-def ensure_exchange_columns_and_table():
-    """Cross-currency uchun: cash_registers.currency, cash_transfers.exchange_rate/to_amount va exchange_rates jadval."""
-    try:
-        with engine.begin() as conn:
-            r = conn.execute(text("PRAGMA table_info(cash_registers)"))
-            cols = [row[1] for row in r]
-            if "currency" not in cols:
-                conn.execute(text("ALTER TABLE cash_registers ADD COLUMN currency VARCHAR(3) NOT NULL DEFAULT 'UZS'"))
-
-            r = conn.execute(text("PRAGMA table_info(cash_transfers)"))
-            cols = [row[1] for row in r]
-            if "exchange_rate" not in cols:
-                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN exchange_rate FLOAT"))
-            if "to_amount" not in cols:
-                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN to_amount FLOAT"))
-
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS exchange_rates (
-                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
-                    from_currency VARCHAR(3) NOT NULL,
-                    to_currency VARCHAR(3) NOT NULL,
-                    rate FLOAT NOT NULL,
-                    effective_date DATE NOT NULL,
-                    note TEXT,
-                    user_id INTEGER REFERENCES users(id),
-                    created_at DATETIME
-                )
-            """))
-            conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS idx_exr_pair_date ON exchange_rates(from_currency, to_currency, effective_date)"
-            ))
-    except Exception as e:
-        logger.error(f"ensure_exchange_columns_and_table: {e}")
-
-
 def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_agent_tasks()
@@ -1989,7 +1989,7 @@ def init_db():
     ensure_product_conversions_table()
     ensure_attendance_improvements()
     ensure_visit_feedback_columns()
-    ensure_exchange_columns_and_table()
+    ensure_currency_columns()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
@@ -2102,6 +2102,51 @@ def ensure_production_group_docs_table():
                     conn.execute(text("ALTER TABLE production_group_docs ADD COLUMN confirmed_at DATETIME"))
     except Exception as e:
         print(f"ensure_production_group_docs_table: {e}")
+
+
+def ensure_currency_columns():
+    """Valyuta konvertatsiyasi uchun additive migration:
+    - cash_registers.currency (default UZS)
+    - cash_transfers.exchange_rate, to_amount
+    - exchange_rates jadvali (kurs tarixi)
+    """
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            # cash_registers.currency
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(cash_registers)"))]
+            if "currency" not in cols:
+                conn.execute(text("ALTER TABLE cash_registers ADD COLUMN currency VARCHAR(3) DEFAULT 'UZS' NOT NULL"))
+                print("cash_registers.currency qo'shildi (default UZS).")
+
+            # cash_transfers.exchange_rate, to_amount
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(cash_transfers)"))]
+            if "exchange_rate" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN exchange_rate REAL"))
+                print("cash_transfers.exchange_rate qo'shildi.")
+            if "to_amount" not in cols:
+                conn.execute(text("ALTER TABLE cash_transfers ADD COLUMN to_amount REAL"))
+                print("cash_transfers.to_amount qo'shildi.")
+
+            # exchange_rates jadvali
+            r = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='exchange_rates'"))
+            if not r.fetchone():
+                conn.execute(text("""
+                    CREATE TABLE exchange_rates (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        from_currency VARCHAR(3) NOT NULL,
+                        to_currency VARCHAR(3) NOT NULL,
+                        rate REAL NOT NULL,
+                        effective_date DATE NOT NULL,
+                        note TEXT,
+                        user_id INTEGER REFERENCES users(id),
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                conn.execute(text("CREATE INDEX idx_exr_pair_date ON exchange_rates (from_currency, to_currency, effective_date)"))
+                print("exchange_rates jadvali yaratildi.")
+    except Exception as e:
+        print(f"ensure_currency_columns: {e}")
 
 
 def ensure_product_conversions_table():
