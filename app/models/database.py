@@ -1954,6 +1954,18 @@ def ensure_agent_tasks():
         logger.error(f"ensure_agent_tasks: {e}")
 
 
+def ensure_agent_commission_column():
+    """Commission Faza 1: agents.commission_percent ustunini qo'shadi."""
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(agents)"))
+            cols = [row[1] for row in r]
+            if "commission_percent" not in cols:
+                conn.execute(text("ALTER TABLE agents ADD COLUMN commission_percent FLOAT DEFAULT 0.0"))
+    except Exception as e:
+        logger.error(f"ensure_agent_commission_column: {e}")
+
+
 def ensure_visit_feedback_columns():
     """Visit jadvaliga fikr/muammo ustunlarini qo'shadi (Bosqich 3)."""
     try:
@@ -1990,6 +2002,7 @@ def init_db():
     ensure_attendance_improvements()
     ensure_visit_feedback_columns()
     ensure_currency_columns()
+    ensure_agent_commission_column()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
