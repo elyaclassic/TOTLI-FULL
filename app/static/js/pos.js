@@ -974,6 +974,11 @@
                               || (d.expense_other && d.expense_other.count > 0);
                 if (hasExpense || typeof d.qoldiq !== 'undefined') {
                     xReportBody.appendChild(_xrSection('HARAJATLAR (NAQD KASSADAN):'));
+                    if (typeof d.opening_naqd !== 'undefined' && d.opening_naqd !== null) {
+                        var oRow = _xrRow('Boshlang\'ich qoldiq (kechadan):', '+' + _xrFmt(d.opening_naqd));
+                        oRow.style.color = '#080';
+                        xReportBody.appendChild(oRow);
+                    }
                     if (d.expense_to_partner && d.expense_to_partner.count > 0) {
                         xReportBody.appendChild(_xrRow(
                             'Kontragentga to\'lov (' + d.expense_to_partner.count + ' ta):',

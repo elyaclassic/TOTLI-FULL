@@ -2301,7 +2301,21 @@ async def sales_pos_x_report(
         pass
 
     naqd_income_today = float(by_type.get("naqd", {}).get("sum", 0) or 0)
-    qoldiq = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"] - inkasatsiya_naqd_today["sum"]
+    today_net_naqd = naqd_income_today - expense_to_partner["sum"] - expense_other["sum"] - inkasatsiya_naqd_today["sum"]
+
+    # Boshlang'ich qoldiq (kechagi qoldiq) — kassa balansidan bugungi net naqdni ayirib topiladi.
+    # Bugungi X-hisobotda qoldiq = hozirgi haqiqiy CashRegister.balance (real-time).
+    # O'tgan sanada balans real-time bo'lgani uchun opening hisoblab bo'lmaydi → eski xulq.
+    opening_naqd = None
+    qoldiq = today_net_naqd
+    try:
+        if role == "sotuvchi" and pos_wh and target_date == date_type.today():
+            naqd_cash_objs = [c for c in shop_cashes if (c.payment_type or "").strip().lower() == "naqd"]
+            current_naqd_balance = sum(float(c.balance or 0) for c in naqd_cash_objs)
+            opening_naqd = current_naqd_balance - today_net_naqd
+            qoldiq = current_naqd_balance
+    except Exception:
+        pass
 
     # Oldingi Z-hisobot bo'lsa farqni hisoblash (majburiy keyingi yopilish uchun).
     # Birinchi (eng eski) Z bilan solishtirish — chunki eng yangi Z hozirgi live state
@@ -2467,6 +2481,7 @@ async def sales_pos_x_report(
         "expense_to_partner": expense_to_partner,
         "expense_other": expense_other,
         "expense_non_cash": [{"type": k, "count": v["count"], "sum": v["sum"]} for k, v in sorted(expense_non_cash.items(), key=lambda x: -x[1]["sum"])],
+        "opening_naqd": opening_naqd,
         "qoldiq": qoldiq,
     })
 
