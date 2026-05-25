@@ -1463,6 +1463,8 @@ async def cash_transfer_create(
     from_cash_id: int = Form(...),
     to_cash_id: int = Form(...),
     amount: float = Form(...),
+    exchange_rate: Optional[float] = Form(None),
+    to_amount: Optional[float] = Form(None),
     note: str = Form(""),
     date: Optional[str] = Form(None),
     db: Session = Depends(get_db),
@@ -1471,21 +1473,49 @@ async def cash_transfer_create(
     """Admin inkasatsiya hujjat yaratadi — status: pending.
 
     date — retroaktiv kiritish uchun (YYYY-MM-DD). Agar bo'sh bo'lsa, bugungi sana.
+
+    Cross-currency: agar from va to kassalar har xil valyutada bo'lsa, exchange_rate
+    va to_amount majburiy (yoki ExchangeRate jadvalidan avtomatik olinadi).
     """
     if from_cash_id == to_cash_id:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Qayerdan va qayerga kassa bir xil bolmasin."), status_code=303)
     if amount <= 0:
         return RedirectResponse(url="/cash/transfers/new?error=" + quote("Summa 0 dan katta bolishi kerak."), status_code=303)
 
-    op_date = datetime.now()
+    from_cash = db.query(CashRegister).filter(CashRegister.id == from_cash_id).first()
+    to_cash = db.query(CashRegister).filter(CashRegister.id == to_cash_id).first()
+    if not from_cash or not to_cash:
+        return RedirectResponse(url="/cash/transfers/new?error=" + quote("Kassa topilmadi."), status_code=303)
+    from_curr = (from_cash.currency or "UZS").upper()
+    to_curr = (to_cash.currency or "UZS").upper()
+    final_rate = None
+    final_to_amount = None
+    if from_curr != to_curr:
+        rate = exchange_rate
+        if not rate or rate <= 0:
+            from app.services.currency_service import get_rate
+            rate = get_rate(db, from_curr, to_curr)
+            if rate <= 0:
+                return RedirectResponse(url="/cash/transfers/new?error=" + quote(
+                    f"Kurs topilmadi ({from_curr}->{to_curr}). Avval /admin/exchange-rates da kurs kiriting."
+                ), status_code=303)
+        final_rate = float(rate)
+        final_to_amount = float(to_amount) if to_amount and to_amount > 0 else round(amount * final_rate, 2)
+
+    now = datetime.now()
+    op_date = now
     if date:
         try:
             parsed = datetime.strptime(date[:10], "%Y-%m-%d")
-            if parsed.date() > datetime.now().date():
+            today = now.date()
+            if parsed.date() > today:
                 return RedirectResponse(url="/cash/transfers/new?error=" + quote("Kelajakdagi sana bolishi mumkin emas."), status_code=303)
             if is_period_closed(db, parsed):
                 return RedirectResponse(url="/cash/transfers/new?error=" + quote(f"{parsed.strftime('%Y-%m')} oyi yopilgan — retroaktiv kiritish mumkin emas."), status_code=303)
-            op_date = parsed.replace(hour=datetime.now().hour, minute=datetime.now().minute, second=datetime.now().second)
+            if parsed.date() == today:
+                op_date = now
+            else:
+                op_date = parsed.replace(hour=23, minute=59, second=59)
         except ValueError:
             return RedirectResponse(url="/cash/transfers/new?error=" + quote("Sana formati notogri."), status_code=303)
 
@@ -1497,6 +1527,8 @@ async def cash_transfer_create(
         from_cash_id=from_cash_id,
         to_cash_id=to_cash_id,
         amount=amount,
+        exchange_rate=final_rate,
+        to_amount=final_to_amount,
         status="pending",
         user_id=current_user.id if current_user else None,
         note=note or None,

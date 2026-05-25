@@ -58,7 +58,7 @@
                     <select name="from_cash_id" id="from_cash_id" class="form-select" required>
                         <option value="">— Tanlang —</option>
                         {% for c in cash_registers %}
-                        <option value="{{ c.id }}">{{ c.name }} ({{ "{:,.0f}".format(c.balance or 0) }} so'm)</option>
+                        <option value="{{ c.id }}" data-currency="{{ c.currency or 'UZS' }}">{{ c.name }} ({{ "{:,.0f}".format(c.balance or 0) }} {{ c.currency or "so'm" }})</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -67,14 +67,14 @@
                     <select name="to_cash_id" id="to_cash_id" class="form-select" required>
                         <option value="">— Tanlang —</option>
                         {% for c in cash_registers %}
-                        <option value="{{ c.id }}">{{ c.name }}</option>
+                        <option value="{{ c.id }}" data-currency="{{ c.currency or 'UZS' }}">{{ c.name }} ({{ c.currency or "UZS" }})</option>
                         {% endfor %}
                     </select>
                     <div id="sameCashWarn" class="text-danger small mt-1" style="display: none;"><i class="bi bi-exclamation-triangle"></i> Qayerdan va qayerga kassa bir xil bo'lmasin.</div>
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Summa (so'm) *</label>
-                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required placeholder="0">
+                    <label class="form-label">Summa <span id="fromCurrLabel">(so'm)</span> *</label>
+                    <input type="number" name="amount" id="amountInp" class="form-control" step="0.01" min="0.01" required placeholder="0" data-calc>
                 </div>
                 {% if current_user and (current_user.role or '')|lower in ['admin', 'manager', 'menejer'] %}
                 <div class="col-md-6">
@@ -82,6 +82,28 @@
                     <input type="date" name="date" class="form-control" value="{{ today_str }}" max="{{ today_str }}">
                 </div>
                 {% endif %}
+                <!-- Cross-currency block (faqat from!=to valyuta bo'lsa ko'rinadi) -->
+                <div class="col-12" id="crossCurrBlock" style="display:none;">
+                  <div class="alert alert-info py-2 small mb-2">
+                    <i class="bi bi-currency-exchange"></i>
+                    <strong>Valyuta konvertatsiyasi:</strong>
+                    <span id="fromCurrBadge" class="badge bg-warning text-dark">USD</span> →
+                    <span id="toCurrBadge" class="badge bg-info text-dark">UZS</span>
+                    <span id="anchorRateNote" class="ms-2 small fw-bold text-success"></span>
+                  </div>
+                  <div class="row g-2">
+                    <div class="col-md-6">
+                      <label class="form-label small"><span id="rateLabel">Kurs (1 USD = ? UZS)</span></label>
+                      <input type="number" name="exchange_rate" id="rateInp" class="form-control" step="0.01" min="0" placeholder="Avtomatik to'ldiriladi">
+                      <small class="text-muted">Bo'sh qoldirsangiz, bugungi kurs avtomatik qo'llanadi.</small>
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small">Qabul qilinadigan summa (<span id="toCurrLabel3">UZS</span>)</label>
+                      <input type="number" name="to_amount" id="toAmountInp" class="form-control" step="0.01" min="0.01" placeholder="Summa × Kurs">
+                      <small class="text-muted">Bo'sh qoldirsangiz, summa × kurs avtomatik.</small>
+                    </div>
+                  </div>
+                </div>
                 <div class="col-12">
                     <label class="form-label">Izoh</label>
                     <input type="text" name="note" class="form-control" placeholder="Izoh">
@@ -137,8 +159,76 @@
                     })
                     .catch(function() {});
             }
-            if (fromSel) fromSel.addEventListener('change', checkSame);
-            if (toSel) toSel.addEventListener('change', checkSame);
+            var crossBlock = document.getElementById('crossCurrBlock');
+            var fromBadge = document.getElementById('fromCurrBadge');
+            var toBadge = document.getElementById('toCurrBadge');
+            var fromLabel = document.getElementById('fromCurrLabel');
+            var toLabel3 = document.getElementById('toCurrLabel3');
+            var rateInp = document.getElementById('rateInp');
+            var amountInp = document.getElementById('amountInp');
+            var toAmountInp = document.getElementById('toAmountInp');
+            function getCurr(sel) {
+                if (!sel || !sel.value) return null;
+                var opt = sel.options[sel.selectedIndex];
+                return opt ? (opt.getAttribute('data-currency') || 'UZS') : null;
+            }
+            function fetchRate(from, to) {
+                if (!from || !to || from === to) return Promise.resolve(null);
+                return fetch('/api/currency/rate?from=' + from + '&to=' + to, {credentials:'same-origin'})
+                    .then(function(r){ return r.ok ? r.json() : null; })
+                    .then(function(d){ return d ? d.rate : null; });
+            }
+            function recalcToAmount() {
+                if (!amountInp || !rateInp || !toAmountInp) return;
+                var a = parseFloat(amountInp.value) || 0;
+                var r = parseFloat(rateInp.value) || 0;
+                if (a > 0 && r > 0) {
+                    var from = getCurr(fromSel);
+                    if (from === 'UZS') {
+                        toAmountInp.value = Math.round(a / r * 100) / 100;
+                    } else {
+                        toAmountInp.value = Math.round(a * r * 100) / 100;
+                    }
+                }
+            }
+            function refreshCurrencyUI() {
+                var from = getCurr(fromSel);
+                var to = getCurr(toSel);
+                if (fromLabel) fromLabel.textContent = '(' + (from || "so'm") + ')';
+                if (!from || !to || from === to) {
+                    if (crossBlock) crossBlock.style.display = 'none';
+                    if (rateInp) rateInp.value = '';
+                    if (toAmountInp) toAmountInp.value = '';
+                    return;
+                }
+                if (crossBlock) crossBlock.style.display = 'block';
+                if (fromBadge) fromBadge.textContent = from;
+                if (toBadge) toBadge.textContent = to;
+                if (toLabel3) toLabel3.textContent = to;
+                var foreignCurr = (from === 'UZS') ? to : from;
+                var rateLabel = document.getElementById('rateLabel');
+                fetchRate(foreignCurr, 'UZS').then(function(rate) {
+                    if (rate) {
+                        if (rateLabel) {
+                            var rateStr = (rate % 1 === 0) ? rate.toLocaleString('ru-RU') : rate.toFixed(2);
+                            rateLabel.textContent = 'Kurs (1 ' + foreignCurr + ' = ' + rateStr + ' UZS)';
+                        }
+                        if (rateInp) {
+                            rateInp.placeholder = String(rate);
+                            if (!rateInp.value) {
+                                rateInp.value = rate;
+                                recalcToAmount();
+                            }
+                        }
+                    } else if (rateLabel) {
+                        rateLabel.textContent = 'Kurs (1 ' + foreignCurr + ' = ? UZS) — kurs topilmadi';
+                    }
+                });
+            }
+            if (amountInp) amountInp.addEventListener('input', recalcToAmount);
+            if (rateInp) rateInp.addEventListener('input', recalcToAmount);
+            if (fromSel) fromSel.addEventListener('change', function(){ checkSame(); refreshCurrencyUI(); });
+            if (toSel) toSel.addEventListener('change', function(){ checkSame(); refreshCurrencyUI(); });
             if (dateInp) dateInp.addEventListener('change', refreshBalances);
             if (form) form.addEventListener('submit', function(e) {
                 if (!checkSame()) {
@@ -177,7 +267,7 @@
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Summa (so'm) *</label>
-                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required value="{{ "%.2f"|format(transfer.amount or 0) }}">
+                    <input type="number" name="amount" class="form-control" step="0.01" min="0.01" required value="{{ "%.2f"|format(transfer.amount or 0) }}" data-calc>
                 </div>
                 <div class="col-md-6">
                     <label class="form-label">Sana <span class="text-muted small">(YYYY-MM-DD)</span></label>
@@ -190,12 +280,12 @@
                 <div class="col-12 d-flex gap-2">
                     <button type="submit" class="btn btn-success" id="btnEditTransfer"><i class="bi bi-check-lg me-1"></i>Saqlash</button>
                     <a href="/cash/transfers" class="btn btn-outline-secondary">Bekor</a>
-                    <form method="post" action="/cash/transfers/{{ transfer.id }}/delete" class="d-inline ms-auto" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
-                        <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
-                        <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
-                    </form>
                 </div>
             </div>
+        </form>
+        <form method="post" action="/cash/transfers/{{ transfer.id }}/delete" class="mt-2" onsubmit="return confirm('Hujjatni o\'chirmoqchimisiz?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Hujjatni o'chirish</button>
         </form>
         <hr class="my-3">
         <div class="d-flex flex-wrap gap-2">
@@ -285,7 +375,13 @@
             <dt class="col-sm-3">Qayerga</dt>
             <dd class="col-sm-9">{{ transfer.to_cash.name if transfer.to_cash else '—' }}</dd>
             <dt class="col-sm-3">Summa</dt>
-            <dd class="col-sm-9 sum-cell">{{ "{:,.0f}".format(transfer.amount or 0) }} so'm</dd>
+            <dd class="col-sm-9 sum-cell">{{ "{:,.0f}".format(transfer.amount or 0) }} {{ transfer.from_cash.currency if transfer.from_cash and transfer.from_cash.currency else "so'm" }}</dd>
+            {% if transfer.exchange_rate and transfer.to_amount %}
+            <dt class="col-sm-3">Kurs</dt>
+            <dd class="col-sm-9">{{ "{:,.2f}".format(transfer.exchange_rate) }}</dd>
+            <dt class="col-sm-3">Qabul qilingan</dt>
+            <dd class="col-sm-9 sum-cell">{{ "{:,.2f}".format(transfer.to_amount or 0) }} {{ transfer.to_cash.currency if transfer.to_cash and transfer.to_cash.currency else "UZS" }}</dd>
+            {% endif %}
             <dt class="col-sm-3">Jo'natuvchi</dt>
             <dd class="col-sm-9">{{ transfer.user.full_name or transfer.user.username if transfer.user else '—' }}</dd>
             {% if transfer.approved_by %}

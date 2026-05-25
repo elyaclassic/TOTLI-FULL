@@ -1246,6 +1246,13 @@
                     <i class="bi bi-tags"></i> Harajat turlari
                 </a>
             </li>
+            {% if current_user and (current_user.role or '')|lower in ['admin', 'manager', 'menejer'] %}
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Valyuta kursi' %}active{% endif %}" href="/admin/exchange-rates">
+                    <i class="bi bi-currency-exchange"></i> Valyuta kursi
+                </a>
+            </li>
+            {% endif %}
 
             <!-- HISOBOTLAR -->
             <li class="nav-item mt-3">

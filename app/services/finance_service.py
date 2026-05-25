@@ -40,7 +40,9 @@ def cash_balance_formula(db: Session, cash_id: int, as_of_date=None) -> tuple:
     transfer_out_q = db.query(func.coalesce(func.sum(CashTransfer.amount), 0)).filter(
         CashTransfer.from_cash_id == cash_id, CashTransfer.status.in_(("in_transit", "completed"))
     )
-    transfer_in_q = db.query(func.coalesce(func.sum(CashTransfer.amount), 0)).filter(
+    transfer_in_q = db.query(
+        func.coalesce(func.sum(func.coalesce(CashTransfer.to_amount, CashTransfer.amount)), 0)
+    ).filter(
         CashTransfer.to_cash_id == cash_id, CashTransfer.status == "completed"
     )
     if cutoff is not None:
