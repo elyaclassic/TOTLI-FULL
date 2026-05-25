@@ -18,6 +18,35 @@
     </div>
 </div>
 
+{% if current_user and current_user.role == 'admin' %}
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="data-table">
+            <div class="card-header">
+                <span><i class="bi bi-percent"></i> Komissiya foizi (admin)</span>
+            </div>
+            <div class="card-body">
+                <form method="post" action="/agents/{{ agent.id }}/commission" class="d-flex gap-2 align-items-end flex-wrap">
+                    <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
+                    <div>
+                        <label for="commission_percent" class="form-label small mb-1">Sotuv foizi (%)</label>
+                        <input type="number" step="0.01" min="0" max="100"
+                               class="form-control form-control-sm"
+                               id="commission_percent" name="commission_percent"
+                               value="{{ '%.2f'|format(agent.commission_percent or 0) }}"
+                               style="width: 140px;">
+                    </div>
+                    <button type="submit" class="btn btn-sm btn-primary">
+                        <i class="bi bi-check2"></i> Saqlash
+                    </button>
+                    <small class="text-muted ms-2">Oyda delivered+paid sotuvlardan shu foiz commission sifatida hisoblanadi.</small>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Stat cards (3 vertikal qator) + Oxirgi joylashuv (kengaytirilgan xarita) -->
 <div class="row g-3 mb-3">
     <div class="col-md-4 d-flex flex-column gap-3">

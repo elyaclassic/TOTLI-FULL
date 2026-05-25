@@ -230,3 +230,16 @@ def ensure_stock_adjustment_doc_type_column(db: Session) -> None:
             raise
     except Exception:
         db.rollback()
+
+
+def ensure_agents_commission_percent_column(db: Session) -> None:
+    """Agar agents jadvalida commission_percent ustuni bo'lmasa, qo'shadi."""
+    try:
+        db.execute(text("ALTER TABLE agents ADD COLUMN commission_percent FLOAT DEFAULT 0.0"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()

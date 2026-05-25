@@ -1420,6 +1420,7 @@ class Agent(Base):
     # set bo'lsa faqat PIN qabul qilinadi (bcrypt hash)
     pin_hash = Column(String(255), nullable=True)
     pin_set_at = Column(DateTime, nullable=True)
+    commission_percent = Column(Float, default=0.0, nullable=True)
 
     locations = relationship("AgentLocation", back_populates="agent", order_by="AgentLocation.recorded_at.desc()")
     routes = relationship("Route", back_populates="agent")

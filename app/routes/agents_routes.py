@@ -25,6 +25,7 @@ from app.models.database import (
     Warehouse,
 )
 from app.deps import require_auth, require_admin, require_admin_or_manager
+from app.utils.db_schema import ensure_agents_commission_percent_column
 
 try:
     from app.config.maps_config import YANDEX_MAPS_API_KEY as _YANDEX_MAPS_API_KEY
@@ -95,6 +96,25 @@ async def agent_add(
     return RedirectResponse(url="/agents", status_code=303)
 
 
+@router.post("/agents/{agent_id}/commission")
+async def agent_commission_update(
+    request: Request,
+    agent_id: int,
+    commission_percent: float = Form(0.0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    if commission_percent < 0 or commission_percent > 100:
+        raise HTTPException(status_code=400, detail="Foiz 0 dan 100 gacha bo'lishi kerak")
+    ensure_agents_commission_percent_column(db)
+    agent = db.query(Agent).filter(Agent.id == agent_id).first()
+    if not agent:
+        raise HTTPException(status_code=404, detail="Agent topilmadi")
+    agent.commission_percent = commission_percent
+    db.commit()
+    return RedirectResponse(url=f"/agents/{agent_id}", status_code=303)
+
+
 @router.get("/agent", response_class=HTMLResponse)
 async def agent_app(request: Request):
     """Mobile agent app — token auth done client-side via localStorage."""
@@ -113,6 +133,7 @@ async def agent_detail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
+    ensure_agents_commission_percent_column(db)
     agent = db.query(Agent).filter(Agent.id == agent_id).first()
     if not agent:
         raise HTTPException(status_code=404, detail="Agent topilmadi")
