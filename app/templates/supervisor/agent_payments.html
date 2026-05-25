@@ -47,14 +47,21 @@
 </div>
 {% endif %}
 
-<!-- Filtr -->
-<div class="d-flex gap-2 mb-3">
-    <a href="/supervisor/agent-payments?status=all" class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Barchasi</a>
-    <a href="/supervisor/agent-payments?status=pending" class="btn btn-sm {% if status_filter == 'pending' %}btn-warning{% else %}btn-outline-secondary{% endif %}">
-        Kutilmoqda {% set pending_count = payments|selectattr('status', 'eq', 'pending')|list|length if status_filter == 'all' else payments|length %}
-    </a>
-    <a href="/supervisor/agent-payments?status=confirmed" class="btn btn-sm {% if status_filter == 'confirmed' %}btn-success{% else %}btn-outline-secondary{% endif %}">Tasdiqlangan</a>
-    <a href="/supervisor/agent-payments?status=cancelled" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-danger{% else %}btn-outline-secondary{% endif %}">Rad etilgan</a>
+<!-- Filtr (status + sana — har doim ko'rinadi, ma'lumot bo'lmasa ham) -->
+{% set _qd = '&date_from=' ~ date_from ~ '&date_to=' ~ date_to %}
+<div class="d-flex flex-wrap gap-2 mb-3 align-items-center">
+    <a href="/supervisor/agent-payments?status=all{{ _qd }}" class="btn btn-sm {% if status_filter == 'all' %}btn-primary{% else %}btn-outline-secondary{% endif %}">Barchasi</a>
+    <a href="/supervisor/agent-payments?status=pending{{ _qd }}" class="btn btn-sm {% if status_filter == 'pending' %}btn-warning{% else %}btn-outline-secondary{% endif %}">Kutilmoqda</a>
+    <a href="/supervisor/agent-payments?status=confirmed{{ _qd }}" class="btn btn-sm {% if status_filter == 'confirmed' %}btn-success{% else %}btn-outline-secondary{% endif %}">Tasdiqlangan</a>
+    <a href="/supervisor/agent-payments?status=cancelled{{ _qd }}" class="btn btn-sm {% if status_filter == 'cancelled' %}btn-danger{% else %}btn-outline-secondary{% endif %}">Rad etilgan</a>
+
+    <form method="get" class="d-flex gap-2 ms-auto align-items-center" style="margin:0;">
+        <input type="hidden" name="status" value="{{ status_filter }}">
+        <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="width:150px;" onchange="this.form.submit()">
+        <span class="text-muted">—</span>
+        <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="width:150px;" onchange="this.form.submit()">
+        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-filter"></i> Ko'rsatish</button>
+    </form>
 </div>
 
 {% if payments %}
@@ -156,10 +163,13 @@
         </div>
     </div>
 </div>
-{% else %}
+{% elif not driver_payments %}
 <div class="text-center text-muted py-4">
     <i class="bi bi-inbox" style="font-size: 2rem;"></i>
-    <p class="mt-2">Agent to'lovlari yo'q</p>
+    <p class="mt-2 mb-1">Tanlangan davrda ma'lumot yo'q ({{ date_from }} — {{ date_to }})</p>
+    <p class="small mb-2">Sanani kengaytiring yoki tezkor tugmalar:</p>
+    <a href="/supervisor/agent-payments?status={{ status_filter }}&date_from={{ today_iso }}&date_to={{ today_iso }}" class="btn btn-sm btn-outline-secondary">Bugun</a>
+    <a href="/supervisor/agent-payments?status={{ status_filter }}" class="btn btn-sm btn-outline-primary">Oxirgi 30 kun (defolt)</a>
 </div>
 {% endif %}
 
@@ -175,13 +185,7 @@
                     {% if (range_pending or 0) > 0 %}<span class="badge bg-warning text-dark ms-1">Kutmoqda: {{ "{:,.0f}".format(range_pending or 0) }}</span>{% endif %}
                     {% if (range_confirmed or 0) > 0 %}<span class="badge bg-info ms-1">Tasdiqlangan: {{ "{:,.0f}".format(range_confirmed or 0) }}</span>{% endif %}
                 </span>
-                <form method="get" class="d-flex gap-2 align-items-center" style="margin:0;">
-                    <input type="hidden" name="status" value="{{ status_filter }}">
-                    <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="width:150px;">
-                    <span>—</span>
-                    <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="width:150px;">
-                    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-filter"></i> Ko'rsatish</button>
-                </form>
+                <small class="text-muted">{{ date_from }} — {{ date_to }}</small>
             </div>
             <table class="table table-sm mb-0">
                 <thead>

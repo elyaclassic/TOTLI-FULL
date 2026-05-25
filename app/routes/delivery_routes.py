@@ -720,13 +720,14 @@ async def supervisor_agent_payments(
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent va Haydovchi to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
-    # Sana filtri (default: bugun)
-    from datetime import datetime as _dt, date as _date
+    # Sana filtri (default: so'nggi 30 kun — supervisor inkasatsiya darchasi)
+    from datetime import datetime as _dt, date as _date, timedelta as _td
     today = _date.today()
+    default_from = today - _td(days=30)
     try:
-        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else today
+        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else default_from
     except (ValueError, TypeError):
-        d_from = today
+        d_from = default_from
     try:
         d_to = _dt.strptime(date_to, "%Y-%m-%d").date() if date_to else today
     except (ValueError, TypeError):
@@ -811,6 +812,7 @@ async def supervisor_agent_payments(
         "status_filter": status,
         "date_from": d_from.isoformat(),
         "date_to": d_to.isoformat(),
+        "today_iso": today.isoformat(),
         "range_total": range_total,
         "range_pending": range_pending,
         "range_confirmed": range_confirmed,
