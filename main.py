@@ -309,6 +309,13 @@ async def favicon():
 async def startup():
     """Dastur ishga tushganda"""
     init_db()
+    # F4: realtime bus uchun asosiy event loop'ni saqlash (sync publish_sync uchun)
+    try:
+        import asyncio
+        from app.services.realtime_bus import bus
+        bus.set_loop(asyncio.get_event_loop())
+    except Exception as e:
+        print("[Startup] realtime_bus loop:", e)
     try:
         from app.models.database import ensure_attendance_advance_tables, ensure_cash_transfer_inkasatsiya, ensure_orders_delivery_columns
         ensure_attendance_advance_tables()

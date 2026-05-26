@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 import calendar
 import traceback
 
-from fastapi import APIRouter, Request, Depends
+from fastapi import APIRouter, Request, Depends, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
@@ -15,10 +15,13 @@ from sqlalchemy import func
 from app.core import templates
 from app.models.database import (
     get_db, User, Product, Partner, Order, Stock,
-    Employee, Production, Recipe, Attendance,
+    Employee, Production, Recipe, Attendance, SessionLocal,
 )
 from app.deps import require_auth
 from app.utils.production_order import recipe_kg_per_unit
+from app.services.realtime_bus import bus
+from app.utils.auth import get_user_from_token
+from app.deps import _extract_user_id
 
 router = APIRouter(tags=["dashboard_v2"])
 
@@ -591,3 +594,53 @@ async def dashboard_v2_drilldown(
         }
 
     return {"title": "Noma'lum kind", "summary": "", "headers": [], "rows": [], "link": None}
+
+
+# ====== F4: WebSocket real-time KPI ======
+
+@router.websocket("/ws/dashboard/v2")
+async def dashboard_v2_ws(websocket: WebSocket):
+    """Real-time KPI broadcast — admin/manager only.
+    Cookie auth (browser standard handshake): session_token cookie tekshiriladi.
+    """
+    # Cookie auth — manual tekshiruv (WebSocket'da Depends ishlamaydi standart yo'l bilan)
+    cookies = websocket.cookies
+    session_token = cookies.get("session_token")
+    if not session_token:
+        await websocket.close(code=1008, reason="Login talab qilindi")
+        return
+    user_data = get_user_from_token(session_token)
+    if not user_data:
+        await websocket.close(code=1008, reason="Session muddati tugadi")
+        return
+    user_id = _extract_user_id(user_data)
+    if not user_id:
+        await websocket.close(code=1008, reason="Invalid session")
+        return
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        if not user:
+            await websocket.close(code=1008, reason="Foydalanuvchi yo'q")
+            return
+        role = (getattr(user, "role", None) or "").strip().lower()
+        if role not in ("admin", "manager", "rahbar", "raxbar", "menejer"):
+            await websocket.close(code=1008, reason="Ruxsat yo'q")
+            return
+    finally:
+        db.close()
+
+    await bus.connect(websocket)
+    try:
+        # Ping/pong va idle keep-alive — client istalgan vaqt yuborishi mumkin
+        while True:
+            msg = await websocket.receive_text()
+            # Echo ping uchun
+            if msg == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+    finally:
+        bus.disconnect(websocket)

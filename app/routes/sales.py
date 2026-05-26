@@ -3630,6 +3630,16 @@ async def sales_pos_complete(
         )
     order.status = "completed"
     db.commit()
+    # F4 realtime: dashboard v2 ga push (silent fail)
+    try:
+        from app.services.realtime_bus import publish_event
+        publish_event("sale_created", {
+            "order_id": order.id,
+            "number": order.number,
+            "amount": float(order.total or 0),
+        })
+    except Exception:
+        pass
     if is_cash_client:
         department_id = getattr(warehouse, "department_id", None) if warehouse else None
         if not department_id and current_user:

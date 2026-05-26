@@ -6,6 +6,7 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/dashboard_v2.css?v=20260525-10">
 <link rel="stylesheet" href="/static/css/drilldown.css?v=20260526-1">
+<link rel="stylesheet" href="/static/css/realtime.css?v=20260526-1">
 <style>
   body.d2-active { background: #0A0E1A !important; }
   body.d2-active .main-content { padding: 0 !important; background: transparent !important; }
@@ -187,7 +188,7 @@
     <!-- ═══════════════════════ COCKPIT BAR ═══════════════════════ -->
     <header class="d2-bar">
       <div class="d2-bar-logo">
-        <span class="live-dot"></span>
+        <span class="live-dot d2-pulse-dot"></span>
         Totli&nbsp;·&nbsp;Cockpit
       </div>
       <div class="d2-bar-status">
@@ -521,6 +522,7 @@
 
 {% block extra_js %}
 <script src="/static/js/drilldown.js?v=20260526-1" defer></script>
+<script src="/static/js/realtime.js?v=20260526-1" defer></script>
 <script>
 (function() {
   document.body.classList.add('d2-active');
