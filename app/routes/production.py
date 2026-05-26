@@ -1201,14 +1201,14 @@ async def production_orders(
     can_view_all = role in ("admin", "rahbar", "raxbar", "manager", "menejer")
     if current_user and not can_view_all:
         if is_operator_role and current_user_employee and (operator_id is None or int(operator_id or 0) == 0):
-            # Operator o'zining + agent buyurtmadan auto-yaratilgan (operator_id NULL VA order_id bor)
-            from sqlalchemy import or_ as _or, and_ as _and
+            # Operator o'zining + hech kimga tayinlanmagan (operator_id NULL)
+            # NULL operator_id = "hech kimga biriktirilmagan" — auto-PR ham, admin qo'lda
+            # yaratganlari ham shu kategoriyaga kiradi. Order_id sharti olib tashlandi
+            # (2026-05-26): admin manual yaratgan PR'lar yashirinmasin.
+            from sqlalchemy import or_ as _or
             q = q.filter(_or(
                 Production.operator_id == current_user_employee.id,
-                _and(
-                    Production.operator_id.is_(None),
-                    Production.order_id.is_not(None),
-                ),
+                Production.operator_id.is_(None),
             ))
         elif not is_operator_role:
             q = q.filter(Production.user_id == current_user.id)
