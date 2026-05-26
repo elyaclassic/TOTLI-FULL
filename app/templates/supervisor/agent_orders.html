@@ -16,75 +16,25 @@
 <div class="page-header mb-3 d-flex justify-content-between align-items-center">
     <div>
         <h5 class="mb-0"><i class="bi bi-cart-check"></i> Agent buyurtmalari</h5>
-        <p class="text-muted mb-0 small">{{ date_from }} — {{ date_to }} · Agentlar tomonidan yaratilgan buyurtmalar</p>
+        <p class="text-muted mb-0 small">Agentlar tomonidan yaratilgan buyurtmalar</p>
     </div>
     <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
 </div>
 
-{# KPI cards #}
-{% set _kpi = kpi or {'all_count':0,'all_sum':0,'by_status':{}} %}
-{% set _bs = _kpi.by_status %}
-<div class="row g-2 mb-3">
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2"><div class="small text-muted">Jami</div>
-            <div class="h5 mb-0 fw-bold">{{ _kpi.all_count }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_kpi.all_sum) }} so'm</div></div>
-    </div>
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2 border-warning"><div class="small text-muted">Draft</div>
-            <div class="h5 mb-0 fw-bold text-warning">{{ _bs.get('draft', {}).get('count', 0) }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_bs.get('draft', {}).get('sum', 0)) }}</div></div>
-    </div>
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2 border-secondary"><div class="small text-muted">Production kutmoqda</div>
-            <div class="h5 mb-0 fw-bold">{{ _bs.get('waiting_production', {}).get('count', 0) }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_bs.get('waiting_production', {}).get('sum', 0)) }}</div></div>
-    </div>
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2 border-info"><div class="small text-muted">Tasdiqlangan</div>
-            <div class="h5 mb-0 fw-bold text-info">{{ _bs.get('confirmed', {}).get('count', 0) }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_bs.get('confirmed', {}).get('sum', 0)) }}</div></div>
-    </div>
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2 border-success"><div class="small text-muted">Yetkazilgan</div>
-            <div class="h5 mb-0 fw-bold text-success">{{ _bs.get('delivered', {}).get('count', 0) }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_bs.get('delivered', {}).get('sum', 0)) }}</div></div>
-    </div>
-    <div class="col-md-2 col-6">
-        <div class="card text-center p-2 border-danger"><div class="small text-muted">Bekor</div>
-            <div class="h5 mb-0 fw-bold text-danger">{{ _bs.get('cancelled', {}).get('count', 0) }}</div>
-            <div class="small text-muted">{{ "{:,.0f}".format(_bs.get('cancelled', {}).get('sum', 0)) }}</div></div>
-    </div>
-</div>
-
-{# Sana darchasi + qidiruv #}
-<form method="get" class="mb-3 d-flex flex-wrap gap-2 align-items-center">
-    <input type="hidden" name="status" value="{{ current_status }}">
-    <label class="small text-muted mb-0">Sana:</label>
-    <input type="date" name="date_from" value="{{ date_from }}" class="form-control form-control-sm" style="width:150px;" onchange="this.form.submit()">
-    <span>—</span>
-    <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="width:150px;" onchange="this.form.submit()">
-    <a href="/supervisor/agent-orders?status={{ current_status }}&date_from={{ today_iso }}&date_to={{ today_iso }}" class="btn btn-sm btn-outline-secondary">Bugun</a>
-    <a href="/supervisor/agent-orders?status={{ current_status }}" class="btn btn-sm btn-outline-secondary">7 kun</a>
-    <input type="text" name="search" value="{{ search or '' }}" placeholder="Raqam yoki mijoz..." class="form-control form-control-sm" style="width:220px;">
-    <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-search"></i> Qidirish</button>
-</form>
-
-{# Status filtri #}
-{% set _qd = '&date_from=' ~ date_from ~ '&date_to=' ~ date_to ~ ('&search=' ~ search if search else '') %}
+<!-- Filtr -->
 <div class="mb-3 d-flex gap-2 flex-wrap">
-    <a href="/supervisor/agent-orders?status=all{{ _qd }}" class="btn btn-sm {{ 'btn-primary' if current_status == 'all' else 'btn-outline-secondary' }}">Barchasi</a>
-    <a href="/supervisor/agent-orders?status=draft{{ _qd }}" class="btn btn-sm {{ 'btn-warning text-dark' if current_status == 'draft' else 'btn-outline-warning' }}">
+    <a href="/supervisor/agent-orders?status=all" class="btn btn-sm {{ 'btn-primary' if current_status == 'all' else 'btn-outline-secondary' }}">Barchasi</a>
+    <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm {{ 'btn-warning text-dark' if current_status == 'draft' else 'btn-outline-warning' }}">
         Yangi (kutmoqda)
         {% if draft_count is defined and draft_count > 0 %}<span class="badge bg-danger ms-1">{{ draft_count }}</span>{% endif %}
     </a>
-    <a href="/supervisor/agent-orders?status=waiting_production{{ _qd }}" class="btn btn-sm {{ 'btn-secondary' if current_status == 'waiting_production' else 'btn-outline-secondary' }}">
+    <a href="/supervisor/agent-orders?status=waiting_production" class="btn btn-sm {{ 'btn-secondary' if current_status == 'waiting_production' else 'btn-outline-secondary' }}">
         <i class="bi bi-hourglass-split"></i> Production kutmoqda
         {% if waiting_count is defined and waiting_count > 0 %}<span class="badge bg-danger ms-1">{{ waiting_count }}</span>{% endif %}
     </a>
-    <a href="/supervisor/agent-orders?status=confirmed{{ _qd }}" class="btn btn-sm {{ 'btn-info' if current_status == 'confirmed' else 'btn-outline-info' }}">Tasdiqlangan</a>
-    <a href="/supervisor/agent-orders?status=delivered{{ _qd }}" class="btn btn-sm {{ 'btn-success' if current_status == 'delivered' else 'btn-outline-success' }}">Yetkazilgan</a>
-    <a href="/supervisor/agent-orders?status=cancelled{{ _qd }}" class="btn btn-sm {{ 'btn-danger' if current_status == 'cancelled' else 'btn-outline-danger' }}">Bekor qilingan</a>
+    <a href="/supervisor/agent-orders?status=confirmed" class="btn btn-sm {{ 'btn-info' if current_status == 'confirmed' else 'btn-outline-info' }}">Tasdiqlangan</a>
+    <a href="/supervisor/agent-orders?status=delivered" class="btn btn-sm {{ 'btn-success' if current_status == 'delivered' else 'btn-outline-success' }}">Bajarilgan</a>
+    <a href="/supervisor/agent-orders?status=cancelled" class="btn btn-sm {{ 'btn-danger' if current_status == 'cancelled' else 'btn-outline-danger' }}">Bekor qilingan</a>
 </div>
 
 {% for order in orders %}
