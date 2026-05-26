@@ -97,6 +97,16 @@
                             {% if p._partner %}
                                 {{ p._partner.name }}
                                 {% if p._partner.code %}<span class="text-muted small">({{ p._partner.code }})</span>{% endif %}
+                                {% set bal = p._partner.balance or 0 %}
+                                <div class="small mt-1">
+                                {% if bal > 0 %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.75rem;">Qarz: {{ "{:,.0f}".format(bal) }}</span>
+                                {% elif bal < 0 %}
+                                    <span class="badge bg-success-subtle text-success border border-success" style="font-size:0.75rem;">Avans: {{ "{:,.0f}".format(-bal) }}</span>
+                                {% else %}
+                                    <span class="text-muted" style="font-size:0.75rem;">Qarz yo'q</span>
+                                {% endif %}
+                                </div>
                             {% else %}
                                 #{{ p.partner_id }}
                             {% endif %}
@@ -206,7 +216,24 @@
                         <td><small>{{ p.number }}</small></td>
                         <td class="muted-cell">{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '—' }}</td>
                         <td>{{ p._driver.full_name if p._driver else '—' }}</td>
-                        <td>{{ p._partner.name if p._partner else '—' }}</td>
+                        <td>
+                            {% if p._partner %}
+                                {{ p._partner.name }}
+                                {% if p._partner.code %}<span class="text-muted small">({{ p._partner.code }})</span>{% endif %}
+                                {% set bal = p._partner.balance or 0 %}
+                                <div class="small mt-1">
+                                {% if bal > 0 %}
+                                    <span class="badge bg-danger-subtle text-danger border border-danger" style="font-size:0.75rem;">Qarz: {{ "{:,.0f}".format(bal) }}</span>
+                                {% elif bal < 0 %}
+                                    <span class="badge bg-success-subtle text-success border border-success" style="font-size:0.75rem;">Avans: {{ "{:,.0f}".format(-bal) }}</span>
+                                {% else %}
+                                    <span class="text-muted" style="font-size:0.75rem;">Qarz yo'q</span>
+                                {% endif %}
+                                </div>
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
                         <td class="fw-bold text-success">{{ "{:,.0f}".format(p.amount or 0) }}</td>
                         <td>
                             {% if p.payment_type == 'naqd' %}<span class="badge bg-success">Naqd</span>
