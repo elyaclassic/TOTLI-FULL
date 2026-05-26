@@ -1,0 +1,208 @@
+/* Cmd Palette (Global qidiruv — Ctrl+K)
+ * Dark Cockpit theme'ga mos, isolated CSS (eski v1 sahifalarda ham ishlaydi).
+ */
+
+.cmdp-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9998;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+}
+
+.cmdp-backdrop.cmdp-open {
+  display: flex;
+  animation: cmdp-fade 120ms ease-out;
+}
+
+@keyframes cmdp-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cmdp-panel {
+  width: 100%;
+  max-width: 640px;
+  background: #111827;
+  border: 1px solid #1F2937;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 136, 0.08);
+  color: #E5E7EB;
+  font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+  animation: cmdp-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cmdp-pop {
+  from { transform: translateY(-8px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.cmdp-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 18px;
+  border-bottom: 1px solid #1F2937;
+}
+
+.cmdp-prompt {
+  color: #00FF88;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.cmdp-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #FFFFFF;
+  font-size: 15px;
+  font-family: 'Inter Tight', sans-serif;
+  caret-color: #00FF88;
+}
+
+.cmdp-input::placeholder {
+  color: #6B7280;
+}
+
+.cmdp-esc {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #6B7280;
+  padding: 3px 6px;
+  border: 1px solid #374151;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.cmdp-results {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.cmdp-results::-webkit-scrollbar { width: 8px; }
+.cmdp-results::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+.cmdp-results::-webkit-scrollbar-track { background: transparent; }
+
+.cmdp-category {
+  padding: 10px 18px 4px;
+}
+
+.cmdp-category-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cmdp-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 80ms ease;
+}
+
+.cmdp-item:hover,
+.cmdp-item.cmdp-active {
+  background: #1F2937;
+}
+
+.cmdp-item.cmdp-active {
+  border-left: 2px solid #00FF88;
+  padding-left: 10px;
+}
+
+.cmdp-item-icon {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0A0E1A;
+  border-radius: 5px;
+  color: #00FF88;
+  font-size: 14px;
+}
+
+.cmdp-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cmdp-item-label {
+  color: #FFFFFF;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmdp-item-sub {
+  color: #9CA3AF;
+  font-size: 12px;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.cmdp-item-enter {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #6B7280;
+  padding: 2px 6px;
+  border: 1px solid #374151;
+  border-radius: 3px;
+  opacity: 0;
+}
+
+.cmdp-item.cmdp-active .cmdp-item-enter {
+  opacity: 1;
+}
+
+.cmdp-empty {
+  padding: 28px 18px;
+  text-align: center;
+  color: #6B7280;
+  font-size: 13px;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.cmdp-hint {
+  padding: 10px 18px;
+  border-top: 1px solid #1F2937;
+  display: flex;
+  gap: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.cmdp-hint kbd {
+  background: #0A0E1A;
+  border: 1px solid #374151;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #9CA3AF;
+  font-family: inherit;
+  font-size: 10px;
+}

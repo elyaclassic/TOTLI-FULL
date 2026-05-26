@@ -837,6 +837,7 @@
     </style>
 
     <link href="/static/css/mobile-fixes.css" rel="stylesheet">
+    <link href="/static/css/cmd_palette.css?v=20260526-1" rel="stylesheet">
     {% block extra_css %}{% endblock %}
     {% set sotuvchi_no_sidebar = (current_user.role if current_user else '') == 'sotuvchi' %}
     {% set production_no_sidebar = (current_user.role if current_user else '')|lower in ['production', 'qadoqlash', 'rahbar', 'raxbar', 'operator'] %}
@@ -1610,6 +1611,7 @@
       </div>
     </div>
     <script src="/static/js/input_calc_v4.js"></script>
+    <script src="/static/js/cmd_palette.js?v=20260526-1" defer></script>
 
     {% block extra_js %}{% endblock %}
 
