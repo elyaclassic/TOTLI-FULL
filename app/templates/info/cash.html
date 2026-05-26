@@ -49,6 +49,8 @@
                         <span class="badge bg-secondary">Click</span>
                         {% elif cash.payment_type == 'terminal' %}
                         <span class="badge bg-info">Terminal</span>
+                        {% elif cash.payment_type == 'perechisleniye' %}
+                        <span class="badge bg-warning text-dark">Perechisleniye</span>
                         {% else %}
                         <span class="text-muted" title="Tahrirlash orqali tanlang">Tanlanmagan</span>
                         {% endif %}
@@ -155,6 +157,7 @@
                             <option value="plastik">Plastik</option>
                             <option value="click">Click</option>
                             <option value="terminal">Terminal</option>
+                            <option value="perechisleniye">Perechisleniye (bank o'tkazma)</option>
                         </select>
                         <small class="text-muted">Sotuv oynasida qaysi to'lov turi tanlansa, pul shu kassaga yoziladi.</small>
                     </div>
@@ -212,6 +215,7 @@
                             <option value="plastik">Plastik</option>
                             <option value="click">Click</option>
                             <option value="terminal">Terminal</option>
+                            <option value="perechisleniye">Perechisleniye (bank o'tkazma)</option>
                         </select>
                     </div>
                     <div class="mb-2">
