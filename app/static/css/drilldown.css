@@ -1,0 +1,237 @@
+/* Drill-down modal — KPI cards click qilinsa ochiladi.
+ * Dark Cockpit theme'ga mos, cmd_palette.css pattern bilan izchil.
+ */
+
+.dd-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 26, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 9997;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 6vh;
+}
+
+.dd-backdrop.dd-open {
+  display: flex;
+  animation: dd-fade 120ms ease-out;
+}
+
+@keyframes dd-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.dd-panel {
+  width: 100%;
+  max-width: 920px;
+  max-height: 84vh;
+  background: #111827;
+  border: 1px solid #1F2937;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 255, 136, 0.06);
+  color: #E5E7EB;
+  font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: dd-pop 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes dd-pop {
+  from { transform: translateY(-12px) scale(0.97); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.dd-header {
+  padding: 14px 20px;
+  border-bottom: 1px solid #1F2937;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.dd-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dd-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #FFFFFF;
+  letter-spacing: 0.2px;
+}
+
+.dd-summary {
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  color: #00FF88;
+}
+
+.dd-close {
+  background: transparent;
+  border: 1px solid #374151;
+  color: #9CA3AF;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 80ms;
+}
+
+.dd-close:hover {
+  background: #1F2937;
+  color: #FFFFFF;
+}
+
+.dd-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.dd-body::-webkit-scrollbar { width: 8px; }
+.dd-body::-webkit-scrollbar-thumb { background: #374151; border-radius: 4px; }
+.dd-body::-webkit-scrollbar-track { background: transparent; }
+
+.dd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dd-table thead {
+  position: sticky;
+  top: 0;
+  background: #0A0E1A;
+  z-index: 1;
+}
+
+.dd-table th {
+  padding: 10px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #6B7280;
+  text-align: left;
+  font-weight: 600;
+  border-bottom: 1px solid #1F2937;
+  white-space: nowrap;
+}
+
+.dd-table td {
+  padding: 9px 14px;
+  border-bottom: 1px solid #1F2937;
+  color: #E5E7EB;
+  white-space: nowrap;
+}
+
+.dd-table tbody tr {
+  transition: background 80ms;
+}
+
+.dd-table tbody tr:hover {
+  background: #1F2937;
+}
+
+.dd-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6B7280;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.dd-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: #6B7280;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+}
+
+.dd-loading::after {
+  content: '...';
+  display: inline-block;
+  animation: dd-dots 1.4s infinite;
+}
+
+@keyframes dd-dots {
+  0%, 20% { content: '.'; }
+  40% { content: '..'; }
+  60%, 100% { content: '...'; }
+}
+
+.dd-footer {
+  padding: 10px 20px;
+  border-top: 1px solid #1F2937;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dd-link {
+  color: #00FF88;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: 'JetBrains Mono', monospace;
+  transition: opacity 80ms;
+}
+
+.dd-link:hover {
+  opacity: 0.75;
+}
+
+.dd-hint {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.dd-hint kbd {
+  background: #0A0E1A;
+  border: 1px solid #374151;
+  border-radius: 3px;
+  padding: 1px 5px;
+  color: #9CA3AF;
+  font-family: inherit;
+  font-size: 10px;
+}
+
+/* KPI card cursor + hover effect — drill-down mavjudligini ko'rsatish */
+.d2-metric[data-drilldown] {
+  cursor: pointer;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.d2-metric[data-drilldown]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(0, 255, 136, 0.15);
+}
+
+.d2-metric[data-drilldown]::after {
+  content: '↗';
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  color: #6B7280;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+
+.d2-metric[data-drilldown]:hover::after {
+  opacity: 1;
+  color: #00FF88;
+}

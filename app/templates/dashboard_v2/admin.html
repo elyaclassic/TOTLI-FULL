@@ -5,9 +5,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/css/dashboard_v2.css?v=20260525-10">
+<link rel="stylesheet" href="/static/css/drilldown.css?v=20260526-1">
 <style>
   body.d2-active { background: #0A0E1A !important; }
   body.d2-active .main-content { padding: 0 !important; background: transparent !important; }
+  /* KPI card position: relative — ::after absolute pozitsiya uchun */
+  .d2-metric { position: relative; }
 </style>
 {% endblock %}
 
@@ -136,7 +139,7 @@
     <section class="d2-metrics">
 
       <!-- Sotuv -->
-      <div class="d2-metric">
+      <div class="d2-metric" data-drilldown="sales">
         <div class="d2-metric-label">
           <span class="dot"></span> Bugungi Sotuv
         </div>
@@ -162,7 +165,7 @@
       </div>
 
       <!-- Ishlab chiqarish -->
-      <div class="d2-metric">
+      <div class="d2-metric" data-drilldown="production">
         <div class="d2-metric-label">
           <span class="dot cyan"></span> Ishlab Chiqarish
         </div>
@@ -179,7 +182,7 @@
       </div>
 
       <!-- Qarz -->
-      <div class="d2-metric">
+      <div class="d2-metric" data-drilldown="debt">
         <div class="d2-metric-label">
           <span class="dot {{ 'alert' if overdue_debts_count > 0 else 'amber' }}"></span> Mijoz Qarzi
         </div>
@@ -201,7 +204,7 @@
       </div>
 
       <!-- Ombor -->
-      <div class="d2-metric">
+      <div class="d2-metric" data-drilldown="stock">
         <div class="d2-metric-label">
           <span class="dot {{ 'alert' if low_stock_count > 5 else 'amber' }}"></span> Ombor Ogohlik
         </div>
@@ -392,6 +395,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="/static/js/drilldown.js?v=20260526-1" defer></script>
 <script>
 (function() {
   document.body.classList.add('d2-active');

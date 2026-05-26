@@ -238,3 +238,154 @@ async def dashboard_v2(
         "in_progress_count": in_progress_count,
         "today_staff": today_staff,
     })
+
+
+@router.get("/api/dashboard/v2/drilldown")
+async def dashboard_v2_drilldown(
+    kind: str = "sales",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """KPI cards drill-down — bitta universal endpoint.
+    kind in: sales|production|debt|stock.
+    Response: {title, summary, headers, rows, link}
+    """
+    role = (getattr(current_user, "role", None) or "").strip().lower()
+    if role not in ("admin", "manager", "rahbar", "raxbar", "menejer"):
+        return {"title": "Ruxsat yo'q", "summary": "", "headers": [], "rows": [], "link": None}
+
+    today = datetime.now().date()
+    today_start = datetime.combine(today, datetime.min.time())
+    LIMIT = 50
+
+    def money(v):
+        try:
+            return f"{float(v or 0):,.0f}".replace(",", " ")
+        except (ValueError, TypeError):
+            return "0"
+
+    if kind == "sales":
+        orders = (
+            db.query(Order)
+            .options(joinedload(Order.partner), joinedload(Order.user))
+            .filter(Order.type == "sale", Order.date >= today_start)
+            .order_by(Order.date.desc())
+            .limit(LIMIT)
+            .all()
+        )
+        total_sum = sum(float(o.total or 0) for o in orders)
+        rows = []
+        for o in orders:
+            rows.append([
+                o.date.strftime("%H:%M") if o.date else "-",
+                o.number or "-",
+                (o.partner.name if o.partner else "Naqd mijoz")[:30],
+                (o.user.username if o.user else "-"),
+                money(o.total),
+                o.status or "-",
+            ])
+        return {
+            "title": "Bugungi sotuvlar",
+            "summary": f"{len(orders)} ta · {money(total_sum)} so'm",
+            "headers": ["Vaqt", "Raqam", "Mijoz", "Sotuvchi", "Summa", "Status"],
+            "rows": rows,
+            "link": {"url": "/sales", "label": "Sotuvlar sahifasi →"},
+        }
+
+    if kind == "production":
+        productions = (
+            db.query(Production)
+            .options(joinedload(Production.recipe), joinedload(Production.operator))
+            .filter(Production.date >= today_start)
+            .order_by(Production.date.desc())
+            .limit(LIMIT)
+            .all()
+        )
+        rows = []
+        total_qty = 0.0
+        for p in productions:
+            qty = float(p.quantity or 0)
+            total_qty += qty
+            rows.append([
+                p.date.strftime("%H:%M") if p.date else "-",
+                p.number or "-",
+                (p.recipe.name if p.recipe else "-")[:35],
+                f"{qty:g}",
+                (p.operator.full_name if p.operator else "-"),
+                p.status or "-",
+            ])
+        return {
+            "title": "Bugungi ishlab chiqarish",
+            "summary": f"{len(productions)} ta · {total_qty:g} dona",
+            "headers": ["Vaqt", "Raqam", "Retsept", "Miqdor", "Operator", "Status"],
+            "rows": rows,
+            "link": {"url": "/production/orders", "label": "Production sahifasi →"},
+        }
+
+    if kind == "debt":
+        partners = (
+            db.query(Partner)
+            .filter(Partner.is_active == True, Partner.balance < 0)
+            .order_by(Partner.balance.asc())
+            .limit(LIMIT)
+            .all()
+        )
+        total_debt = sum(float(p.balance or 0) for p in partners)
+        rows = []
+        for p in partners:
+            rows.append([
+                (p.name or "-")[:35],
+                p.phone or "-",
+                money(abs(float(p.balance or 0))),
+                (p.address or "-")[:30],
+            ])
+        return {
+            "title": "Qarzdor mijozlar",
+            "summary": f"{len(partners)} ta · {money(abs(total_debt))} so'm jami qarz",
+            "headers": ["Mijoz", "Telefon", "Qarz (so'm)", "Manzil"],
+            "rows": rows,
+            "link": {"url": "/partners", "label": "Mijozlar sahifasi →"},
+        }
+
+    if kind == "stock":
+        from sqlalchemy import or_ as _or
+        # Min_stock'dan past yoki min_stock yo'q va < 10
+        low_stocks = (
+            db.query(Stock)
+            .options(joinedload(Stock.product), joinedload(Stock.warehouse))
+            .join(Product)
+            .filter(
+                Stock.quantity > 0,
+                _or(
+                    (Product.min_stock != None) & (Stock.quantity < Product.min_stock),
+                    (Product.min_stock == None) & (Stock.quantity < 10),
+                ),
+            )
+            .order_by(Stock.quantity)
+            .limit(LIMIT)
+            .all()
+        )
+        rows = []
+        for ls in low_stocks:
+            unit = "kg"
+            try:
+                if ls.product and getattr(ls.product, "unit", None):
+                    unit = ls.product.unit.name or "kg"
+            except Exception:
+                pass
+            min_st = getattr(ls.product, "min_stock", None) if ls.product else None
+            rows.append([
+                (ls.product.name if ls.product else "?")[:35],
+                (ls.warehouse.name if ls.warehouse else "-")[:25],
+                f"{float(ls.quantity or 0):g} {unit}",
+                (f"{float(min_st):g}" if min_st else "—"),
+            ])
+        return {
+            "title": "Ombor ogohliklari",
+            "summary": f"{len(low_stocks)} ta tovar past zaxirada",
+            "headers": ["Mahsulot", "Ombor", "Qoldiq", "Min. me'yor"],
+            "rows": rows,
+            "link": {"url": "/qoldiqlar", "label": "Qoldiqlar sahifasi →"},
+        }
+
+    return {"title": "Noma'lum kind", "summary": "", "headers": [], "rows": [], "link": None}
