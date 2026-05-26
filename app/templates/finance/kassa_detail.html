@@ -104,18 +104,25 @@
                     {% if payments %}
                         {% for payment in payments %}
                         {% set p_status = payment.status|default('confirmed', true) %}
-                        <tr class="{% if p_status == 'cancelled' %}table-secondary opacity-75{% endif %}">
+                        {% set is_tr = payment.is_transfer|default(false) %}
+                        <tr class="{% if p_status == 'cancelled' %}table-secondary opacity-75{% elif is_tr %}table-info-row{% endif %}">
                             <td class="muted-cell">{{ ((page|default(1)) - 1) * (per_page|default(100)) + loop.index }}</td>
                             <td class="muted-cell">{{ payment.date.strftime('%d.%m.%Y %H:%M') if payment.date else '—' }}</td>
                             <td>
-                                {% if payment.type == 'income' %}
+                                {% if is_tr %}
+                                    {% if 'Konvertatsiya' in (payment.description or '') %}
+                                        <span class="badge bg-warning text-dark" style="font-size: 11px;">Konvertatsiya</span>
+                                    {% else %}
+                                        <span class="badge bg-info text-dark" style="font-size: 11px;">O'tkazma</span>
+                                    {% endif %}
+                                {% elif payment.type == 'income' %}
                                     <span class="badge-done">Kirim</span>
                                 {% else %}
                                     <span class="badge-cancelled">Chiqim</span>
                                 {% endif %}
                             </td>
-                            <td>{{ payment.partner.name if payment.partner else '—' }}</td>
-                            <td class="muted-cell"><small>{% set ed = expense_doc_by_payment.get(payment.id) if expense_doc_by_payment else None %}{% if ed %}{% set parts = (payment.description or '').split(ed.number) %}{{ parts[0] }}<a href="/finance/harajat/hujjat/{{ ed.id }}" class="fw-bold text-decoration-none" title="Harajat hujjatini ochish">{{ ed.number }}</a>{{ parts[1] if parts|length > 1 else '' }}{% else %}{{ payment.description or '—' }}{% endif %}</small></td>
+                            <td>{% if is_tr %}<span class="text-muted">—</span>{% else %}{{ payment.partner.name if payment.partner else '—' }}{% endif %}</td>
+                            <td class="muted-cell"><small>{% if is_tr %}{{ payment.description }}{% else %}{% set ed = expense_doc_by_payment.get(payment.id) if expense_doc_by_payment else None %}{% if ed %}{% set parts = (payment.description or '').split(ed.number) %}{{ parts[0] }}<a href="/finance/harajat/hujjat/{{ ed.id }}" class="fw-bold text-decoration-none" title="Harajat hujjatini ochish">{{ ed.number }}</a>{{ parts[1] if parts|length > 1 else '' }}{% else %}{{ payment.description or '—' }}{% endif %}{% endif %}</small></td>
                             <td class="sum-cell {% if payment.type == 'income' %}text-success{% else %}text-danger{% endif %}">
                                 {% if payment.type == 'income' %}+{% else %}-{% endif %}{{ "{:,.0f}".format(payment.amount or 0) }}
                             </td>
@@ -128,6 +135,9 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% if is_tr %}
+                                <span class="text-muted small">#{{ payment.transfer_number or payment.transfer_id }}</span>
+                                {% else %}
                                 <div class="d-flex gap-1">
                                 {% if p_status == 'cancelled' %}
                                 <form method="post" action="/finance/payment/{{ payment.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlash — kassa balansiga qayta hisoblanadi.');">
@@ -143,6 +153,7 @@
                                 </form>
                                 {% endif %}
                                 </div>
+                                {% endif %}
                             </td>
                             {% endif %}
                         </tr>

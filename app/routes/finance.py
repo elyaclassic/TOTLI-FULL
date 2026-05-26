@@ -571,32 +571,95 @@ async def finance_kassa_detail(
     total_expense_all_time = float(total_expense_all_time)
     stored_balance = float(cash.balance or 0)
     balance_mismatch = abs(computed_balance - stored_balance) > 0.01
+    # ---------- Payments ----------
     q = (
         db.query(Payment)
         .options(joinedload(Payment.partner))
         .filter(Payment.cash_register_id == cash_register_id)
         .order_by(Payment.date.desc())
     )
+    # ---------- CashTransfers (kassadan kassaga + konvertatsiya) ----------
+    tq = (
+        db.query(CashTransfer)
+        .options(joinedload(CashTransfer.from_cash), joinedload(CashTransfer.to_cash))
+        .filter(
+            or_(
+                CashTransfer.from_cash_id == cash_register_id,
+                CashTransfer.to_cash_id == cash_register_id,
+            ),
+            CashTransfer.status.in_(("in_transit", "completed")),
+        )
+        .order_by(CashTransfer.date.desc())
+    )
     if (date_from or "").strip():
         try:
             df = datetime.strptime(str(date_from).strip()[:10], "%Y-%m-%d").date()
             q = q.filter(Payment.date >= df)
+            tq = tq.filter(CashTransfer.date >= df)
         except ValueError:
             pass
     if (date_to or "").strip():
         try:
             dt = datetime.strptime(str(date_to).strip()[:10], "%Y-%m-%d").date()
-            q = q.filter(Payment.date < datetime.combine(dt + timedelta(days=1), datetime.min.time()))
+            cutoff = datetime.combine(dt + timedelta(days=1), datetime.min.time())
+            q = q.filter(Payment.date < cutoff)
+            tq = tq.filter(CashTransfer.date < cutoff)
         except ValueError:
             pass
+
+    # CashTransfer'ni Payment-compatible row ga aylantirish
+    from types import SimpleNamespace
+    transfers_all = tq.all()
+    transfer_rows = []
+    for t in transfers_all:
+        is_out = t.from_cash_id == cash_register_id
+        # Konvertatsiya = cross-currency (to_amount + exchange_rate aniq farqli)
+        is_conv = (
+            t.exchange_rate is not None
+            and t.to_amount is not None
+            and abs(float(t.to_amount or 0) - float(t.amount or 0)) > 0.01
+        )
+        # Bu kassa nuqtai-nazaridan amount: chiqimda from amount, kirimda to_amount (yoki amount agar to_amount=NULL)
+        amount = float(t.amount or 0) if is_out else float(t.to_amount or t.amount or 0)
+        other = t.to_cash if is_out else t.from_cash
+        other_name = other.name if other else "—"
+        label = "Konvertatsiya" if is_conv else "Kassadan kassaga"
+        arrow = "→" if is_out else "←"
+        if is_conv and not is_out:
+            # kirimda konvertatsiya: from valyuta + rate ko'rsatish
+            rate_str = f" (kurs {t.exchange_rate:g})"
+        else:
+            rate_str = ""
+        desc = f"{label}: {arrow} {other_name}{rate_str} (#{t.number or t.id})"
+        transfer_rows.append(SimpleNamespace(
+            id=f"T-{t.id}",
+            date=t.date,
+            type="expense" if is_out else "income",
+            amount=amount,
+            partner=None,
+            description=desc,
+            category="transfer",
+            payment_type="naqd",
+            status=t.status,
+            is_transfer=True,
+            transfer_id=t.id,
+            transfer_number=t.number,
+        ))
+
+    # Merge Payment + transfer rows, sort by date desc
+    payments_all = q.all()
+    all_rows = list(payments_all) + transfer_rows
+    all_rows.sort(key=lambda r: (r.date or datetime.min), reverse=True)
+
     per_page = 100
     page = max(1, int(page)) if page else 1
-    total_count = q.count()
+    total_count = len(all_rows)
     total_pages = max(1, (total_count + per_page - 1) // per_page) if total_count else 1
     page = min(page, total_pages)
-    payments = q.offset((page - 1) * per_page).limit(per_page).all()
+    payments = all_rows[(page - 1) * per_page : page * per_page]
     # Har payment uchun bog'langan ExpenseDoc id ni topish (HD-... raqamlari klikab bo'lishi uchun)
-    payment_ids = [p.id for p in payments if p.id]
+    # CashTransfer rowlarni o'tkazib yuborish (ularda ExpenseDoc yo'q)
+    payment_ids = [p.id for p in payments if p.id and not getattr(p, 'is_transfer', False)]
     expense_doc_by_payment = {}
     if payment_ids:
         for ed in db.query(ExpenseDoc.id, ExpenseDoc.payment_id, ExpenseDoc.number).filter(
@@ -605,8 +668,9 @@ async def finance_kassa_detail(
             expense_doc_by_payment[ed.payment_id] = {"id": ed.id, "number": ed.number}
     filter_date_from = str(date_from or "").strip()[:10] if date_from else ""
     filter_date_to = str(date_to or "").strip()[:10] if date_to else ""
-    total_income = sum(p.amount or 0 for p in payments if getattr(p, "type", None) == "income")
-    total_expense = sum(p.amount or 0 for p in payments if getattr(p, "type", None) == "expense")
+    # Sahifa darajasidagi yig'indi (Payment + CashTransfer)
+    total_income = sum(float(p.amount or 0) for p in payments if getattr(p, "type", None) == "income")
+    total_expense = sum(float(p.amount or 0) for p in payments if getattr(p, "type", None) == "expense")
     parts = []
     if filter_date_from:
         parts.append(f"date_from={filter_date_from}")

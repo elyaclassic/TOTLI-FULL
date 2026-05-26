@@ -78,14 +78,24 @@
       {% if cash_data %}
         {% for cd in cash_data %}
         <div class="col-md-4 col-6">
-          <a href="/finance/kassa/{{ cd.cash.id }}" class="text-decoration-none">
+          {% set _open = cd.cash.opening_balance or 0 %}
+          {% set _tooltip = 'Balans formulasi:\n  ' ~ '{:,.0f}'.format(_open) ~ ' (boshlang\'ich)\n  + jami kirim\n  − jami chiqim\n  + kassaga o\'tkazma\n  − kassadan o\'tkazma\n= ' ~ '{:,.0f}'.format(cd.balance) ~ ' so\'m\n\nBatafsil → kassa sahifasini ochish' %}
+          <a href="/finance/kassa/{{ cd.cash.id }}" class="text-decoration-none" title="{{ _tooltip }}">
             <div class="mini-stat h-100" style="border-left: 4px solid {% if cd.balance >= 0 %}#2e7d32{% else %}#dc3545{% endif %}; cursor:pointer; transition: box-shadow .15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow=''">
-              <div class="fw-semibold mb-1">{{ cd.cash.name }}</div>
+              <div class="fw-semibold mb-1 d-flex justify-content-between align-items-center">
+                <span>{{ cd.cash.name }}</span>
+                <i class="bi bi-info-circle" style="font-size: 12px; opacity: 0.5;" title="Balans formulasini ko'rish — kursorni karta ustiga olib boring"></i>
+              </div>
               <div class="num {% if cd.balance >= 0 %}text-success{% else %}text-danger{% endif %}">{{ "{:,.0f}".format(cd.balance) }}</div>
               {% if cd.is_filtered %}
               <div class="lbl"><span class="text-success">+{{ "{:,.0f}".format(cd.income) }}</span> / <span class="text-danger">-{{ "{:,.0f}".format(cd.expense) }}</span></div>
               {% else %}
-              <div class="lbl">{{ cd.cash.payment_type or 'Naqd' }}</div>
+              <div class="lbl" style="display: flex; justify-content: space-between;">
+                <span>{{ cd.cash.payment_type or 'Naqd' }}</span>
+                {% if _open and _open != 0 %}
+                <span class="text-muted" style="font-size: 10px;">opening: {{ "{:,.0f}".format(_open) }}</span>
+                {% endif %}
+              </div>
               {% endif %}
             </div>
           </a>

@@ -229,6 +229,74 @@
                                     <i class="bi bi-check-lg"></i> Qabul
                                 </button>
                             </form>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2 ms-1"
+                                    onclick="if(confirm('To`lovni o`chirish?')){document.getElementById('del-pend-{{ p.id }}').submit();}"
+                                    title="O'chirish">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                            <form id="del-pend-{{ p.id }}" method="post" action="/supervisor/agent-payments/delete-driver/{{ p.id }}" style="display:none;"></form>
+                            {% elif p.status == 'confirmed' %}
+                            <div class="d-flex gap-1">
+                              <!-- Tahrirlash modal -->
+                              <button type="button" class="btn btn-sm btn-outline-primary py-0 px-2"
+                                      data-bs-toggle="modal" data-bs-target="#editDriverPay{{ p.id }}"
+                                      title="Tahrirlash">
+                                <i class="bi bi-pencil"></i>
+                              </button>
+                              <!-- Bekor qilish (revert) -->
+                              <form method="post" action="/supervisor/agent-payments/revert-driver/{{ p.id }}"
+                                    style="display:inline;"
+                                    onsubmit="return confirm('Tasdiqni bekor qilish? Mijoz qarzi qaytariladi, summa pending statusga o`tadi. So`ngra o`chirish mumkin bo`ladi.');">
+                                <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Tasdiqni bekor qilish (so'ng o'chirish mumkin)">
+                                  <i class="bi bi-arrow-counterclockwise"></i>
+                                </button>
+                              </form>
+                              <!-- O'chirish DISABLED — avval bekor qilish kerak -->
+                              <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2"
+                                      disabled
+                                      title="Tasdiqlangan to'lovni o'chirib bo'lmaydi. Avval 'Bekor qilish' tugmasini bosing.">
+                                <i class="bi bi-trash"></i>
+                              </button>
+                            </div>
+
+                            <!-- EDIT MODAL -->
+                            <div class="modal fade" id="editDriverPay{{ p.id }}" tabindex="-1">
+                              <div class="modal-dialog modal-dialog-centered">
+                                <div class="modal-content">
+                                  <form method="post" action="/supervisor/agent-payments/edit-driver/{{ p.id }}">
+                                    <div class="modal-header">
+                                      <h5 class="modal-title">To'lovni tahrirlash · {{ p.number }}</h5>
+                                      <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                      <div class="mb-3">
+                                        <label class="form-label small text-muted">Mijoz</label>
+                                        <div class="fw-semibold">{{ p._partner.name if p._partner else '—' }}</div>
+                                      </div>
+                                      <div class="mb-3">
+                                        <label class="form-label">Summa (so'm)</label>
+                                        <input type="number" name="amount" class="form-control" required min="1" step="any"
+                                               value="{{ p.amount|int }}">
+                                      </div>
+                                      <div class="mb-3">
+                                        <label class="form-label">To'lov turi</label>
+                                        <select name="payment_type" class="form-select">
+                                          <option value="naqd" {% if p.payment_type=='naqd' %}selected{% endif %}>Naqd</option>
+                                          <option value="plastik" {% if p.payment_type=='plastik' %}selected{% endif %}>Plastik</option>
+                                        </select>
+                                      </div>
+                                      <div class="alert alert-warning small mb-0">
+                                        <i class="bi bi-info-circle"></i> Tasdiqlangan to'lov tahrirlanadi: eski summa qaytariladi, yangi summa qaytadan qo'llanadi (Order.paid, Partner.balance).
+                                      </div>
+                                    </div>
+                                    <div class="modal-footer">
+                                      <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+                                      <button type="submit" class="btn btn-primary">Saqlash va qayta tasdiqlash</button>
+                                    </div>
+                                  </form>
+                                </div>
+                              </div>
+                            </div>
                             {% else %}
                                 <small class="muted-cell">—</small>
                             {% endif %}

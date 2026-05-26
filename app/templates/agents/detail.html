@@ -116,6 +116,16 @@
                         <span class="text-muted small">—</span>
                         <input type="date" name="date_to" id="orderDateTo" value="{{ date_to }}" class="form-control form-control-sm" style="width:140px;" onchange="document.getElementById('orderDateFilterForm').submit()">
                     </form>
+                    <div class="input-group input-group-sm" style="width: 240px;">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" id="orderSearchInput" class="form-control form-control-sm"
+                               placeholder="Mijoz, raqam, tel..."
+                               oninput="filterOrderRows()">
+                        <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('orderSearchInput').value=''; filterOrderRows();" title="Tozalash">
+                            <i class="bi bi-x"></i>
+                        </button>
+                    </div>
+                    <span id="orderSearchCount" class="text-muted small" style="display:none;"></span>
                     <button type="button" id="bulkConfirmBtn" class="btn btn-sm btn-success" disabled onclick="confirmSelected()">
                         <i class="bi bi-check2-all"></i> Belgilanganlar tasdiqlash (<span id="bulkConfirmCount">0</span>)
                     </button>
@@ -148,9 +158,52 @@
                 document.getElementById('orderDateTo').value = to;
                 document.getElementById('orderDateFilterForm').submit();
             }
+
+            // Real-time client-side qidiruv (mijoz / raqam / telefon)
+            function filterOrderRows() {
+                var input = document.getElementById('orderSearchInput');
+                var countEl = document.getElementById('orderSearchCount');
+                if (!input) return;
+                var q = (input.value || '').trim().toLowerCase();
+                // Faqat raqam bo'lsa probel/+ olib tashlash (telefon match uchun)
+                var qDigits = q.replace(/[^0-9]/g, '');
+                var ordersTable = document.getElementById('ordersTable');
+                var rows = ordersTable ? ordersTable.querySelectorAll('tbody tr') : [];
+                var shown = 0, total = 0;
+                rows.forEach(function(tr) {
+                    // Skip empty/no-data placeholder rows (faqat data rowlar)
+                    if (!tr.querySelector('td')) return;
+                    total++;
+                    if (!q) {
+                        tr.style.display = '';
+                        shown++;
+                        return;
+                    }
+                    var text = tr.textContent.toLowerCase();
+                    var textDigits = text.replace(/[^0-9]/g, '');
+                    var match = text.indexOf(q) !== -1;
+                    if (!match && qDigits.length >= 3) {
+                        match = textDigits.indexOf(qDigits) !== -1;
+                    }
+                    if (match) {
+                        tr.style.display = '';
+                        shown++;
+                    } else {
+                        tr.style.display = 'none';
+                    }
+                });
+                if (countEl) {
+                    if (q) {
+                        countEl.style.display = '';
+                        countEl.textContent = shown + ' / ' + total;
+                    } else {
+                        countEl.style.display = 'none';
+                    }
+                }
+            }
             </script>
             <div class="card-body p-0" style="max-height: 560px; overflow-y: auto;">
-                <table class="table table-sm mb-0">
+                <table class="table table-sm mb-0" id="ordersTable">
                     <thead>
                         <tr>
                             <th style="width:36px;"><input type="checkbox" id="selectAllOrders" onclick="toggleAllOrders(this)"></th>
@@ -194,7 +247,14 @@
                                 {% endif %}
                             </td>
                             <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</td>
-                            <td>{{ order.partner.name if order.partner else '-' }}</td>
+                            <td>
+                                {% if order.partner %}
+                                  {{ order.partner.name }}
+                                  {% if order.partner.phone %}
+                                    <br><small class="text-muted"><i class="bi bi-telephone"></i> <a href="tel:{{ order.partner.phone }}" class="text-decoration-none text-muted">{{ order.partner.phone }}</a></small>
+                                  {% endif %}
+                                {% else %}-{% endif %}
+                            </td>
                             <td class="text-end">
                                 {% if is_exchange %}
                                 {% set ret_qty = order.items|sum(attribute='quantity') %}
