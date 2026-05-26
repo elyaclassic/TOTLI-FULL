@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TOTLI BI — Yangi Dizayn Vizyoni (2026-05-25)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
+<style>
+:root {
+  --brand: #017449;
+  --brand-50: #ecfdf5;
+  --brand-600: #015a39;
+  --accent: #FFB50D;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-500: #6b7280;
+  --gray-700: #374151;
+  --gray-900: #111827;
+  --success: #059669;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --info: #2563eb;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.05);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.06);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.08);
+  --radius-sm: 6px;
+  --radius-md: 12px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Inter', system-ui, sans-serif; color: var(--gray-900); background: var(--gray-50); line-height: 1.5; font-feature-settings: "tnum"; }
+.page { max-width: 1280px; margin: 0 auto; padding: 32px 24px; }
+.intro { background: linear-gradient(135deg, var(--brand) 0%, var(--brand-600) 100%); color: white; padding: 48px 32px; border-radius: var(--radius-md); margin-bottom: 48px; }
+.intro h1 { font-family: 'Righteous', cursive; font-size: 36px; margin-bottom: 12px; }
+.intro p { font-size: 16px; opacity: .92; max-width: 700px; }
+.intro .badge { display: inline-block; background: var(--accent); color: var(--gray-900); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; margin-top: 16px; }
+
+h2 { font-size: 24px; font-weight: 700; color: var(--gray-900); margin: 48px 0 16px; padding-bottom: 12px; border-bottom: 2px solid var(--gray-200); }
+h2 .num { display: inline-block; background: var(--brand); color: white; width: 32px; height: 32px; border-radius: var(--radius-sm); text-align: center; line-height: 32px; font-size: 14px; margin-right: 12px; }
+h3 { font-size: 18px; font-weight: 600; margin: 24px 0 12px; color: var(--gray-700); }
+.note { background: #fffbeb; border-left: 3px solid var(--accent); padding: 12px 16px; margin: 16px 0; border-radius: var(--radius-sm); font-size: 14px; color: var(--gray-700); }
+
+/* === BRAND / TOKENS === */
+.tokens { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+.swatch { background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
+.swatch .color { height: 80px; }
+.swatch .info { padding: 12px; font-size: 13px; }
+.swatch .name { font-weight: 600; color: var(--gray-900); }
+.swatch .hex { color: var(--gray-500); font-family: 'SF Mono', Consolas, monospace; font-size: 12px; }
+
+/* === BEFORE / AFTER === */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 20px 0; }
+.compare > div { background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-md); overflow: hidden; }
+.compare-label { padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.before .compare-label { background: #fef2f2; color: var(--danger); }
+.after .compare-label { background: var(--brand-50); color: var(--brand); }
+@media (max-width: 768px) { .compare { grid-template-columns: 1fr; } }
+
+/* === MOCKUP DASHBOARD === */
+.mock { padding: 16px; font-size: 13px; }
+
+/* HOZIRGI dashboard — chaotic */
+.mock-old { background: linear-gradient(180deg, #f5f5f5, #fff); padding: 0; }
+.mock-old .hero { background: linear-gradient(135deg, #017449 0%, #0d9968 100%); color: white; padding: 24px; position: relative; overflow: hidden; }
+.mock-old .hero::before { content: ''; position: absolute; right: -20px; top: -20px; width: 100px; height: 100px; background: radial-gradient(circle, rgba(255,255,255,.2), transparent); border-radius: 50%; }
+.mock-old .hero h3 { font-family: 'Righteous', cursive; font-size: 20px; margin: 0; color: white; }
+.mock-old .hero p { font-size: 13px; opacity: .9; margin-top: 4px; }
+.mock-old .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 16px; }
+.mock-old .metric { background: white; border-radius: 14px; padding: 12px; text-align: center; border: 1px solid #e0e0e0; }
+.mock-old .metric .ring { width: 56px; height: 56px; margin: 0 auto 8px; border-radius: 50%; background: conic-gradient(#017449 0% 72%, #e0e0e0 72% 100%); display: flex; align-items: center; justify-content: center; }
+.mock-old .metric .ring-inner { width: 42px; height: 42px; background: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #017449; }
+.mock-old .metric .label { font-family: 'Righteous', cursive; font-size: 11px; color: #555; }
+.mock-old .extra { padding: 12px 16px; background: #fff3cd; border-left: 4px solid #ffc107; margin: 0 16px 16px; font-size: 12px; }
+
+/* YANGI dashboard — clean */
+.mock-new { background: var(--gray-50); padding: 0; }
+.mock-new .topbar { background: white; padding: 16px 20px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+.mock-new .topbar .logo { font-family: 'Righteous', cursive; font-size: 20px; color: var(--brand); }
+.mock-new .topbar .user { font-size: 13px; color: var(--gray-700); }
+.mock-new .greeting { padding: 24px 20px 16px; }
+.mock-new .greeting h3 { font-size: 18px; font-weight: 600; color: var(--gray-900); }
+.mock-new .greeting .sub { color: var(--gray-500); font-size: 13px; margin-top: 4px; }
+.mock-new .greeting .today { color: var(--brand); font-weight: 600; font-size: 13px; }
+.mock-new .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; padding: 0 20px; }
+.mock-new .kpi { background: white; border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); }
+.mock-new .kpi .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--gray-500); font-weight: 500; }
+.mock-new .kpi .kpi-value { font-size: 24px; font-weight: 700; color: var(--gray-900); margin-top: 4px; font-feature-settings: "tnum"; }
+.mock-new .kpi .kpi-trend { font-size: 12px; margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+.mock-new .kpi .kpi-trend.up { color: var(--success); }
+.mock-new .kpi .kpi-trend.down { color: var(--danger); }
+.mock-new .kpi .spark { margin-top: 8px; height: 24px; background: linear-gradient(180deg, transparent, var(--brand-50)); clip-path: polygon(0 80%, 15% 70%, 30% 60%, 50% 40%, 70% 50%, 85% 20%, 100% 30%, 100% 100%, 0 100%); }
+.mock-new .kpi .spark.down { background: linear-gradient(180deg, transparent, #fef2f2); clip-path: polygon(0 30%, 20% 40%, 40% 50%, 60% 60%, 80% 70%, 100% 80%, 100% 100%, 0 100%); }
+.mock-new .workflow { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; padding: 20px; }
+.mock-new .kanban { background: white; border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); }
+.mock-new .kanban-h { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; font-size: 12px; font-weight: 600; color: var(--gray-700); margin-bottom: 12px; }
+.mock-new .kanban-h span { padding: 6px 10px; background: var(--gray-100); border-radius: 999px; text-align: center; }
+.mock-new .kanban-h span:nth-child(1)::before { content: '⏱ '; }
+.mock-new .kanban-h span:nth-child(2)::before { content: '⚙ '; color: var(--info); }
+.mock-new .kanban-h span:nth-child(3)::before { content: '✓ '; color: var(--success); }
+.mock-new .kanban-cols { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
+.mock-new .kanban-card { background: var(--gray-50); border-radius: var(--radius-sm); padding: 8px 10px; font-size: 11px; margin-bottom: 6px; border-left: 3px solid var(--gray-300); }
+.mock-new .kanban-card.urgent { border-left-color: var(--warning); }
+.mock-new .kanban-card.done { border-left-color: var(--success); opacity: .7; }
+.mock-new .lowstock { background: white; border-radius: var(--radius-md); padding: 16px; box-shadow: var(--shadow-sm); }
+.mock-new .lowstock h4 { font-size: 13px; font-weight: 600; margin-bottom: 12px; color: var(--gray-700); }
+.mock-new .lowstock-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 12px; }
+.mock-new .lowstock-item:last-child { border-bottom: none; }
+.mock-new .lowstock-item .name { color: var(--gray-900); }
+.mock-new .lowstock-item .qty { font-weight: 600; font-feature-settings: "tnum"; }
+.mock-new .lowstock-item .qty.warn { color: var(--warning); }
+.mock-new .lowstock-item .qty.danger { color: var(--danger); }
+
+/* === POS MOCKUP === */
+.pos-mock { display: grid; grid-template-columns: 2fr 1fr; gap: 0; min-height: 360px; }
+.pos-mock .catalog { background: var(--gray-50); padding: 16px; }
+.pos-mock .catalog-h { font-size: 12px; color: var(--gray-500); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; font-weight: 600; }
+.pos-mock .pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pos-mock .pcard { background: white; border-radius: var(--radius-md); padding: 12px; text-align: center; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform .15s ease-out, box-shadow .15s ease-out; }
+.pos-mock .pcard:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.pos-mock .pcard .pimg { height: 60px; background: linear-gradient(135deg, var(--brand-50), var(--gray-100)); border-radius: var(--radius-sm); margin-bottom: 8px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+.pos-mock .pcard .pname { font-size: 11px; font-weight: 500; color: var(--gray-900); }
+.pos-mock .pcard .pprice { font-size: 12px; font-weight: 600; color: var(--brand); margin-top: 2px; }
+.pos-mock .pcard .lowdot { display: inline-block; width: 6px; height: 6px; background: var(--warning); border-radius: 50%; margin-left: 4px; vertical-align: middle; }
+.pos-mock .cart { background: white; padding: 16px; border-left: 1px solid var(--gray-200); display: flex; flex-direction: column; }
+.pos-mock .cart-h { font-weight: 600; font-size: 14px; margin-bottom: 12px; }
+.pos-mock .cart-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--gray-100); font-size: 12px; }
+.pos-mock .cart-item .iname { color: var(--gray-900); }
+.pos-mock .cart-item .iprice { font-weight: 600; font-feature-settings: "tnum"; }
+.pos-mock .cart-total { display: flex; justify-content: space-between; padding: 12px 0; margin-top: auto; border-top: 2px solid var(--gray-900); font-size: 16px; font-weight: 700; }
+.pos-mock .cart-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.pos-mock .btn { padding: 14px; border-radius: var(--radius-sm); font-weight: 600; text-align: center; font-size: 13px; cursor: pointer; border: 1.5px solid transparent; transition: all .15s ease-out; }
+.pos-mock .btn-primary { background: var(--brand); color: white; grid-column: span 2; padding: 16px; font-size: 15px; }
+.pos-mock .btn-primary:hover { background: var(--brand-600); }
+.pos-mock .btn-secondary { background: white; color: var(--gray-700); border-color: var(--gray-300); }
+.pos-mock .btn-secondary:hover { background: var(--gray-50); }
+
+/* === AGENT MOBILE === */
+.phone-row { display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; margin: 24px 0; }
+.phone { width: 280px; height: 560px; background: #1f2937; border-radius: 32px; padding: 12px; box-shadow: var(--shadow-lg); }
+.phone-screen { background: white; border-radius: 24px; height: 100%; overflow: hidden; display: flex; flex-direction: column; position: relative; }
+.phone-label { text-align: center; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: .05em; }
+
+/* HOZIRGI mobil */
+.mobile-old .mtop { background: #017449; color: white; padding: 16px 20px; font-family: 'Righteous', cursive; font-size: 14px; }
+.mobile-old .mbody { padding: 12px; flex: 1; overflow: auto; }
+.mobile-old .partner-row { display: flex; gap: 8px; align-items: center; padding: 8px; background: white; border: 1px solid #e0e0e0; border-radius: 8px; margin-bottom: 6px; }
+.mobile-old .partner-avatar { width: 36px; height: 36px; background: #e8e8e8; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #999; font-size: 16px; }
+.mobile-old .partner-info { flex: 1; min-width: 0; }
+.mobile-old .partner-name { font-size: 12px; font-weight: 500; color: #333; }
+.mobile-old .partner-debt { font-size: 11px; color: #d32f2f; }
+.mobile-old .fab-row { position: absolute; bottom: 16px; right: 16px; display: flex; gap: 8px; }
+.mobile-old .fab { width: 44px; height: 44px; border-radius: 50%; background: #4CAF50; color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.2); font-size: 18px; }
+.mobile-old .fab.sync { background: #4CAF50; }
+
+/* YANGI mobil */
+.mobile-new .mtop { background: white; padding: 14px 16px; border-bottom: 1px solid var(--gray-200); display: flex; justify-content: space-between; align-items: center; }
+.mobile-new .mtop .greet { font-size: 13px; font-weight: 600; color: var(--gray-900); }
+.mobile-new .mtop .greet .sub { font-size: 11px; color: var(--gray-500); font-weight: 400; }
+.mobile-new .mbody { padding: 12px; flex: 1; overflow: auto; }
+.mobile-new .partner-row { display: flex; gap: 10px; align-items: center; padding: 10px; background: white; border-radius: var(--radius-md); margin-bottom: 6px; box-shadow: var(--shadow-sm); }
+.mobile-new .partner-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 13px; font-weight: 600; }
+.mobile-new .partner-avatar.c1 { background: linear-gradient(135deg, #ec4899, #db2777); }
+.mobile-new .partner-avatar.c2 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.mobile-new .partner-avatar.c3 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.mobile-new .partner-avatar.c4 { background: linear-gradient(135deg, var(--brand), var(--brand-600)); }
+.mobile-new .partner-info { flex: 1; min-width: 0; }
+.mobile-new .partner-name { font-size: 13px; font-weight: 500; color: var(--gray-900); }
+.mobile-new .partner-meta { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+.mobile-new .partner-bal { text-align: right; font-size: 13px; font-weight: 600; font-feature-settings: "tnum"; }
+.mobile-new .partner-bal.neg { color: var(--danger); }
+.mobile-new .partner-bal.pos { color: var(--success); }
+.mobile-new .fab { position: absolute; bottom: 76px; right: 16px; width: 56px; height: 56px; border-radius: 50%; background: var(--brand); color: white; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-lg); font-size: 24px; }
+.mobile-new .bottom-nav { display: flex; background: white; border-top: 1px solid var(--gray-200); }
+.mobile-new .bnav-item { flex: 1; padding: 10px 0; text-align: center; font-size: 10px; color: var(--gray-500); }
+.mobile-new .bnav-item.active { color: var(--brand); }
+.mobile-new .bnav-item .icon { font-size: 20px; display: block; margin-bottom: 2px; }
+
+/* === BUTTONS DEMO === */
+.btn-demo { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px; background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); }
+.btn-demo button { padding: 10px 16px; border-radius: var(--radius-sm); border: 1.5px solid transparent; font-weight: 500; font-size: 14px; cursor: pointer; transition: all .15s ease-out; min-height: 40px; }
+.btn-primary-d { background: var(--brand); color: white; }
+.btn-primary-d:hover { background: var(--brand-600); }
+.btn-secondary-d { background: white; color: var(--gray-700); border-color: var(--gray-300); }
+.btn-secondary-d:hover { background: var(--gray-50); }
+.btn-ghost-d { background: transparent; color: var(--gray-700); }
+.btn-ghost-d:hover { background: var(--gray-100); }
+.btn-danger-d { background: white; color: var(--danger); border-color: var(--danger); }
+.btn-danger-d:hover { background: var(--danger); color: white; }
+
+/* === TABLE DEMO === */
+.table-demo { background: white; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); overflow: hidden; }
+.table-demo table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.table-demo thead th { background: var(--gray-50); color: var(--gray-500); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--gray-200); }
+.table-demo thead th.num { text-align: right; }
+.table-demo tbody td { padding: 12px 16px; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+.table-demo tbody td.num { text-align: right; font-feature-settings: "tnum"; font-weight: 500; color: var(--gray-900); }
+.table-demo tbody tr:hover { background: var(--gray-50); }
+.table-demo tbody tr:last-child td { border-bottom: none; }
+.table-demo .badge-sm { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 500; }
+.table-demo .badge-success { background: #ecfdf5; color: var(--success); }
+.table-demo .badge-warn { background: #fffbeb; color: var(--warning); }
+.table-demo .table-footer { background: var(--gray-50); padding: 12px 16px; display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+
+/* === CHANGES LIST === */
+.changes { background: white; border-radius: var(--radius-md); padding: 24px; box-shadow: var(--shadow-sm); margin-top: 16px; }
+.change-item { display: grid; grid-template-columns: 80px 1fr 1fr; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--gray-100); align-items: start; }
+.change-item:last-child { border-bottom: none; }
+.change-area { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--brand); font-weight: 600; padding-top: 2px; }
+.change-old { color: var(--gray-500); font-size: 13px; }
+.change-new { color: var(--gray-900); font-size: 13px; font-weight: 500; }
+.change-new strong { color: var(--brand); }
+
+/* === RESPONSIVE === */
+@media (max-width: 768px) {
+  .mock-new .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .mock-new .workflow { grid-template-columns: 1fr; }
+  .pos-mock { grid-template-columns: 1fr; }
+  .tokens { grid-template-columns: repeat(2, 1fr); }
+  .intro h1 { font-size: 28px; }
+  .page { padding: 16px 12px; }
+  .change-item { grid-template-columns: 1fr; gap: 4px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="intro">
+  <h1>TOTLI BI — Yangi Dizayn Vizyoni</h1>
+  <p>7-ekspert auditi natijasi: hozirgi loyiha kuchli operatsion asoslari ustiga zamonaviy dizayn tilini joriy etish. Bu sahifa "qayerini, nimasini yaxshilash kerak" savoliga real javob beradi.</p>
+  <span class="badge">2026-05-25 · 4 platforma · 80+ fayl tahlil</span>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">1</span>Brand Identity — 5 yashildan 1 ga</h2>
+
+<div class="note">
+  <strong>Hozirgi muammo:</strong> Loyihada <code>#017449</code> · <code>#0d6b4b</code> · <code>#4CAF50</code> · <code>#0d9968</code> · <code>#8B4513</code> — 5 ta turli "asosiy" rang ishlatilgan. Sotuvchi POSda bir, agent app boshqa, admin yana boshqa yashilni ko'radi. Brand identity zaif.
+</div>
+
+<h3>Yangi yagona palette</h3>
+<div class="tokens">
+  <div class="swatch"><div class="color" style="background: #017449"></div><div class="info"><div class="name">Brand</div><div class="hex">#017449</div></div></div>
+  <div class="swatch"><div class="color" style="background: #ecfdf5"></div><div class="info"><div class="name">Brand-50</div><div class="hex">#ecfdf5 (fon)</div></div></div>
+  <div class="swatch"><div class="color" style="background: #015a39"></div><div class="info"><div class="name">Brand-600</div><div class="hex">#015a39 (hover)</div></div></div>
+  <div class="swatch"><div class="color" style="background: #FFB50D"></div><div class="info"><div class="name">Accent</div><div class="hex">#FFB50D (CTA)</div></div></div>
+  <div class="swatch"><div class="color" style="background: #059669"></div><div class="info"><div class="name">Success</div><div class="hex">#059669</div></div></div>
+  <div class="swatch"><div class="color" style="background: #d97706"></div><div class="info"><div class="name">Warning</div><div class="hex">#d97706</div></div></div>
+  <div class="swatch"><div class="color" style="background: #dc2626"></div><div class="info"><div class="name">Danger</div><div class="hex">#dc2626</div></div></div>
+  <div class="swatch"><div class="color" style="background: #111827"></div><div class="info"><div class="name" style="color: white">Gray-900</div><div class="hex" style="color: #ccc">#111827 (heading)</div></div></div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">2</span>Admin Dashboard — Hozir va Yangi</h2>
+
+<div class="compare">
+  <div class="before">
+    <div class="compare-label">❌ Hozir — hero gradient, conic-progress, font xaos</div>
+    <div class="mock mock-old">
+      <div class="hero">
+        <h3>Salom, Elyor!</h3>
+        <p>Bugun: 25-may-2026 · Bugungi sotuv ko'rsatkichi</p>
+      </div>
+      <div class="metrics">
+        <div class="metric"><div class="ring"><div class="ring-inner">72%</div></div><div class="label">SOTUV</div></div>
+        <div class="metric"><div class="ring"><div class="ring-inner">85%</div></div><div class="label">FOYDA</div></div>
+        <div class="metric"><div class="ring"><div class="ring-inner">42%</div></div><div class="label">QARZ</div></div>
+        <div class="metric"><div class="ring"><div class="ring-inner">60%</div></div><div class="label">KASSA</div></div>
+      </div>
+      <div class="extra">⚠ Z-hisobot to'liq emas. Quyidagi kassalarda smena yopilmagan: Asosiy kassa, Do'kon 2</div>
+    </div>
+  </div>
+  <div class="after">
+    <div class="compare-label">✅ Yangi — sodda, raqam-fokus, sparkline trend</div>
+    <div class="mock mock-new">
+      <div class="topbar">
+        <div class="logo">TOTLI</div>
+        <div class="user">Elyor ▾</div>
+      </div>
+      <div class="greeting">
+        <h3>Salom, Elyor</h3>
+        <div class="sub"><span class="today">Bugun · 25-may</span> · Bugungi sotuv 12.4M som</div>
+      </div>
+      <div class="kpi-grid">
+        <div class="kpi"><div class="kpi-label">Sotuv</div><div class="kpi-value">12.4M</div><div class="kpi-trend up">↗ +18% kechagidan</div><div class="spark"></div></div>
+        <div class="kpi"><div class="kpi-label">Foyda</div><div class="kpi-value">2.85M</div><div class="kpi-trend up">↗ +12%</div><div class="spark"></div></div>
+        <div class="kpi"><div class="kpi-label">Qarz</div><div class="kpi-value">4.20M</div><div class="kpi-trend down">↘ −5%</div><div class="spark down"></div></div>
+        <div class="kpi"><div class="kpi-label">Kassa</div><div class="kpi-value">1.85M</div><div class="kpi-trend up">↗ +8%</div><div class="spark"></div></div>
+      </div>
+      <div class="workflow">
+        <div class="kanban">
+          <div class="kanban-h"><span>Kutmoqda 5</span><span>Jarayonda 2</span><span>Tayyor 8</span></div>
+          <div class="kanban-cols">
+            <div>
+              <div class="kanban-card urgent">AGT-021 · Marvarid · 2.4M</div>
+              <div class="kanban-card">AGT-022 · Benazir · 850K</div>
+              <div class="kanban-card">AGT-023 · Chinor · 1.2M</div>
+            </div>
+            <div>
+              <div class="kanban-card">PR-0089 · Karton xarid</div>
+              <div class="kanban-card">PR-0090 · ETIKETKA</div>
+            </div>
+            <div>
+              <div class="kanban-card done">S-0085 · 450K ✓</div>
+              <div class="kanban-card done">S-0086 · 1.1M ✓</div>
+            </div>
+          </div>
+        </div>
+        <div class="lowstock">
+          <h4>Kam qolgan</h4>
+          <div class="lowstock-item"><span class="name">Karton WH1</span><span class="qty warn">28%</span></div>
+          <div class="lowstock-item"><span class="name">Sariq holva 100g</span><span class="qty warn">15%</span></div>
+          <div class="lowstock-item"><span class="name">ETIKETKA WH2</span><span class="qty danger">0% ⚠</span></div>
+          <div class="lowstock-item"><span class="name">P-202 KAROBKA</span><span class="qty warn">12%</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="changes">
+  <h3 style="margin-top: 0">Asosiy o'zgartirish nuqtalari</h3>
+  <div class="change-item"><div class="change-area">Hero</div><div class="change-old">Yashil gradient + radial circle + Righteous font</div><div class="change-new"><strong>Olib tashlash</strong> → bitta qator: "Salom Elyor. Bugun 25-may. Bugungi sotuv: 12.4M"</div></div>
+  <div class="change-item"><div class="change-area">Metric</div><div class="change-old">Conic-gradient progress (72%, 85%) — nima 72%? noaniq</div><div class="change-new"><strong>Aniq raqam</strong> 12.4M som + trend (↗ +18%) + 7 kun sparkline</div></div>
+  <div class="change-item"><div class="change-area">Font</div><div class="change-old">Righteous (display font) hero h3 da, "SOTUV" labelda</div><div class="change-new"><strong>Inter 500</strong> heading va body, Righteous faqat logoda</div></div>
+  <div class="change-item"><div class="change-area">Workflow</div><div class="change-old">Tab interfeysi, har tab ichida raqamlar</div><div class="change-new"><strong>Kanban ustunlar</strong> — har buyurtma kartochkasi ko'rinadi, vizual oqim</div></div>
+  <div class="change-item"><div class="change-area">Alert</div><div class="change-old">Sariq alarm banner butun ekranda</div><div class="change-new"><strong>Inline</strong> tinch xabar tepada, urguda emas</div></div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">3</span>POS — Sotuvchi ekrani</h2>
+
+<div class="note">
+  <strong>POS hozir 7/10 — eng yaxshi sahifa.</strong> Lekin katalog Bootstrap grid (zerikarli), savat o'ng tarafda kichik. Yangi: katta karta, savat alohida, CTA hierarchy.
+</div>
+
+<div class="compare">
+  <div class="after" style="grid-column: 1 / -1">
+    <div class="compare-label">✅ Yangi POS — touch-first, katta katalog, sticky CTA</div>
+    <div class="pos-mock">
+      <div class="catalog">
+        <div class="catalog-h">Katalog · 24 mahsulot</div>
+        <div class="pgrid">
+          <div class="pcard"><div class="pimg">🍯</div><div class="pname">Sariq holva 100g</div><div class="pprice">12 000 <span class="lowdot"></span></div></div>
+          <div class="pcard"><div class="pimg">🍫</div><div class="pname">Halva karamel</div><div class="pprice">18 500</div></div>
+          <div class="pcard"><div class="pimg">🥜</div><div class="pname">Yong'oqli halva</div><div class="pprice">22 000</div></div>
+          <div class="pcard"><div class="pimg">🍪</div><div class="pname">Pista holva 200g</div><div class="pprice">35 000</div></div>
+          <div class="pcard"><div class="pimg">🍰</div><div class="pname">Sezam holva</div><div class="pprice">15 500</div></div>
+          <div class="pcard"><div class="pimg">🎂</div><div class="pname">Mevali halva</div><div class="pprice">24 000</div></div>
+        </div>
+      </div>
+      <div class="cart">
+        <div class="cart-h">Savat (3 ta mahsulot)</div>
+        <div class="cart-item"><span class="iname">Sariq holva × 2</span><span class="iprice">24 000</span></div>
+        <div class="cart-item"><span class="iname">Halva karamel × 1</span><span class="iprice">18 500</span></div>
+        <div class="cart-item"><span class="iname">Yong'oqli × 3</span><span class="iprice">66 000</span></div>
+        <div class="cart-total"><span>JAMI</span><span>108 500</span></div>
+        <div class="cart-actions">
+          <div class="btn btn-primary">Naqd to'lov</div>
+          <div class="btn btn-secondary">Plastik</div>
+          <div class="btn btn-secondary">Olis (Click)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="changes">
+  <h3 style="margin-top: 0">POS o'zgartirish nuqtalari</h3>
+  <div class="change-item"><div class="change-area">Katalog</div><div class="change-old">Bootstrap grid, kichik karta, rasm yo'q yoki kichik</div><div class="change-new"><strong>3-4 ustun katta karta</strong> (200×140) + katta rasm, 1-tap qo'shish</div></div>
+  <div class="change-item"><div class="change-area">Stok past</div><div class="change-old">"Stok: 2 dona" matn yoki yo'q</div><div class="change-new"><strong>Kichik sariq nuqta</strong> narx yonida — vizual signal, joy egallamaydi</div></div>
+  <div class="change-item"><div class="change-area">CTA</div><div class="change-old">Bootstrap "btn btn-success" — barchasi teng vazn</div><div class="change-new"><strong>Hierarchy:</strong> Naqd primary yashil (eng katta) + Plastik/Olis secondary</div></div>
+  <div class="change-item"><div class="change-area">Mobile</div><div class="change-old">Savat sticky 1024px+, telefon portretda static (pastda ko'rinmaydi)</div><div class="change-new"><strong>Bottom sheet</strong> — savat pastdan tortib chiqadi (Linear/Stripe pattern)</div></div>
+  <div class="change-item"><div class="change-area">Success</div><div class="change-old">Hozirgi cubic-bezier animation — A+ (saqlanadi)</div><div class="change-new"><strong>Boshqa actionlarga ham tarqalsin</strong> — to'lov tasdiq, harajat saqlash, hujjat yopish</div></div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">4</span>Agent Mobil — Hozir va Yangi</h2>
+
+<div class="note">
+  <strong>Hozirgi muammo:</strong> Agent app'da partner avatar — grey ikon (B.Marvarid, B.Benazir, B.Chinor — hammasi bir xil). Aniqlash qiyin. Ikkita FAB ham bir xil yashil (sync va xarita). Brand rang — Material yashil <code>#4CAF50</code>, asosiy <code>#017449</code> dan farqli.
+</div>
+
+<div class="phone-row">
+  <div>
+    <div class="phone">
+      <div class="phone-screen mobile-old">
+        <div class="mtop">TOTLI Agent</div>
+        <div class="mbody">
+          <div class="partner-row">
+            <div class="partner-avatar">👤</div>
+            <div class="partner-info"><div class="partner-name">B. Marvarid Beauty</div><div class="partner-debt">Qarz: 2 450 000</div></div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar">👤</div>
+            <div class="partner-info"><div class="partner-name">B. Benazir Cosmetics</div><div class="partner-debt">Qarz: 850 000</div></div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar">👤</div>
+            <div class="partner-info"><div class="partner-name">B. Chinor Market</div><div class="partner-debt">Qarz: 1 200 000</div></div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar">👤</div>
+            <div class="partner-info"><div class="partner-name">D. Oloyboy SP</div><div class="partner-debt">Qarz: 320 000</div></div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar">👤</div>
+            <div class="partner-info"><div class="partner-name">M. Tursun Boy</div><div class="partner-debt">Qarz: 1 800 000</div></div>
+          </div>
+        </div>
+        <div class="fab-row">
+          <div class="fab sync">⟳</div>
+          <div class="fab">📍</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">❌ Hozir</div>
+  </div>
+
+  <div>
+    <div class="phone">
+      <div class="phone-screen mobile-new">
+        <div class="mtop">
+          <div class="greet">Salom, Murodjon<div class="sub">Bugun 8/12 partner</div></div>
+          <div style="font-size: 18px">🌙</div>
+        </div>
+        <div class="mbody">
+          <div class="partner-row">
+            <div class="partner-avatar c1">BM</div>
+            <div class="partner-info"><div class="partner-name">Marvarid Beauty</div><div class="partner-meta">2.4 km · Bugun 14:00</div></div>
+            <div class="partner-bal neg">−2.45M</div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar c2">BB</div>
+            <div class="partner-info"><div class="partner-name">Benazir Cosmetics</div><div class="partner-meta">1.8 km · Ertaga</div></div>
+            <div class="partner-bal neg">−850K</div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar c3">BC</div>
+            <div class="partner-info"><div class="partner-name">Chinor Market</div><div class="partner-meta">3.1 km · Bugun 15:30</div></div>
+            <div class="partner-bal neg">−1.20M</div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar c4">DO</div>
+            <div class="partner-info"><div class="partner-name">Oloyboy SP</div><div class="partner-meta">4.5 km</div></div>
+            <div class="partner-bal pos">+320K</div>
+          </div>
+          <div class="partner-row">
+            <div class="partner-avatar c1">MT</div>
+            <div class="partner-info"><div class="partner-name">Tursun Boy</div><div class="partner-meta">2.0 km · Bugun 17:00</div></div>
+            <div class="partner-bal neg">−1.80M</div>
+          </div>
+        </div>
+        <div class="fab">+</div>
+        <div class="bottom-nav">
+          <div class="bnav-item active"><span class="icon">🏠</span>Bosh</div>
+          <div class="bnav-item"><span class="icon">📋</span>Buyurtma</div>
+          <div class="bnav-item"><span class="icon">📍</span>Xarita</div>
+          <div class="bnav-item"><span class="icon">👤</span>Profil</div>
+        </div>
+      </div>
+    </div>
+    <div class="phone-label">✅ Yangi</div>
+  </div>
+</div>
+
+<div class="changes">
+  <h3 style="margin-top: 0">Agent mobil o'zgartirish nuqtalari</h3>
+  <div class="change-item"><div class="change-area">Brand</div><div class="change-old"><code>#4CAF50</code> Material yashil (asosiy <code>#017449</code> dan farqli)</div><div class="change-new"><strong><code>#017449</code></strong> — POS, admin va agent bir oilada</div></div>
+  <div class="change-item"><div class="change-area">Avatar</div><div class="change-old">👤 grey ikon — har partner bir xil</div><div class="change-new"><strong>Initial letter</strong> rangli fonda (BM, BB, BC) — Notion uslubi, darhol tanish</div></div>
+  <div class="change-item"><div class="change-area">Balans</div><div class="change-old">"Qarz: 2 450 000" — har doim "Qarz" yozuvi</div><div class="change-new"><strong>±raqam</strong> (qizil/yashil) — qarz va avans bir vizual qoidada, qisqa (2.45M)</div></div>
+  <div class="change-item"><div class="change-area">FAB</div><div class="change-old">2 ta yashil FAB — sync va xarita, rang tengligi</div><div class="change-new"><strong>1 ta primary FAB</strong> (+yangi buyurtma) — eng muhim action. Sync — bottom bar/menu da</div></div>
+  <div class="change-item"><div class="change-area">Navigatsiya</div><div class="change-old">Sidebar (hamburger menu kerak) yoki tab — sekin</div><div class="change-new"><strong>Bottom nav 4 tab</strong> — bosh ekran, telefon ergonomikasi (bosh barmoq)</div></div>
+  <div class="change-item"><div class="change-area">Kontekst</div><div class="change-old">Partner ro'yxati — faqat nom + qarz</div><div class="change-new"><strong>Masofa + vaqt</strong> ("2.4 km · Bugun 14:00") — agent kun rejasini biladi</div></div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">5</span>Tugma Tizimi</h2>
+<div class="note">Bitta loyihada hozir <strong>8+ xil tugma uslubi</strong>: btn-success bootstrap, custom yashil, gradient, outline-success... Yangi: 4 ta variant, har biri aniq vaziyat uchun.</div>
+
+<div class="btn-demo">
+  <button class="btn-primary-d">Primary (asosiy action)</button>
+  <button class="btn-secondary-d">Secondary (alternativ)</button>
+  <button class="btn-ghost-d">Ghost (uchinchi darajali)</button>
+  <button class="btn-danger-d">Danger (o'chirish/bekor)</button>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">6</span>Jadval — Hisobot ko'rinishi</h2>
+<div class="note">Hozir: jadval header katta qora matn, summa o'rtasida, badge har xil. Yangi: UPPERCASE 11px header (Linear/Stripe uslubi), tabular numbers, sticky summary footer.</div>
+
+<div class="table-demo">
+  <table>
+    <thead>
+      <tr>
+        <th>№ va Sana</th>
+        <th>Mijoz</th>
+        <th class="num">Summa</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>S-0085<br><span style="color: var(--gray-500); font-size: 12px">25-may 14:30</span></td>
+        <td>Marvarid Beauty</td>
+        <td class="num">2 450 000</td>
+        <td><span class="badge-sm badge-success">Yetkazildi</span></td>
+      </tr>
+      <tr>
+        <td>S-0086<br><span style="color: var(--gray-500); font-size: 12px">25-may 13:45</span></td>
+        <td>Benazir Cosmetics</td>
+        <td class="num">850 000</td>
+        <td><span class="badge-sm badge-success">Yetkazildi</span></td>
+      </tr>
+      <tr>
+        <td>S-0087<br><span style="color: var(--gray-500); font-size: 12px">25-may 12:20</span></td>
+        <td>Chinor Market</td>
+        <td class="num">1 200 000</td>
+        <td><span class="badge-sm badge-warn">Yo'lda</span></td>
+      </tr>
+      <tr>
+        <td>S-0088<br><span style="color: var(--gray-500); font-size: 12px">25-may 11:10</span></td>
+        <td>Oloyboy SP</td>
+        <td class="num">3 800 000</td>
+        <td><span class="badge-sm badge-success">Yetkazildi</span></td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="table-footer">
+    <span>Jami 38 ta, ko'rsatilgan 4 ta</span>
+    <span>8 300 000 som</span>
+  </div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">7</span>Eng tezkor yaxshilanish nuqtalari</h2>
+
+<div class="changes">
+  <div class="change-item"><div class="change-area" style="color: var(--danger)">XAVFLI</div><div class="change-old">Driver login = telefon raqami (haqiqiy parol yo'q)</div><div class="change-new"><strong>PIN majburiy</strong> — Agent pattern (memory'da bor) porting</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--danger)">XAVFLI</div><div class="change-old">XSS: partner.name <code>|safe</code> — admin sahifada agent kiritgan kod ishlaydi</div><div class="change-new"><strong>Jinja escape</strong> <code>purchases/list.html:111</code></div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--warning)">MOBIL</div><div class="change-old">Input font-size 13-14px — iOS Safari avtomatik zoom qiladi</div><div class="change-new"><strong>font-size: 16px</strong> mobil-da (1 qator CSS)</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--warning)">MOBIL</div><div class="change-old">Toast pastdan o'ng — klaviatura yoki bottom nav ostida qoladi</div><div class="change-new"><strong>Mobile: top center</strong></div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--brand)">UI</div><div class="change-old">Righteous font heading, nav, button — o'qish qiyin</div><div class="change-new"><strong>Faqat logo + hero h1</strong>, qolgani Inter 500/600</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--brand)">UI</div><div class="change-old">5 xil yashil rang turli sahifalarda</div><div class="change-new"><strong>1 brand</strong> <code>#017449</code> hamma joyda</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--brand)">UI</div><div class="change-old">Border radius 8/10/12/14/16/20/22/24 — har joyda boshqa</div><div class="change-new"><strong>3 ta</strong>: 6px button/input, 12px card, 999px pill</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--info)">APK</div><div class="change-old">android:allowBackup standart (true) — token cloud backup'ga tushadi</div><div class="change-new"><strong>allowBackup="false"</strong> + R8/ProGuard yoqish</div></div>
+  <div class="change-item"><div class="change-area" style="color: var(--info)">APK</div><div class="change-old">ACCESS_BACKGROUND_LOCATION manifestda — kod ishlatmaydi</div><div class="change-new"><strong>Olib tashlash</strong> — Play Store policy violation</div></div>
+</div>
+
+<!-- =================================================== -->
+<h2><span class="num">8</span>Amaliy reja — qaerdan boshlash</h2>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-top: 16px;">
+  <div style="background: white; border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow-sm); border-top: 4px solid var(--success);">
+    <h3 style="color: var(--success); margin-top: 0">🟢 Tier A — Bugun</h3>
+    <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 12px">2-3 soat, foydalanuvchi ta'sirsiz</p>
+    <ul style="font-size: 13px; padding-left: 20px; line-height: 1.8;">
+      <li>4 xavfsizlik fix (Driver/XSS/redirect/SQLi)</li>
+      <li>iOS zoom (input 16px)</li>
+      <li>Toast pozitsiyasi</li>
+      <li>Righteous → faqat logo</li>
+      <li>Focus ring global</li>
+      <li>CDN → /static/vendor/</li>
+      <li>APK: allowBackup, R8, BG_LOCATION</li>
+    </ul>
+  </div>
+  <div style="background: white; border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow-sm); border-top: 4px solid var(--warning);">
+    <h3 style="color: var(--warning); margin-top: 0">🟡 Tier B — Tungi</h3>
+    <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 12px">2-3 tun, 00:00-04:00</p>
+    <ul style="font-size: 13px; padding-left: 20px; line-height: 1.8;">
+      <li>Design tokens _tokens.css</li>
+      <li>4 komponent unifikatsiya</li>
+      <li>Mobile responsive (collapse, card-stack)</li>
+      <li>PWA SW rewrite</li>
+      <li>Double-confirm deploy</li>
+      <li>DB index + FK ondelete</li>
+      <li>Flutter token header</li>
+    </ul>
+  </div>
+  <div style="background: white; border-radius: var(--radius-md); padding: 20px; box-shadow: var(--shadow-sm); border-top: 4px solid var(--danger);">
+    <h3 style="color: var(--danger); margin-top: 0">🔴 Tier C — Yakshanba</h3>
+    <p style="font-size: 13px; color: var(--gray-500); margin-bottom: 12px">1-2 hafta, feature flag</p>
+    <ul style="font-size: 13px; padding-left: 20px; line-height: 1.8;">
+      <li>Alembic migratsiya</li>
+      <li>Service qatlam (sales.py split)</li>
+      <li>base.html partials</li>
+      <li>POS to'liq redesign</li>
+      <li>Admin dashboard yangi</li>
+      <li>Agent mobil bottom nav</li>
+      <li>Pul Float → Numeric (3 oy)</li>
+    </ul>
+  </div>
+</div>
+
+<div style="text-align: center; margin-top: 48px; padding: 24px; background: var(--brand-50); border-radius: var(--radius-md);">
+  <p style="font-size: 14px; color: var(--brand-600); font-weight: 600">
+    Bu prototip — real ko'rinish.<br>
+    <span style="font-weight: 400; color: var(--gray-700)">Yoqsa, Tier A bilan boshlaymiz va 1 hafta ichida foydalanuvchi sezadigan o'zgarish bo'ladi.</span>
+  </p>
+</div>
+
+</div>
+</body>
+</html>

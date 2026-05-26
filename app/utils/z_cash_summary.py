@@ -4,8 +4,9 @@ Smena yopilganda yoki ko'rilganda quyidagilarni hisoblaydi:
 - naqd savdo (pure + split ichidagi naqd)
 - naqd harajat (smena davomida)
 - naqd kontragentga to'lov
+- naqd kassadan kassaga o'tkazma (inkasatsiya)  ← 2026-05-26 fix
 - oldingi Z dan boshlang'ich qoldiq (chain)
-- yakuniy qoldiq = oldingi + savdo − harajat − to'lov
+- yakuniy qoldiq = oldingi + savdo − harajat − to'lov − inkasatsiya
 
 Sales.py (save) va reports.py (view) dan chaqiriladi.
 """
@@ -18,7 +19,7 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.database import Order, Payment
+from app.models.database import Order, Payment, CashTransfer, CashRegister, User
 
 
 def compute_z_cash_summary(db: Session, target_date: date, user_id: int, until_dt=None) -> dict:
@@ -35,8 +36,10 @@ def compute_z_cash_summary(db: Session, target_date: date, user_id: int, until_d
         cash_sales_total      — pure + split
         cash_expenses_total   — naqd harajatlar (kassadan har qanday chiqim)
         cash_payments_out     — naqd kontragentga to'lov (supplier_payment)
+        cash_transfers_out    — naqd kassadan kassaga o'tkazma (inkasatsiya)  ← 2026-05-26 fix
     """
     from sqlalchemy import distinct, select
+    from sqlalchemy.orm import joinedload
 
     order_where = [
         func.date(Order.created_at) == target_date,
@@ -93,12 +96,40 @@ def compute_z_cash_summary(db: Session, target_date: date, user_id: int, until_d
         *exp_filters, Payment.category == "supplier_payment",
     ).scalar() or 0.0
 
+    # === 2026-05-26 fix: CashTransfer (kassadan kassaga) hisobga olish ===
+    # Foydalanuvchining naqd POS kassalaridan chiqayotgan o'tkazmalar (inkasatsiya).
+    # X-hisobotda allaqachon inkasatsiya_naqd_today sifatida hisoblanadi (sales.py:2269-2274).
+    # Z-hisobot ham shu mantiqni qaytarmasa, naqd qoldiq xayoliy ko'p chiqadi.
+    cash_transfers_out = 0.0
+    try:
+        user_full = db.query(User).options(joinedload(User.cash_registers_list)).filter(User.id == user_id).first()
+        user_cashes = list(getattr(user_full, "cash_registers_list", None) or []) if user_full else []
+        naqd_cash_ids = [
+            c.id for c in user_cashes
+            if (c.payment_type or "").strip().lower() == "naqd"
+        ]
+        if naqd_cash_ids:
+            tr_filters = [
+                CashTransfer.from_cash_id.in_(naqd_cash_ids),
+                CashTransfer.status.in_(("in_transit", "completed")),
+                func.date(CashTransfer.date) == target_date,
+            ]
+            if until_dt is not None:
+                tr_filters.append(CashTransfer.date <= until_dt)
+            cash_transfers_out = db.query(
+                func.coalesce(func.sum(CashTransfer.amount), 0)
+            ).filter(*tr_filters).scalar() or 0.0
+    except Exception:
+        # Defensive: schema drift yoki user_id'siz holatda 0 qaytaring.
+        cash_transfers_out = 0.0
+
     return {
         "cash_sales_pure": float(cash_sales_pure),
         "cash_sales_split": float(cash_sales_split),
         "cash_sales_total": float(cash_sales_total),
         "cash_expenses_total": float(cash_expenses_total),
         "cash_payments_out": float(cash_payments_out),
+        "cash_transfers_out": float(cash_transfers_out),
     }
 
 

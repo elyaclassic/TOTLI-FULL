@@ -55,6 +55,8 @@ from app.utils.db_schema import (
 from app.routes import auth as auth_routes
 from app.routes import dashboard as dashboard_routes
 from app.routes import home as home_routes
+from app.routes import dashboard_v2 as dashboard_v2_routes
+from app.routes import agent_v2 as agent_v2_routes
 from app.routes import reports as reports_routes
 from app.routes import info as info_routes
 from app.routes import sales as sales_routes
@@ -124,6 +126,8 @@ app.mount("/static", _CachedStaticFiles(directory="app/static"), name="static")
 # Routerlar (auth, dashboard, home, reports, info, sales, qoldiqlar, finance, products)
 app.include_router(auth_routes.router)
 app.include_router(home_routes.router)
+app.include_router(dashboard_v2_routes.router)
+app.include_router(agent_v2_routes.router)
 app.include_router(reports_routes.router)
 app.include_router(info_routes.router)
 app.include_router(dashboard_routes.router)

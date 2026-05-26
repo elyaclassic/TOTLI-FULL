@@ -428,16 +428,51 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
 async def supervisor_agent_orders(
     request: Request,
     status: str = "all",
+    date_from: str = None,
+    date_to: str = None,
+    search: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent buyurtmalari alohida sahifa — tasdiqlash va yetkazishga berish."""
-    q = db.query(Order).filter(Order.source == "agent").options(
-        joinedload(Order.partner), joinedload(Order.items)
-    )
+    from datetime import datetime as _dt, date as _date, timedelta as _td
+    today = _date.today()
+    default_from = today - _td(days=7)
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else default_from
+    except (ValueError, TypeError):
+        d_from = default_from
+    try:
+        d_to = _dt.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+    except (ValueError, TypeError):
+        d_to = today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+    search = (search or "").strip()
+
+    base_q = db.query(Order).filter(Order.source == "agent")
+    # Sana filtri (created_at)
+    base_q = base_q.filter(func.date(Order.created_at) >= d_from, func.date(Order.created_at) <= d_to)
+    # Qidiruv (number yoki partner.name)
+    if search:
+        like_pat = f"%{search}%"
+        base_q = base_q.outerjoin(Partner, Order.partner_id == Partner.id).filter(
+            (Order.number.ilike(like_pat)) | (Partner.name.ilike(like_pat))
+        )
+
+    # KPI: status taqsimot + jami summa (sana darchasi ichida)
+    kpi_rows = base_q.with_entities(Order.status, func.count(Order.id), func.coalesce(func.sum(Order.total), 0)).group_by(Order.status).all()
+    kpi = {"all_count": 0, "all_sum": 0.0, "by_status": {}}
+    for st, cnt, total in kpi_rows:
+        st_key = st or "unknown"
+        kpi["by_status"][st_key] = {"count": cnt, "sum": float(total or 0)}
+        kpi["all_count"] += cnt
+        kpi["all_sum"] += float(total or 0)
+
+    q = base_q.options(joinedload(Order.partner), joinedload(Order.items))
     if status and status != "all":
         q = q.filter(Order.status == status)
-    orders = q.order_by(Order.created_at.desc()).limit(100).all()
+    orders = q.order_by(Order.created_at.desc()).limit(200).all()
     # Topilma 2A: waiting_production buyurtma uchun qaysi Production (qaysi mahsulot) ko'rsatilsin
     from app.models.database import Production as _Production, Stock as _Stock
     production_info = {}
@@ -488,6 +523,11 @@ async def supervisor_agent_orders(
         "production_info": production_info,
         "missing_items": missing_items,
         "page_title": "Agent buyurtmalari",
+        "date_from": d_from.isoformat(),
+        "date_to": d_to.isoformat(),
+        "today_iso": today.isoformat(),
+        "search": search,
+        "kpi": kpi,
     })
 
 

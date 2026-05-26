@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/dashboard_v2.css?v=20260525-10">
+<style>
+  body.d2-active { background: #0A0E1A !important; }
+  body.d2-active .main-content { padding: 0 !important; background: transparent !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# === Number formatting macros === #}
+{% macro fmt_money(n) -%}
+  {%- set n = (n or 0)|float -%}
+  {%- if n >= 1000000 -%}
+    {{ '%.2f'|format(n/1000000) }}<span class="unit">M</span>
+  {%- elif n >= 1000 -%}
+    {{ '%.1f'|format(n/1000) }}<span class="unit">K</span>
+  {%- else -%}
+    {{ n|int }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_kg(n) -%}
+  {%- set n = (n or 0)|float -%}
+  {%- if n >= 1000 -%}
+    {{ '%.2f'|format(n/1000) }}<span class="unit">T</span>
+  {%- else -%}
+    {{ '%.1f'|format(n) }}<span class="unit">KG</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_short(n) -%}
+  {%- set n = (n or 0)|float -%}
+  {%- if n >= 1000000 -%}
+    {{ '%.1f'|format(n/1000000) }}M
+  {%- elif n >= 1000 -%}
+    {{ '%.0f'|format(n/1000) }}K
+  {%- else -%}
+    {{ n|int }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro initials(name) -%}
+  {%- set parts = (name or '').strip().split() -%}
+  {%- if parts|length >= 2 -%}
+    {{ parts[0][0]|upper }}{{ parts[1][0]|upper }}
+  {%- elif parts|length == 1 -%}
+    {{ parts[0][:2]|upper }}
+  {%- else -%}??{%- endif -%}
+{%- endmacro %}
+
+{# === Segmented bar (0-12 segments based on percent, CLAMPED 0-100) === #}
+{% macro segbar(pct, color) -%}
+  {%- set pct = (pct or 0)|int -%}
+  {%- if pct > 100 %}{% set pct = 100 %}{% endif -%}
+  {%- if pct < 0 %}{% set pct = 0 %}{% endif -%}
+  {%- set filled = (pct / 100 * 12)|round(0)|int -%}
+  {%- if filled > 12 %}{% set filled = 12 %}{% endif -%}
+  <div class="d2-segbar">
+    {% for i in range(12) %}
+      <div class="seg {% if i < filled %}on{% if color %} {{ color }}{% endif %}{% endif %}"></div>
+    {% endfor %}
+    <span class="pct">{{ pct }}%</span>
+  </div>
+{%- endmacro %}
+
+{# === Compute sparkline max === #}
+{% set spark_max = 1 %}
+{% if monthly_sales %}
+  {% for m in monthly_sales %}
+    {% if (m.total or 0) > spark_max %}{% set spark_max = m.total %}{% endif %}
+  {% endfor %}
+{% endif %}
+
+{# === Trend calculation === #}
+{% set trend_pct = 0 %}
+{% set trend_dir = 'up' %}
+{% if monthly_sales and monthly_sales|length > 1 %}
+  {% set prev = monthly_sales[-2].total or 0 %}
+  {% set curr = monthly_sales[-1].total or 0 %}
+  {% if prev > 0 %}
+    {% set trend_pct = ((curr - prev) / prev * 100)|round(0)|int %}
+    {% if trend_pct < 0 %}{% set trend_dir = 'down' %}{% endif %}
+  {% endif %}
+{% endif %}
+
+{# === Sotuv plan vs actual (sample %) === #}
+{% set sales_progress = 67 %}
+{% if stats.today_sales and stats.today_sales > 0 %}
+  {% set sales_progress = ((stats.today_sales / 15000000) * 100)|round(0)|int %}
+  {% if sales_progress > 100 %}{% set sales_progress = 100 %}{% endif %}
+{% endif %}
+
+<div class="d2" id="d2-root">
+  <div class="d2-page">
+
+    <!-- ═══════════════════════ COCKPIT BAR ═══════════════════════ -->
+    <header class="d2-bar">
+      <div class="d2-bar-logo">
+        <span class="live-dot"></span>
+        Totli&nbsp;·&nbsp;Cockpit
+      </div>
+      <div class="d2-bar-status">
+        <span>Sotuv <strong>{{ stats.today_orders or 0 }}</strong></span>
+        <span>Qarz <strong>{{ fmt_short(stats.total_debt) }}</strong></span>
+        <span>Ombor <strong>{{ low_stock_count }}</strong></span>
+        <span>Xodim <strong>{{ today_staff|length }}</strong></span>
+      </div>
+      <div class="d2-bar-clock" id="d2-clock">--:--:--</div>
+      <div class="d2-bar-user">
+        <div class="user-info">
+          {{ current_user.username }}
+          <span class="role">{{ current_user.role|capitalize }}</span>
+        </div>
+        <a href="/logout" class="user-logout" title="Chiqish">
+          <i class="bi bi-box-arrow-right"></i>
+        </a>
+      </div>
+    </header>
+
+    <!-- ═══════════════════════ GREETING ═══════════════════════ -->
+    <section class="d2-greeting">
+      <span class="session" id="d2-session">Yuklanmoqda</span>
+      <h1 class="headline">
+        Bugun <span class="num">{{ fmt_short(stats.today_sales) }}</span> so'm sotuv,
+        <span class="num">{% if stats.today_production >= 1000 %}{{ '%.2f'|format(stats.today_production/1000) }} t{% else %}{{ stats.today_production|int }} kg{% endif %}</span> ishlab chiqarish,
+        <span class="num">{{ stats.today_orders or 0 }}</span> ta buyurtma.
+      </h1>
+    </section>
+
+    <!-- ═══════════════════════ METRICS GRID ═══════════════════════ -->
+    <section class="d2-metrics">
+
+      <!-- Sotuv -->
+      <div class="d2-metric">
+        <div class="d2-metric-label">
+          <span class="dot"></span> Bugungi Sotuv
+        </div>
+        <div class="d2-metric-value">{{ fmt_money(stats.today_sales) }} <span class="unit">so'm</span></div>
+        <div class="d2-metric-sub">
+          <span>{{ stats.today_orders or 0 }} buyurtma</span>
+          {% if trend_pct != 0 %}
+            <span class="d2-metric-delta {{ trend_dir }}">
+              {{ '+' if trend_dir == 'up' else '−' }}{{ trend_pct|abs }}%
+            </span>
+          {% endif %}
+        </div>
+        <div class="d2-spark">
+          {% if monthly_sales %}
+            {% set last_idx = monthly_sales|length - 1 %}
+            {% for m in monthly_sales %}
+              {% set pct = ((m.total or 0) / spark_max * 100)|round(0)|int if spark_max > 0 else 0 %}
+              <div class="bar {{ 'high' if loop.index0 == last_idx else '' }}"
+                   style="height: {{ pct }}%;" title="{{ m.month }}: {{ fmt_short(m.total) }}"></div>
+            {% endfor %}
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- Ishlab chiqarish -->
+      <div class="d2-metric">
+        <div class="d2-metric-label">
+          <span class="dot cyan"></span> Ishlab Chiqarish
+        </div>
+        <div class="d2-metric-value">{{ fmt_kg(stats.today_production) }}</div>
+        <div class="d2-metric-sub">
+          <span>{{ stats.today_tayyor_kg|int }}kg tayyor · {{ stats.today_yarim_tayyor_kg|int }}kg yarim</span>
+        </div>
+        {# Tayyor/Jami ratio — qaysi nisbatda tayyor bo'lib chiqdi #}
+        {% set tayyor_ratio = 0 %}
+        {% if stats.today_production > 0 %}
+          {% set tayyor_ratio = (stats.today_tayyor_kg / stats.today_production * 100)|int %}
+        {% endif %}
+        {{ segbar(tayyor_ratio, 'cyan') }}
+      </div>
+
+      <!-- Qarz -->
+      <div class="d2-metric">
+        <div class="d2-metric-label">
+          <span class="dot {{ 'alert' if overdue_debts_count > 0 else 'amber' }}"></span> Mijoz Qarzi
+        </div>
+        <div class="d2-metric-value">{{ fmt_money(stats.total_debt) }} <span class="unit">so'm</span></div>
+        <div class="d2-metric-sub">
+          {% if overdue_debts_count > 0 %}
+            <span class="d2-metric-delta down">{{ overdue_debts_count }} ta kechikkan</span>
+          {% else %}
+            <span>Hammasi faol</span>
+          {% endif %}
+        </div>
+        {# Kechikkan ulushi #}
+        {% set total_debtors = pending_orders|length + completed_orders|length + overdue_debts_count %}
+        {% set overdue_pct = 0 %}
+        {% if total_debtors > 0 %}
+          {% set overdue_pct = (overdue_debts_count / total_debtors * 100)|int %}
+        {% endif %}
+        {{ segbar(overdue_pct, 'alert' if overdue_debts_count > 0 else 'amber') }}
+      </div>
+
+      <!-- Ombor -->
+      <div class="d2-metric">
+        <div class="d2-metric-label">
+          <span class="dot {{ 'alert' if low_stock_count > 5 else 'amber' }}"></span> Ombor Ogohlik
+        </div>
+        <div class="d2-metric-value">{{ low_stock_count }} <span class="unit">tovar</span></div>
+        <div class="d2-metric-sub">
+          {% if low_stock_items %}
+            <span>{{ low_stock_items[0].name[:20] }}{% if low_stock_items|length > 1 %}, +{{ low_stock_items|length - 1 }} ta{% endif %}</span>
+          {% else %}
+            <span>Hammasi to'liq</span>
+          {% endif %}
+        </div>
+        {# 20+ critical SKU = 100%, 0 = 0%. Bu warning shkala #}
+        {% set ombor_pct = (low_stock_count * 5)|int %}
+        {{ segbar(ombor_pct, 'alert' if low_stock_count > 5 else 'amber') }}
+      </div>
+
+    </section>
+
+    <!-- ═══════════════════════ BODY: STREAM + RAIL ═══════════════════════ -->
+    <section class="d2-body">
+
+      <!-- WORKFLOW STREAM -->
+      <div class="d2-panel">
+        <div class="d2-panel-h">
+          <div class="title">Sotuv oqimi</div>
+          <div class="meta">live · bugun</div>
+        </div>
+        <div class="d2-tabs" id="d2-tabs">
+          <div class="d2-tab active" data-tab="pending">
+            Kutmoqda <span class="n">{{ pending_orders|length }}</span>
+          </div>
+          <div class="d2-tab" data-tab="progress">
+            Jarayonda <span class="n">{{ in_progress_count }}</span>
+          </div>
+          <div class="d2-tab" data-tab="done">
+            Tayyor <span class="n">{{ completed_orders|length }}</span>
+          </div>
+        </div>
+
+        <!-- PENDING -->
+        <div class="d2-stream" data-pane="pending">
+          {% if pending_orders %}
+            {% for o in pending_orders %}
+              <a href="/sales/{{ o.id }}" class="d2-row">
+                <span class="id">S-{{ '%04d'|format(o.id) }}</span>
+                <span class="partner">
+                  {{ o.partner.name if o.partner else '—' }}
+                  <span class="time">{{ o.date.strftime('%H:%M') if o.date else '—' }}</span>
+                </span>
+                <span class="amount">{{ fmt_short(o.total or 0) }}</span>
+                <span class="status">Draft</span>
+              </a>
+            {% endfor %}
+          {% else %}
+            <div class="d2-empty">Kutmoqda buyurtma yo'q</div>
+          {% endif %}
+        </div>
+
+        <!-- PROGRESS -->
+        <div class="d2-stream" data-pane="progress" style="display:none;">
+          <div class="d2-empty">{{ in_progress_count }} ta ishlab chiqarish jarayonda — <a href="/production" style="color: var(--d2-signal);">batafsil</a></div>
+        </div>
+
+        <!-- DONE -->
+        <div class="d2-stream" data-pane="done" style="display:none;">
+          {% if completed_orders %}
+            {% for o in completed_orders %}
+              <a href="/sales/{{ o.id }}" class="d2-row">
+                <span class="id">S-{{ '%04d'|format(o.id) }}</span>
+                <span class="partner">
+                  {{ o.partner.name if o.partner else '—' }}
+                  <span class="time">{{ o.date.strftime('%H:%M') if o.date else '—' }}</span>
+                </span>
+                <span class="amount">{{ fmt_short(o.total or 0) }}</span>
+                <span class="status done">{{ o.status|capitalize }}</span>
+              </a>
+            {% endfor %}
+          {% else %}
+            <div class="d2-empty">Bugun tugatilgan buyurtma yo'q</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- RAIL -->
+      <div class="d2-rail">
+
+        <!-- Low stock -->
+        <div class="d2-panel">
+          <div class="d2-panel-h">
+            <div class="title">Ombor ogohlik</div>
+            <div class="meta">{{ low_stock_count }} sku</div>
+          </div>
+          <div class="d2-stock">
+            {% if low_stock_items %}
+              {% for item in low_stock_items %}
+                {% set pct = (((item.qty or 0) / 10) * 100)|round(0)|int %}
+                {% if pct > 100 %}{% set pct = 100 %}{% endif %}
+                {% set filled = (pct / 100 * 8)|round(0)|int %}
+                {% set is_crit = pct < 20 %}
+                <div class="d2-stock-row">
+                  <div>
+                    <div class="d2-stock-name">{{ item.name }}</div>
+                    <div class="d2-stock-bar">
+                      {% for i in range(8) %}
+                        <div class="seg {% if i < filled %}on{% if is_crit %} critical{% endif %}{% endif %}"></div>
+                      {% endfor %}
+                    </div>
+                  </div>
+                  <div class="d2-stock-qty {% if is_crit %}alert{% endif %}">
+                    {{ '%.1f'|format(item.qty|float) }}{{ item.unit }}
+                  </div>
+                </div>
+              {% endfor %}
+            {% else %}
+              <div class="d2-empty">ALL OK</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Staff -->
+        <div class="d2-panel">
+          <div class="d2-panel-h">
+            <div class="title">Xodimlar ishda</div>
+            <div class="meta">{{ today_staff|length }} kishi</div>
+          </div>
+          {% if today_staff %}
+            <div class="d2-staff">
+              {% for s in today_staff[:18] %}
+                <div class="d2-staff-cell" title="{{ s.name }} · {{ s.position }}">
+                  <div class="d2-staff-avatar">
+                    {% if s.photo %}
+                      <img src="{{ s.photo }}" alt="" onerror="this.style.display='none';this.parentNode.innerText='{{ initials(s.name) }}';">
+                    {% else %}{{ initials(s.name) }}{% endif %}
+                  </div>
+                  <div class="d2-staff-name">{{ (s.name or '').split(' ')[0][:8] }}</div>
+                  <div class="d2-staff-time">{{ s.check_in }}</div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="d2-empty">Hozir hech kim qayd qilinmagan</div>
+          {% endif %}
+        </div>
+
+      </div>
+
+    </section>
+
+    <!-- ═══════════════════════ ACTIONS ═══════════════════════ -->
+    <section class="d2-actions">
+      <div class="d2-actions-h">Tezkor amallar</div>
+      <div class="d2-actions-grid">
+        <a href="/sales/pos" class="d2-action">
+          <span class="key">P</span>
+          <span class="label">POS</span>
+          <span class="desc">/sales/pos</span>
+        </a>
+        <a href="/production/new" class="d2-action">
+          <span class="key">N</span>
+          <span class="label">Ishlab chiqarish</span>
+          <span class="desc">/production</span>
+        </a>
+        <a href="/qoldiqlar" class="d2-action">
+          <span class="key">Q</span>
+          <span class="label">Qoldiqlar</span>
+          <span class="desc">/qoldiqlar</span>
+        </a>
+        <a href="/agents" class="d2-action">
+          <span class="key">A</span>
+          <span class="label">Agentlar</span>
+          <span class="desc">/agents</span>
+        </a>
+        <a href="/reports/sales" class="d2-action">
+          <span class="key">R</span>
+          <span class="label">Hisobotlar</span>
+          <span class="desc">/reports</span>
+        </a>
+        <a href="/?view=premium" class="d2-action">
+          <span class="key">←</span>
+          <span class="label">Eski dizayn</span>
+          <span class="desc">/?view=premium</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  document.body.classList.add('d2-active');
+
+  // Live clock — HH:MM:SS
+  const clockEl = document.getElementById('d2-clock');
+  function tick() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    const s = String(d.getSeconds()).padStart(2, '0');
+    if (clockEl) clockEl.textContent = `${h}:${m}:${s}`;
+  }
+  tick();
+  setInterval(tick, 1000);
+
+  // Session label — date
+  const sessionEl = document.getElementById('d2-session');
+  if (sessionEl) {
+    const d = new Date();
+    const monthShort = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+    sessionEl.textContent = `SESSION · ${String(d.getDate()).padStart(2,'0')}.${monthShort[d.getMonth()]}.${d.getFullYear()} · ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }
+
+  // Tab switching
+  const tabs = document.querySelectorAll('#d2-tabs .d2-tab');
+  const panes = document.querySelectorAll('[data-pane]');
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      const target = t.dataset.tab;
+      tabs.forEach(x => x.classList.toggle('active', x === t));
+      panes.forEach(p => p.style.display = (p.dataset.pane === target) ? '' : 'none');
+    });
+  });
+
+  // Keyboard shortcuts (P, N, Q, A, R)
+  const shortcuts = { 'p': '/sales/pos', 'n': '/production/new', 'q': '/qoldiqlar', 'a': '/agents', 'r': '/reports/sales' };
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const key = e.key.toLowerCase();
+    if (shortcuts[key]) {
+      e.preventDefault();
+      window.location.href = shortcuts[key];
+    }
+  });
+})();
+</script>
+{% endblock %}

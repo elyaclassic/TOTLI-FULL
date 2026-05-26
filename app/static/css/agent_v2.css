@@ -1,0 +1,783 @@
+/* ============================================================
+   TOTLI BI — Agent Dashboard v2 — "Mobile Cockpit"
+   Mobile-first dark cockpit; bottom nav + FAB + touch-first
+   Fonts: JetBrains Mono (data) + Inter Tight (UI)
+   ============================================================ */
+
+/* === TOKENS === */
+.av2 {
+  --av-bg:          #0A0E1A;
+  --av-bg-2:        #0F1420;
+  --av-surface:     #111827;
+  --av-surface-2:   #1A2030;
+  --av-line:        #1F2937;
+  --av-line-bright: #3A4660;
+
+  --av-text:        #E5E7EB;
+  --av-text-2:      #9CA3AF;
+  --av-text-3:      #6B7280;
+
+  --av-signal:      #00FF88;
+  --av-signal-dim:  #00B86A;
+  --av-signal-bg:   rgba(0, 255, 136, 0.10);
+  --av-signal-glow: rgba(0, 255, 136, 0.25);
+
+  --av-amber:       #FFB020;
+  --av-amber-bg:    rgba(255, 176, 32, 0.10);
+  --av-alert:       #FF4757;
+  --av-alert-bg:    rgba(255, 71, 87, 0.10);
+  --av-cyan:        #5DADE2;
+
+  --av-mono:        "JetBrains Mono", "SF Mono", Consolas, monospace;
+  --av-sans:        "Inter Tight", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --av-r:           8px;
+  --av-r-2:         14px;
+  --av-r-3:         22px;
+
+  --av-t:           180ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  --av-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --av-nav-h:       64px;
+}
+
+/* === RESET === */
+.av2, .av2 * { box-sizing: border-box; margin: 0; padding: 0; }
+
+.av2 {
+  font-family: var(--av-sans);
+  color: var(--av-text);
+  background: var(--av-bg);
+  min-height: 100vh;
+  line-height: 1.5;
+  font-feature-settings: "tnum", "ss01";
+  letter-spacing: -0.005em;
+  padding-bottom: calc(var(--av-nav-h) + var(--av-safe-bottom) + 16px);
+  position: relative;
+  overflow-x: hidden;
+}
+
+body.av2-active {
+  background: var(--av-bg) !important;
+  color: var(--av-text);
+}
+
+body.av2-active .main-content {
+  margin-left: 0 !important;
+  padding: 0 !important;
+  background: transparent !important;
+}
+
+/* Sidebar yashirish (mobile agent uchun) */
+body.av2-active .sidebar,
+body.av2-active .top-bar,
+body.av2-active .mobile-header { display: none !important; }
+
+/* ============================================================
+   HEADER — sticky, agent profil
+   ============================================================ */
+.av-header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: linear-gradient(180deg, var(--av-surface) 0%, var(--av-bg) 100%);
+  padding: 16px 20px 14px;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 16px);
+  border-bottom: 1px solid var(--av-line);
+}
+
+.av-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.av-avatar {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--av-signal), var(--av-signal-dim));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0A0E1A;
+  font-family: var(--av-mono);
+  font-weight: 700;
+  font-size: 18px;
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.35), inset 0 0 0 2px rgba(255, 255, 255, 0.1);
+  position: relative;
+}
+
+.av-avatar::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--av-signal);
+  border: 2px solid var(--av-bg);
+  box-shadow: 0 0 6px var(--av-signal);
+  animation: av-pulse 2s ease-in-out infinite;
+}
+
+.av-greeting {
+  flex: 1;
+  min-width: 0;
+}
+
+.av-greeting .salom {
+  font-family: var(--av-sans);
+  font-size: 12px;
+  color: var(--av-text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  margin-bottom: 1px;
+  font-weight: 400;
+}
+
+.av-greeting .name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--av-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.av-greeting .region {
+  font-family: var(--av-mono);
+  font-size: 11px;
+  color: var(--av-text-2);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.av-greeting .region::before {
+  content: "📍";
+  font-size: 10px;
+}
+
+.av-header-action {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--av-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--av-text-2);
+  border: 1px solid var(--av-line);
+  text-decoration: none;
+  font-size: 18px;
+  transition: all var(--av-t);
+}
+
+.av-header-action:hover {
+  color: var(--av-alert);
+  border-color: var(--av-alert);
+}
+
+/* Live clock — small */
+.av-clock {
+  font-family: var(--av-mono);
+  font-size: 10px;
+  color: var(--av-signal);
+  letter-spacing: 0.1em;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.av-clock::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--av-signal);
+  box-shadow: 0 0 6px var(--av-signal);
+  animation: av-pulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   HERO KPI — katta sotuv ko'rsatkichi
+   ============================================================ */
+.av-hero {
+  padding: 28px 20px 24px;
+  text-align: center;
+  background: radial-gradient(ellipse at top, rgba(0, 255, 136, 0.08) 0%, transparent 60%);
+  position: relative;
+}
+
+.av-hero::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  width: 48px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--av-signal-dim), transparent);
+}
+
+.av-hero .label {
+  font-family: var(--av-sans);
+  font-size: 13px;
+  color: var(--av-text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+.av-hero .value {
+  font-family: var(--av-mono);
+  font-size: 52px;
+  font-weight: 700;
+  color: var(--av-signal);
+  text-shadow: 0 0 24px rgba(0, 255, 136, 0.35);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.03em;
+}
+
+.av-hero .value .unit {
+  font-size: 15px;
+  color: var(--av-text-2);
+  font-weight: 400;
+  margin-left: 6px;
+  letter-spacing: 0.04em;
+  text-shadow: none;
+}
+
+.av-hero .sub {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--av-text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.av-hero .sub .delta {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--av-signal-bg);
+  color: var(--av-signal);
+  font-family: var(--av-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* ============================================================
+   KPI ROW — 3 ta kichik
+   ============================================================ */
+.av-kpis {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 0 16px 20px;
+}
+
+.av-kpi {
+  background: var(--av-surface);
+  border: 1px solid var(--av-line);
+  border-radius: var(--av-r-2);
+  padding: 14px 10px;
+  text-align: center;
+  position: relative;
+  transition: all var(--av-t);
+}
+
+.av-kpi:active { transform: scale(0.97); }
+
+.av-kpi-label {
+  font-family: var(--av-sans);
+  font-size: 11px;
+  color: var(--av-text-3);
+  letter-spacing: 0;
+  text-transform: none;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.av-kpi-value {
+  font-family: var(--av-mono);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--av-text);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.av-kpi-value.signal { color: var(--av-signal); }
+.av-kpi-value.amber  { color: var(--av-amber);  }
+
+.av-kpi-bar {
+  margin-top: 8px;
+  display: flex;
+  gap: 1px;
+  height: 4px;
+}
+
+.av-kpi-bar .seg {
+  flex: 1;
+  background: var(--av-line);
+  border-radius: 1px;
+  transition: background var(--av-t);
+}
+
+.av-kpi-bar .seg.on { background: var(--av-signal); }
+.av-kpi-bar .seg.on.amber { background: var(--av-amber); }
+
+/* ============================================================
+   SECTION — bo'lim sarlavhasi
+   ============================================================ */
+.av-section {
+  padding: 20px 16px 0;
+}
+
+.av-section-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 0 4px;
+}
+
+.av-section-h .title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--av-text);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.01em;
+}
+
+.av-section-h .title::before {
+  content: "";
+  width: 4px;
+  height: 16px;
+  background: var(--av-signal);
+  border-radius: 2px;
+  box-shadow: 0 0 10px var(--av-signal-glow);
+}
+
+.av-section-h .count {
+  font-family: var(--av-mono);
+  font-size: 11px;
+  color: var(--av-text-3);
+  letter-spacing: 0.08em;
+  padding: 3px 8px;
+  background: var(--av-surface-2);
+  border-radius: 999px;
+  border: 1px solid var(--av-line);
+}
+
+/* ============================================================
+   PARTNER LIST — yo'l davomida vizit
+   ============================================================ */
+.av-partners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.av-partner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--av-surface);
+  border: 1px solid var(--av-line);
+  border-radius: var(--av-r-2);
+  border-left: 4px solid var(--av-line-bright);
+  text-decoration: none;
+  color: var(--av-text);
+  transition: all var(--av-t);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.av-partner:hover { border-color: var(--av-line-bright); background: var(--av-surface-2); }
+.av-partner:active { transform: scale(0.98); }
+.av-partner.done { border-left-color: var(--av-signal); opacity: 0.7; }
+.av-partner.urgent { border-left-color: var(--av-amber); }
+.av-partner.missed { border-left-color: var(--av-alert); }
+
+.av-partner-avatar {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--av-mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.av-partner-avatar.c0 { background: linear-gradient(135deg, #ec4899, #db2777); }
+.av-partner-avatar.c1 { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+.av-partner-avatar.c2 { background: linear-gradient(135deg, #f59e0b, #d97706); }
+.av-partner-avatar.c3 { background: linear-gradient(135deg, #10b981, #059669); }
+.av-partner-avatar.c4 { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+.av-partner-avatar.c5 { background: linear-gradient(135deg, #ef4444, #dc2626); }
+
+.av-partner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.av-partner-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--av-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.av-partner-meta {
+  display: flex;
+  gap: 8px;
+  font-family: var(--av-mono);
+  font-size: 11px;
+  color: var(--av-text-3);
+}
+
+.av-partner-meta .time {
+  color: var(--av-signal);
+}
+
+.av-partner-meta .addr {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.av-partner-bal {
+  font-family: var(--av-mono);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.av-partner-bal.neg {
+  color: var(--av-alert);
+  background: var(--av-alert-bg);
+}
+
+.av-partner-bal.pos {
+  color: var(--av-signal);
+  background: var(--av-signal-bg);
+}
+
+.av-partner-bal.zero {
+  color: var(--av-text-3);
+}
+
+/* ============================================================
+   ORDER LIST — recent orders
+   ============================================================ */
+.av-orders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.av-order {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--av-surface);
+  border: 1px solid var(--av-line);
+  border-radius: var(--av-r);
+  text-decoration: none;
+  color: var(--av-text);
+  transition: all var(--av-t);
+}
+
+.av-order:active { transform: scale(0.98); }
+
+.av-order-info .num {
+  font-family: var(--av-mono);
+  font-size: 11px;
+  color: var(--av-text-3);
+  margin-bottom: 2px;
+}
+
+.av-order-info .cust {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--av-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.av-order-amount {
+  font-family: var(--av-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--av-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.av-order-status {
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  text-transform: capitalize;
+  font-weight: 500;
+  background: var(--av-amber-bg);
+  color: var(--av-amber);
+  border: 1px solid rgba(255, 176, 32, 0.2);
+}
+
+.av-order-status.done {
+  background: var(--av-signal-bg);
+  color: var(--av-signal);
+  border-color: rgba(0, 255, 136, 0.2);
+}
+
+/* ============================================================
+   EMPTY STATE
+   ============================================================ */
+.av-empty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--av-text-3);
+  font-family: var(--av-mono);
+  font-size: 12px;
+  background: var(--av-surface);
+  border-radius: var(--av-r-2);
+  border: 1px dashed var(--av-line);
+}
+
+/* ============================================================
+   FAB — Floating Action Button
+   ============================================================ */
+.av-fab {
+  position: fixed;
+  bottom: calc(var(--av-nav-h) + var(--av-safe-bottom) + 20px);
+  right: 16px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--av-signal) 0%, var(--av-signal-dim) 100%);
+  color: #0A0E1A;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow:
+    0 8px 24px rgba(0, 0, 0, 0.4),
+    0 0 24px rgba(0, 255, 136, 0.4);
+  z-index: 90;
+  transition: all var(--av-t);
+}
+
+.av-fab:active {
+  transform: scale(0.92);
+}
+
+.av-fab:hover {
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 32px rgba(0, 255, 136, 0.55);
+}
+
+/* ============================================================
+   BOTTOM NAV — 4 tab
+   ============================================================ */
+.av-bnav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(var(--av-nav-h) + var(--av-safe-bottom));
+  padding-bottom: var(--av-safe-bottom);
+  background: rgba(17, 24, 39, 0.95);
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--av-line);
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  z-index: 80;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.av-bnav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-decoration: none;
+  color: var(--av-text-3);
+  font-size: 10px;
+  font-weight: 500;
+  font-family: var(--av-sans);
+  transition: color var(--av-t);
+  -webkit-tap-highlight-color: transparent;
+  position: relative;
+}
+
+.av-bnav-item .ico {
+  font-size: 22px;
+  line-height: 1;
+  display: block;
+}
+
+.av-bnav-item.active {
+  color: var(--av-signal);
+}
+
+.av-bnav-item.active::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 32px;
+  height: 3px;
+  background: var(--av-signal);
+  border-radius: 0 0 3px 3px;
+  box-shadow: 0 2px 8px var(--av-signal-glow);
+}
+
+.av-bnav-item:active { background: rgba(0, 255, 136, 0.06); }
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes av-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.5; transform: scale(0.85); }
+}
+
+@keyframes av-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.av-hero, .av-kpis, .av-section {
+  animation: av-fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.av-hero { animation-delay: 0.05s; }
+.av-kpis { animation-delay: 0.1s; }
+.av-section:nth-of-type(1) { animation-delay: 0.15s; }
+.av-section:nth-of-type(2) { animation-delay: 0.2s; }
+.av-section:nth-of-type(3) { animation-delay: 0.25s; }
+
+/* ============================================================
+   FOCUS / TOUCH OPTIMIZATIONS
+   ============================================================ */
+.av2 *:focus-visible {
+  outline: 2px solid var(--av-signal);
+  outline-offset: 2px;
+}
+
+.av2 a, .av2 button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Prevent iOS zoom on inputs */
+.av2 input, .av2 select, .av2 textarea {
+  font-size: 16px !important;
+}
+
+/* ============================================================
+   TABLET — kichik desktop (768-1199px) — 2 ustun grid
+   ============================================================ */
+@media (min-width: 768px) {
+  .av2 {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Header keng */
+  .av-header {
+    padding: 20px 24px 16px;
+    border-radius: 0 0 var(--av-r-2) var(--av-r-2);
+    margin-top: 0;
+  }
+
+  /* Hero katta */
+  .av-hero {
+    padding: 36px 24px 32px;
+  }
+
+  .av-hero .value {
+    font-size: 64px;
+  }
+
+  /* KPI 3 → 6 ta yoki kattaroq */
+  .av-kpis {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    padding: 0 24px 24px;
+    max-width: 720px;
+    margin: 0 auto;
+  }
+
+  .av-kpi-value { font-size: 24px; }
+
+  /* Section 2 ustun grid */
+  .av-section {
+    padding: 24px;
+  }
+
+  /* Partner cards 2 ustun */
+  .av-partners {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  /* Orders 2 ustun */
+  .av-orders {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+}
+
+/* ============================================================
+   DESKTOP (1200px+) — 3 ustun layout
+   ============================================================ */
+@media (min-width: 1200px) {
+  .av-partners {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .av-orders {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  /* FAB doim o'ng pastida */
+  .av-fab {
+    right: 32px;
+  }
+}

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/css/agent_v2.css?v=20260526-3">
+<style>
+  body.av2-active { background: #0A0E1A !important; }
+  body.av2-active .main-content { padding: 0 !important; margin-left: 0 !important; }
+</style>
+{% endblock %}
+
+{% block content %}
+{# === Macros === #}
+{% macro fmt_money(n) -%}
+  {%- set n = (n or 0)|float -%}
+  {%- if n >= 1000000 -%}
+    {{ '%.2f'|format(n/1000000) }}<span class="unit">M som</span>
+  {%- elif n >= 1000 -%}
+    {{ '%.1f'|format(n/1000) }}<span class="unit">K som</span>
+  {%- else -%}
+    {{ n|int }}<span class="unit">som</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_short(n) -%}
+  {%- set n = (n or 0)|float -%}
+  {%- if n >= 1000000 -%}{{ '%.1f'|format(n/1000000) }}M
+  {%- elif n >= 1000 -%}{{ '%.0f'|format(n/1000) }}K
+  {%- else -%}{{ n|int }}{%- endif -%}
+{%- endmacro %}
+
+{% macro initials(name) -%}
+  {%- set parts = (name or '').strip().split() -%}
+  {%- if parts|length >= 2 -%}{{ parts[0][0]|upper }}{{ parts[1][0]|upper }}
+  {%- elif parts|length == 1 -%}{{ parts[0][:2]|upper }}
+  {%- else -%}??{%- endif -%}
+{%- endmacro %}
+
+{% macro tinybar(pct, color) -%}
+  {%- set pct = (pct or 0)|int -%}
+  {%- if pct > 100 %}{% set pct = 100 %}{% endif -%}
+  {%- if pct < 0 %}{% set pct = 0 %}{% endif -%}
+  {%- set filled = (pct / 100 * 8)|round(0)|int -%}
+  <div class="av-kpi-bar">
+    {% for i in range(8) %}
+      <div class="seg {% if i < filled %}on{% if color %} {{ color }}{% endif %}{% endif %}"></div>
+    {% endfor %}
+  </div>
+{%- endmacro %}
+
+<div class="av2">
+
+  <!-- ═══════════════════ HEADER ═══════════════════ -->
+  <header class="av-header">
+    <div class="av-header-row">
+      <div class="av-avatar">{{ initials(agent.name) }}</div>
+      <div class="av-greeting">
+        <div class="salom">Salom</div>
+        <div class="name">{{ agent.name }}</div>
+        <div class="region">{{ agent.region }}</div>
+      </div>
+      <a href="/logout" class="av-header-action" title="Chiqish"><i class="bi bi-box-arrow-right"></i></a>
+    </div>
+    <div class="av-clock" id="av-clock">--:--</div>
+  </header>
+
+  <!-- ═══════════════════ HERO ═══════════════════ -->
+  <section class="av-hero">
+    <div class="label">Bugungi Sotuv</div>
+    <div class="value">{{ fmt_money(kpi.today_sales) }}</div>
+    <div class="sub">
+      <span>{{ kpi.today_orders }} ta buyurtma</span>
+      {% if kpi.today_sales > 0 %}
+        <span class="delta">↗ faol</span>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ═══════════════════ 3 KPI ═══════════════════ -->
+  <section class="av-kpis">
+    <div class="av-kpi">
+      <div class="av-kpi-label">Vizit</div>
+      <div class="av-kpi-value signal">{{ kpi.visits_completed }}/{{ kpi.visits_total }}</div>
+      {{ tinybar(kpi.visits_percent, 'on') }}
+    </div>
+    <div class="av-kpi">
+      <div class="av-kpi-label">Buyurtma</div>
+      <div class="av-kpi-value">{{ kpi.today_orders }}</div>
+      {{ tinybar((kpi.today_orders * 10)|int, '') }}
+    </div>
+    <div class="av-kpi">
+      <div class="av-kpi-label">Oylik plan</div>
+      <div class="av-kpi-value {% if kpi.target_percent >= 100 %}signal{% else %}amber{% endif %}">
+        {% if kpi.target_percent >= 200 %}
+          {{ '%.1f'|format(kpi.target_percent / 100) }}×
+        {% else %}
+          {{ kpi.target_percent }}%
+        {% endif %}
+      </div>
+      {{ tinybar(kpi.target_percent, 'on' if kpi.target_percent >= 100 else 'amber') }}
+    </div>
+  </section>
+
+  <!-- ═══════════════════ BUGUNGI VIZIT ═══════════════════ -->
+  <section class="av-section">
+    <div class="av-section-h">
+      <div class="title">Bugungi vizit</div>
+      <span class="count">{{ schedule|length }} ta</span>
+    </div>
+    <div class="av-partners">
+      {% if schedule %}
+        {% for s in schedule %}
+          <a href="/agent/partner/{{ s.partner_id }}" class="av-partner {% if s.completed %}done{% endif %}">
+            <div class="av-partner-avatar c{{ loop.index0 % 6 }}">{{ initials(s.name) }}</div>
+            <div class="av-partner-body">
+              <div class="av-partner-name">{{ s.name }}</div>
+              <div class="av-partner-meta">
+                <span class="time">{{ s.time }}</span>
+                <span class="addr">{{ s.address }}</span>
+              </div>
+            </div>
+            {% if s.balance > 0 %}
+              <div class="av-partner-bal neg">−{{ fmt_short(s.balance) }}</div>
+            {% elif s.balance < 0 %}
+              <div class="av-partner-bal pos">+{{ fmt_short(s.balance|abs) }}</div>
+            {% else %}
+              <div class="av-partner-bal zero">—</div>
+            {% endif %}
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="av-empty">Bugun vizit rejalashtirilmagan</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ═══════════════════ SO'NGGI BUYURTMALAR ═══════════════════ -->
+  <section class="av-section">
+    <div class="av-section-h">
+      <div class="title">So'nggi buyurtmalar</div>
+      <span class="count">7 kun</span>
+    </div>
+    <div class="av-orders">
+      {% if recent_orders %}
+        {% for o in recent_orders %}
+          <a href="/sales/{{ o.id }}" class="av-order">
+            <div class="av-order-info">
+              <div class="num">{{ o.number }} · {{ o.date }}</div>
+              <div class="cust">{{ o.customer }}</div>
+            </div>
+            <div class="av-order-amount">{{ fmt_short(o.total) }}</div>
+            <div class="av-order-status {% if o.status in ('completed', 'delivered') %}done{% endif %}">{{ o.status|capitalize }}</div>
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="av-empty">So'nggi 7 kunda buyurtma yo'q</div>
+      {% endif %}
+    </div>
+  </section>
+
+  <!-- ═══════════════════ AKTIV MIJOZLAR ═══════════════════ -->
+  <section class="av-section">
+    <div class="av-section-h">
+      <div class="title">Aktiv mijozlar</div>
+      <span class="count">30 kun</span>
+    </div>
+    <div class="av-partners">
+      {% if customers %}
+        {% for c in customers %}
+          <a href="/agent/partner/{{ c.id }}" class="av-partner">
+            <div class="av-partner-avatar c{{ loop.index0 % 6 }}">{{ initials(c.name) }}</div>
+            <div class="av-partner-body">
+              <div class="av-partner-name">{{ c.name }}</div>
+              <div class="av-partner-meta">
+                <span class="time">{{ c.orders_count }} buyurtma</span>
+                <span class="addr">{{ fmt_short(c.total_sum) }} so'm</span>
+              </div>
+            </div>
+            {% if c.balance > 0 %}
+              <div class="av-partner-bal neg">−{{ fmt_short(c.balance) }}</div>
+            {% elif c.balance < 0 %}
+              <div class="av-partner-bal pos">+{{ fmt_short(c.balance|abs) }}</div>
+            {% else %}
+              <div class="av-partner-bal zero">—</div>
+            {% endif %}
+          </a>
+        {% endfor %}
+      {% else %}
+        <div class="av-empty">Aktiv mijozlar yo'q</div>
+      {% endif %}
+    </div>
+  </section>
+
+</div>
+
+<!-- ═══════════════════ FAB — Yangi buyurtma ═══════════════════ -->
+<a href="/agents/new-order" class="av-fab" title="Yangi buyurtma"><i class="bi bi-plus-lg"></i></a>
+
+<!-- ═══════════════════ BOTTOM NAV ═══════════════════ -->
+<nav class="av-bnav">
+  <a href="/dashboard/agent/v2" class="av-bnav-item active">
+    <i class="bi bi-house-door-fill ico"></i>
+    <div>Bosh</div>
+  </a>
+  <a href="/agents/new-order" class="av-bnav-item">
+    <i class="bi bi-plus-circle-fill ico"></i>
+    <div>Buyurtma</div>
+  </a>
+  <a href="/map" class="av-bnav-item">
+    <i class="bi bi-geo-alt-fill ico"></i>
+    <div>Xarita</div>
+  </a>
+  <a href="/agents" class="av-bnav-item">
+    <i class="bi bi-person-fill ico"></i>
+    <div>Profil</div>
+  </a>
+</nav>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+  document.body.classList.add('av2-active');
+
+  // Live clock + date
+  const clockEl = document.getElementById('av-clock');
+  const monthNames = ['yan','fev','mar','apr','may','iyn','iyl','avg','sen','okt','noy','dek'];
+  function tick() {
+    const d = new Date();
+    const h = String(d.getHours()).padStart(2, '0');
+    const m = String(d.getMinutes()).padStart(2, '0');
+    if (clockEl) clockEl.textContent = `${h}:${m} · ${d.getDate()} ${monthNames[d.getMonth()]}`;
+  }
+  tick();
+  setInterval(tick, 30000);
+})();
+</script>
+{% endblock %}

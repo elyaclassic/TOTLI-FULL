@@ -3076,6 +3076,7 @@ def _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh):
         + cash_summary["cash_sales_total"]
         - cash_summary["cash_expenses_total"]
         - cash_summary["cash_payments_out"]
+        - cash_summary.get("cash_transfers_out", 0.0)  # 2026-05-26 fix
     )
 
     return {
@@ -3104,6 +3105,7 @@ def _build_pos_shift_snapshot(db, current_user, target_date, role, pos_wh):
         "cash_sales_total": cash_summary["cash_sales_total"],
         "cash_expenses_total": cash_summary["cash_expenses_total"],
         "cash_payments_out": cash_summary["cash_payments_out"],
+        "cash_transfers_out": cash_summary.get("cash_transfers_out", 0.0),  # 2026-05-26 fix
         "previous_cash_remaining": prev_remaining,
         "previous_z_id": prev_zid,
         "cash_remaining": cash_remaining,
@@ -3297,6 +3299,7 @@ async def sales_pos_z_report(
         + cash_summary["cash_sales_total"]
         - cash_summary["cash_expenses_total"]
         - cash_summary["cash_payments_out"]
+        - cash_summary.get("cash_transfers_out", 0.0)  # 2026-05-26 fix
     )
 
     snapshot = {

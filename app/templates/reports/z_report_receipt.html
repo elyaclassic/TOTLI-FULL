@@ -115,9 +115,15 @@
     {% endfor %}
     <div class="row"><span>JAMI to'lov</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_payments_out or 0) }}</strong></span></div>
 
+    {% if (snap.cash_transfers_out or 0) > 0 %}
+    <div class="receipt-line"></div>
+    <div class="row"><strong>Kassadan kassaga:</strong><span></span></div>
+    <div class="row"><span>JAMI inkasatsiya</span><span class="right"><strong>{{ "{:,.0f}".format(snap.cash_transfers_out or 0) }}</strong></span></div>
+    {% endif %}
+
     <div class="row net-row"><span>QOLDIQ NAQD</span><span class="right">{{ "{:,.0f}".format(snap.cash_remaining or 0) }}</span></div>
     <div class="receipt-line center" style="font-size:9px; color:#666;">
-        (oldingi + savdo − harajat − to'lov)
+        (oldingi + savdo − harajat − to'lov − inkasatsiya)
     </div>
 
     <div class="thanks">
