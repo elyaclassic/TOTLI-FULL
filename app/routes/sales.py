@@ -1585,7 +1585,11 @@ async def sales_nakladnoy_excel_bulk(
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    filename = f"yuk_xati_jamlama_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    # Fayl nomi: 1 ta order bo'lsa o'sha order raqamida, ko'p bo'lsa jamlama
+    if len(orders) == 1:
+        filename = f"yuk_xati_{orders[0].number}.xlsx"
+    else:
+        filename = f"yuk_xati_jamlama_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1754,7 +1758,20 @@ async def sales_nakladnoy_excel(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Sotuv yuk xatini Excel formatda yuklab olish."""
+    """Sotuv yuk xatini Excel formatda yuklab olish — bulk endpoint'iga delegate.
+    Format izchilligi uchun (Накладная № ..., 7 ustun, ОБМЕН bo'limlari) bulk
+    funksiyasini chaqiramiz. Bulk fayl nomi 1 ta order uchun yuk_xati_{number}.xlsx.
+    """
+    return await sales_nakladnoy_excel_bulk(ids=str(order_id), db=db, current_user=current_user)
+
+
+@router.get("/{order_id}/nakladnoy/excel/legacy", include_in_schema=False)
+async def sales_nakladnoy_excel_legacy(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Eski single yuk xati (TOTLI HOLVA — Yuk xati formati) — saqlangan emergency uchun."""
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from fastapi.responses import StreamingResponse

@@ -414,6 +414,7 @@ def create_production_from_order(
             current_stage=start_stage,
             max_stage=max_stage,
             user_id=current_user.id if current_user else order.user_id,
+            order_id=order.id,  # Auto-PR bo'lganini belgilash — production_orders filter shu shartni tekshiradi
             note=f"Buyurtma {order.number} uchun avtomatik yaratilgan",
         )
         db.add(production)
