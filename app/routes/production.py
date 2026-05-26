@@ -1201,14 +1201,17 @@ async def production_orders(
     can_view_all = role in ("admin", "rahbar", "raxbar", "manager", "menejer")
     if current_user and not can_view_all:
         if is_operator_role and current_user_employee and (operator_id is None or int(operator_id or 0) == 0):
-            # Operator o'zining + hech kimga tayinlanmagan (operator_id NULL)
-            # NULL operator_id = "hech kimga biriktirilmagan" — auto-PR ham, admin qo'lda
-            # yaratganlari ham shu kategoriyaga kiradi. Order_id sharti olib tashlandi
-            # (2026-05-26): admin manual yaratgan PR'lar yashirinmasin.
-            from sqlalchemy import or_ as _or
+            # Operator o'zining + agent buyurtmadan auto-yaratilgan (operator_id NULL VA order_id bor).
+            # Admin qo'lda yaratgan manual PR (operator_id NULL VA order_id NULL) operatorga
+            # ko'rinmasligi kerak — admin operator tanlashi shart (UI required). Aks holda
+            # PR yashirin qoladi (admin'da ko'rinadi, operator'da emas). Bu intended behavior.
+            from sqlalchemy import or_ as _or, and_ as _and
             q = q.filter(_or(
                 Production.operator_id == current_user_employee.id,
-                Production.operator_id.is_(None),
+                _and(
+                    Production.operator_id.is_(None),
+                    Production.order_id.is_not(None),
+                ),
             ))
         elif not is_operator_role:
             q = q.filter(Production.user_id == current_user.id)
@@ -1589,11 +1592,16 @@ async def create_production(
     recipe = db.query(Recipe).options(joinedload(Recipe.stages)).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
-    # Operator: forma orqali tanlangan yoki joriy foydalanuvchiga bog'langan xodim
+    # Operator: forma orqali tanlangan yoki joriy foydalanuvchiga bog'langan xodim.
+    # Operator MAJBURIY — admin (employee link yo'q) tanlamasdan PR yaratsa, bu PR
+    # boshqa operatorlarga ko'rinmaydi (filter intended) → ish bekorga turadi.
     effective_operator_id = int(operator_id) if operator_id else None
     if effective_operator_id is None and current_user:
         current_user_employee = db.query(Employee).filter(Employee.user_id == current_user.id).first()
         effective_operator_id = current_user_employee.id if current_user_employee else None
+    if effective_operator_id is None:
+        msg = quote("Operator tanlanmagan. Iltimos, formada operator (xodim) tanlang.")
+        return RedirectResponse(url=f"/production?error=operator_required&detail={msg}", status_code=303)
     max_stage = _recipe_max_stage(recipe)
     today = datetime.now()
     today_prefix = f"PR-{today.strftime('%Y%m%d')}-"

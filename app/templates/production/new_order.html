@@ -110,9 +110,9 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label class="form-label">Operator (xodim)</label>
-                            <select class="form-select" name="operator_id">
-                                <option value="" {% if not current_user_employee_id %}selected{% endif %}>{{ current_user.full_name if (current_user and not current_user_employee_id) else '— Tanlash —' }}</option>
+                            <label class="form-label">Operator (xodim) <span class="text-danger">*</span></label>
+                            <select class="form-select" name="operator_id" required>
+                                <option value="" disabled {% if not current_user_employee_id %}selected{% endif %}>— Operator tanlang —</option>
                                 {% for emp in employees or [] %}
                                 <option value="{{ emp.id }}" {% if current_user_employee_id and emp.id == current_user_employee_id %}selected{% endif %}>{{ emp.full_name }}</option>
                                 {% endfor %}
