@@ -224,6 +224,54 @@ async def dashboard_v2(
         print(f"[Dashboard v2] Statistika xato: {e}")
         print(traceback.format_exc())
 
+    # ====== F3 widget'lar (row-2): yetkazish, top mahsulot, top agent, inkasatsiya ======
+    widgets = {
+        "delivery_count": 0,
+        "top_product_name": "—",
+        "top_product_qty": 0,
+        "top_agent_name": "—",
+        "top_agent_sum": 0.0,
+        "cash_collected": 0.0,
+        "cash_transfers_count": 0,
+    }
+    try:
+        from app.models.database import Delivery as _Delivery, OrderItem as _OI, Agent as _Agent, CashTransfer as _CT
+        widgets["delivery_count"] = db.query(_Delivery).filter(_Delivery.created_at >= today_start).count()
+
+        # Top mahsulot bugun
+        top_prod = (
+            db.query(_OI.product_id, func.sum(_OI.quantity).label("qty"))
+            .join(Order, Order.id == _OI.order_id)
+            .filter(Order.type == "sale", Order.date >= today_start)
+            .group_by(_OI.product_id)
+            .order_by(func.sum(_OI.total).desc())
+            .first()
+        )
+        if top_prod and top_prod[0]:
+            pr = db.query(Product).filter(Product.id == top_prod[0]).first()
+            widgets["top_product_name"] = (pr.name if pr else "—")[:18]
+            widgets["top_product_qty"] = float(top_prod[1] or 0)
+
+        # Top agent bugun
+        top_agent = (
+            db.query(Order.agent_id, func.sum(Order.total).label("summa"))
+            .filter(Order.source == "agent", Order.date >= today_start, Order.agent_id != None)
+            .group_by(Order.agent_id)
+            .order_by(func.sum(Order.total).desc())
+            .first()
+        )
+        if top_agent and top_agent[0]:
+            ag = db.query(_Agent).filter(_Agent.id == top_agent[0]).first()
+            widgets["top_agent_name"] = (ag.full_name if ag else "—")[:18]
+            widgets["top_agent_sum"] = float(top_agent[1] or 0)
+
+        # Bugungi inkasatsiya
+        cash_q = db.query(_CT).filter(_CT.date >= today_start).all()
+        widgets["cash_transfers_count"] = len(cash_q)
+        widgets["cash_collected"] = sum(float(c.amount or 0) for c in cash_q)
+    except Exception as e:
+        print(f"[Dashboard v2] Widget stats xato: {e}")
+
     return templates.TemplateResponse("dashboard_v2/admin.html", {
         "request": request,
         "current_user": current_user,
@@ -237,6 +285,7 @@ async def dashboard_v2(
         "completed_orders": completed_orders,
         "in_progress_count": in_progress_count,
         "today_staff": today_staff,
+        "widgets": widgets,
     })
 
 
@@ -386,6 +435,159 @@ async def dashboard_v2_drilldown(
             "headers": ["Mahsulot", "Ombor", "Qoldiq", "Min. me'yor"],
             "rows": rows,
             "link": {"url": "/qoldiqlar", "label": "Qoldiqlar sahifasi →"},
+        }
+
+    if kind == "delivery":
+        from app.models.database import Delivery as _Delivery, Driver as _Driver
+        deliveries = (
+            db.query(_Delivery)
+            .options(joinedload(_Delivery.driver) if hasattr(_Delivery, "driver") else None)
+            .filter(_Delivery.created_at >= today_start)
+            .order_by(_Delivery.created_at.desc())
+            .limit(LIMIT)
+            .all()
+        )
+        # driver_id -> driver name kesh
+        driver_ids = list({d.driver_id for d in deliveries if d.driver_id})
+        drivers_map = {}
+        if driver_ids:
+            for dr in db.query(_Driver).filter(_Driver.id.in_(driver_ids)).all():
+                drivers_map[dr.id] = dr.full_name
+        rows = []
+        for d in deliveries:
+            rows.append([
+                d.created_at.strftime("%H:%M") if d.created_at else "-",
+                d.number or d.order_number or "-",
+                drivers_map.get(d.driver_id, "—"),
+                (d.delivery_address or "-")[:35],
+                d.status or "-",
+            ])
+        return {
+            "title": "Bugungi yetkazishlar",
+            "summary": f"{len(deliveries)} ta yetkazish",
+            "headers": ["Vaqt", "Raqam", "Haydovchi", "Manzil", "Status"],
+            "rows": rows,
+            "link": {"url": "/delivery", "label": "Yetkazishlar sahifasi →"},
+        }
+
+    if kind == "top_products":
+        from app.models.database import OrderItem as _OI
+        from sqlalchemy import func as _func
+        # Bugungi sotuvlarda mahsulot bo'yicha jami quantity va summa
+        results = (
+            db.query(
+                _OI.product_id,
+                _func.sum(_OI.quantity).label("qty"),
+                _func.sum(_OI.total).label("summa"),
+            )
+            .join(Order, Order.id == _OI.order_id)
+            .filter(Order.type == "sale", Order.date >= today_start)
+            .group_by(_OI.product_id)
+            .order_by(_func.sum(_OI.total).desc())
+            .limit(LIMIT)
+            .all()
+        )
+        # Product nomlari
+        prod_ids = [r[0] for r in results if r[0]]
+        prods_map = {}
+        if prod_ids:
+            for p in db.query(Product).filter(Product.id.in_(prod_ids)).all():
+                prods_map[p.id] = p.name
+        rows = []
+        for rank, r in enumerate(results, 1):
+            rows.append([
+                f"#{rank}",
+                prods_map.get(r[0], "?")[:35],
+                f"{float(r[1] or 0):g}",
+                money(r[2]),
+            ])
+        total_revenue = sum(float(r[2] or 0) for r in results)
+        return {
+            "title": "Top sotilayotgan mahsulotlar",
+            "summary": f"{len(results)} ta mahsulot · {money(total_revenue)} so'm",
+            "headers": ["Reyting", "Mahsulot", "Miqdor", "Tushum (so'm)"],
+            "rows": rows,
+            "link": {"url": "/products", "label": "Mahsulotlar sahifasi →"},
+        }
+
+    if kind == "top_agents":
+        from app.models.database import Agent as _Agent
+        from sqlalchemy import func as _func
+        results = (
+            db.query(
+                Order.agent_id,
+                _func.count(Order.id).label("cnt"),
+                _func.sum(Order.total).label("summa"),
+            )
+            .filter(
+                Order.source == "agent",
+                Order.date >= today_start,
+                Order.agent_id != None,
+            )
+            .group_by(Order.agent_id)
+            .order_by(_func.sum(Order.total).desc())
+            .limit(LIMIT)
+            .all()
+        )
+        agent_ids = [r[0] for r in results if r[0]]
+        agents_map = {}
+        if agent_ids:
+            for a in db.query(_Agent).filter(_Agent.id.in_(agent_ids)).all():
+                agents_map[a.id] = a.full_name
+        rows = []
+        for rank, r in enumerate(results, 1):
+            rows.append([
+                f"#{rank}",
+                agents_map.get(r[0], "?")[:30],
+                f"{int(r[1] or 0)} ta",
+                money(r[2]),
+            ])
+        total_revenue = sum(float(r[2] or 0) for r in results)
+        return {
+            "title": "Bugungi faol agentlar",
+            "summary": f"{len(results)} ta agent · {money(total_revenue)} so'm",
+            "headers": ["Reyting", "Agent", "Buyurtma", "Summa (so'm)"],
+            "rows": rows,
+            "link": {"url": "/supervisor/agent-orders", "label": "Agent buyurtmalari →"},
+        }
+
+    if kind == "cash":
+        from app.models.database import CashTransfer as _CT, CashRegister as _CR
+        transfers = (
+            db.query(_CT)
+            .filter(_CT.date >= today_start)
+            .order_by(_CT.date.desc())
+            .limit(LIMIT)
+            .all()
+        )
+        # CashRegister nomlari
+        reg_ids = set()
+        for t in transfers:
+            if t.from_cash_id:
+                reg_ids.add(t.from_cash_id)
+            if t.to_cash_id:
+                reg_ids.add(t.to_cash_id)
+        regs_map = {}
+        if reg_ids:
+            for r in db.query(_CR).filter(_CR.id.in_(list(reg_ids))).all():
+                regs_map[r.id] = r.name
+        rows = []
+        for t in transfers:
+            rows.append([
+                t.date.strftime("%H:%M") if t.date else "-",
+                t.number or "-",
+                regs_map.get(t.from_cash_id, "-")[:20],
+                regs_map.get(t.to_cash_id, "-")[:20],
+                money(t.amount),
+                t.status or "-",
+            ])
+        total = sum(float(t.amount or 0) for t in transfers)
+        return {
+            "title": "Bugungi inkasatsiya",
+            "summary": f"{len(transfers)} ta o'tkazma · {money(total)} so'm",
+            "headers": ["Vaqt", "Raqam", "Qaerdan", "Qayerga", "Summa", "Status"],
+            "rows": rows,
+            "link": {"url": "/cash-transfers", "label": "Kassa o'tkazmalari →"},
         }
 
     return {"title": "Noma'lum kind", "summary": "", "headers": [], "rows": [], "link": None}

@@ -11,6 +11,89 @@
   body.d2-active .main-content { padding: 0 !important; background: transparent !important; }
   /* KPI card position: relative — ::after absolute pozitsiya uchun */
   .d2-metric { position: relative; }
+
+  /* ===== F3 widget row-2: kompakt cards ===== */
+  .d2-widgets {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 0 24px 20px;
+  }
+  @media (max-width: 1100px) { .d2-widgets { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px)  { .d2-widgets { grid-template-columns: 1fr; } }
+
+  .d2-widget {
+    position: relative;
+    background: #0F1722;
+    border: 1px solid #1F2937;
+    border-radius: 10px;
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+  }
+  .d2-widget:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 255, 136, 0.12);
+    border-color: #2A3441;
+  }
+  .d2-widget::after {
+    content: '↗';
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    color: #6B7280;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    opacity: 0;
+    transition: opacity 120ms;
+  }
+  .d2-widget:hover::after {
+    opacity: 1;
+    color: #00FF88;
+  }
+  .d2-widget-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #9CA3AF;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .d2-widget-label i {
+    color: #00FF88;
+    font-size: 12px;
+  }
+  .d2-widget-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: #FFFFFF;
+    line-height: 1.1;
+  }
+  .d2-widget-value .unit {
+    font-size: 11px;
+    color: #6B7280;
+    font-weight: 400;
+    margin-left: 2px;
+  }
+  .d2-widget-value-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: #FFFFFF;
+    line-height: 1.25;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .d2-widget-sub {
+    margin-top: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #6B7280;
+  }
 </style>
 {% endblock %}
 
@@ -219,6 +302,48 @@
         {# 20+ critical SKU = 100%, 0 = 0%. Bu warning shkala #}
         {% set ombor_pct = (low_stock_count * 5)|int %}
         {{ segbar(ombor_pct, 'alert' if low_stock_count > 5 else 'amber') }}
+      </div>
+
+    </section>
+
+    <!-- ═══════════════════════ ROW-2: KICHIK WIDGET'LAR ═══════════════════════ -->
+    {% set _w = widgets or {} %}
+    <section class="d2-widgets">
+
+      <!-- Yetkazish -->
+      <div class="d2-widget" data-drilldown="delivery">
+        <div class="d2-widget-label">
+          <i class="bi bi-truck"></i> Bugungi yetkazish
+        </div>
+        <div class="d2-widget-value">{{ _w.get('delivery_count', 0) }} <span class="unit">ta</span></div>
+        <div class="d2-widget-sub">haydovchi orderlar</div>
+      </div>
+
+      <!-- Top mahsulot -->
+      <div class="d2-widget" data-drilldown="top_products">
+        <div class="d2-widget-label">
+          <i class="bi bi-trophy"></i> Top mahsulot
+        </div>
+        <div class="d2-widget-value-text">{{ _w.get('top_product_name', '—') }}</div>
+        <div class="d2-widget-sub">{{ '%g'|format(_w.get('top_product_qty', 0)) }} sotildi</div>
+      </div>
+
+      <!-- Top agent -->
+      <div class="d2-widget" data-drilldown="top_agents">
+        <div class="d2-widget-label">
+          <i class="bi bi-person-badge"></i> Top agent
+        </div>
+        <div class="d2-widget-value-text">{{ _w.get('top_agent_name', '—') }}</div>
+        <div class="d2-widget-sub">{{ fmt_short(_w.get('top_agent_sum', 0)) }} so'm</div>
+      </div>
+
+      <!-- Inkasatsiya -->
+      <div class="d2-widget" data-drilldown="cash">
+        <div class="d2-widget-label">
+          <i class="bi bi-cash-coin"></i> Inkasatsiya
+        </div>
+        <div class="d2-widget-value">{{ fmt_short(_w.get('cash_collected', 0)) }} <span class="unit">so'm</span></div>
+        <div class="d2-widget-sub">{{ _w.get('cash_transfers_count', 0) }} ta o'tkazma</div>
       </div>
 
     </section>
