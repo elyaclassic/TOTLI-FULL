@@ -106,9 +106,10 @@ def _send_to_chats_sync(text: str, chat_ids: list):
         running = None
 
     if running is not None:
-        t = threading.Thread(target=_run, daemon=False)
+        # FastAPI request kontekstida — fire-and-forget (daemon, .join() yo'q)
+        # Telegram yetkazib berishi orqaga, request darhol javob beradi
+        t = threading.Thread(target=_run, daemon=True)
         t.start()
-        t.join(timeout=15)
     else:
         _run()
 
