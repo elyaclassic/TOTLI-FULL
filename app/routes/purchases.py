@@ -132,7 +132,7 @@ async def purchase_new(
     from app.utils.draft_check import redirect_to_draft
     redirect = redirect_to_draft(
         db, Purchase,
-        edit_url_template="/purchases/{id}",
+        edit_url_template="/purchases/edit/{id}",
         user_role=getattr(current_user, "role", "") or "",
         force_new=bool(force_new),
         message="Sizda ochiq tovar kirimi qoralamasi bor — avval uni tasdiqlang yoki bekor qiling.",
@@ -439,7 +439,7 @@ async def purchase_confirm(
     if not purchase:
         raise HTTPException(status_code=404, detail="Tovar kirimi topilmadi")
     if is_period_closed(db, purchase.date):
-        return RedirectResponse(url=f"/purchases/{purchase_id}?error=period_closed", status_code=303)
+        return RedirectResponse(url=f"/purchases/edit/{purchase_id}?error=period_closed", status_code=303)
 
     # --- Atomik biznes operatsiyasi (stock + price + partner balance + log) ---
     from app.services.document_service import confirm_purchase_atomic, DocumentError
