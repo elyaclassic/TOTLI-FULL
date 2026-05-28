@@ -47,6 +47,15 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
+    {% if error == "paid_block" and error_detail %}
+    <div class="alert alert-warning alert-dismissible fade show py-2" role="alert">
+        <strong><i class="bi bi-cash-coin"></i> To'lov qabul qilingan.</strong> {{ error_detail }}
+        <div class="mt-2">
+            <a href="/sales/return/{{ order.id }}" class="btn btn-sm btn-warning"><i class="bi bi-arrow-return-left"></i> Qaytarish hujjati yaratish</a>
+        </div>
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
     {% if error == "item" and error_detail %}
     <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
         <strong>Qatorni yangilab bo'lmadi.</strong> {{ error_detail }}
@@ -130,6 +139,7 @@
                         {% elif (order.status or '')|lower in ('completed', 'delivered') %}
                         <a href="/sales/{{ order.id }}/nakladnoy" target="_blank" class="top-btn btn btn-outline-secondary"><i class="bi bi-printer"></i> YUK XATI</a>
                         {% if current_user and (current_user.role or '')|lower == 'admin' %}
+                        <a href="/sales/return/{{ order.id }}" class="top-btn btn btn-outline-warning"><i class="bi bi-arrow-return-left"></i> Qaytarish</a>
                         <form method="POST" action="/sales/{{ order.id }}/revert" style="display: inline;" onsubmit="return confirm('Tasdiqni bekor qilish — ombor qoldig\'i qaytadi. Davom etasizmi?');">
                             <button type="submit" class="top-btn btn btn-warning"><i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish</button>
                         </form>
