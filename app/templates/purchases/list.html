@@ -14,8 +14,15 @@
 
     <!-- Page title -->
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-        <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2"></i>Tovar kirimlari</h5>
-        {% if from_pos %}
+        <div class="d-flex align-items-center gap-2">
+            {% if current_user and current_user.role == 'sotuvchi' %}
+            <a href="/sales/pos" class="btn btn-outline-secondary btn-sm" title="Sotuv oynasiga qaytish"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            {% else %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="history.back()" title="Orqaga"><i class="bi bi-arrow-left"></i> Orqaga</button>
+            {% endif %}
+            <h5 class="mb-0 fw-bold"><i class="bi bi-box-seam me-2"></i>Tovar kirimlari</h5>
+        </div>
+        {% if from_pos and current_user and current_user.role != 'sotuvchi' %}
         <a href="/sales/pos" class="btn btn-outline-primary btn-sm"><i class="bi bi-cart-check me-1"></i>Sotuv oynasiga qaytish</a>
         {% endif %}
     </div>
