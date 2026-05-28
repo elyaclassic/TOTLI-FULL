@@ -62,11 +62,34 @@
         <input type="date" name="date_to" value="{{ date_to }}" class="form-control form-control-sm" style="width:150px;" onchange="this.form.submit()">
         <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-filter"></i> Ko'rsatish</button>
     </form>
+    <a href="/supervisor/agent-payments/export?status={{ status_filter }}{{ _qd }}" class="btn btn-sm btn-success" title="Excel'ga yuklash">
+        <i class="bi bi-file-earmark-excel"></i> Excel
+    </a>
 </div>
 
 {% if payments %}
 <div class="card data-table">
     <div class="card-body p-0">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <span><i class="bi bi-person-badge"></i> Agent to'lovlari
+                <span class="badge bg-primary ms-2">{{ agent_count }} ta</span>
+                <span class="badge bg-success ms-1">Jami: {{ "{:,.0f}".format(agent_total or 0) }} so'm</span>
+                {% if (agent_pending or 0) > 0 %}<span class="badge bg-warning text-dark ms-1">Kutmoqda: {{ "{:,.0f}".format(agent_pending or 0) }}</span>{% endif %}
+                {% if (agent_confirmed or 0) > 0 %}<span class="badge bg-info ms-1">Tasdiqlangan: {{ "{:,.0f}".format(agent_confirmed or 0) }}</span>{% endif %}
+                {% for ptype, amount in agent_by_type.items() %}
+                    {% if amount > 0 %}
+                        {% if ptype == 'naqd' %}
+                            <span class="badge bg-success-subtle text-success border ms-1"><i class="bi bi-cash"></i> Naqd: {{ "{:,.0f}".format(amount) }}</span>
+                        {% elif ptype == 'plastik' %}
+                            <span class="badge bg-primary-subtle text-primary border ms-1"><i class="bi bi-credit-card"></i> Plastik: {{ "{:,.0f}".format(amount) }}</span>
+                        {% else %}
+                            <span class="badge bg-info-subtle text-info border ms-1"><i class="bi bi-bank"></i> {{ ptype|capitalize }}: {{ "{:,.0f}".format(amount) }}</span>
+                        {% endif %}
+                    {% endif %}
+                {% endfor %}
+            </span>
+            <small class="text-muted">{{ date_from }} — {{ date_to }}</small>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover table-striped mb-0">
                 <thead>
@@ -85,7 +108,7 @@
                 <tbody>
                     {% for p in payments %}
                     <tr>
-                        <td>{{ p.id }}</td>
+                        <td>{{ loop.index }}</td>
                         <td>
                             {% if p._agent %}
                                 <strong>{{ p._agent.full_name or p._agent.code }}</strong>
@@ -194,6 +217,17 @@
                     <span class="badge bg-success ms-1">Jami: {{ "{:,.0f}".format(range_total or 0) }} so'm</span>
                     {% if (range_pending or 0) > 0 %}<span class="badge bg-warning text-dark ms-1">Kutmoqda: {{ "{:,.0f}".format(range_pending or 0) }}</span>{% endif %}
                     {% if (range_confirmed or 0) > 0 %}<span class="badge bg-info ms-1">Tasdiqlangan: {{ "{:,.0f}".format(range_confirmed or 0) }}</span>{% endif %}
+                    {% for ptype, amount in driver_by_type.items() %}
+                        {% if amount > 0 %}
+                            {% if ptype == 'naqd' %}
+                                <span class="badge bg-success-subtle text-success border ms-1"><i class="bi bi-cash"></i> Naqd: {{ "{:,.0f}".format(amount) }}</span>
+                            {% elif ptype == 'plastik' %}
+                                <span class="badge bg-primary-subtle text-primary border ms-1"><i class="bi bi-credit-card"></i> Plastik: {{ "{:,.0f}".format(amount) }}</span>
+                            {% else %}
+                                <span class="badge bg-info-subtle text-info border ms-1"><i class="bi bi-bank"></i> {{ ptype|capitalize }}: {{ "{:,.0f}".format(amount) }}</span>
+                            {% endif %}
+                        {% endif %}
+                    {% endfor %}
                 </span>
                 <small class="text-muted">{{ date_from }} — {{ date_to }}</small>
             </div>
@@ -213,7 +247,7 @@
                 <tbody>
                     {% for p in driver_payments %}
                     <tr>
-                        <td><small>{{ p.number }}</small></td>
+                        <td>{{ loop.index }}<br><small class="text-muted">{{ p.number }}</small></td>
                         <td class="muted-cell">{{ p.date.strftime('%d.%m.%Y %H:%M') if p.date else '—' }}</td>
                         <td>{{ p._driver.full_name if p._driver else '—' }}</td>
                         <td>

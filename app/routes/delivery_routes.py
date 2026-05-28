@@ -5,7 +5,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
 
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from app.core import templates
 from app.models.database import (
     get_db,
@@ -31,7 +31,9 @@ from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 from urllib.parse import quote
 from sqlalchemy.orm import joinedload
 from sqlalchemy import func
+from app.logging_config import get_logger
 
+logger = get_logger("delivery_routes")
 router = APIRouter(tags=["delivery"])
 
 
@@ -735,7 +737,10 @@ async def supervisor_agent_payments(
     if d_from > d_to:
         d_from, d_to = d_to, d_from
 
-    q = db.query(AgentPayment).order_by(AgentPayment.id.desc())
+    q = db.query(AgentPayment).filter(
+        func.date(AgentPayment.created_at) >= d_from,
+        func.date(AgentPayment.created_at) <= d_to,
+    ).order_by(AgentPayment.id.desc())
     if status == "pending":
         q = q.filter(AgentPayment.status == "pending")
     elif status == "confirmed":
@@ -803,6 +808,21 @@ async def supervisor_agent_payments(
     range_pending = sum(float(p.amount or 0) for p in driver_payments if p.status == "pending")
     range_confirmed = sum(float(p.amount or 0) for p in driver_payments if p.status == "confirmed")
 
+    # Agent va Driver to'lovlari uchun jamlamalar (umumiy + to'lov turi bo'yicha)
+    def _breakdown(items):
+        bd = {}
+        for it in items:
+            key = (it.payment_type or "—").lower()
+            bd[key] = bd.get(key, 0.0) + float(it.amount or 0)
+        return bd
+
+    agent_total = sum(float(p.amount or 0) for p in payments)
+    agent_count = len(payments)
+    agent_confirmed = sum(float(p.amount or 0) for p in payments if p.status == "confirmed")
+    agent_pending = sum(float(p.amount or 0) for p in payments if p.status == "pending")
+    agent_by_type = _breakdown(payments)
+    driver_by_type = _breakdown(driver_payments)
+
     return templates.TemplateResponse("supervisor/agent_payments.html", {
         "request": request,
         "payments": payments,
@@ -816,8 +836,197 @@ async def supervisor_agent_payments(
         "range_total": range_total,
         "range_pending": range_pending,
         "range_confirmed": range_confirmed,
+        "agent_total": agent_total,
+        "agent_count": agent_count,
+        "agent_confirmed": agent_confirmed,
+        "agent_pending": agent_pending,
+        "agent_by_type": agent_by_type,
+        "driver_by_type": driver_by_type,
         "current_user": current_user,
     })
+
+
+@router.get("/supervisor/agent-payments/export")
+async def supervisor_agent_payments_export(
+    request: Request,
+    status: str = "all",
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent va Haydovchi to'lovlarini Excel'ga eksport qilish."""
+    import io
+    from datetime import datetime as _dt, date as _date, timedelta as _td
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    today = _date.today()
+    default_from = today - _td(days=30)
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else default_from
+    except (ValueError, TypeError):
+        d_from = default_from
+    try:
+        d_to = _dt.strptime(date_to, "%Y-%m-%d").date() if date_to else today
+    except (ValueError, TypeError):
+        d_to = today
+    if d_from > d_to:
+        d_from, d_to = d_to, d_from
+
+    q = db.query(AgentPayment).filter(
+        func.date(AgentPayment.created_at) >= d_from,
+        func.date(AgentPayment.created_at) <= d_to,
+    ).order_by(AgentPayment.id.desc())
+    if status in ("pending", "confirmed", "cancelled"):
+        q = q.filter(AgentPayment.status == status)
+    ap_rows = q.all()
+    for p in ap_rows:
+        p._agent = db.query(Agent).filter(Agent.id == p.agent_id).first()
+        p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
+
+    from app.models.database import Payment as _Payment, Driver as _Driver
+    dq = db.query(_Payment).filter(
+        _Payment.category == "delivery",
+        func.date(_Payment.date) >= d_from,
+        func.date(_Payment.date) <= d_to,
+    ).order_by(_Payment.id.desc())
+    if status == "confirmed":
+        dq = dq.filter(_Payment.status == "confirmed")
+    dp_rows = dq.all()
+    for p in dp_rows:
+        p._partner = db.query(Partner).filter(Partner.id == p.partner_id).first() if p.partner_id else None
+        p._driver = None
+        if p.user_id:
+            p._driver = (
+                db.query(_Driver)
+                .filter((_Driver.employee_id == p.user_id) | (_Driver.id == p.user_id))
+                .first()
+            )
+
+    status_label_map = {
+        "pending": "Kutilmoqda",
+        "confirmed": "Tasdiqlangan",
+        "cancelled": "Rad etilgan",
+    }
+    type_label_map = {"naqd": "Naqd", "plastik": "Plastik", "perechisleniye": "Perechisleniye"}
+
+    wb = Workbook()
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    bold_font = Font(bold=True)
+    total_fill = PatternFill(start_color="E7E6E6", end_color="E7E6E6", fill_type="solid")
+
+    # --- Sheet 1: Agent to'lovlari ---
+    ws1 = wb.active
+    ws1.title = "Agent to'lovlari"
+    ws1["A1"] = f"Agent to'lovlari (inkassatsiya) — {d_from} dan {d_to} gacha"
+    ws1["A1"].font = Font(bold=True, size=14)
+    ws1.merge_cells("A1:H1")
+    headers1 = ["#", "Sana", "Agent", "Mijoz", "Kod", "Summa (so'm)", "Tur", "Status", "Izoh"]
+    for col, h in enumerate(headers1, 1):
+        cell = ws1.cell(row=3, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    ap_total = 0.0
+    ap_by_type = {}
+    for i, p in enumerate(ap_rows, 1):
+        agent_name = p._agent.full_name if p._agent else f"Agent #{p.agent_id}"
+        partner_name = p._partner.name if p._partner else ""
+        partner_code = p._partner.code if p._partner else ""
+        amount = float(p.amount or 0)
+        ptype = type_label_map.get(p.payment_type, p.payment_type or "")
+        st = status_label_map.get(p.status, p.status or "")
+        ws1.append([
+            i,
+            p.created_at.strftime("%d.%m.%Y %H:%M") if p.created_at else "",
+            agent_name,
+            partner_name,
+            partner_code,
+            amount,
+            ptype,
+            st,
+            p.notes or "",
+        ])
+        ap_total += amount
+        ap_by_type[ptype] = ap_by_type.get(ptype, 0.0) + amount
+
+    last_row = 3 + len(ap_rows) + 1
+    ws1.cell(row=last_row, column=1, value=f"JAMI: {len(ap_rows)} ta").font = bold_font
+    ws1.cell(row=last_row, column=6, value=ap_total).font = bold_font
+    for col in range(1, 10):
+        ws1.cell(row=last_row, column=col).fill = total_fill
+    row_n = last_row + 1
+    for ptype, amount in ap_by_type.items():
+        ws1.cell(row=row_n, column=5, value=f"{ptype}:").font = bold_font
+        ws1.cell(row=row_n, column=6, value=amount).font = bold_font
+        row_n += 1
+
+    widths1 = [6, 18, 22, 30, 10, 16, 16, 16, 30]
+    for col, w in enumerate(widths1, 1):
+        ws1.column_dimensions[chr(64 + col)].width = w
+
+    # --- Sheet 2: Haydovchi to'lovlari ---
+    ws2 = wb.create_sheet("Haydovchi to'lovlari")
+    ws2["A1"] = f"Haydovchi to'lovlari (yetkazish davomida) — {d_from} dan {d_to} gacha"
+    ws2["A1"].font = Font(bold=True, size=14)
+    ws2.merge_cells("A1:I1")
+    headers2 = ["#", "Hujjat raqami", "Sana", "Haydovchi", "Mijoz", "Kod", "Summa (so'm)", "Tur", "Status"]
+    for col, h in enumerate(headers2, 1):
+        cell = ws2.cell(row=3, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    dp_total = 0.0
+    dp_by_type = {}
+    for i, p in enumerate(dp_rows, 1):
+        driver_name = p._driver.full_name if p._driver else "—"
+        partner_name = p._partner.name if p._partner else ""
+        partner_code = p._partner.code if p._partner else ""
+        amount = float(p.amount or 0)
+        ptype = type_label_map.get(p.payment_type, p.payment_type or "")
+        st = status_label_map.get(p.status, p.status or "")
+        ws2.append([
+            i,
+            p.number or "",
+            p.date.strftime("%d.%m.%Y %H:%M") if p.date else "",
+            driver_name,
+            partner_name,
+            partner_code,
+            amount,
+            ptype,
+            st,
+        ])
+        dp_total += amount
+        dp_by_type[ptype] = dp_by_type.get(ptype, 0.0) + amount
+
+    last_row = 3 + len(dp_rows) + 1
+    ws2.cell(row=last_row, column=1, value=f"JAMI: {len(dp_rows)} ta").font = bold_font
+    ws2.cell(row=last_row, column=7, value=dp_total).font = bold_font
+    for col in range(1, 10):
+        ws2.cell(row=last_row, column=col).fill = total_fill
+    row_n = last_row + 1
+    for ptype, amount in dp_by_type.items():
+        ws2.cell(row=row_n, column=6, value=f"{ptype}:").font = bold_font
+        ws2.cell(row=row_n, column=7, value=amount).font = bold_font
+        row_n += 1
+
+    widths2 = [6, 20, 18, 22, 30, 10, 16, 16, 16]
+    for col, w in enumerate(widths2, 1):
+        ws2.column_dimensions[chr(64 + col)].width = w
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"agent_payments_{d_from}_{d_to}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.post("/supervisor/agent-payments/confirm/{payment_id}")
@@ -850,37 +1059,63 @@ async def supervisor_confirm_agent_payment(
     if partner:
         partner.balance = float(partner.balance or 0) - float(ap.amount or 0)
 
-    # 3. Tegishli kassaga kirim qilish
-    pay_type_map = {"naqd": "naqd", "plastik": "plastik", "perechisleniye": "perechisleniye"}
-    cash_type = pay_type_map.get(ap.payment_type, "naqd")
+    # 3. Tegishli kassaga kirim qilish — payment_type bo'yicha qat'iy moslashtirish
+    pay_type_map = {
+        "naqd": "naqd",
+        "plastik": "plastik",
+        "perechisleniye": "perechisleniye",
+        "click": "click",
+        "terminal": "terminal",
+    }
+    ap_pay_type = (ap.payment_type or "").lower().strip()
+    cash_type = pay_type_map.get(ap_pay_type)
+    if not cash_type:
+        db.rollback()
+        return RedirectResponse(
+            url="/supervisor/agent-payments?error=" + quote(
+                f"Noma'lum to'lov turi: {ap.payment_type!r}. Admin bilan bog'laning."
+            ),
+            status_code=303,
+        )
     cash_register = db.query(CashRegister).filter(
         CashRegister.payment_type == cash_type,
         CashRegister.is_active == True,
-    ).first()
-    # Agar mos kassa topilmasa, birinchi faol kassani olish
+        CashRegister.currency == "UZS",
+    ).order_by(CashRegister.id.asc()).first()
     if not cash_register:
-        cash_register = db.query(CashRegister).filter(CashRegister.is_active == True).first()
-
-    if cash_register:
-        # To'lov hujjati yaratish (Payment)
-        last_payment = db.query(Payment).order_by(Payment.id.desc()).first()
-        next_num = (last_payment.id + 1) if last_payment else 1
-        payment_number = f"AGT-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
-
-        payment = Payment(
-            number=payment_number,
-            date=datetime.now(),
-            type="income",
-            cash_register_id=cash_register.id,
-            partner_id=ap.partner_id,
-            amount=float(ap.amount or 0),
-            payment_type=ap.payment_type,
-            category="agent_collection",
-            description=f"Agent inkassatsiya: {partner.name if partner else ''}" + (f" — {ap.notes}" if ap.notes else ""),
-            user_id=current_user.id,
-            status="confirmed",
+        db.rollback()
+        return RedirectResponse(
+            url="/supervisor/agent-payments?error=" + quote(
+                f"'{cash_type}' turidagi faol kassa topilmadi. Avval kassa yarating."
+            ),
+            status_code=303,
         )
-        db.add(payment)
+
+    last_payment = db.query(Payment).order_by(Payment.id.desc()).first()
+    next_num = (last_payment.id + 1) if last_payment else 1
+    payment_number = f"AGT-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
+
+    payment = Payment(
+        number=payment_number,
+        date=datetime.now(),
+        type="income",
+        cash_register_id=cash_register.id,
+        partner_id=ap.partner_id,
+        amount=float(ap.amount or 0),
+        payment_type=ap.payment_type,
+        category="agent_collection",
+        description=(
+            f"Agent inkassatsiya: {partner.name if partner else ''}"
+            + (f" — {ap.notes}" if ap.notes else "")
+            + f" [AP#{ap.id}]"
+        ),
+        user_id=current_user.id,
+        status="confirmed",
+    )
+    db.add(payment)
+    logger.info(
+        f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), amount={ap.amount}"
+    )
 
     # 4. Buyurtmalar qarzini kamaytirish (FIFO — eng eski buyurtmadan boshlab)
     remaining = float(ap.amount or 0)
