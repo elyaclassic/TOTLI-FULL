@@ -591,11 +591,15 @@ async def finance_kassa_detail(
         )
         .order_by(CashTransfer.date.desc())
     )
+    period_opening_balance = None
+    period_closing_balance = None
+    from app.services.finance_service import cash_balance_formula as _cbf
     if (date_from or "").strip():
         try:
             df = datetime.strptime(str(date_from).strip()[:10], "%Y-%m-%d").date()
             q = q.filter(Payment.date >= df)
             tq = tq.filter(CashTransfer.date >= df)
+            period_opening_balance, _, _ = _cbf(db, cash_register_id, as_of_date=df - timedelta(days=1))
         except ValueError:
             pass
     if (date_to or "").strip():
@@ -604,6 +608,7 @@ async def finance_kassa_detail(
             cutoff = datetime.combine(dt + timedelta(days=1), datetime.min.time())
             q = q.filter(Payment.date < cutoff)
             tq = tq.filter(CashTransfer.date < cutoff)
+            period_closing_balance, _, _ = _cbf(db, cash_register_id, as_of_date=dt)
         except ValueError:
             pass
 
@@ -671,6 +676,9 @@ async def finance_kassa_detail(
     # Sahifa darajasidagi yig'indi (Payment + CashTransfer)
     total_income = sum(float(p.amount or 0) for p in payments if getattr(p, "type", None) == "income")
     total_expense = sum(float(p.amount or 0) for p in payments if getattr(p, "type", None) == "expense")
+    # Davr darajasidagi yig'indi (hamma sahifalar bo'yicha, filter doirasida)
+    period_total_income = sum(float(p.amount or 0) for p in all_rows if getattr(p, "type", None) == "income")
+    period_total_expense = sum(float(p.amount or 0) for p in all_rows if getattr(p, "type", None) == "expense")
     parts = []
     if filter_date_from:
         parts.append(f"date_from={filter_date_from}")
@@ -691,6 +699,10 @@ async def finance_kassa_detail(
         "computed_balance": computed_balance,
         "stored_balance": stored_balance,
         "balance_mismatch": balance_mismatch,
+        "period_opening_balance": period_opening_balance,
+        "period_closing_balance": period_closing_balance,
+        "period_total_income": period_total_income,
+        "period_total_expense": period_total_expense,
         "page": page,
         "per_page": per_page,
         "total_count": total_count,

@@ -1597,6 +1597,113 @@ async def report_cash_ledger(
     })
 
 
+@router.get("/kassa-summary", response_class=HTMLResponse)
+async def report_kassa_summary(
+    request: Request,
+    start_date: str = None,
+    end_date: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Kassa hisoboti — har bir kassa uchun davr boshi/oxiri qoldiq + kirim/chiqim (faqat admin)."""
+    from app.services.finance_service import cash_balance_formula
+
+    today = datetime.now()
+    if not start_date:
+        start_date = today.replace(day=1).strftime("%Y-%m-%d")
+    if not end_date:
+        end_date = today.strftime("%Y-%m-%d")
+
+    try:
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").date()
+    except ValueError:
+        start_dt = today.replace(day=1).date()
+        start_date = start_dt.strftime("%Y-%m-%d")
+    try:
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").date()
+    except ValueError:
+        end_dt = today.date()
+        end_date = end_dt.strftime("%Y-%m-%d")
+
+    cash_registers = db.query(CashRegister).filter(CashRegister.is_active == True).order_by(CashRegister.name).all()
+
+    confirmed = or_(Payment.status == "confirmed", Payment.status.is_(None))
+    start_ts = datetime.combine(start_dt, datetime.min.time())
+    end_ts = datetime.combine(end_dt, datetime.max.time())
+
+    rows = []
+    totals_by_currency = {}
+    for cash in cash_registers:
+        currency = (cash.currency or "UZS").upper()
+        prev_day = start_dt - timedelta(days=1)
+        opening_balance, _, _ = cash_balance_formula(db, cash.id, as_of_date=prev_day)
+        closing_balance, _, _ = cash_balance_formula(db, cash.id, as_of_date=end_dt)
+
+        period_income = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.cash_register_id == cash.id,
+            Payment.type == "income",
+            confirmed,
+            Payment.date >= start_ts,
+            Payment.date <= end_ts,
+        ).scalar() or 0)
+        period_expense = float(db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.cash_register_id == cash.id,
+            Payment.type == "expense",
+            confirmed,
+            Payment.date >= start_ts,
+            Payment.date <= end_ts,
+        ).scalar() or 0)
+        transfer_in = float(db.query(func.coalesce(func.sum(func.coalesce(CashTransfer.to_amount, CashTransfer.amount)), 0)).filter(
+            CashTransfer.to_cash_id == cash.id,
+            CashTransfer.status == "completed",
+            CashTransfer.date >= start_ts,
+            CashTransfer.date <= end_ts,
+        ).scalar() or 0)
+        transfer_out = float(db.query(func.coalesce(func.sum(CashTransfer.amount), 0)).filter(
+            CashTransfer.from_cash_id == cash.id,
+            CashTransfer.status.in_(("in_transit", "completed")),
+            CashTransfer.date >= start_ts,
+            CashTransfer.date <= end_ts,
+        ).scalar() or 0)
+
+        kirim_total = period_income + transfer_in
+        chiqim_total = period_expense + transfer_out
+
+        rows.append({
+            "id": cash.id,
+            "name": cash.name or f"Kassa #{cash.id}",
+            "currency": currency,
+            "opening": opening_balance,
+            "income": period_income,
+            "transfer_in": transfer_in,
+            "expense": period_expense,
+            "transfer_out": transfer_out,
+            "kirim_total": kirim_total,
+            "chiqim_total": chiqim_total,
+            "closing": closing_balance,
+        })
+
+        t = totals_by_currency.setdefault(currency, {"opening": 0.0, "kirim": 0.0, "chiqim": 0.0, "closing": 0.0})
+        t["opening"] += opening_balance
+        t["kirim"] += kirim_total
+        t["chiqim"] += chiqim_total
+        t["closing"] += closing_balance
+
+    rows_by_currency = {}
+    for r in rows:
+        rows_by_currency.setdefault(r["currency"], []).append(r)
+
+    return templates.TemplateResponse("reports/kassa_summary.html", {
+        "request": request,
+        "page_title": "Kassa hisoboti",
+        "current_user": current_user,
+        "start_date": start_date,
+        "end_date": end_date,
+        "rows_by_currency": rows_by_currency,
+        "totals_by_currency": totals_by_currency,
+    })
+
+
 _PRODUCTION_WEIGHT_RE = __import__("re").compile(
     r"(\d+(?:[.,]\d+)?)\s*(kg|gr|g)\b", __import__("re").IGNORECASE
 )

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    .summary-table { font-variant-numeric: tabular-nums; }
+    .summary-table th { background:#f8fafc; font-weight:600; font-size:.85rem; color:#334155; }
+    .summary-table td { vertical-align: middle; }
+    .summary-table .num-cell { text-align: right; font-weight:600; }
+    .summary-table .num-cell.plus  { color:#2e7d32; }
+    .summary-table .num-cell.minus { color:#c62828; }
+    .summary-table tr.total-row { background:#f1f5f9; font-weight:700; }
+    .summary-table tr.total-row td { border-top: 2px solid #cbd5e1; }
+    .currency-block { margin-bottom: 1.5rem; }
+    .currency-label { font-size: .8rem; color:#64748b; margin-bottom: .35rem; text-transform: uppercase; letter-spacing: .5px; }
+    .kassa-link { color: #1a73e8; text-decoration: none; }
+    .kassa-link:hover { text-decoration: underline; }
+</style>
+
+<div class="page-header mb-3">
+    <h4 class="mb-0"><i class="bi bi-safe text-success"></i> Kassa hisoboti</h4>
+    <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+</div>
+
+<div class="filter-card mb-3">
+    <form method="get" action="/reports/kassa-summary" class="row g-3 align-items-end">
+        <div class="col-md-3">
+            <label class="form-label">Boshlanish</label>
+            <input type="date" name="start_date" class="form-control" value="{{ start_date }}">
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Tugash</label>
+            <input type="date" name="end_date" class="form-control" value="{{ end_date }}">
+        </div>
+        <div class="col-md-6 d-flex gap-2">
+            <button type="submit" class="btn btn-primary"><i class="bi bi-search"></i> Ko'rsatish</button>
+            <a href="/reports/kassa-summary" class="btn btn-outline-secondary">Tozalash</a>
+        </div>
+    </form>
+    <div class="muted-cell mt-2" style="font-size:12px;">
+        <i class="bi bi-info-circle"></i>
+        Davr boshi qoldiq — boshlanish sanasidan oldingi kun oxiri.
+        Davr oxiri qoldiq — tugash sanasi oxiri (23:59).
+        Kirim/Chiqim — to'lovlar + kassalararo o'tkazmalar yig'indisi.
+    </div>
+</div>
+
+{% for currency, rows in rows_by_currency.items() %}
+<div class="currency-block">
+    <div class="currency-label">Valyuta: <strong>{{ currency }}</strong></div>
+    <div class="data-table">
+        <div class="table-responsive">
+            <table class="table table-hover summary-table mb-0">
+                <thead>
+                    <tr>
+                        <th>Kassa</th>
+                        <th class="text-end">Davr boshi qoldiq</th>
+                        <th class="text-end">Kirim</th>
+                        <th class="text-end">Chiqim</th>
+                        <th class="text-end">Davr oxiri qoldiq</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr>
+                        <td>
+                            <a href="/finance/kassa/{{ r.id }}?date_from={{ start_date }}&date_to={{ end_date }}" class="kassa-link">
+                                <i class="bi bi-safe"></i> {{ r.name }}
+                            </a>
+                        </td>
+                        <td class="num-cell {% if r.opening >= 0 %}plus{% else %}minus{% endif %}">
+                            {{ "{:,.0f}".format(r.opening) }}
+                        </td>
+                        <td class="num-cell plus">
+                            {% if r.kirim_total %}+{{ "{:,.0f}".format(r.kirim_total) }}{% else %}—{% endif %}
+                        </td>
+                        <td class="num-cell minus">
+                            {% if r.chiqim_total %}−{{ "{:,.0f}".format(r.chiqim_total) }}{% else %}—{% endif %}
+                        </td>
+                        <td class="num-cell {% if r.closing >= 0 %}plus{% else %}minus{% endif %}">
+                            {{ "{:,.0f}".format(r.closing) }}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% set t = totals_by_currency[currency] %}
+                    <tr class="total-row">
+                        <td>JAMI ({{ currency }})</td>
+                        <td class="num-cell {% if t.opening >= 0 %}plus{% else %}minus{% endif %}">
+                            {{ "{:,.0f}".format(t.opening) }}
+                        </td>
+                        <td class="num-cell plus">+{{ "{:,.0f}".format(t.kirim) }}</td>
+                        <td class="num-cell minus">−{{ "{:,.0f}".format(t.chiqim) }}</td>
+                        <td class="num-cell {% if t.closing >= 0 %}plus{% else %}minus{% endif %}">
+                            {{ "{:,.0f}".format(t.closing) }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-info">
+    <i class="bi bi-info-circle"></i> Aktiv kassalar topilmadi.
+</div>
+{% endfor %}
+
+{% endblock %}

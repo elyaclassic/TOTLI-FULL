@@ -72,6 +72,37 @@
         </form>
     </div>
 
+    {% if period_opening_balance is not none or period_closing_balance is not none %}
+    <div class="d-flex gap-3 mb-3 flex-wrap">
+        {% if period_opening_balance is not none %}
+        <div class="mini-stat">
+            <div class="num {% if period_opening_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                {{ "{:,.0f}".format(period_opening_balance) }}
+            </div>
+            <div class="lbl">Davr boshiga qoldiq ({{ filter_date_from }}) (so'm)</div>
+        </div>
+        {% endif %}
+        {% if filter_date_from or filter_date_to %}
+        <div class="mini-stat">
+            <div class="num text-success">+{{ "{:,.0f}".format(period_total_income or 0) }}</div>
+            <div class="lbl">Davr ichi kirim (so'm)</div>
+        </div>
+        <div class="mini-stat">
+            <div class="num text-danger">−{{ "{:,.0f}".format(period_total_expense or 0) }}</div>
+            <div class="lbl">Davr ichi chiqim (so'm)</div>
+        </div>
+        {% endif %}
+        {% if period_closing_balance is not none %}
+        <div class="mini-stat">
+            <div class="num {% if period_closing_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                {{ "{:,.0f}".format(period_closing_balance) }}
+            </div>
+            <div class="lbl">Davr oxiriga qoldiq ({{ filter_date_to }}) (so'm)</div>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <!-- Transactions table -->
     <div class="data-table">
         <div class="d-flex align-items-center justify-content-between gap-2 px-3 pt-3 pb-2 border-bottom flex-wrap">
