@@ -20,12 +20,14 @@ def fmt_money(amount):
     return f"{int(round(amount or 0)):,}".replace(",", " ")
 
 
-def balance_text(partner):
+def balance_text(partner, own=True):
     bal = partner.balance or 0
     if bal > 0:
-        return f"💰 Qarzingiz: <b>{fmt_money(bal)}</b> so'm"
+        word = "Qarzingiz" if own else "Qarzi"
+        return f"💰 {word}: <b>{fmt_money(bal)}</b> so'm"
     if bal < 0:
-        return f"💰 Avans qoldig'ingiz: <b>{fmt_money(-bal)}</b> so'm"
+        word = "Avans qoldig'ingiz" if own else "Avans qoldig'i"
+        return f"💰 {word}: <b>{fmt_money(-bal)}</b> so'm"
     return "✅ Qarzdorlik yo'q"
 
 

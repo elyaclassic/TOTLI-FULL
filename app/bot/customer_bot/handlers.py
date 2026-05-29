@@ -354,7 +354,7 @@ async def on_staffview(cb: CallbackQuery):
             await cb.answer("Mijoz topilmadi", show_alert=True)
             return
         orders = q.recent_orders(db, p.id, limit=10)
-        lines = [f"<b>{p.name}</b>", q.balance_text(p), ""]
+        lines = [f"<b>{p.name}</b>", q.balance_text(p, own=False), ""]
         if orders:
             lines.append("📦 <b>Oxirgi buyurtmalar:</b>")
             for o in orders:
