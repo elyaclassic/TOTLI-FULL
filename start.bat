@@ -34,6 +34,12 @@ set SENIOR_BOTS_LOG=%WORK_DIR%\senior_bots.log
 set SENIOR_BOTS_LOCK_PORT=47892
 :: =======================================================
 
+:: ========== CUSTOMER BOT (standalone) ==========
+set CUSTOMER_BOT_RUNNER=%WORK_DIR%\scripts\_customer_bot_runner.bat
+set CUSTOMER_BOT_LOG=%WORK_DIR%\customer_bot.log
+set CUSTOMER_BOT_LOCK_PORT=47893
+:: ================================================
+
 cd /d "%~dp0"
 
 echo ========================================
@@ -106,6 +112,7 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%PORT% " ^| findstr 
 if "%STARTED%"=="1" (
     call :start_bot_if_needed
     call :start_senior_bots_if_needed
+    call :start_customer_bot_if_needed
     echo.
     echo ========================================
     echo   [OK] Server ishga tushdi (orqa fonda)
@@ -132,6 +139,7 @@ if "%STARTED%"=="1" (
 :: Server ishlayapti — bot ham ishlayaptimi tekshirib, kerak bo'lsa boshlash
 call :start_bot_if_needed
 call :start_senior_bots_if_needed
+call :start_customer_bot_if_needed
 echo.
 echo ========================================
 echo   [!] Server allaqachon ishlayapti
@@ -158,12 +166,14 @@ echo Server va bot qayta ishga tushirilmoqda...
 call :kill_server
 call :kill_bot
 call :kill_senior_bots
+call :kill_customer_bot
 timeout /t 2 /nobreak >nul
 echo Yangi server ishga tushirilmoqda...
 call :start_server
 timeout /t 3 /nobreak >nul
 call :start_bot_if_needed
 call :start_senior_bots_if_needed
+call :start_customer_bot_if_needed
 echo [OK] Server qayta ishga tushdi.
 if "!BOT_STARTED_NOW!"=="1" echo [OK] Telegram Sheets Bot ham qayta ishga tushdi.
 if "!BOT_FAILED!"=="1"      echo [X] Bot ishga tushmadi: %BOT_LOG_FILE%
@@ -179,6 +189,7 @@ echo Server va bot to'xtatilmoqda...
 call :kill_server
 call :kill_bot
 call :kill_senior_bots
+call :kill_customer_bot
 echo [OK] Server va bot to'xtatildi.
 echo.
 pause
@@ -325,6 +336,51 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%SENIOR_BOTS_LOCK_PO
     taskkill /PID %%a /F /T >nul 2>&1
 )
 for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%senior_bots_standalone%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do (
+    taskkill /PID %%a /F /T >nul 2>&1
+)
+timeout /t 1 /nobreak >nul
+goto :eof
+
+:: ====== YORDAMCHI: Customer bot (standalone) ishga tushirish ======
+:start_customer_bot_if_needed
+:: Already running? (lock port 47893)
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%CUSTOMER_BOT_LOCK_PORT% " ^| findstr "LISTENING"') do goto :eof
+:: Fallback: check by CommandLine
+for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%customer_bot_standalone%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do goto :eof
+:: Write runner bat (ASCII only, no Cyrillic)
+> "%CUSTOMER_BOT_RUNNER%" (
+    echo @echo off
+    echo setlocal
+    echo set ROOT=D:\TOTLI BI
+    echo cd /d "%%ROOT%%"
+    echo set PY=
+    echo where python >nul 2>&1 ^&^& set PY=python
+    echo if not "%%PY%%"=="" goto run
+    echo where py >nul 2>&1 ^&^& set PY=py -3
+    echo if not "%%PY%%"=="" goto run
+    echo if exist "%%LocalAppData%%\Programs\Python\Python313\python.exe" set PY="%%LocalAppData%%\Programs\Python\Python313\python.exe"
+    echo if not "%%PY%%"=="" goto run
+    echo if exist "C:\Program Files\Python313\python.exe" set PY="C:\Program Files\Python313\python.exe"
+    echo :run
+    echo if "%%PY%%"=="" ^( echo [%%date%% %%time%%] PYTHON NOT FOUND ^>^> "%%ROOT%%\customer_bot.log" ^& exit /b 1 ^)
+    echo %%PY%% scripts\customer_bot_standalone.py ^>^> "%%ROOT%%\customer_bot.log" 2^>^&1
+    echo endlocal
+)
+:: Launch hidden via VBS
+> "%TEMP%\totli_start_customer.vbs" (
+    echo Set WshShell = CreateObject^("WScript.Shell"^)
+    echo WshShell.Run """%CUSTOMER_BOT_RUNNER%""", 0, False
+)
+cscript //nologo "%TEMP%\totli_start_customer.vbs"
+del "%TEMP%\totli_start_customer.vbs" 2>nul
+goto :eof
+
+:: ====== YORDAMCHI: Customer bot o'chirish ======
+:kill_customer_bot
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":%CUSTOMER_BOT_LOCK_PORT% " ^| findstr "LISTENING"') do (
+    taskkill /PID %%a /F /T >nul 2>&1
+)
+for /f "tokens=2 delims=," %%a in ('wmic process where "name='python.exe' and CommandLine like '%%customer_bot_standalone%%'" get ProcessId /format:csv 2^>nul ^| findstr /v "^$" ^| findstr /v "ProcessId"') do (
     taskkill /PID %%a /F /T >nul 2>&1
 )
 timeout /t 1 /nobreak >nul
