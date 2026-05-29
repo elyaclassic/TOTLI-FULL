@@ -83,6 +83,9 @@ def _send_via_token(chat_ids, text):
 
 def notify_customer(partner_id, text):
     """Partner'ning approved Telegram linklariga xabar. Fire-and-forget, hech qachon raise qilmaydi."""
+    import os
+    if os.environ.get("TESTING") == "1":
+        return  # test rejimida prod DB/Telegram'ga tegmaymiz
     try:
         from app.models.database import SessionLocal
         from app.bot.customer_bot.registration import approved_telegram_ids_for_partner
