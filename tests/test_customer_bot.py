@@ -208,3 +208,29 @@ def test_parse_date_uz_invalid():
     assert parse_date_uz("salom") is None
     assert parse_date_uz("32.13.2026") is None
     assert parse_date_uz("") is None
+
+
+def test_notify_messages():
+    from app.bot.customer_bot.notify import (
+        msg_order_confirmed, msg_order_dispatched,
+        msg_order_delivered, msg_agent_payment,
+    )
+
+    class O:
+        pass
+    o = O(); o.number = "AGT-20260529-001"; o.total = 250000; o.paid = 100000
+
+    assert "AGT-20260529-001" in msg_order_confirmed(o)
+    assert "250 000" in msg_order_confirmed(o)
+
+    assert "yo'lda" in msg_order_dispatched(o).lower()
+    assert "AGT-20260529-001" in msg_order_dispatched(o)
+
+    dm = msg_order_delivered(o, balance=150000)
+    assert "yetkazildi" in dm.lower()
+    assert "100 000" in dm        # to'langan
+    assert "150 000" in dm        # qoldiq
+
+    am = msg_agent_payment("AG-001", "Akbarjon", 500000, balance=150000)
+    assert "AG-001" in am and "Akbarjon" in am
+    assert "500 000" in am and "150 000" in am
