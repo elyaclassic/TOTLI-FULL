@@ -29,6 +29,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     </div>
     {% endif %}
+    {% if error == "shortage" and error_detail %}
+    <div class="alert alert-danger py-2" role="alert" style="border-left:5px solid #dc3545;">
+        <strong><i class="bi bi-exclamation-triangle-fill"></i> Tasdiqlab bo'lmadi — ombor yetishmayapti!</strong>
+        <div class="mt-1">{{ error_detail }}</div>
+        <div class="mt-1 small text-muted">Yetmayotgan mahsulot miqdorini kamaytiring yoki ishlab chiqaring, so'ng qayta tasdiqlang.</div>
+    </div>
+    {% endif %}
     {% if error == "production" and error_detail %}
     <div class="alert alert-warning alert-dismissible fade show py-2" role="alert">
         <strong>Ishlab chiqarish yaratilmadi.</strong> {{ error_detail }}
