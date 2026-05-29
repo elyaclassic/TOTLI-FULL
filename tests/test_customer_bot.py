@@ -192,3 +192,19 @@ def test_statement_totals_in_range(db):
     assert st["total_paid"] == 30000
     assert len(st["orders"]) == 1
     assert len(st["payments"]) == 1
+
+
+def test_parse_date_uz():
+    from datetime import date
+    from app.bot.customer_bot.queries import parse_date_uz
+    assert parse_date_uz("15.05.2026") == date(2026, 5, 15)
+    assert parse_date_uz("15.5.2026") == date(2026, 5, 15)
+    assert parse_date_uz("2026-05-15") == date(2026, 5, 15)
+    assert parse_date_uz("15/05/2026") == date(2026, 5, 15)
+
+
+def test_parse_date_uz_invalid():
+    from app.bot.customer_bot.queries import parse_date_uz
+    assert parse_date_uz("salom") is None
+    assert parse_date_uz("32.13.2026") is None
+    assert parse_date_uz("") is None

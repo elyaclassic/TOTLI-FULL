@@ -1,3 +1,5 @@
+from datetime import date as _date
+
 from sqlalchemy import func as sa_func
 
 from app.models.database import Order, OrderItem, Payment, Partner
@@ -71,3 +73,22 @@ def statement(db, partner_id, date_from, date_to):
         "total_orders": sum(o.total or 0 for o in orders),
         "total_paid": sum(p.amount or 0 for p in payments),
     }
+
+
+def parse_date_uz(text):
+    """'15.05.2026' / '15.5.2026' / '2026-05-15' / '15/05/2026' -> date yoki None."""
+    s = (text or "").strip()
+    for sep in (".", "/", "-"):
+        parts = s.split(sep)
+        if len(parts) == 3:
+            try:
+                a, b, c = (int(x) for x in parts)
+            except ValueError:
+                continue
+            try:
+                if len(parts[0]) == 4:  # yyyy-mm-dd
+                    return _date(a, b, c)
+                return _date(c, b, a)   # dd.mm.yyyy
+            except ValueError:
+                return None
+    return None
