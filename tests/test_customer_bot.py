@@ -34,3 +34,51 @@ def test_normalize_phone_invalid():
     assert normalize_phone("") is None
     assert normalize_phone(None) is None
     assert normalize_phone("12345") is None       # 5 raqam
+
+
+def _mk_partner(db, name, phone, phone2=None, active=True):
+    from app.models.database import Partner
+    p = Partner(name=name, phone=phone, phone2=phone2, is_active=active, balance=0)
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+def test_find_matching_partner_diff_formats(db):
+    from app.bot.customer_bot.registration import find_matching_partners
+    _mk_partner(db, "Gellet Market", "+998902924002")
+    _mk_partner(db, "olmos market", "998910558888")
+    # Telegram '998902924002' yuboradi -> +998902924002 ga mos
+    res = find_matching_partners(db, "998902924002")
+    assert len(res) == 1
+    assert res[0].name == "Gellet Market"
+
+
+def test_find_matching_partner_phone2(db):
+    from app.bot.customer_bot.registration import find_matching_partners
+    _mk_partner(db, "Benazir", "+998938000458", phone2="+998331777727")
+    res = find_matching_partners(db, "998331777727")
+    assert len(res) == 1
+    assert res[0].name == "Benazir"
+
+
+def test_find_matching_partner_none(db):
+    from app.bot.customer_bot.registration import find_matching_partners
+    _mk_partner(db, "Gellet Market", "+998902924002")
+    assert find_matching_partners(db, "998000000000") == []
+    assert find_matching_partners(db, "0.....") == []
+
+
+def test_find_matching_partner_skips_inactive(db):
+    from app.bot.customer_bot.registration import find_matching_partners
+    _mk_partner(db, "Eski", "+998905565959", active=False)
+    assert find_matching_partners(db, "998905565959") == []
+
+
+def test_find_matching_partner_multiple(db):
+    from app.bot.customer_bot.registration import find_matching_partners
+    _mk_partner(db, "Do'kon A", "+998905565959")
+    _mk_partner(db, "Do'kon B", "905565959")
+    res = find_matching_partners(db, "998905565959")
+    assert len(res) == 2
