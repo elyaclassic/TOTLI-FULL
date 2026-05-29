@@ -816,6 +816,11 @@ async def sales_confirm(
             audit_sale(order.id)
         except Exception:
             pass
+        try:
+            from app.bot.customer_bot.notify import notify_customer, msg_order_confirmed
+            notify_customer(order.partner_id, msg_order_confirmed(order))
+        except Exception:
+            pass
         return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
 
     # POS flow — stock yetadimi tekshir, yetsa darrov yetkaziladi
@@ -1156,6 +1161,12 @@ async def sales_dispatch(
     try:
         from app.bot.services.audit_watchdog import audit_sale
         audit_sale(order.id)
+    except Exception:
+        pass
+
+    try:
+        from app.bot.customer_bot.notify import notify_customer, msg_order_dispatched
+        notify_customer(order.partner_id, msg_order_dispatched(order))
     except Exception:
         pass
 
