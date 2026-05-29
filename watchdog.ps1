@@ -9,6 +9,7 @@ $LOG = "$ROOT\watchdog.log"
 $SERVER_RUNNER = "$ROOT\_server_runner.bat"
 $BOT_RUNNER = "$ROOT\external\telegram_sheets_bot\_bot_runner.bat"
 $SENIOR_BOTS_RUNNER = "$ROOT\scripts\_senior_bots_runner.bat"
+$CUSTOMER_BOT_RUNNER = "$ROOT\scripts\_customer_bot_runner.bat"
 $ENV_FILE = "$ROOT\.env"
 
 function Write-WLog($msg) {
@@ -129,7 +130,31 @@ if (-not $senior_ok) {
     }
 }
 
-# 4. Log rotation (1 MB)
+# 4. Mijoz (customer) bot (standalone jarayon) tekshirish
+$customer_ok = $false
+try {
+    $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction Stop |
+        Where-Object { $_.CommandLine -match 'customer_bot_standalone' }
+    if ($procs) { $customer_ok = $true }
+} catch {}
+
+if (-not $customer_ok) {
+    Write-WLog "CUSTOMER BOT OFF -- restarting"
+    if (Start-Hidden $CUSTOMER_BOT_RUNNER "customer_bot") {
+        Start-Sleep -Seconds 10
+        $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+            Where-Object { $_.CommandLine -match 'customer_bot_standalone' }
+        if ($procs) {
+            Write-WLog "CUSTOMER BOT UP after restart"
+            Send-Notify "Mijoz bot ochib qolgan edi - qayta ishga tushirildi"
+        } else {
+            Write-WLog "CUSTOMER BOT restart failed"
+            Send-Notify "Mijoz bot qayta ishga tushirilmadi! Qolda tekshiring."
+        }
+    }
+}
+
+# 5. Log rotation (1 MB)
 if (Test-Path $LOG) {
     $size = (Get-Item $LOG).Length
     if ($size -gt 1048576) {
