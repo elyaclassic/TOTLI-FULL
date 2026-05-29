@@ -148,3 +148,47 @@ def test_order_status_label():
     assert order_status_label("delivered") == "Yetkazildi"
     assert order_status_label("cancelled") == "Bekor qilindi"
     assert order_status_label("waiting_production") == "Ishlab chiqarishda"
+
+
+def _mk_order(db, partner_id, number, total, paid, status, date_str):
+    from datetime import datetime
+    from app.models.database import Order
+    o = Order(
+        number=number, partner_id=partner_id, type="sale", source="agent",
+        subtotal=total, total=total, paid=paid, debt=total - paid, status=status,
+        date=datetime.strptime(date_str, "%Y-%m-%d"),
+    )
+    db.add(o)
+    db.commit()
+    db.refresh(o)
+    return o
+
+
+def test_recent_orders_limit_and_order(db):
+    from app.bot.customer_bot.queries import recent_orders
+    p = _mk_partner(db, "Gellet", "+998902924002")
+    _mk_order(db, p.id, "AGT-1", 100000, 0, "delivered", "2026-05-01")
+    _mk_order(db, p.id, "AGT-2", 200000, 0, "confirmed", "2026-05-10")
+    res = recent_orders(db, p.id, limit=10)
+    assert [o.number for o in res] == ["AGT-2", "AGT-1"]  # yangi birinchi
+
+
+def test_statement_totals_in_range(db):
+    from datetime import date
+    from app.models.database import Payment
+    from app.bot.customer_bot.queries import statement
+    p = _mk_partner(db, "Gellet", "+998902924002")
+    _mk_order(db, p.id, "AGT-1", 100000, 0, "delivered", "2026-05-05")
+    _mk_order(db, p.id, "AGT-2", 50000, 0, "delivered", "2026-04-20")  # oraliqdan tashqari
+    pay = Payment(number="PAY-1", type="income", partner_id=p.id, amount=30000,
+                  status="confirmed", category="sale")
+    from datetime import datetime
+    pay.date = datetime(2026, 5, 6)
+    db.add(pay)
+    db.commit()
+
+    st = statement(db, p.id, date(2026, 5, 1), date(2026, 5, 31))
+    assert st["total_orders"] == 100000      # faqat AGT-1
+    assert st["total_paid"] == 30000
+    assert len(st["orders"]) == 1
+    assert len(st["payments"]) == 1

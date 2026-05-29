@@ -28,3 +28,46 @@ def balance_text(partner):
 
 def order_status_label(status):
     return _STATUS_LABELS.get(status, status or "")
+
+
+def recent_orders(db, partner_id, limit=10):
+    return (
+        db.query(Order)
+        .filter(Order.partner_id == partner_id, Order.type == "sale")
+        .order_by(Order.date.desc(), Order.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def statement(db, partner_id, date_from, date_to):
+    """date_from/date_to — datetime.date. Tashkent local vaqt: sa_func.date ishlatamiz."""
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.partner_id == partner_id,
+            Order.type == "sale",
+            sa_func.date(Order.date) >= date_from,
+            sa_func.date(Order.date) <= date_to,
+        )
+        .order_by(Order.date.asc())
+        .all()
+    )
+    payments = (
+        db.query(Payment)
+        .filter(
+            Payment.partner_id == partner_id,
+            Payment.type == "income",
+            Payment.status == "confirmed",
+            sa_func.date(Payment.date) >= date_from,
+            sa_func.date(Payment.date) <= date_to,
+        )
+        .order_by(Payment.date.asc())
+        .all()
+    )
+    return {
+        "orders": orders,
+        "payments": payments,
+        "total_orders": sum(o.total or 0 for o in orders),
+        "total_paid": sum(p.amount or 0 for p in payments),
+    }
