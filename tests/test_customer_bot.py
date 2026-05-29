@@ -118,3 +118,33 @@ def test_approved_link_lookup_by_partner(db):
     reg.approve_link(db, link.id, p.id, "admin")
     ids = reg.approved_telegram_ids_for_partner(db, p.id)
     assert ids == ["555"]
+
+
+def test_fmt_money():
+    from app.bot.customer_bot.queries import fmt_money
+    assert fmt_money(1493000) == "1 493 000"
+    assert fmt_money(0) == "0"
+    assert fmt_money(1493000.0) == "1 493 000"
+
+
+def test_balance_text():
+    from app.bot.customer_bot.queries import balance_text
+
+    class P:
+        pass
+    p = P()
+    p.balance = 1493000
+    assert "Qarz" in balance_text(p) and "1 493 000" in balance_text(p)
+    p.balance = -50000
+    assert "Avans" in balance_text(p) and "50 000" in balance_text(p)
+    p.balance = 0
+    assert "yo'q" in balance_text(p).lower()
+
+
+def test_order_status_label():
+    from app.bot.customer_bot.queries import order_status_label
+    assert order_status_label("confirmed") == "Qabul qilindi"
+    assert order_status_label("out_for_delivery") == "Yo'lda"
+    assert order_status_label("delivered") == "Yetkazildi"
+    assert order_status_label("cancelled") == "Bekor qilindi"
+    assert order_status_label("waiting_production") == "Ishlab chiqarishda"
