@@ -1139,11 +1139,12 @@ async def supervisor_confirm_agent_payment(
 
     db.commit()
     try:
-        from app.bot.customer_bot.notify import notify_customer, msg_agent_payment
-        _agent = db.query(Agent).filter(Agent.id == ap.agent_id).first()
-        notify_customer(ap.partner_id, msg_agent_payment(
-            _agent.code if _agent else "", _agent.full_name if _agent else "",
-            ap.amount, partner.balance if partner else 0))
+        if partner is not None:
+            from app.bot.customer_bot.notify import notify_customer, msg_agent_payment
+            _agent = db.query(Agent).filter(Agent.id == ap.agent_id).first()
+            notify_customer(ap.partner_id, msg_agent_payment(
+                _agent.code if _agent else "", _agent.full_name if _agent else "",
+                ap.amount, partner.balance))
     except Exception:
         pass
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)

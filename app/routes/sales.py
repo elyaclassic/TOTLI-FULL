@@ -817,8 +817,9 @@ async def sales_confirm(
         except Exception:
             pass
         try:
-            from app.bot.customer_bot.notify import notify_customer, msg_order_confirmed
-            notify_customer(order.partner_id, msg_order_confirmed(order))
+            if order.type == "sale":
+                from app.bot.customer_bot.notify import notify_customer, msg_order_confirmed
+                notify_customer(order.partner_id, msg_order_confirmed(order))
         except Exception:
             pass
         return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)

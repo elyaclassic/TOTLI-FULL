@@ -397,7 +397,7 @@ async def driver_delivery_status(
             try:
                 from app.bot.customer_bot.notify import notify_customer, msg_order_delivered
                 _order_d = db.query(Order).filter(Order.id == delivery.order_id).first()
-                if _order_d and _order_d.partner_id:
+                if _order_d and _order_d.type == "sale" and _order_d.partner_id:
                     _partner_d = db.query(Partner).filter(Partner.id == _order_d.partner_id).first()
                     if _partner_d:
                         notify_customer(_order_d.partner_id, msg_order_delivered(_order_d, _partner_d.balance))
