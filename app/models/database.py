@@ -236,6 +236,21 @@ class ChatTelegramLink(Base):
     thread = relationship("ChatThread")
 
 
+class CustomerBotLink(Base):
+    """Mijoz Telegram boti — mijoz (Partner) <-> Telegram bog'lanishi."""
+    __tablename__ = "customer_bot_links"
+    id = Column(Integer, primary_key=True, index=True)
+    telegram_id = Column(String(50), unique=True, index=True)
+    telegram_username = Column(String(100), nullable=True)
+    telegram_full_name = Column(String(200), nullable=True)
+    phone = Column(String(20))
+    partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True, index=True)
+    status = Column(String(20), default="pending")  # pending | approved | rejected
+    requested_at = Column(DateTime, default=datetime.now)
+    approved_at = Column(DateTime, nullable=True)
+    approved_by = Column(String(100), nullable=True)
+
+
 # ==========================================
 # TOVARLAR VA XOM ASHYO
 # ==========================================
