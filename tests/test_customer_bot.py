@@ -298,3 +298,73 @@ def test_reject_link_none_guard(db):
     from app.bot.customer_bot import registration as reg
     result = reg.reject_link(db, 999999, "admin")
     assert result is None
+
+
+# ── TDD: search_partners ─────────────────────────────────────────────────────
+
+def test_search_partners_by_name(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "Gellet Market", "+998902924002")
+    _mk_partner(db, "Olmos Market", "+998910558888")
+    _mk_partner(db, "Supermarket", "+998901111111")
+
+    res = search_partners(db, "market")
+    names = [p.name for p in res]
+    assert "Gellet Market" in names
+    assert "Olmos Market" in names
+    assert "Supermarket" in names
+
+
+def test_search_partners_case_insensitive(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "BENAZIR Do'kon", "+998901234567")
+
+    res = search_partners(db, "benazir")
+    assert len(res) == 1
+    assert res[0].name == "BENAZIR Do'kon"
+
+
+def test_search_partners_by_phone_different_format(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "Gellet Market", "+998902924002")
+    _mk_partner(db, "Olmos Market", "+998910558888")
+
+    # Telefon boshqa formatda berilgan — normalizatsiya ishlashi kerak
+    res = search_partners(db, "+998 90 292 40 02")
+    assert len(res) == 1
+    assert res[0].name == "Gellet Market"
+
+
+def test_search_partners_by_phone2(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "Benazir", "+998938000458", phone2="+998331777727")
+
+    res = search_partners(db, "331777727")
+    assert len(res) == 1
+    assert res[0].name == "Benazir"
+
+
+def test_search_partners_empty_query(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "Gellet Market", "+998902924002")
+
+    assert search_partners(db, "") == []
+    assert search_partners(db, "   ") == []
+    assert search_partners(db, None) == []
+
+
+def test_search_partners_excludes_inactive(db):
+    from app.bot.customer_bot.queries import search_partners
+    _mk_partner(db, "Eski Do'kon", "+998905565959", active=False)
+
+    res = search_partners(db, "Eski")
+    assert res == []
+
+
+def test_search_partners_limit(db):
+    from app.bot.customer_bot.queries import search_partners
+    for i in range(15):
+        _mk_partner(db, f"Market {i}", f"+9989011{i:05d}")
+
+    res = search_partners(db, "Market", limit=5)
+    assert len(res) <= 5

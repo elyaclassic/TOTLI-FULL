@@ -2,7 +2,7 @@ import logging
 from datetime import date, timedelta
 
 from aiogram import Router, F
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
@@ -11,7 +11,7 @@ from aiogram.types import (
 )
 
 from app.models.database import SessionLocal, Partner
-from app.bot.customer_bot.config import admin_ids
+from app.bot.customer_bot.config import admin_ids, staff_ids
 from app.bot.customer_bot import registration as reg
 from app.bot.customer_bot import queries as q
 
@@ -43,8 +43,19 @@ def _approved_partner(db, tg_id):
     return None
 
 
+@router.message(Command("id"))
+async def on_id(message: Message):
+    await message.answer(f"Sizning Telegram ID: {message.from_user.id}")
+
+
 @router.message(CommandStart())
 async def on_start(message: Message):
+    if message.from_user.id in staff_ids():
+        await message.answer(
+            "🔎 Xodim rejimi. Mijoz nomi yoki telefon raqamini yozing — "
+            "buyurtma va balansini ko'rsataman."
+        )
+        return
     db = SessionLocal()
     try:
         p = _approved_partner(db, message.from_user.id)
@@ -327,6 +338,64 @@ async def on_range_to(message: Message, state: FSMContext):
     for o in st["orders"][:30]:
         lines.append(f"  № {o.number} — {q.fmt_money(o.total)} so'm · {q.order_status_label(o.status)}")
     await message.answer("\n".join(lines), reply_markup=_menu_kb())
+
+
+# ── Xodim qidiruvi: FSM handlerlaridan KEYIN, catch-all dan OLDIN ───────────
+# StateFilter(None) — faqat FSM holati yo'q paytda ishlaydi (customer FSM ga tegmaydi)
+@router.message(StateFilter(None))
+async def on_staff_search(message: Message):
+    if message.from_user.id not in staff_ids():
+        return  # xodim emas — keyingi handlerga o'tkazamiz (on_other)
+    if not message.text:
+        return
+    # Menyu tugmalari xodim uchun ma'nosiz — ular catch-all ga tushsin
+    _MENU_BUTTONS = {"📦 Buyurtmalarim", "💰 Qarz/Avans qoldig'i", "📅 Hisobot", "ℹ️ Yordam"}
+    if message.text in _MENU_BUTTONS:
+        return
+    db = SessionLocal()
+    try:
+        results = q.search_partners(db, message.text)
+    finally:
+        db.close()
+    if not results:
+        await message.answer("Mijoz topilmadi.")
+        return
+    buttons = [
+        [InlineKeyboardButton(text=p.name, callback_data=f"staffview:{p.id}")]
+        for p in results
+    ]
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer("🔎 Topilgan mijozlar:", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("staffview:"))
+async def on_staffview(cb: CallbackQuery):
+    if cb.from_user.id not in staff_ids():
+        await cb.answer("Ruxsat yo'q", show_alert=True)
+        return
+    partner_id = int(cb.data.split(":")[1])
+    db = SessionLocal()
+    try:
+        p = db.query(Partner).filter(Partner.id == partner_id).first()
+        if not p:
+            await cb.answer("Mijoz topilmadi", show_alert=True)
+            return
+        orders = q.recent_orders(db, p.id, limit=10)
+        lines = [f"<b>{p.name}</b>", q.balance_text(p), ""]
+        if orders:
+            lines.append("📦 <b>Oxirgi buyurtmalar:</b>")
+            for o in orders:
+                d = o.date.strftime("%d.%m.%Y") if o.date else ""
+                lines.append(
+                    f"№ {o.number} — {d}\n"
+                    f"  {q.fmt_money(o.total)} so'm · {q.order_status_label(o.status)}"
+                )
+        else:
+            lines.append("Buyurtmalar topilmadi.")
+    finally:
+        db.close()
+    await cb.message.answer("\n".join(lines), parse_mode="HTML")
+    await cb.answer()
 
 
 # ── Catch-all: FSM handlerlaridan KEYIN ──────────────────────────────────────

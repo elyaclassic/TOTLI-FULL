@@ -2,7 +2,8 @@ from datetime import date as _date
 
 from sqlalchemy import func as sa_func
 
-from app.models.database import Order, Payment
+from app.models.database import Order, Partner, Payment
+from app.bot.customer_bot.phone import normalize_phone
 
 _STATUS_LABELS = {
     "draft": "Qoralama",
@@ -78,6 +79,30 @@ def statement(db, partner_id, date_from, date_to):
         "total_orders": sum(o.total or 0 for o in orders),
         "total_paid": sum(p.amount or 0 for p in payments),
     }
+
+
+def search_partners(db, query, limit=10):
+    """Aktiv partnerlarni nom (case-insensitive) yoki telefon (normalized) bo'yicha qidirish."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    name_matches = db.query(Partner).filter(
+        Partner.is_active == True,  # noqa: E712
+        Partner.name.ilike(f"%{q}%"),
+    ).limit(limit).all()
+    norm = normalize_phone(q)
+    result = list(name_matches)
+    seen = {p.id for p in result}
+    if norm:
+        for p in db.query(Partner).filter(Partner.is_active == True).all():  # noqa: E712
+            if p.id in seen:
+                continue
+            if normalize_phone(p.phone) == norm or normalize_phone(p.phone2) == norm:
+                result.append(p)
+                seen.add(p.id)
+                if len(result) >= limit:
+                    break
+    return result[:limit]
 
 
 def parse_date_uz(text):

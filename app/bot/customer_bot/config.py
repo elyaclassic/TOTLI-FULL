@@ -7,3 +7,8 @@ LOCK_PORT = int(os.environ.get("CUSTOMER_BOT_LOCK_PORT", "47893"))
 def admin_ids():
     raw = os.environ.get("CUSTOMER_BOT_ADMIN_IDS", "")
     return {int(x) for x in raw.replace(" ", "").split(",") if x.strip().isdigit()}
+
+
+def staff_ids():
+    raw = os.environ.get("CUSTOMER_BOT_STAFF_IDS", "")
+    return {int(x) for x in raw.replace(" ", "").split(",") if x.strip().isdigit()} | admin_ids()
