@@ -450,9 +450,16 @@ class _PartnerSearchSheetState extends State<_PartnerSearchSheet> {
   String _query = '';
 
   List<Map<String, dynamic>> get _filtered {
-    if (_query.isEmpty) return widget.partners;
-    final q = _query.toLowerCase();
-    return widget.partners.where((p) => (p['name'] ?? '').toString().toLowerCase().contains(q)).toList();
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return widget.partners;
+    final qDigits = q.replaceAll(RegExp(r'\D'), '');
+    return widget.partners.where((p) {
+      final name = (p['name'] ?? '').toString().toLowerCase();
+      if (name.contains(q)) return true;
+      if (qDigits.isEmpty) return false;
+      final phoneDigits = (p['phone'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
+      return phoneDigits.contains(qDigits);
+    }).toList();
   }
 
   @override

@@ -1,7 +1,7 @@
 name: totli_mobile
 description: TOTLI HOLVA - Agent va Haydovchi mobil ilovasi
 publish_to: 'none'
-version: 2.0.13+61
+version: 2.0.14+62
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
