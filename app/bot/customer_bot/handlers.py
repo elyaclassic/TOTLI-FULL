@@ -341,33 +341,6 @@ async def on_range_to(message: Message, state: FSMContext):
 
 
 # ── Xodim qidiruvi: FSM handlerlaridan KEYIN, catch-all dan OLDIN ───────────
-# StateFilter(None) — faqat FSM holati yo'q paytda ishlaydi (customer FSM ga tegmaydi)
-@router.message(StateFilter(None))
-async def on_staff_search(message: Message):
-    if message.from_user.id not in staff_ids():
-        return  # xodim emas — keyingi handlerga o'tkazamiz (on_other)
-    if not message.text:
-        return
-    # Menyu tugmalari xodim uchun ma'nosiz — ular catch-all ga tushsin
-    _MENU_BUTTONS = {"📦 Buyurtmalarim", "💰 Qarz/Avans qoldig'i", "📅 Hisobot", "ℹ️ Yordam"}
-    if message.text in _MENU_BUTTONS:
-        return
-    db = SessionLocal()
-    try:
-        results = q.search_partners(db, message.text)
-    finally:
-        db.close()
-    if not results:
-        await message.answer("Mijoz topilmadi.")
-        return
-    buttons = [
-        [InlineKeyboardButton(text=p.name, callback_data=f"staffview:{p.id}")]
-        for p in results
-    ]
-    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
-    await message.answer("🔎 Topilgan mijozlar:", reply_markup=kb)
-
-
 @router.callback_query(F.data.startswith("staffview:"))
 async def on_staffview(cb: CallbackQuery):
     if cb.from_user.id not in staff_ids():
@@ -398,9 +371,28 @@ async def on_staffview(cb: CallbackQuery):
     await cb.answer()
 
 
-# ── Catch-all: FSM handlerlaridan KEYIN ──────────────────────────────────────
+# ── Catch-all: FSM handlerlaridan KEYIN (staff qidiruvi + customer fallback) ──
 @router.message()
 async def on_other(message: Message):
+    # Xodim (oq ro'yxat) — matn = mijoz qidiruvi
+    if message.from_user.id in staff_ids() and message.text:
+        _MENU_BUTTONS = {"📦 Buyurtmalarim", "💰 Qarz/Avans qoldig'i", "📅 Hisobot", "ℹ️ Yordam"}
+        if message.text not in _MENU_BUTTONS:
+            db = SessionLocal()
+            try:
+                results = q.search_partners(db, message.text)
+            finally:
+                db.close()
+            if not results:
+                await message.answer("Mijoz topilmadi.")
+                return
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text=p.name, callback_data=f"staffview:{p.id}")]
+                for p in results
+            ])
+            await message.answer("🔎 Topilgan mijozlar:", reply_markup=kb)
+            return
+    # Oddiy mijoz fallback
     db = SessionLocal()
     try:
         if _approved_partner(db, message.from_user.id):
