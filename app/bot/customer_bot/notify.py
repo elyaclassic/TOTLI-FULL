@@ -42,14 +42,15 @@ def msg_agent_payment(agent_code, agent_name, amount, balance):
 
 def _send_via_token(chat_ids, text):
     """Yangi Bot instance ochib yuboradi, sessiyani yopadi. Sync kontekst."""
-    from app.bot.customer_bot.config import BOT_TOKEN
-    if not BOT_TOKEN or not chat_ids:
+    import os
+    token = os.environ.get("CUSTOMER_BOT_TOKEN", "")
+    if not token or not chat_ids:
         return
 
     async def _run():
         from aiogram import Bot
         from aiogram.client.default import DefaultBotProperties
-        bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode="HTML"))
+        bot = Bot(token=token, default=DefaultBotProperties(parse_mode="HTML"))
         try:
             for cid in chat_ids:
                 try:

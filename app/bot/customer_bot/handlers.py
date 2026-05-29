@@ -6,7 +6,7 @@ from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import (
-    Message, KeyboardButton, ReplyKeyboardMarkup,
+    Message, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove,
     InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery,
 )
 
@@ -70,6 +70,10 @@ async def on_contact(message: Message):
     phone = message.contact.phone_number
     db = SessionLocal()
     try:
+        # Fix 2: already-approved user must not regress to pending
+        if _approved_partner(db, message.from_user.id):
+            await message.answer("Siz allaqachon ulangansiz!", reply_markup=_menu_kb())
+            return
         matches = reg.find_matching_partners(db, phone)
         if not matches:
             await message.answer(
@@ -80,29 +84,37 @@ async def on_contact(message: Message):
             db, message.from_user.id, message.from_user.username,
             message.from_user.full_name, message.contact.phone_number,
         )
-        await message.answer(
-            f"✅ Raqamingiz qabul qilindi: {phone}\n\n"
-            "So'rovingiz administratorga yuborildi. Tasdiqlangach xabar beramiz. ⏳",
-            reply_markup=ReplyKeyboardMarkup(keyboard=[[]], resize_keyboard=True),
-        )
-        # adminlarga tasdiq tugmalari — har admin uchun har kandidat uchun alohida xabar
-        for admin in admin_ids():
-            for cand in matches:
-                kb = InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(
-                        text=f"✅ {cand.name}",
-                        callback_data=f"cbapprove:{link.id}:{cand.id}",
-                    ),
-                    InlineKeyboardButton(text="❌ Rad", callback_data=f"cbreject:{link.id}"),
-                ]])
-                await message.bot.send_message(
-                    admin,
-                    f"🆕 Yangi mijoz so'rovi\nDo'kon: <b>{cand.name}</b>\n"
-                    f"Telefon: {phone}\nTelegram: @{message.from_user.username or '—'} ({message.from_user.id})",
-                    reply_markup=kb,
-                )
     finally:
         db.close()
+    await message.answer(
+        f"✅ Raqamingiz qabul qilindi: {phone}\n\n"
+        "So'rovingiz administratorga yuborildi. Tasdiqlangach xabar beramiz. ⏳",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    # Fix 4: warn if no admins configured
+    if not admin_ids():
+        logger.error("CUSTOMER_BOT_ADMIN_IDS bo'sh — admin tasdiq xabari yuborilmaydi")
+    # adminlarga tasdiq tugmalari — har admin uchun har kandidat uchun alohida xabar
+    db2 = SessionLocal()
+    try:
+        matches = reg.find_matching_partners(db2, phone)
+    finally:
+        db2.close()
+    for admin in admin_ids():
+        for cand in matches:
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text=f"✅ {cand.name}",
+                    callback_data=f"cbapprove:{link.id}:{cand.id}",
+                ),
+                InlineKeyboardButton(text="❌ Rad", callback_data=f"cbreject:{link.id}"),
+            ]])
+            await message.bot.send_message(
+                admin,
+                f"🆕 Yangi mijoz so'rovi\nDo'kon: <b>{cand.name}</b>\n"
+                f"Telefon: {phone}\nTelegram: @{message.from_user.username or '—'} ({message.from_user.id})",
+                reply_markup=kb,
+            )
 
 
 @router.callback_query(F.data.startswith("cbapprove:"))
@@ -114,9 +126,12 @@ async def on_approve(cb: CallbackQuery):
     db = SessionLocal()
     try:
         link = reg.approve_link(db, int(link_id), int(partner_id), cb.from_user.id)
-        tg = link.telegram_id
+        tg = link.telegram_id if link is not None else None
     finally:
         db.close()
+    if link is None:
+        await cb.answer("Bu so'rov allaqachon qayta ishlangan", show_alert=True)
+        return
     await cb.message.edit_text(cb.message.text + "\n\n✅ TASDIQLANDI")
     try:
         await cb.bot.send_message(
@@ -136,9 +151,12 @@ async def on_reject(cb: CallbackQuery):
     db = SessionLocal()
     try:
         link = reg.reject_link(db, int(link_id), cb.from_user.id)
-        tg = link.telegram_id
+        tg = link.telegram_id if link is not None else None
     finally:
         db.close()
+    if link is None:
+        await cb.answer("Bu so'rov allaqachon qayta ishlangan", show_alert=True)
+        return
     await cb.message.edit_text(cb.message.text + "\n\n❌ RAD ETILDI")
     try:
         await cb.bot.send_message(
@@ -219,8 +237,6 @@ def _range_for(key):
 @router.callback_query(F.data.startswith("cbrep:") & ~F.data.endswith(":custom"))
 async def on_report(cb: CallbackQuery):
     key = cb.data.split(":")[1]
-    if key == "custom":
-        return
     d_from, d_to = _range_for(key)
     db = SessionLocal()
     try:
