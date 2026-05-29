@@ -222,15 +222,79 @@ def test_notify_messages():
 
     assert "AGT-20260529-001" in msg_order_confirmed(o)
     assert "250 000" in msg_order_confirmed(o)
+    assert "✅" in msg_order_confirmed(o)
+    assert "qabul" in msg_order_confirmed(o).lower()
 
     assert "yo'lda" in msg_order_dispatched(o).lower()
     assert "AGT-20260529-001" in msg_order_dispatched(o)
+    assert "🚚" in msg_order_dispatched(o)
 
     dm = msg_order_delivered(o, balance=150000)
     assert "yetkazildi" in dm.lower()
     assert "100 000" in dm        # to'langan
     assert "150 000" in dm        # qoldiq
+    assert "📦" in dm
 
     am = msg_agent_payment("AG-001", "Akbarjon", 500000, balance=150000)
     assert "AG-001" in am and "Akbarjon" in am
     assert "500 000" in am and "150 000" in am
+    assert "💰" in am
+
+
+def test_balance_text_emojis():
+    from app.bot.customer_bot.queries import balance_text
+
+    class P:
+        pass
+    p = P()
+    p.balance = 1000
+    assert "💰" in balance_text(p)
+    p.balance = -1000
+    assert "💰" in balance_text(p)
+    p.balance = 0
+    assert "✅" in balance_text(p)
+
+
+def test_parse_date_uz_out_of_range():
+    from app.bot.customer_bot.queries import parse_date_uz
+    assert parse_date_uz("15.05.26") is None      # 2-digit year → year=26 → out of range
+    assert parse_date_uz("15.05.1999") is None    # below 2000
+
+
+def test_statement_excludes_draft_cancelled(db):
+    from datetime import date
+    from app.bot.customer_bot.queries import statement
+    p = _mk_partner(db, "TestPartner", "+998901234567")
+    _mk_order(db, p.id, "AGT-D1", 100000, 0, "draft", "2026-05-10")
+    _mk_order(db, p.id, "AGT-C1", 200000, 0, "cancelled", "2026-05-10")
+    _mk_order(db, p.id, "AGT-OK", 300000, 0, "delivered", "2026-05-10")
+
+    st = statement(db, p.id, date(2026, 5, 1), date(2026, 5, 31))
+    assert st["total_orders"] == 300000
+    assert len(st["orders"]) == 1
+    assert st["orders"][0].number == "AGT-OK"
+
+
+def test_recent_orders_excludes_draft(db):
+    from app.bot.customer_bot.queries import recent_orders
+    p = _mk_partner(db, "TestPartner2", "+998901234568")
+    _mk_order(db, p.id, "AGT-DRAFT", 100000, 0, "draft", "2026-05-15")
+    _mk_order(db, p.id, "AGT-CONF", 200000, 0, "confirmed", "2026-05-15")
+
+    res = recent_orders(db, p.id, limit=10)
+    numbers = [o.number for o in res]
+    assert "AGT-DRAFT" not in numbers
+    assert "AGT-CONF" in numbers
+
+
+def test_approve_link_none_guard(db):
+    from app.bot.customer_bot import registration as reg
+    # non-existent link_id — must return None without crashing
+    result = reg.approve_link(db, 999999, 1, "admin")
+    assert result is None
+
+
+def test_reject_link_none_guard(db):
+    from app.bot.customer_bot import registration as reg
+    result = reg.reject_link(db, 999999, "admin")
+    assert result is None

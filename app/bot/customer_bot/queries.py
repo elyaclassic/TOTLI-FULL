@@ -2,7 +2,7 @@ from datetime import date as _date
 
 from sqlalchemy import func as sa_func
 
-from app.models.database import Order, OrderItem, Payment, Partner
+from app.models.database import Order, Payment
 
 _STATUS_LABELS = {
     "draft": "Qoralama",
@@ -22,10 +22,10 @@ def fmt_money(amount):
 def balance_text(partner):
     bal = partner.balance or 0
     if bal > 0:
-        return f"Qarzingiz: <b>{fmt_money(bal)}</b> so'm"
+        return f"💰 Qarzingiz: <b>{fmt_money(bal)}</b> so'm"
     if bal < 0:
-        return f"Avans qoldig'ingiz: <b>{fmt_money(-bal)}</b> so'm"
-    return "Qarzdorlik yo'q"
+        return f"💰 Avans qoldig'ingiz: <b>{fmt_money(-bal)}</b> so'm"
+    return "✅ Qarzdorlik yo'q"
 
 
 def order_status_label(status):
@@ -35,7 +35,11 @@ def order_status_label(status):
 def recent_orders(db, partner_id, limit=10):
     return (
         db.query(Order)
-        .filter(Order.partner_id == partner_id, Order.type == "sale")
+        .filter(
+            Order.partner_id == partner_id,
+            Order.type == "sale",
+            Order.status != "draft",
+        )
         .order_by(Order.date.desc(), Order.id.desc())
         .limit(limit)
         .all()
@@ -49,6 +53,7 @@ def statement(db, partner_id, date_from, date_to):
         .filter(
             Order.partner_id == partner_id,
             Order.type == "sale",
+            Order.status.notin_(["draft", "cancelled"]),
             sa_func.date(Order.date) >= date_from,
             sa_func.date(Order.date) <= date_to,
         )
@@ -87,8 +92,14 @@ def parse_date_uz(text):
                 continue
             try:
                 if len(parts[0]) == 4:  # yyyy-mm-dd
-                    return _date(a, b, c)
-                return _date(c, b, a)   # dd.mm.yyyy
+                    year = a
+                    result = _date(a, b, c)
+                else:                   # dd.mm.yyyy
+                    year = c
+                    result = _date(c, b, a)
+                if not (2000 <= year <= 2100):
+                    return None
+                return result
             except ValueError:
                 return None
     return None

@@ -40,6 +40,8 @@ def create_pending_link(db, telegram_id, username, full_name, phone):
 
 def approve_link(db, link_id, partner_id, approved_by):
     link = db.query(CustomerBotLink).filter(CustomerBotLink.id == link_id).first()
+    if link is None:
+        return None
     link.status = "approved"
     link.partner_id = partner_id
     link.approved_at = datetime.now()
@@ -51,6 +53,8 @@ def approve_link(db, link_id, partner_id, approved_by):
 
 def reject_link(db, link_id, approved_by):
     link = db.query(CustomerBotLink).filter(CustomerBotLink.id == link_id).first()
+    if link is None:
+        return None
     link.status = "rejected"
     link.approved_by = str(approved_by)
     db.commit()
