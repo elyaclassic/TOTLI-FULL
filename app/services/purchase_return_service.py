@@ -9,6 +9,9 @@ class DocumentError(Exception):
 
 
 def validate_return(db: Session, doc: PurchaseReturn) -> None:
+    partner = db.query(Partner).filter(Partner.id == doc.partner_id).first()
+    if not partner or (partner.type not in ("supplier", "both")):
+        raise DocumentError("Qaytarish faqat yetkazib beruvchi uchun (mijoz emas)")
     items = db.query(PurchaseReturnItem).filter(PurchaseReturnItem.return_id == doc.id).all()
     if not items:
         raise DocumentError("Hujjatda qator yo'q")

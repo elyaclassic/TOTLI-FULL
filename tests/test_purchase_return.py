@@ -105,3 +105,19 @@ def test_return_maps_to_debit(db):
     rows = [{"date": d.date, "doc_type": "Xarid qaytarish", "debit": float(d.total or 0), "credit": 0.0}
             for d in confirmed]
     assert rows and rows[0]["debit"] == 4000.0 and rows[0]["credit"] == 0.0
+
+def test_confirm_rejects_non_supplier(db):
+    _seed(db)  # partner id=1 is type='supplier'
+    db.add(Partner(id=2, name="Mijoz X", type="customer", balance=0.0))
+    db.commit()
+    from app.services.purchase_return_service import confirm_return, DocumentError
+    pr = PurchaseReturn(number="PR-20260531-0009", partner_id=2, warehouse_id=1,
+                        date=_dt.datetime(2026,5,31,10,0), status="draft", total=1000.0)
+    db.add(pr); db.flush()
+    db.add(PurchaseReturnItem(return_id=pr.id, product_id=1, quantity=1.0, price=1000.0, total=1000.0))
+    db.commit()
+    with pytest.raises(DocumentError):
+        confirm_return(db, pr, current_user=None)
+    db.refresh(pr)
+    assert pr.status == "draft"                      # rejected before status change
+    assert db.query(Partner).get(2).balance == 0.0   # customer balance untouched
