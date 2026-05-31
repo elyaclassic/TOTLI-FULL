@@ -123,6 +123,44 @@ class PurchaseExpense(Base):
     purchase = relationship("Purchase", back_populates="expenses")
 
 
+class PurchaseReturn(Base):
+    """Yetkazib beruvchiga qaytarish hujjati (brak/yaroqsiz)"""
+    __tablename__ = "purchase_returns"
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(40), unique=True, index=True)
+    date = Column(DateTime, default=datetime.now)
+    partner_id = Column(Integer, ForeignKey("partners.id"))
+    warehouse_id = Column(Integer, ForeignKey("warehouses.id"))
+    status = Column(String(20), default="draft")  # draft | confirmed | cancelled
+    reason = Column(String(20), default="brak")    # brak | expired | other
+    total = Column(Float, default=0)
+    notes = Column(Text)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    items = relationship("PurchaseReturnItem", back_populates="return_doc",
+                         cascade="all, delete-orphan")
+    partner = relationship("Partner")
+    warehouse = relationship("Warehouse")
+
+    __table_args__ = (
+        Index("idx_purchase_returns_user_status", "user_id", "status"),
+    )
+
+
+class PurchaseReturnItem(Base):
+    """Qaytarish qatorlari"""
+    __tablename__ = "purchase_return_items"
+    id = Column(Integer, primary_key=True, index=True)
+    return_id = Column(Integer, ForeignKey("purchase_returns.id"), index=True)
+    product_id = Column(Integer, ForeignKey("products.id"), index=True)
+    quantity = Column(Float)
+    price = Column(Float)
+    total = Column(Float)
+    return_doc = relationship("PurchaseReturn", back_populates="items")
+    product = relationship("Product")
+
+
 # ==========================================
 # FOYDALANUVCHILAR
 # ==========================================

@@ -243,3 +243,38 @@ def ensure_agents_commission_percent_column(db: Session) -> None:
             raise
     except Exception:
         db.rollback()
+
+
+def ensure_purchase_return_tables(db: Session) -> None:
+    """purchase_returns + purchase_return_items jadvallari (yetkazib beruvchiga qaytarish)."""
+    try:
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS purchase_returns (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                number VARCHAR(40) UNIQUE,
+                date DATETIME,
+                partner_id INTEGER REFERENCES partners(id),
+                warehouse_id INTEGER REFERENCES warehouses(id),
+                status VARCHAR(20) DEFAULT 'draft',
+                reason VARCHAR(20) DEFAULT 'brak',
+                total FLOAT DEFAULT 0,
+                notes TEXT,
+                user_id INTEGER REFERENCES users(id),
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        db.execute(text("""
+            CREATE TABLE IF NOT EXISTS purchase_return_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                return_id INTEGER REFERENCES purchase_returns(id),
+                product_id INTEGER REFERENCES products(id),
+                quantity FLOAT,
+                price FLOAT,
+                total FLOAT
+            )
+        """))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_pr_user_status ON purchase_returns(user_id, status)"))
+        db.execute(text("CREATE INDEX IF NOT EXISTS idx_pri_return ON purchase_return_items(return_id)"))
+        db.commit()
+    except Exception:
+        db.rollback()
