@@ -1074,18 +1074,18 @@ async def report_stock_export(
         ws.cell(row=4, column=c).fill = header_fill
         ws.cell(row=4, column=c).font = Font(bold=True, color="FFFFFF")
     for s in stocks:
-        p = s.product
-        wh = s.warehouse
+        p = s["product"]
+        wh = s["warehouse"]
         min_s = getattr(p, "min_stock", 0) or 0
         price = getattr(p, "purchase_price", 0) or 0
         ws.append([
             wh.name if wh else "",
             p.name if p else "",
             (p.barcode or p.code or "") if p else "",
-            float(s.quantity or 0),
+            float(s["quantity"] or 0),
             float(min_s),
             float(price),
-            float((s.quantity or 0) * price),
+            float((s["quantity"] or 0) * price),
         ])
     buf = io.BytesIO()
     wb.save(buf)
