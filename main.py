@@ -48,6 +48,7 @@ from app.utils.db_schema import (
     ensure_audit_cooldowns_table,
     ensure_product_is_for_agent_column,
     ensure_sales_plans_table,
+    ensure_purchase_return_tables,
     ensure_orders_pending_driver_id_column,
     ensure_partners_price_type_id_column,
     ensure_perf_indexes_20260507,
@@ -65,6 +66,7 @@ from app.routes import finance as finance_routes
 from app.routes import products as products_routes
 from app.routes import warehouse as warehouse_routes
 from app.routes import purchases as purchases_routes
+from app.routes import purchase_returns as purchase_returns_routes
 from app.routes import partners as partners_routes
 from app.routes import employees as employees_routes
 from app.routes import employees_dismissals as employees_dismissals_routes
@@ -141,6 +143,7 @@ app.include_router(products_routes.product_check_router)
 app.include_router(warehouse_routes.router)
 app.include_router(warehouse_routes.inventory_router)
 app.include_router(purchases_routes.router)
+app.include_router(purchase_returns_routes.router)
 app.include_router(partners_routes.router)
 app.include_router(employees_routes.router)
 app.include_router(employees_dismissals_routes.router)
@@ -333,6 +336,7 @@ async def startup():
             ensure_audit_cooldowns_table(db)
             ensure_product_is_for_agent_column(db)
             ensure_sales_plans_table(db)
+            ensure_purchase_return_tables(db)
             ensure_orders_pending_driver_id_column(db)
             ensure_partners_price_type_id_column(db)
             ensure_perf_indexes_20260507(db)
