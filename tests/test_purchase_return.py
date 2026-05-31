@@ -90,3 +90,18 @@ def test_cancel_restores(db):
     assert pr.status == "cancelled"
     assert db.query(Stock).filter_by(warehouse_id=1, product_id=1).first().quantity == 10.0  # restored
     assert db.query(Partner).get(1).balance == -50000.0  # restored
+
+def test_return_maps_to_debit(db):
+    _seed(db)
+    from app.services.purchase_return_service import confirm_return
+    pr = PurchaseReturn(number="PR-20260531-0005", partner_id=1, warehouse_id=1,
+                        date=_dt.datetime(2026,5,15,10,0), status="draft", total=4000.0)
+    db.add(pr); db.flush()
+    db.add(PurchaseReturnItem(return_id=pr.id, product_id=1, quantity=4.0, price=1000.0, total=4000.0))
+    db.commit()
+    confirm_return(db, pr, current_user=None)
+    confirmed = db.query(PurchaseReturn).filter(
+        PurchaseReturn.partner_id == 1, PurchaseReturn.status == "confirmed").all()
+    rows = [{"date": d.date, "doc_type": "Xarid qaytarish", "debit": float(d.total or 0), "credit": 0.0}
+            for d in confirmed]
+    assert rows and rows[0]["debit"] == 4000.0 and rows[0]["credit"] == 0.0

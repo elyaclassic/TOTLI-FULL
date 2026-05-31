@@ -2035,6 +2035,26 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
             "credit": credit,
         })
 
+    # Yetkazib beruvchiga qaytarishlar (tasdiqlangan) — xaridning teskarisi: DEBIT
+    from app.models.database import PurchaseReturn as _PR
+    q_returns = db.query(_PR).filter(
+        _PR.partner_id == partner_id,
+        _PR.status == "confirmed",
+    )
+    if period_only:
+        q_returns = q_returns.filter(_PR.date >= date_from_start, _PR.date <= date_to_end)
+    for d in q_returns.order_by(_PR.date):
+        doc_label = f"Xarid qaytarish {d.number or ''} {d.date.strftime('%d.%m.%Y %H:%M') if d.date else ''}".strip()
+        rows.append({
+            "date": d.date,
+            "doc_type": "Xarid qaytarish",
+            "doc_number": d.number or "",
+            "doc_label": doc_label,
+            "doc_url": f"/purchase-returns/{d.id}",
+            "debit": float(d.total or 0),
+            "credit": 0.0,
+        })
+
     rows.sort(key=lambda r: r["date"])
     opening_debit = 0.0
     opening_credit = 0.0
