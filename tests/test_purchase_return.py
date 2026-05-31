@@ -74,3 +74,19 @@ def test_double_confirm_blocked(db):
     with pytest.raises(DocumentError):
         confirm_return(db, pr, current_user=None)
     assert db.query(Partner).get(1).balance == -49000.0  # applied only once
+
+def test_cancel_restores(db):
+    _seed(db)
+    from app.services.purchase_return_service import confirm_return, cancel_return
+    pr = PurchaseReturn(number="PR-20260531-0004", partner_id=1, warehouse_id=1,
+                        date=_dt.datetime(2026,5,31,10,0), status="draft", total=2000.0)
+    db.add(pr); db.flush()
+    db.add(PurchaseReturnItem(return_id=pr.id, product_id=1, quantity=2.0, price=1000.0, total=2000.0))
+    db.commit()
+    confirm_return(db, pr, current_user=None)
+    assert db.query(Stock).filter_by(warehouse_id=1, product_id=1).first().quantity == 8.0
+    cancel_return(db, pr, current_user=None)
+    db.refresh(pr)
+    assert pr.status == "cancelled"
+    assert db.query(Stock).filter_by(warehouse_id=1, product_id=1).first().quantity == 10.0  # restored
+    assert db.query(Partner).get(1).balance == -50000.0  # restored

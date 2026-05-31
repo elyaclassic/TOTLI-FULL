@@ -72,3 +72,32 @@ def confirm_return(db: Session, doc: PurchaseReturn, current_user=None, client_h
     except Exception:
         db.rollback()
         raise
+
+
+def cancel_return(db: Session, doc: PurchaseReturn, current_user=None, client_host=None) -> None:
+    """Tasdiqlangan qaytarishni bekor qilish — stock va balansni tiklaydi."""
+    res = db.execute(
+        text("UPDATE purchase_returns SET status='cancelled' WHERE id=:id AND status='confirmed'"),
+        {"id": doc.id},
+    )
+    if res.rowcount == 0:
+        db.rollback()
+        raise DocumentError("Faqat tasdiqlangan hujjatni bekor qilish mumkin")
+    try:
+        items = db.query(PurchaseReturnItem).filter(PurchaseReturnItem.return_id == doc.id).all()
+        for it in items:
+            create_stock_movement(
+                db=db, warehouse_id=doc.warehouse_id, product_id=it.product_id,
+                quantity_change=+float(it.quantity), operation_type="return_purchase_revert",
+                document_type="PurchaseReturn", document_id=doc.id, document_number=doc.number,
+                user_id=current_user.id if current_user else None,
+                note=f"Qaytarish bekor qilindi: {doc.number}", created_at=doc.date,
+            )
+        if doc.partner_id:
+            partner = db.query(Partner).filter(Partner.id == doc.partner_id).first()
+            if partner:
+                partner.balance = (partner.balance or 0) - float(doc.total or 0)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
