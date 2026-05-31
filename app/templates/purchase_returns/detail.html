@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% set reason_labels = {'brak': 'Brak', 'expired': 'Eskirgan', 'other': 'Boshqa'} %}
+<div class="container-fluid">
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <!-- Page header -->
+    <div class="page-header mb-3">
+        <div class="d-flex align-items-center gap-2">
+            {% if current_user and current_user.role == 'sotuvchi' %}
+            <a href="/sales/pos" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            {% else %}
+            <button type="button" class="top-btn btn btn-outline-secondary" onclick="history.back()"><i class="bi bi-arrow-left"></i> Orqaga</button>
+            {% endif %}
+            <h5 class="mb-0 ms-1">
+                {{ doc.number }}
+                {% if doc.status == 'draft' %}
+                <span class="badge bg-secondary ms-2">Qoralama</span>
+                {% elif doc.status == 'confirmed' %}
+                <span class="badge bg-success ms-2">Tasdiqlangan</span>
+                {% elif doc.status == 'cancelled' %}
+                <span class="badge bg-danger ms-2">Bekor</span>
+                {% endif %}
+            </h5>
+        </div>
+        <div class="d-flex gap-2">
+            {% if doc.status == 'draft' %}
+            <form method="post" action="/purchase-returns/{{ doc.id }}/confirm" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <button type="submit" class="top-btn btn btn-success"
+                    onclick="return confirm('Qaytarishni tasdiqlaysizmi? Ombor qoldig\'i va yetkazib beruvchi qarzi kamayadi.')">
+                    <i class="bi bi-check-circle"></i> Tasdiqlash
+                </button>
+            </form>
+            {% elif doc.status == 'confirmed' %}
+            <form method="post" action="/purchase-returns/{{ doc.id }}/cancel" style="display:inline;">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+                <button type="submit" class="top-btn btn btn-danger"
+                    onclick="return confirm('Tasdiqni bekor qilasizmi? Ombor qoldig\'i va qarz qaytariladi.');">
+                    <i class="bi bi-arrow-counterclockwise"></i> Bekor qilish
+                </button>
+            </form>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if doc.status == 'draft' %}
+    <div class="alert alert-info py-2 small">
+        <i class="bi bi-info-circle me-1"></i>Tasdiqlash ombor qoldig'ini kamaytiradi va yetkazib beruvchi qarzini kamaytiradi.
+    </div>
+    {% endif %}
+
+    <!-- Header info card -->
+    <div class="data-table card mb-3">
+        <div class="card-header py-2">
+            <span class="fw-semibold"><i class="bi bi-info-circle me-1 text-secondary"></i> Hujjat ma'lumotlari</span>
+        </div>
+        <div class="card-body py-2">
+            <div class="row g-2">
+                <div class="col-sm-3">
+                    <span class="muted-cell small">Yetkazib beruvchi</span>
+                    <div class="fw-semibold">{{ doc.partner.name if doc.partner else '—' }}</div>
+                </div>
+                <div class="col-sm-3">
+                    <span class="muted-cell small">Ombor</span>
+                    <div class="fw-semibold">{{ doc.warehouse.name if doc.warehouse else '—' }}</div>
+                </div>
+                <div class="col-sm-3">
+                    <span class="muted-cell small">Sana</span>
+                    <div class="fw-semibold">{{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '—' }}</div>
+                </div>
+                <div class="col-sm-3">
+                    <span class="muted-cell small">Sabab</span>
+                    <div class="fw-semibold">{{ reason_labels.get(doc.reason, doc.reason or '—') }}</div>
+                </div>
+            </div>
+            {% if doc.notes %}
+            <div class="mt-2">
+                <span class="muted-cell small">Izoh</span>
+                <div>{{ doc.notes }}</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Items table card -->
+    <div class="data-table card mb-3">
+        <div class="card-header py-2">
+            <span class="fw-semibold"><i class="bi bi-box-seam me-1 text-secondary"></i> Mahsulotlar</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="muted-cell" style="width:40px;">№</th>
+                            <th>Mahsulot</th>
+                            <th class="num-cell">Miqdor</th>
+                            <th class="num-cell">Narx</th>
+                            <th class="sum-cell">Jami</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in doc.items %}
+                        <tr>
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td>{{ item.product.name if item.product else '—' }}</td>
+                            <td class="num-cell">{{ "{:,.2f}".format(item.quantity or 0) }}</td>
+                            <td class="num-cell">{{ "{:,.0f}".format(item.price or 0) }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(item.total or 0) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr><td colspan="5" class="text-center text-muted py-4">Mahsulot yo'q.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="4" class="text-end fw-bold py-2">Jami:</td>
+                            <td class="sum-cell fw-bold" style="color:#065f46;">
+                                {{ "{:,.0f}".format(doc.total or 0) }}
+                                <span class="text-muted fw-normal" style="font-size:11px;">so'm</span>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

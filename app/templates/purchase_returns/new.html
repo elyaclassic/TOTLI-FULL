@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="page-header mb-3">
+        <h5 class="mb-0"><i class="bi bi-arrow-return-left text-primary"></i> Yangi qaytarish</h5>
+        <div class="d-flex gap-2">
+            <a href="/purchase-returns" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Orqaga</a>
+        </div>
+    </div>
+
+    {% if request.query_params.get('error') %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ request.query_params.get('error') }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <div class="card-header"><span class="fw-bold"><i class="bi bi-plus-circle text-primary"></i> Yangi qaytarish hujjati</span></div>
+        <div class="card-body">
+            <form method="post" action="/purchase-returns" id="returnCreateForm">
+                <input type="hidden" name="csrf_token" value="{{ getattr(request.state, 'csrf_token', '') }}">
+
+                <div class="row mb-4">
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-600">Yetkazib beruvchi *</label>
+                        <select name="partner_id" class="form-select" required>
+                            <option value="">Tanlang...</option>
+                            {% for s in suppliers %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <label class="form-label fw-600">Ombor *</label>
+                        <select name="warehouse_id" class="form-select" required>
+                            <option value="">Tanlang...</option>
+                            {% for w in warehouses %}
+                            <option value="{{ w.id }}">{{ w.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-600">Sana</label>
+                        <input type="date" name="date" class="form-control" value="{{ today if today is defined else '' }}">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-600">Sabab</label>
+                        <select name="reason" class="form-select">
+                            <option value="brak">Brak</option>
+                            <option value="expired">Eskirgan</option>
+                            <option value="other">Boshqa</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label fw-600">Izoh</label>
+                        <textarea name="notes" class="form-control" rows="1" placeholder="Ixtiyoriy"></textarea>
+                    </div>
+                </div>
+
+                <!-- Hidden master list of products (used to build per-row selects) -->
+                <select id="product_master" style="display:none;">
+                    <option value="">Tanlang...</option>
+                    {% for p in products %}
+                    <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <h6 class="mb-0 fw-bold">Mahsulotlar</h6>
+                </div>
+                <div class="table-responsive mb-3">
+                    <table class="table table-sm" id="productsTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Mahsulot</th>
+                                <th style="width:120px;">Miqdor</th>
+                                <th style="width:150px;">Narx (tannarx)</th>
+                                <th style="width:160px;">Qator jami</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="productsTableBody">
+                            <tr class="product-row">
+                                <td>
+                                    <select name="product_id" class="form-select form-select-sm row-product">
+                                        <option value="">Tanlang...</option>
+                                        {% for p in products %}
+                                        <option value="{{ p.id }}">{{ p.name }}{% if p.code %} ({{ p.code }}){% endif %}</option>
+                                        {% endfor %}
+                                    </select>
+                                </td>
+                                <td><input type="number" name="quantity" class="form-control form-control-sm row-qty" step="any" min="0" placeholder="0"></td>
+                                <td><input type="number" name="price" class="form-control form-control-sm row-price" step="any" min="0" placeholder="0"></td>
+                                <td><span class="row-total fw-semibold">0</span> <span class="text-muted" style="font-size:11px;">so'm</span></td>
+                                <td><button type="button" class="btn-act danger remove-product-row" title="O'chirish"><i class="bi bi-trash"></i></button></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="top-btn btn btn-outline-primary btn-sm mb-4" id="addProductRow">
+                    <i class="bi bi-plus-circle"></i> Qator qo'shish
+                </button>
+
+                <div class="filter-card mb-4">
+                    <div style="font-size:11px;text-transform:uppercase;color:#888;font-weight:700;margin-bottom:3px;">Jami</div>
+                    <div style="font-size:18px;font-weight:800;color:#017449;"><span id="grandTotal">0</span> so'm</div>
+                </div>
+
+                <button type="submit" class="top-btn btn btn-success">
+                    <i class="bi bi-check-circle"></i> Saqlash
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    var tbody = document.getElementById('productsTableBody');
+    var form = document.getElementById('returnCreateForm');
+
+    function formatSum(n) {
+        return (n || 0).toLocaleString('uz-UZ', { maximumFractionDigits: 0 });
+    }
+
+    function recomputeRow(row) {
+        var qty = parseFloat(row.querySelector('.row-qty') && row.querySelector('.row-qty').value) || 0;
+        var price = parseFloat(row.querySelector('.row-price') && row.querySelector('.row-price').value) || 0;
+        var totalEl = row.querySelector('.row-total');
+        if (totalEl) totalEl.textContent = formatSum(qty * price);
+        return qty * price;
+    }
+
+    function recomputeAll() {
+        var grand = 0;
+        tbody.querySelectorAll('.product-row').forEach(function(row) {
+            grand += recomputeRow(row);
+        });
+        var g = document.getElementById('grandTotal');
+        if (g) g.textContent = formatSum(grand);
+    }
+
+    function fetchPrice(row) {
+        var sel = row.querySelector('.row-product');
+        var priceInput = row.querySelector('.row-price');
+        if (!sel || !priceInput || !sel.value) return;
+        fetch('/purchase-returns/price?product_id=' + encodeURIComponent(sel.value))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data && data.price !== undefined && data.price !== null) {
+                    priceInput.value = parseFloat(data.price).toFixed(2);
+                    recomputeAll();
+                }
+            })
+            .catch(function(e) { console.error('Narx olishda xatolik:', e); });
+    }
+
+    function wireRow(row) {
+        var sel = row.querySelector('.row-product');
+        if (sel) sel.addEventListener('change', function() { fetchPrice(row); });
+        row.querySelectorAll('.row-qty, .row-price').forEach(function(inp) {
+            inp.addEventListener('input', recomputeAll);
+        });
+        var rm = row.querySelector('.remove-product-row');
+        if (rm) rm.addEventListener('click', function() {
+            if (tbody.querySelectorAll('.product-row').length > 1) {
+                row.remove();
+                recomputeAll();
+            }
+        });
+    }
+
+    // Wire the initial row
+    tbody.querySelectorAll('.product-row').forEach(wireRow);
+
+    document.getElementById('addProductRow').addEventListener('click', function() {
+        var firstRow = tbody.querySelector('.product-row');
+        if (!firstRow) return;
+        var newRow = firstRow.cloneNode(true);
+        if (newRow.querySelector('.row-product')) newRow.querySelector('.row-product').value = '';
+        if (newRow.querySelector('.row-qty')) newRow.querySelector('.row-qty').value = '';
+        if (newRow.querySelector('.row-price')) newRow.querySelector('.row-price').value = '';
+        if (newRow.querySelector('.row-total')) newRow.querySelector('.row-total').textContent = '0';
+        tbody.appendChild(newRow);
+        wireRow(newRow);
+        recomputeAll();
+    });
+
+    form.addEventListener('submit', function(e) {
+        var hasProduct = false;
+        tbody.querySelectorAll('.product-row').forEach(function(row) {
+            var sel = row.querySelector('.row-product');
+            var qty = row.querySelector('.row-qty');
+            if (sel && sel.value && parseFloat(qty && qty.value) > 0) hasProduct = true;
+        });
+        if (!hasProduct) {
+            e.preventDefault();
+            alert('Kamida bitta mahsulot qo\'shing (mahsulot va miqdor kiriting).');
+        }
+    });
+
+    recomputeAll();
+}());
+</script>
+{% endblock %}

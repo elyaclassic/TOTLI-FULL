@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+
+    <!-- Page title -->
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div class="d-flex align-items-center gap-2">
+            {% if current_user and current_user.role == 'sotuvchi' %}
+            <a href="/sales/pos" class="btn btn-outline-secondary btn-sm" title="Sotuv oynasiga qaytish"><i class="bi bi-arrow-left"></i> Orqaga</a>
+            {% else %}
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="history.back()" title="Orqaga"><i class="bi bi-arrow-left"></i> Orqaga</button>
+            {% endif %}
+            <h5 class="mb-0 fw-bold"><i class="bi bi-arrow-return-left me-2"></i>Yetkazib beruvchiga qaytarishlar</h5>
+        </div>
+        <a href="/purchase-returns/new" class="top-btn btn btn-success">
+            <i class="bi bi-plus-circle me-1"></i>Yangi qaytarish
+        </a>
+    </div>
+
+    <!-- Data table card -->
+    <div class="card data-table">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-table text-muted"></i>
+                <span class="fw-semibold" style="font-size:14px;">Qaytarishlar ro'yxati</span>
+                <span class="text-muted" style="font-size:12px;">({{ docs|length }} ta)</span>
+            </div>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table mb-0">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Raqam</th>
+                            <th>Sana</th>
+                            <th>Yetkazib beruvchi</th>
+                            <th>Jami</th>
+                            <th>Holat</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for doc in docs %}
+                        <tr style="cursor:pointer;" onclick="window.location='/purchase-returns/{{ doc.id }}'">
+                            <td class="muted-cell">{{ loop.index }}</td>
+                            <td class="num-cell">
+                                <a href="/purchase-returns/{{ doc.id }}" class="text-decoration-none">{{ doc.number }}</a>
+                            </td>
+                            <td class="muted-cell">{{ doc.date.strftime('%d.%m.%Y %H:%M') if doc.date else '-' }}</td>
+                            <td>{{ doc.partner.name if doc.partner else '—' }}</td>
+                            <td class="sum-cell">{{ "{:,.0f}".format(doc.total or 0) }} <span class="text-muted fw-normal" style="font-size:11px;">so'm</span></td>
+                            <td>
+                                {% if doc.status == 'draft' %}
+                                <span class="badge bg-secondary">Qoralama</span>
+                                {% elif doc.status == 'confirmed' %}
+                                <span class="badge bg-success">Tasdiqlangan</span>
+                                {% elif doc.status == 'cancelled' %}
+                                <span class="badge bg-danger">Bekor</span>
+                                {% else %}
+                                <span class="badge bg-light text-dark">{{ doc.status }}</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 opacity-25"></i>
+                                Hozircha qaytarish yo'q.<br>
+                                <a href="/purchase-returns/new" class="mt-2 d-inline-block">Yangi qaytarish yaratish</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
