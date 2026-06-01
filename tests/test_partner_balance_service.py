@@ -119,3 +119,59 @@ def test_compute_usd_no_rate_uses_raw_amount(db):
                    amount=100, cash_register_id=usd.id, date=datetime(2026,6,1)))
     db.commit()
     assert compute_partner_balance(db, p.id) == 100.0
+
+
+from app.models.database import AuditLog
+
+
+def test_recompute_sets_balance_and_returns_old_new(db):
+    from app.services.partner_balance_service import recompute_partner_balance
+    p = _partner(db, balance=999)
+    db.add(Order(partner_id=p.id, type="sale", status="confirmed", total=100000, date=datetime(2026,6,1)))
+    db.commit()
+    old, new = recompute_partner_balance(db, p.id, reason="sale_confirm")
+    db.commit()
+    assert old == 999.0
+    assert new == 100000.0
+    db.refresh(p)
+    assert p.balance == 100000.0
+
+
+def test_recompute_writes_audit_log(db):
+    from app.services.partner_balance_service import recompute_partner_balance
+    p = _partner(db, balance=0)
+    db.add(Order(partner_id=p.id, type="sale", status="confirmed", total=50000, date=datetime(2026,6,1)))
+    db.commit()
+    recompute_partner_balance(db, p.id, reason="sale_confirm", ref="S-0001", actor="admin")
+    db.commit()
+    logs = db.query(AuditLog).filter(AuditLog.entity_type == "partner_balance").all()
+    assert len(logs) == 1
+    assert logs[0].entity_id == p.id
+    assert logs[0].action == "recompute"
+    assert "sale_confirm" in (logs[0].details or "")
+    assert logs[0].entity_number == "S-0001"
+
+
+def test_recompute_idempotent(db):
+    from app.services.partner_balance_service import recompute_partner_balance
+    p = _partner(db, balance=0)
+    db.add(Order(partner_id=p.id, type="sale", status="confirmed", total=70000, date=datetime(2026,6,1)))
+    db.commit()
+    recompute_partner_balance(db, p.id, reason="x"); db.commit()
+    old, new = recompute_partner_balance(db, p.id, reason="x"); db.commit()
+    assert old == new == 70000.0
+
+
+def test_recompute_confirm_revert_confirm_no_drift(db):
+    from app.services.partner_balance_service import recompute_partner_balance
+    p = _partner(db, balance=0)
+    o = Order(partner_id=p.id, type="sale", status="confirmed", total=80000, date=datetime(2026,6,1))
+    db.add(o); db.commit()
+    recompute_partner_balance(db, p.id, reason="confirm"); db.commit()
+    db.refresh(p); assert p.balance == 80000.0
+    o.status = "cancelled"; db.commit()
+    recompute_partner_balance(db, p.id, reason="revert"); db.commit()
+    db.refresh(p); assert p.balance == 0.0
+    o.status = "confirmed"; db.commit()
+    recompute_partner_balance(db, p.id, reason="reconfirm"); db.commit()
+    db.refresh(p); assert p.balance == 80000.0

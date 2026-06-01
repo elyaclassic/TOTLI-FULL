@@ -9,7 +9,7 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.database import (
-    Partner, Order, Payment, Purchase,
+    AuditLog, Partner, Order, Payment, Purchase,
     PartnerBalanceDoc, PartnerBalanceDocItem, PurchaseReturn,
 )
 from app.services.currency_service import get_rate
@@ -89,3 +89,27 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
         total += float(d.total or 0)
 
     return total
+
+
+def recompute_partner_balance(db: Session, partner_id: int, *, reason: str,
+                              ref: str = None, actor: str = None) -> tuple:
+    """Partner balansini qayta hisoblab set qiladi + audit log yozadi.
+
+    db.commit() CHAQIRMAYDI — chaqiruvchining tranzaksiyasiga qo'shiladi (atomik).
+    Qaytaradi: (old_balance, new_balance).
+    """
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not partner:
+        return (0.0, 0.0)
+    old = float(partner.balance or 0)
+    new = compute_partner_balance(db, partner_id)
+    partner.balance = new
+    db.add(AuditLog(
+        user_name=actor or "system",
+        action="recompute",
+        entity_type="partner_balance",
+        entity_id=partner_id,
+        entity_number=ref,
+        details=f"reason={reason}; {old:.2f} -> {new:.2f}; delta={new - old:+.2f}",
+    ))
+    return (old, new)
