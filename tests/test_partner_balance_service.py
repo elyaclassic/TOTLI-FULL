@@ -84,3 +84,38 @@ def test_compute_includes_null_status_payment(db):
     db.add(Payment(partner_id=p.id, type="expense", status=None, amount=10000, date=datetime(2026,6,1)))
     db.commit()
     assert compute_partner_balance(db, p.id) == 10000.0
+
+
+from datetime import date
+from app.models.database import CashRegister, ExchangeRate
+
+
+def test_compute_converts_usd_expense_payment(db):
+    p = _partner(db)
+    usd = CashRegister(name="Asosiy $", payment_type="naqd", currency="USD", is_active=True, opening_balance=0)
+    db.add(usd); db.flush()
+    db.add(ExchangeRate(from_currency="USD", to_currency="UZS", rate=12000, effective_date=date(2026,1,1)))
+    db.add(Payment(partner_id=p.id, type="expense", status="confirmed",
+                   amount=100, cash_register_id=usd.id, date=datetime(2026,6,1)))
+    db.commit()
+    assert compute_partner_balance(db, p.id) == 1200000.0
+
+
+def test_compute_uzs_payment_not_converted(db):
+    p = _partner(db)
+    uzs = CashRegister(name="Naqd", payment_type="naqd", currency="UZS", is_active=True, opening_balance=0)
+    db.add(uzs); db.flush()
+    db.add(Payment(partner_id=p.id, type="expense", status="confirmed",
+                   amount=50000, cash_register_id=uzs.id, date=datetime(2026,6,1)))
+    db.commit()
+    assert compute_partner_balance(db, p.id) == 50000.0
+
+
+def test_compute_usd_no_rate_uses_raw_amount(db):
+    p = _partner(db)
+    usd = CashRegister(name="Asosiy $", payment_type="naqd", currency="USD", is_active=True, opening_balance=0)
+    db.add(usd); db.flush()
+    db.add(Payment(partner_id=p.id, type="expense", status="confirmed",
+                   amount=100, cash_register_id=usd.id, date=datetime(2026,6,1)))
+    db.commit()
+    assert compute_partner_balance(db, p.id) == 100.0

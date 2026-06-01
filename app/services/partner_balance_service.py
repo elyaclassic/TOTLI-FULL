@@ -3,6 +3,8 @@
 Kanonik formula = reports._build_partner_movements yopilish balansi.
 Belgi: musbat = mijoz bizga qarzdor; manfiy = biz partnerga qarzdormiz.
 """
+import logging
+
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -10,6 +12,27 @@ from app.models.database import (
     Partner, Order, Payment, Purchase,
     PartnerBalanceDoc, PartnerBalanceDocItem, PurchaseReturn,
 )
+from app.services.currency_service import get_rate
+
+logger = logging.getLogger(__name__)
+
+
+def _payment_amount_uzs(db: Session, payment: Payment) -> float:
+    """To'lov summasini so'mda qaytaradi. USD kassa bo'lsa kurs bilan aylantiradi."""
+    amt = float(payment.amount or 0)
+    cr = payment.cash_register
+    currency = (getattr(cr, "currency", None) or "UZS") if cr else "UZS"
+    if currency == "UZS":
+        return amt
+    on_date = payment.date.date() if payment.date else None
+    rate = get_rate(db, currency, "UZS", on_date)
+    if not rate or rate <= 0:
+        logger.warning(
+            "partner_balance: %s to'lov #%s uchun %s->UZS kurs topilmadi, xom amount ishlatildi",
+            currency, getattr(payment, "id", "?"), currency,
+        )
+        return amt
+    return amt * rate
 
 
 def compute_partner_balance(db: Session, partner_id: int) -> float:
@@ -37,7 +60,7 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
         Payment.partner_id == partner_id,
         or_(Payment.status == "confirmed", Payment.status.is_(None)),
     ):
-        amt = float(p.amount or 0)
+        amt = _payment_amount_uzs(db, p)
         if p.type == "income":
             total -= amt
         else:
