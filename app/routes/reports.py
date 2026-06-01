@@ -1956,12 +1956,14 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
         })
 
     # To'lovlar: income = credit (ular bizga to'ladı), expense = debit (biz ularga to'ladık) — faqat tasdiqlangan
+    from app.services.partner_balance_service import _payment_amount_uzs
     q_payments = db.query(Payment).filter(Payment.partner_id == partner_id)
     if hasattr(Payment, "status"):
         q_payments = q_payments.filter(or_(Payment.status == "confirmed", Payment.status.is_(None)))
     if period_only:
         q_payments = q_payments.filter(Payment.date >= date_from_start, Payment.date <= date_to_end)
     for p in q_payments.order_by(Payment.date):
+        amt_uzs = _payment_amount_uzs(db, p)
         if p.type == "income":
             doc_label = f"To'lov (kirim) {p.number or ''} {p.date.strftime('%d.%m.%Y %H:%M') if p.date else ''}".strip()
             rows.append({
@@ -1971,7 +1973,7 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
                 "doc_label": doc_label,
                 "doc_url": f"/finance/payment/{p.id}/edit",
                 "debit": 0.0,
-                "credit": float(p.amount or 0),
+                "credit": amt_uzs,
             })
         else:
             doc_label = f"To'lov (chiqim) {p.number or ''} {p.date.strftime('%d.%m.%Y %H:%M') if p.date else ''}".strip()
@@ -1981,7 +1983,7 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
                 "doc_number": p.number or "",
                 "doc_label": doc_label,
                 "doc_url": f"/finance/payment/{p.id}/edit",
-                "debit": float(p.amount or 0),
+                "debit": amt_uzs,
                 "credit": 0.0,
             })
 
@@ -2580,7 +2582,8 @@ def _compute_salary_total(db: Session, dt_from: datetime, dt_to: datetime) -> fl
     total = 0.0
     for y, m in months:
         sals = db.query(Salary).filter(Salary.year == y, Salary.month == m).all()
-        total += sum(float(s.total or 0) for s in sals)
+        # Ochilish balanslari (is_balance_entry) — oldingi davr qarzi, davr ish haqi xarajati EMAS.
+        total += sum(float(s.total or 0) for s in sals if not getattr(s, "is_balance_entry", False))
     return total
 
 

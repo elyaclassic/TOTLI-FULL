@@ -175,3 +175,32 @@ def test_recompute_confirm_revert_confirm_no_drift(db):
     o.status = "confirmed"; db.commit()
     recompute_partner_balance(db, p.id, reason="reconfirm"); db.commit()
     db.refresh(p); assert p.balance == 80000.0
+
+
+def test_reconciliation_closing_equals_compute(db):
+    from app.routes.reports import _build_partner_movements
+    from datetime import datetime as _dt
+    p = _partner(db)
+    db.add(Order(partner_id=p.id, type="sale", status="confirmed", total=100000, date=_dt(2026,6,1)))
+    db.add(Payment(partner_id=p.id, type="income", status="confirmed", amount=30000, date=_dt(2026,6,1)))
+    db.add(Purchase(partner_id=p.id, status="confirmed", total=20000, total_expenses=0, date=_dt(2026,6,1)))
+    db.commit()
+    rows, od, oc = _build_partner_movements(db, p.id, _dt(2026,1,1), _dt(2026,12,31), period_only=False)
+    closing = sum(float(r["debit"]) - float(r["credit"]) for r in rows)
+    assert abs(closing - compute_partner_balance(db, p.id)) < 0.01
+
+
+def test_reconciliation_closing_equals_compute_with_usd(db):
+    from app.routes.reports import _build_partner_movements
+    from datetime import datetime as _dt, date as _d
+    from app.models.database import CashRegister, ExchangeRate
+    p = _partner(db)
+    usd = CashRegister(name="$", payment_type="naqd", currency="USD", is_active=True, opening_balance=0)
+    db.add(usd); db.flush()
+    db.add(ExchangeRate(from_currency="USD", to_currency="UZS", rate=12000, effective_date=_d(2026,1,1)))
+    db.add(Payment(partner_id=p.id, type="expense", status="confirmed", amount=100, cash_register_id=usd.id, date=_dt(2026,6,1)))
+    db.commit()
+    rows, od, oc = _build_partner_movements(db, p.id, _dt(2026,1,1), _dt(2026,12,31), period_only=False)
+    closing = sum(float(r["debit"]) - float(r["credit"]) for r in rows)
+    assert abs(closing - compute_partner_balance(db, p.id)) < 0.01
+    assert abs(closing - 1200000.0) < 0.01
