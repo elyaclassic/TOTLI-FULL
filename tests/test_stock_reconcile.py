@@ -40,3 +40,47 @@ def test_compute_isolated_per_wh_product(db):
     _mv(db, 2, 1, +99)
     _mv(db, 1, 2, +5)
     assert compute_stock_quantity(db, 1, 1) == 10.0
+
+
+from app.models.database import AuditLog
+from app.services.stock_service import reconcile_stock
+
+
+def test_reconcile_sets_stored_to_ledger(db):
+    _wh(db); _prod(db)
+    s = Stock(warehouse_id=1, product_id=1, quantity=999)
+    db.add(s); db.commit()
+    _mv(db, 1, 1, +100)
+    _mv(db, 1, 1, -30)
+    old, new = reconcile_stock(db, 1, 1, reason="test"); db.commit()
+    assert old == 999.0
+    assert new == 70.0
+    db.refresh(s); assert s.quantity == 70.0
+
+
+def test_reconcile_writes_audit(db):
+    _wh(db); _prod(db)
+    db.add(Stock(warehouse_id=1, product_id=1, quantity=0)); db.commit()
+    _mv(db, 1, 1, +50)
+    reconcile_stock(db, 1, 1, reason="transfer_confirm", actor="admin"); db.commit()
+    logs = db.query(AuditLog).filter(AuditLog.entity_type == "stock").all()
+    assert len(logs) == 1
+    assert "transfer_confirm" in (logs[0].details or "")
+
+
+def test_reconcile_no_movements_is_noop(db):
+    _wh(db); _prod(db)
+    s = Stock(warehouse_id=1, product_id=1, quantity=100)
+    db.add(s); db.commit()
+    old, new = reconcile_stock(db, 1, 1, reason="test"); db.commit()
+    assert old == 100.0 and new == 100.0
+    db.refresh(s); assert s.quantity == 100.0
+
+
+def test_reconcile_idempotent(db):
+    _wh(db); _prod(db)
+    db.add(Stock(warehouse_id=1, product_id=1, quantity=0)); db.commit()
+    _mv(db, 1, 1, +42)
+    reconcile_stock(db, 1, 1, reason="x"); db.commit()
+    old, new = reconcile_stock(db, 1, 1, reason="x"); db.commit()
+    assert old == new == 42.0

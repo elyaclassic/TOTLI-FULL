@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.database import Stock, StockMovement
+from app.models.database import AuditLog, Stock, StockMovement
 
 
 class NegativeStockError(Exception):
@@ -273,3 +273,58 @@ def compute_stock_quantity(db: Session, warehouse_id: int, product_id: int) -> f
         )
         .scalar() or 0.0
     )
+
+
+def _stock_movement_count(db: Session, warehouse_id: int, product_id: int) -> int:
+    return db.query(StockMovement).filter(
+        StockMovement.warehouse_id == warehouse_id,
+        StockMovement.product_id == product_id,
+    ).count()
+
+
+def reconcile_stock(db: Session, warehouse_id: int, product_id: int, *,
+                    reason: str, actor: str = None) -> tuple:
+    """stocks.quantity = compute_stock_quantity (kanonik). Dublikat row'larni 1 ga
+    birlashtiradi. move_count=0 (faqat initial) bo'lsa TEGMAYDI. commit qilmaydi.
+    Qaytaradi: (old, new).
+    """
+    rows = db.query(Stock).filter(
+        Stock.warehouse_id == warehouse_id,
+        Stock.product_id == product_id,
+    ).all()
+    if len(rows) > 1:
+        total = sum(float(r.quantity or 0) for r in rows)
+        keep = rows[0]; keep.quantity = total
+        old_ids = [r.id for r in rows[1:]]
+        if old_ids:
+            db.query(StockMovement).filter(StockMovement.stock_id.in_(old_ids)).update(
+                {StockMovement.stock_id: keep.id}, synchronize_session=False)
+        for r in rows[1:]:
+            db.delete(r)
+        db.flush()
+        stock = keep
+    elif len(rows) == 1:
+        stock = rows[0]
+    else:
+        stock = None
+
+    old = float(stock.quantity or 0) if stock else 0.0
+
+    if _stock_movement_count(db, warehouse_id, product_id) == 0:
+        return (old, old)
+
+    new = compute_stock_quantity(db, warehouse_id, product_id)
+    if stock is None:
+        stock = Stock(warehouse_id=warehouse_id, product_id=product_id, quantity=new)
+        db.add(stock); db.flush()
+    else:
+        stock.quantity = new
+    db.add(AuditLog(
+        user_name=actor or "system",
+        action="reconcile",
+        entity_type="stock",
+        entity_id=product_id,
+        entity_number=f"wh{warehouse_id}/p{product_id}",
+        details=f"reason={reason}; {old:.3f} -> {new:.3f}; delta={new - old:+.3f}",
+    ))
+    return (old, new)
