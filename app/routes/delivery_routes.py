@@ -588,15 +588,6 @@ async def supervisor_reject_agent_order(
         )
     # Agar tasdiqlangan bo'lsa — stock qaytarish + yetkazishni ham bekor qilish
     if order.status == "confirmed":
-        # D1 audit fix: partner.balance ni qaytarish (snapshot dan)
-        if order.partner_id and float(order.debt or 0) > 0:
-            partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
-            if partner_obj:
-                if order.previous_partner_balance is not None:
-                    partner_obj.balance = float(order.previous_partner_balance)
-                else:
-                    # Eski yozuvlar uchun fallback: hozirgi balansdan order.debt ayrish
-                    partner_obj.balance = float(partner_obj.balance or 0) - float(order.debt or 0)
         for it in order.items:
             if not it.product_id or not (it.quantity or 0) > 0:
                 continue
@@ -624,6 +615,16 @@ async def supervisor_reject_agent_order(
         ).all():
             delivery.status = "cancelled"
     order.status = "cancelled"
+    # Site 1: delivery_revert — recompute partner balance after order cancelled
+    if order.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, order.partner_id,
+            reason="delivery_revert",
+            ref=order.number,
+            actor=current_user.username if current_user else None,
+        )
     db.commit()
     referer = request.headers.get("referer", "/supervisor/agent-orders")
     return RedirectResponse(url=referer, status_code=303)
@@ -1054,10 +1055,8 @@ async def supervisor_confirm_agent_payment(
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
     db.refresh(ap)
 
-    # 2. Mijoz qarzidan ayirish (balance = qarzdorlik)
+    # 2. Mijoz partner'ini olish (keyinroq recompute + notify uchun)
     partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
-    if partner:
-        partner.balance = float(partner.balance or 0) - float(ap.amount or 0)
 
     # 3. Tegishli kassaga kirim qilish — payment_type bo'yicha qat'iy moslashtirish
     pay_type_map = {
@@ -1136,6 +1135,17 @@ async def supervisor_confirm_agent_payment(
             order.paid = float(order.paid or 0) + pay_this
             order.debt = order_debt - pay_this
             remaining -= pay_this
+
+    # Site 2: agent_payment_confirm — recompute after Payment added + FIFO debt reduction
+    if ap.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, ap.partner_id,
+            reason="agent_payment_confirm",
+            ref=payment_number,
+            actor=current_user.username if current_user else None,
+        )
 
     db.commit()
     try:
@@ -1233,10 +1243,16 @@ async def supervisor_confirm_driver_payment(
                 order.debt = order_debt - applied
                 remaining -= applied
 
-    # Partner balansi kamayadi
-    partner = db.query(Partner).filter(Partner.id == p.partner_id).first() if p.partner_id else None
-    if partner:
-        partner.balance = float(partner.balance or 0) - float(p.amount or 0)
+    # Site 3: driver payment confirm — recompute after Payment confirmed + order.paid updated
+    if p.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, p.partner_id,
+            reason="agent_payment_confirm",
+            ref=getattr(p, "number", None),
+            actor=current_user.username if current_user else None,
+        )
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("Haydovchi to'lovi tasdiqlandi"), status_code=303)
@@ -1273,14 +1289,20 @@ async def supervisor_revert_driver_payment(
             order.paid = max(0.0, float(order.paid or 0) - amount)
             order.debt = float(order.debt or 0) + amount
 
-    # 2. Partner balansi (qarz qaytadi)
-    if p.partner_id:
-        partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
-        if partner:
-            partner.balance = float(partner.balance or 0) + amount
-
-    # 3. Payment status -> pending
+    # 3. Payment status -> pending (payment no longer counted by recompute)
     p.status = "pending"
+
+    # Site 4: driver payment cancel — recompute after Payment set to pending + order.debt restored
+    if p.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, p.partner_id,
+            reason="agent_payment_cancel",
+            ref=getattr(p, "number", None),
+            actor=current_user.username if current_user else None,
+        )
+
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov bekor qilindi"), status_code=303)
 
@@ -1338,17 +1360,13 @@ async def supervisor_edit_driver_payment(
     old_amount = float(p.amount or 0)
     was_confirmed = p.status == "confirmed"
 
-    # Agar confirmed edi: avval eski summa effektni qaytarish
+    # Agar confirmed edi: avval eski summa effektni qaytarish (order.paid/debt adjusted)
     if was_confirmed:
         if p.order_id:
             order = db.query(Order).filter(Order.id == p.order_id).first()
             if order:
                 order.paid = max(0.0, float(order.paid or 0) - old_amount)
                 order.debt = float(order.debt or 0) + old_amount
-        if p.partner_id:
-            partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
-            if partner:
-                partner.balance = float(partner.balance or 0) + old_amount
 
     # Yangi qiymatlarni yozish
     p.amount = new_amount
@@ -1362,7 +1380,7 @@ async def supervisor_edit_driver_payment(
     if cr:
         p.cash_register_id = cr.id
 
-    # Agar confirmed edi: yangi summa bilan qayta qo'llash
+    # Agar confirmed edi: yangi summa bilan qayta qo'llash (order.paid/debt)
     if was_confirmed:
         if p.order_id:
             order = db.query(Order).filter(Order.id == p.order_id).first()
@@ -1370,10 +1388,17 @@ async def supervisor_edit_driver_payment(
                 applied = min(float(order.debt or 0), new_amount)
                 order.paid = float(order.paid or 0) + applied
                 order.debt = max(0.0, float(order.debt or 0) - applied)
-        if p.partner_id:
-            partner = db.query(Partner).filter(Partner.id == p.partner_id).first()
-            if partner:
-                partner.balance = float(partner.balance or 0) - new_amount
+
+    # Site 5: driver payment edit — single recompute after all amount/order updates
+    if p.partner_id and was_confirmed:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, p.partner_id,
+            reason="agent_payment_edit",
+            ref=getattr(p, "number", None),
+            actor=current_user.username if current_user else None,
+        )
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov tahrirlandi"), status_code=303)
@@ -1393,12 +1418,7 @@ async def supervisor_revert_agent_payment(
     if ap.status != "confirmed":
         return RedirectResponse(url="/supervisor/agent-payments?error=not_confirmed", status_code=303)
 
-    # 1. Mijoz qarzini qaytarish
-    partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
-    if partner:
-        partner.balance = float(partner.balance or 0) + float(ap.amount or 0)
-
-    # 2. Tegishli Payment ni o'chirish (agar yaratilgan bo'lsa)
+    # 1. Tegishli Payment ni o'chirish (agar yaratilgan bo'lsa)
     # AGT- raqamli to'lovlarni topish
     payments = db.query(Payment).filter(
         Payment.partner_id == ap.partner_id,
@@ -1408,10 +1428,22 @@ async def supervisor_revert_agent_payment(
     for p in payments:
         db.delete(p)
 
-    # 3. Statusni pending ga qaytarish
+    # 2. Statusni pending ga qaytarish
     ap.status = "pending"
     ap.confirmed_by = None
     ap.confirmed_at = None
+
+    # Site 6: agent payment cancel — recompute after Payment deleted + status pending
+    if ap.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, ap.partner_id,
+            reason="agent_payment_cancel",
+            ref=None,
+            actor=current_user.username if current_user else None,
+        )
+
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
@@ -1428,11 +1460,10 @@ async def supervisor_delete_agent_payment(
     if not ap:
         return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
 
-    # Agar tasdiqlangan bo'lsa — avval revert qilish
+    # Agar tasdiqlangan bo'lsa — avval Payment'larni o'chirish, so'ng recompute
+    partner_id_for_recompute = None
     if ap.status == "confirmed":
-        partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
-        if partner:
-            partner.balance = float(partner.balance or 0) + float(ap.amount or 0)
+        partner_id_for_recompute = ap.partner_id
         payments = db.query(Payment).filter(
             Payment.partner_id == ap.partner_id,
             Payment.amount == float(ap.amount or 0),
@@ -1442,6 +1473,18 @@ async def supervisor_delete_agent_payment(
             db.delete(p)
 
     db.delete(ap)
+
+    # Site 7: agent payment delete — recompute after Payment deleted + ap deleted
+    if partner_id_for_recompute:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(
+            db, partner_id_for_recompute,
+            reason="agent_payment_delete",
+            ref=None,
+            actor=current_user.username if current_user else None,
+        )
+
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
