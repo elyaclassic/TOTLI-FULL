@@ -523,10 +523,6 @@ async def partner_merge(
     if not primary or len(others) != len(other_ids):
         raise HTTPException(status_code=404, detail="Partner topilmadi")
 
-    # 1) Balanslar qo'shish
-    for o in others:
-        primary.balance = (primary.balance or 0) + (o.balance or 0)
-
     # 2) partner_agents — UniqueConstraint(partner_id, agent_id) — alohida ishlatish
     existing_agents = {pa.agent_id for pa in db.query(PartnerAgent).filter(PartnerAgent.partner_id == primary_id).all()}
     for o_id in other_ids:
@@ -561,6 +557,11 @@ async def partner_merge(
         if not (o.name or "").startswith("[→#"):
             o.name = f"[→#{primary_id}] {o.name}"
 
+    # Balansni qayta hisoblash — barcha hujjatlar primary'ga ko'chgach
+    from app.services.partner_balance_service import recompute_partner_balance
+    db.flush()
+    recompute_partner_balance(db, primary_id, reason="partner_merge", ref=str(primary_id),
+                              actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url=f"/partners/duplicates?merged=1&primary={primary_id}", status_code=303)
 

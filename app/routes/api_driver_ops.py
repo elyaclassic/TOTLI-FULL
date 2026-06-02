@@ -356,13 +356,12 @@ async def driver_delivery_status(
                     {"id": order.id},
                 )
                 if claim.rowcount == 1:
-                    # Status atomik o'zgardi — endi balance yozish (faqat bir marta)
-                    if order.partner_id and float(order.debt or 0) > 0:
-                        partner_obj = db.query(Partner).filter(Partner.id == order.partner_id).first()
-                        if partner_obj:
-                            if order.previous_partner_balance is None:
-                                order.previous_partner_balance = float(partner_obj.balance or 0)
-                            partner_obj.balance = float(partner_obj.balance or 0) + float(order.debt or 0)
+                    # Status atomik 'delivered' bo'ldi — balansni qayta hisoblash
+                    if order.partner_id:
+                        from app.services.partner_balance_service import recompute_partner_balance
+                        db.flush()
+                        recompute_partner_balance(db, order.partner_id, reason="driver_deliver",
+                                                  ref=getattr(order, "number", None))
                     # Obmen qaytarish (return_sale): qaytgan tovar jismonan keldi —
                     # endi (yetkazilganda, to'g'ri vaqt) omborga kirim qilamiz va
                     # bog'langan child sotuvni tasdiqlaymiz. Atomik rowcount==1 bilan
