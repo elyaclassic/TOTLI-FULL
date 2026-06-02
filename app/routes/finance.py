@@ -1323,7 +1323,9 @@ async def finance_harajat_hujjat_save(
     if not cash:
         return RedirectResponse(url="/finance/harajatlar?error=cash", status_code=303)
     try:
-        doc_date = datetime.strptime(str(date).strip()[:10], "%Y-%m-%d")
+        _d = datetime.strptime(str(date).strip()[:10], "%Y-%m-%d").date()
+        # Tanlangan sanaga joriy vaqtni qo'shamiz (faqat sana = 00:00 bo'lib qolmasin, payment bilan mos)
+        doc_date = datetime.combine(_d, datetime.now().time())
     except ValueError:
         doc_date = datetime.now()
     form = await request.form()
