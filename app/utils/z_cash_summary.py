@@ -89,7 +89,7 @@ def compute_z_cash_summary(db: Session, target_date: date, user_id: int, until_d
         exp_filters.append(Payment.created_at <= until_dt)
 
     cash_expenses_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-        *exp_filters, Payment.category.in_(("expense", "expense_doc", "other")),
+        *exp_filters, Payment.category.in_(("expense", "expense_doc", "other", "sale_return")),
     ).scalar() or 0.0
 
     cash_payments_out = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
