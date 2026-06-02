@@ -1,5 +1,6 @@
 """Ombor harakati (StockMovement) yaratish va o'chirish."""
 from datetime import datetime
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.models.database import Stock, StockMovement
@@ -260,3 +261,15 @@ def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: st
             created_at=order.date or _dt.now(),
             strict_negative=True,  # D5 audit fix: sale stock'ni manfiy qilolmaydi
         )
+
+
+def compute_stock_quantity(db: Session, warehouse_id: int, product_id: int) -> float:
+    """Kanonik qoldiq = shu (wh, product) uchun barcha movement quantity_change yig'indisi."""
+    return float(
+        db.query(func.coalesce(func.sum(StockMovement.quantity_change), 0.0))
+        .filter(
+            StockMovement.warehouse_id == warehouse_id,
+            StockMovement.product_id == product_id,
+        )
+        .scalar() or 0.0
+    )
