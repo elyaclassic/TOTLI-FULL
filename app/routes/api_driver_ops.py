@@ -281,6 +281,10 @@ async def driver_delivery_status(
                             created_at=datetime.now(),
                         )
                 order.status = "cancelled"
+                if order.partner_id:
+                    from app.services.partner_balance_service import recompute_partner_balance
+                    db.flush()
+                    recompute_partner_balance(db, order.partner_id, reason="delivery_failed")
 
         if new_status == "delivered":
             delivery.delivered_at = datetime.now()
