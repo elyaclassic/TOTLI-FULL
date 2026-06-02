@@ -4088,6 +4088,22 @@ async def sales_return_revert(
             note=f"Qaytarish tasdiqini bekor: {doc.number}",
             created_at=doc.date,
         )
+    # Refund Payment'ni o'chirish (kassa naqdini qaytarish)
+    refund_pays = db.query(Payment).filter(
+        Payment.order_id == doc.id, Payment.category == "sale_return", Payment.type == "expense"
+    ).all()
+    _registers = set()
+    for rp in refund_pays:
+        if rp.cash_register_id:
+            _registers.add(rp.cash_register_id)
+        db.delete(rp)
+    db.flush()
+    from app.services.finance_service import sync_cash_balance
+    for _cr in _registers:
+        sync_cash_balance(db, _cr)
+    if doc.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        recompute_partner_balance(db, doc.partner_id, reason="sale_return_revert", ref=doc.number)
     doc.status = "cancelled"
     db.commit()
     return RedirectResponse(url="/sales/return/document/" + doc.number + "?reverted=1", status_code=303)
