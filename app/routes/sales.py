@@ -3973,6 +3973,41 @@ async def sales_return_create(
     return_order.total = total_return
     return_order.paid = total_return
     return_order.debt = 0
+    db.flush()
+    # === Refund: original sotuv naqd to'langan bo'lsa kassadan proporsional chiqim ===
+    from app.services.refund_service import compute_return_refund
+    returned_lines = [(product_ids[i], quantities[i]) for i in range(min(len(product_ids), len(quantities)))
+                      if product_ids[i] and quantities[i] > 0]
+    rinfo = compute_return_refund(db, sale, returned_lines)
+    if rinfo["return_total"] > 0:
+        return_order.total = rinfo["return_total"]
+        return_order.subtotal = rinfo["return_total"]
+        return_order.paid = rinfo["return_total"]
+    has_child = db.query(Order.id).filter(Order.parent_order_id == return_order.id).first()
+    if rinfo["refund_cash"] > 0 and rinfo["refund_cash_register_id"] and not has_child:
+        _today = datetime.now().strftime('%Y%m%d')
+        _last = db.query(Payment).filter(Payment.number.like(f"PAY-{_today}-%")).order_by(Payment.number.desc()).first()
+        _seq = (int(_last.number.split("-")[-1]) + 1) if (_last and _last.number) else 1
+        db.add(Payment(
+            number=f"PAY-{_today}-{_seq:04d}",
+            date=datetime.now(),
+            type="expense",
+            category="sale_return",
+            payment_type="cash",
+            status="confirmed",
+            partner_id=sale.partner_id,
+            order_id=return_order.id,
+            cash_register_id=rinfo["refund_cash_register_id"],
+            amount=rinfo["refund_cash"],
+            description=f"Qaytarish refund: {return_order.number} ({sale.number})",
+            user_id=current_user.id if current_user else None,
+        ))
+        db.flush()
+        from app.services.finance_service import sync_cash_balance
+        sync_cash_balance(db, rinfo["refund_cash_register_id"])
+        if sale.partner_id:
+            from app.services.partner_balance_service import recompute_partner_balance
+            recompute_partner_balance(db, sale.partner_id, reason="sale_return_refund", ref=return_order.number)
     db.commit()
     wh_name = ""
     if return_warehouse_id:
