@@ -815,22 +815,19 @@ async def finance_payment_post(
 
 def _payment_apply_balance(db: Session, payment: Payment, sign: int):
     """Kassa va kontragent balanslarini yangilash.
-    sign=1: tasdiqlash, sign=-1: bekor qilish.
-    income (kirim) = kontragent bizga to'ladi → balance += amount (qarz kamayadi)
-    expense (chiqim) = biz kontragentga to'laymiz → balance += amount (qarz kamayadi)
+
+    `sign` — eski inkremental API bilan moslik uchun (endi partner balansiga ta'sir qilmaydi).
+    Kontragent balansi recompute bilan hujjatlardan qayta hisoblanadi (USD konvertatsiya bilan #7/#8),
+    kassa balansi formula bilan sinxronlanadi. Chaqiruvchi to'lov statusini (confirmed/cancelled)
+    DB'da o'rnatib bo'lgach chaqiradi.
     """
     _sync_cash_balance(db, payment.cash_register_id)
-    # Kontragent balansini yangilash
     if payment.partner_id:
-        partner = db.query(Partner).filter(Partner.id == payment.partner_id).first()
-        if partner:
-            amount = float(payment.amount or 0)
-            if payment.type == "income":
-                # Kontragent bizga to'ladi — uning qarzi kamayadi (balance -= amount)
-                partner.balance = (partner.balance or 0) - (amount * sign)
-            elif payment.type == "expense":
-                # Biz kontragentga to'laymiz — bizning qarzimiz kamayadi (balance += amount)
-                partner.balance = (partner.balance or 0) + (amount * sign)
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(db, payment.partner_id,
+                                  reason=f"payment_{payment.type or 'unknown'}",
+                                  ref=payment.number)
 
 
 @router.post("/payment/{payment_id}/confirm")

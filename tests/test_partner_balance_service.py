@@ -214,3 +214,21 @@ def test_reconciliation_closing_equals_compute_with_usd(db):
     closing = sum(float(r["debit"]) - float(r["credit"]) for r in rows)
     assert abs(closing - compute_partner_balance(db, p.id)) < 0.01
     assert abs(closing - 1200000.0) < 0.01
+
+
+def test_payment_apply_balance_recomputes_with_usd_conversion(db):
+    """finance._payment_apply_balance USD chiqimni kurs bilan recompute qiladi (#7/#8)."""
+    from app.routes.finance import _payment_apply_balance
+    from app.models.database import CashRegister, ExchangeRate
+    from datetime import date as _d
+    p = _partner(db, balance=0)
+    usd = CashRegister(name="Asosiy $", payment_type="naqd", currency="USD", is_active=True, opening_balance=0)
+    db.add(usd); db.flush()
+    db.add(ExchangeRate(from_currency="USD", to_currency="UZS", rate=12000, effective_date=_d(2026,1,1)))
+    pay = Payment(partner_id=p.id, type="expense", status="confirmed", amount=100,
+                  cash_register_id=usd.id, number="PAY-T-1", date=datetime(2026,6,1))
+    db.add(pay); db.flush()
+    _payment_apply_balance(db, pay, 1)
+    db.commit()
+    db.refresh(p)
+    assert p.balance == 1200000.0  # 100 USD * 12000 — xom 100 EMAS (eski bug)
