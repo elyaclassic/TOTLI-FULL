@@ -858,12 +858,12 @@ async def sales_confirm(
 
     # Qarz va balans
     order.debt = max(0.0, (order.total or 0) - (order.paid or 0))
-    if order.partner_id and order.debt > 0:
-        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-        if partner:
-            if order.previous_partner_balance is None:
-                order.previous_partner_balance = float(partner.balance or 0)
-            partner.balance = float(partner.balance or 0) + float(order.debt)
+    if order.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(db, order.partner_id, reason="sale_confirm",
+                                  ref=order.number,
+                                  actor=current_user.username if current_user else None)
 
     db.commit()
     check_low_stock_and_notify(db)
@@ -3725,10 +3725,12 @@ async def sales_pos_complete(
                     _sync_cash_balance(db, cash_register.id)
             db.commit()
     else:
-        # Revert (sales/revert) uchun snapshot — order.previous_partner_balance dan to'g'ri qaytarish uchun
-        if order.previous_partner_balance is None:
-            order.previous_partner_balance = float(partner.balance or 0)
-        partner.balance = (partner.balance or 0) + (order.total or 0)
+        if order.partner_id:
+            from app.services.partner_balance_service import recompute_partner_balance
+            db.flush()
+            recompute_partner_balance(db, order.partner_id, reason="sale_create",
+                                      ref=order.number,
+                                      actor=current_user.username if current_user else None)
         db.commit()
     log_action(db, user=current_user, action="create", entity_type="sale",
                entity_id=order.id, entity_number=order.number,
@@ -4262,9 +4264,13 @@ async def pos_pay_supplier(
     if getattr(cash_register, "balance", None) is not None:
         db.flush()
         _sync_cash_balance(db, cash_register.id)
-    # Partner balansini yangilash (qarzni kamaytirish)
-    if partner.balance is not None:
-        partner.balance = (partner.balance or 0) + amount  # balance < 0 — biz qarz, + qo'shsak kamayadi
+    # Partner balansini qayta hisoblash (chiqim Payment yuqorida yaratildi)
+    if partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(db, partner_id, reason="supplier_payment",
+                                  ref=pay_number,
+                                  actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"To'lov: {partner.name} ga {amount:,.0f} so'm ({pt})"), status_code=303)
 
