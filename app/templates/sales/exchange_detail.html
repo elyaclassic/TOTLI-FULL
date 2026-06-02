@@ -38,6 +38,11 @@
             <a href="/sales/exchange/{{ parent.id }}/excel" class="btn btn-outline-success btn-sm" title="Obmen yuk xati (yagona Excel)">
                 <i class="bi bi-file-earmark-excel"></i> Excel (Накладная)
             </a>
+            {% if parent.status in ['draft','confirmed'] and child.status in ['draft','confirmed'] %}
+            <a href="/sales/exchange/{{ parent.id }}/edit" class="btn btn-warning btn-sm">
+                <i class="bi bi-pencil"></i> Tahrirlash
+            </a>
+            {% endif %}
             <button class="btn btn-outline-secondary btn-sm" onclick="history.back()">
                 <i class="bi bi-arrow-left"></i> Orqaga
             </button>
