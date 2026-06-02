@@ -233,7 +233,9 @@ async def driver_delivery_status(
                             diff = old_qty - new_qty
                             target_oi.quantity = new_qty
                             target_oi.total = new_total
-                            if diff > 0.001 and order.status == "confirmed":
+                            # FIX: stock dispatch'da ('out_for_delivery') chiqariladi — partial
+                            # yetkazishda qoldiq SHU holatda ham qaytsin (eski 'confirmed'-only leak edi)
+                            if diff > 0.001 and (order.status or "") in ("confirmed", "out_for_delivery"):
                                 wh_id = target_oi.warehouse_id or order.warehouse_id
                                 if wh_id and target_oi.product_id:
                                     create_stock_movement(
