@@ -1195,14 +1195,14 @@ async def agent_debtors(request: Request, token: str = None, db: Session = Depen
         agent = _agent_from_token(_extract_token(request, token), db)
         if not agent:
             return {"success": False, "error": "Token noto'g'ri"}
-        # Partner bo'yicha qarz summasi (Order.debt > 0)
+        # Partner balansi bo'yicha TO'LIQ qarz (kanonik: ochilish qoldig'i + sotuv - to'lov).
+        # Avval Order.debt ishlatilardi -> faqat buyurtmasi bor mijozlar ko'rinardi (ochilish
+        # qoldig'i bo'lganlar tushib qolardi). Endi to'liq balans.
         from sqlalchemy import desc
         results = (
-            db.query(Partner.id, Partner.name, Partner.phone, sa_func.sum(Order.debt).label("total_debt"))
-            .join(Order, Order.partner_id == Partner.id)
-            .filter(Partner.agent_id == agent.id, Partner.is_active == True, Order.debt > 0)
-            .group_by(Partner.id, Partner.name, Partner.phone)
-            .order_by(desc("total_debt"))
+            db.query(Partner.id, Partner.name, Partner.phone, Partner.balance.label("total_debt"))
+            .filter(Partner.agent_id == agent.id, Partner.is_active == True, Partner.balance > 0)
+            .order_by(desc(Partner.balance))
             .all()
         )
         debtors = [
