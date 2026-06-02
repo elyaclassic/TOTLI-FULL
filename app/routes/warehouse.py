@@ -692,6 +692,13 @@ async def warehouse_transfer_confirm(
             created_at=transfer.date,
         )
     # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
+    from app.services.stock_service import reconcile_stock
+    db.flush()
+    affected = {(transfer.from_warehouse_id, item.product_id) for item in items} | \
+               {(transfer.to_warehouse_id, item.product_id) for item in items}
+    for wh, pid in affected:
+        reconcile_stock(db, wh, pid, reason="transfer_confirm",
+                        actor=current_user.username if current_user else None)
     db.commit()
     logger.info(
         "transfer_confirm: #%s wh=%s->%s items=%s user=%s",
@@ -748,6 +755,13 @@ async def warehouse_transfer_revert(
             created_at=transfer.date,
         )
     transfer.status = "draft"
+    from app.services.stock_service import reconcile_stock
+    db.flush()
+    affected = {(transfer.from_warehouse_id, item.product_id) for item in items} | \
+               {(transfer.to_warehouse_id, item.product_id) for item in items}
+    for wh, pid in affected:
+        reconcile_stock(db, wh, pid, reason="transfer_revert",
+                        actor=current_user.username if current_user else None)
     db.commit()
     logger.info(
         "transfer_revert: #%s wh=%s->%s items=%s user=%s",
@@ -771,7 +785,15 @@ async def warehouse_transfer_delete(
             url="/warehouse/transfers?error=" + quote("Tasdiqlangan hujjatni to'g'ridan-to'g'ri o'chirib bo'lmaydi. Avval tasdiqni bekor qiling."),
             status_code=303,
         )
+    items = db.query(WarehouseTransferItem).filter(WarehouseTransferItem.transfer_id == transfer_id).all()
+    affected = {(transfer.from_warehouse_id, item.product_id) for item in items} | \
+               {(transfer.to_warehouse_id, item.product_id) for item in items}
     db.delete(transfer)
+    from app.services.stock_service import reconcile_stock
+    db.flush()
+    for wh, pid in affected:
+        reconcile_stock(db, wh, pid, reason="transfer_delete",
+                        actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url="/warehouse/transfers?deleted=1", status_code=303)
 
