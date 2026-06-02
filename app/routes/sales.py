@@ -49,21 +49,6 @@ def _check_order_access(order: Order, current_user: User):
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
 
 
-def _revert_balance_if_needed(db, order, partner):
-    """delivered/completed bo'lgan orderda balance qaytariladi.
-
-    - previous_partner_balance bor bo'lsa: snapshot'ga qaytariladi (yangi flow)
-    - previous_partner_balance NULL bo'lsa: legacy/migrated order — debt ayiriladi (eski flow fallback)
-    """
-    if order.status not in ("delivered", "completed"):
-        return
-    if not partner:
-        return
-    if order.previous_partner_balance is not None:
-        partner.balance = order.previous_partner_balance
-    elif (order.debt or 0) > 0:
-        # Legacy migrated order — snapshot yo'q, debt'ni ayirish
-        partner.balance = float(partner.balance or 0) - float(order.debt or 0)
 from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
@@ -1289,10 +1274,6 @@ async def sales_revert(
             note=f"Sotuv tasdiqini bekor qilish: {order.number}",
             created_at=order.date or datetime.now(),
         )
-    partner = None
-    if order.partner_id:
-        partner = db.query(Partner).filter(Partner.id == order.partner_id).first()
-    _revert_balance_if_needed(db, order, partner)
     order.previous_partner_balance = None
     # Yetkazilmagan delivery larni cancel qilish (cancelled/failed/delivered emasini)
     from app.models.database import Delivery as DeliveryModel
@@ -1302,6 +1283,12 @@ async def sales_revert(
     ).all():
         delivery.status = "cancelled"
     order.status = "draft"
+    if order.partner_id:
+        from app.services.partner_balance_service import recompute_partner_balance
+        db.flush()
+        recompute_partner_balance(db, order.partner_id, reason="sale_revert",
+                                  ref=order.number,
+                                  actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
