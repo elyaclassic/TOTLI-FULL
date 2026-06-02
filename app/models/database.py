@@ -2055,6 +2055,7 @@ def init_db():
     ensure_attendance_improvements()
     ensure_visit_feedback_columns()
     ensure_currency_columns()
+    ensure_stock_unique_index()
     ensure_agent_commission_column()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
@@ -2213,6 +2214,36 @@ def ensure_currency_columns():
                 print("exchange_rates jadvali yaratildi.")
     except Exception as e:
         print(f"ensure_currency_columns: {e}")
+
+
+def ensure_stock_unique_index():
+    """Jonli DB'da (warehouse_id, product_id) bo'yicha dublikat Stock row'larni birlashtirib,
+    unique index yaratadi. ORM'da UniqueConstraint bor, lekin eski jadval konstraintsiz
+    yaratilgan bo'lishi mumkin. Idempotent."""
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        dups = conn.execute(text(
+            "SELECT warehouse_id, product_id, COUNT(*) c FROM stocks "
+            "GROUP BY warehouse_id, product_id HAVING c > 1"
+        )).fetchall()
+        for wh, pid, _c in dups:
+            ids = [r[0] for r in conn.execute(text(
+                "SELECT id FROM stocks WHERE warehouse_id=:w AND product_id=:p ORDER BY id"),
+                {"w": wh, "p": pid}).fetchall()]
+            keep, drop = ids[0], ids[1:]
+            total = conn.execute(text(
+                "SELECT COALESCE(SUM(quantity),0) FROM stocks WHERE warehouse_id=:w AND product_id=:p"),
+                {"w": wh, "p": pid}).scalar()
+            conn.execute(text("UPDATE stocks SET quantity=:q WHERE id=:id"), {"q": total, "id": keep})
+            if drop:
+                drop_csv = ",".join(str(int(x)) for x in drop)
+                conn.execute(text(f"UPDATE stock_movements SET stock_id=:k WHERE stock_id IN ({drop_csv})"), {"k": keep})
+                conn.execute(text(f"DELETE FROM stocks WHERE id IN ({drop_csv})"))
+            print(f"stock dublikat birlashtirildi: wh={wh} pid={pid} -> id={keep} total={total}")
+        conn.execute(text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_stock_wh_prod_idx ON stocks(warehouse_id, product_id)"
+        ))
+        print("stocks(warehouse_id, product_id) unique index ta'minlandi.")
 
 
 def ensure_product_conversions_table():
