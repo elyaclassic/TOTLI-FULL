@@ -49,6 +49,41 @@ def _check_order_access(order: Order, current_user: User):
         raise HTTPException(status_code=403, detail="Bu buyurtmaga ruxsat yo'q")
 
 
+def _exchange_editable(parent, child) -> bool:
+    """Yetkazilmagan exchange (har ikkala order draft/confirmed) tahrirlanadi."""
+    ok = ("draft", "confirmed")
+    return ((parent.status or "") in ok) and (child is None or (child.status or "") in ok)
+
+
+def _apply_exchange_edit(db, parent, child, *, ret_lines, new_lines, actor=None):
+    """Exchange itemlarini almashtiradi (ret_lines parent return_sale, new_lines child sale),
+    total qayta hisoblaydi, partner balansni recompute qiladi. commit qilmaydi.
+    ret_lines/new_lines: [(product_id, qty, price), ...].
+    """
+    from app.models.database import OrderItem as _OI
+    for order, lines in ((parent, ret_lines), (child, new_lines)):
+        if order is None:
+            continue
+        db.query(_OI).filter(_OI.order_id == order.id).delete(synchronize_session=False)
+        tot = 0.0
+        for pid, qty, price in lines:
+            pid = int(pid); qty = float(qty); price = float(price)
+            if pid <= 0 or qty <= 0:
+                continue
+            line_total = qty * price
+            db.add(_OI(order_id=order.id, product_id=pid, quantity=qty, price=price,
+                       discount_percent=0, total=line_total))
+            tot += line_total
+        order.subtotal = tot
+        order.total = tot
+    db.flush()
+    pid_set = {o.partner_id for o in (parent, child) if o is not None and o.partner_id}
+    from app.services.partner_balance_service import recompute_partner_balance
+    for pid in pid_set:
+        recompute_partner_balance(db, pid, reason="exchange_edit",
+                                  ref=parent.number if parent else None, actor=actor)
+
+
 from app.services.period_service import is_period_closed
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.user_scope import get_warehouses_for_user
