@@ -25,6 +25,7 @@ from app.models.database import (
     Order, OrderItem, Payment,
 )
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.services.partner_balance_service import recompute_partner_balance
 from app.utils.audit import log_action
 
 
@@ -129,12 +130,13 @@ def confirm_purchase_atomic(
 
         # --- Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi ---
 
-        # --- Partner balansini yangilash ---
-        total_with_expenses = items_total + total_expenses
+        # --- Partner balansini qayta hisoblash (recompute pattern) ---
+        total_with_expenses = items_total + total_expenses  # audit log uchun saqlanadi
         if purchase.partner_id:
-            partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()
-            if partner:
-                partner.balance -= total_with_expenses
+            db.flush()
+            recompute_partner_balance(db, purchase.partner_id, reason="purchase_confirm",
+                                      ref=purchase.number,
+                                      actor=current_user.username if current_user else None)
 
         # --- Audit log ---
         log_action(
@@ -325,12 +327,12 @@ def revert_purchase_atomic(
                 note=f"Xarid bekor: {purchase.number}",
             )
 
-        # --- Partner balansini qaytarish ---
-        total_with_expenses = purchase.total + (purchase.total_expenses or 0)
+        # --- Partner balansini qayta hisoblash (recompute pattern) ---
         if purchase.partner_id:
-            partner = db.query(Partner).filter(Partner.id == purchase.partner_id).first()
-            if partner:
-                partner.balance += total_with_expenses
+            db.flush()
+            recompute_partner_balance(db, purchase.partner_id, reason="purchase_revert",
+                                      ref=purchase.number,
+                                      actor=current_user.username if current_user else None)
 
         # --- Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi ---
 

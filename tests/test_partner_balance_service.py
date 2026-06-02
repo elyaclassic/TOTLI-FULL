@@ -177,6 +177,16 @@ def test_recompute_confirm_revert_confirm_no_drift(db):
     db.refresh(p); assert p.balance == 80000.0
 
 
+def test_purchase_confirm_recomputes_balance(db):
+    from app.services.partner_balance_service import recompute_partner_balance
+    p = _partner(db, balance=0)
+    pur = Purchase(partner_id=p.id, status="confirmed", total=60000, total_expenses=0, date=datetime(2026,6,1))
+    db.add(pur); db.flush()
+    recompute_partner_balance(db, p.id, reason="purchase_confirm"); db.commit()
+    db.refresh(p)
+    assert p.balance == -60000.0
+
+
 def test_reconciliation_closing_equals_compute(db):
     from app.routes.reports import _build_partner_movements
     from datetime import datetime as _dt
