@@ -1187,8 +1187,9 @@ async def sales_delete_item(
 def _revert_return_sale_exchange(db, order, current_user):
     """Qaytarish/almashtirish (return_sale) tasdiqini bekor qilish — XAVFSIZ minimal.
 
-    Faqat yetkazilmagan (status='confirmed') va to'lovsiz almashtirishni bekor qiladi:
-    qaytarish (parent) + juft sotuv (child) ikkalasi 'cancelled' bo'ladi + partner balans recompute.
+    Faqat yetkazilmagan (status='confirmed') va to'lovsiz almashtirishni DRAFT holatga
+    qaytaradi (tahrirlab qayta tasdiqlash uchun): qaytarish (parent) + juft sotuv (child)
+    ikkalasi 'draft' bo'ladi + partner balans recompute. Oddiy sotuv revert kabi.
     Yetkazilgan ('delivered'/'completed') yoki to'lovli almashtirishni RAD etadi (to'liq Sub-2 keyin).
     """
     child = db.query(Order).filter(Order.parent_order_id == order.id, Order.type == "sale").first()
@@ -1207,7 +1208,7 @@ def _revert_return_sale_exchange(db, order, current_user):
             status_code=303)
     affected = set()
     for d in docs:
-        d.status = "cancelled"
+        d.status = "draft"
         if d.partner_id:
             affected.add(d.partner_id)
     db.flush()
