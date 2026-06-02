@@ -1794,6 +1794,13 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
 
     # Faqat hujjatdagi tovarlar yangilanadi — boshqa tovarlarning qoldig'iga tegmaydi
 
+    # Stock drift fix: har bir (wh, pid) juftligi uchun stock.quantity harakatlar yig'indisiga moslash
+    from app.services.stock_service import reconcile_stock
+    db.flush()
+    for _wh, _pid in {(it.warehouse_id, it.product_id) for it in doc.items}:
+        reconcile_stock(db, _wh, _pid, reason="stock_adjustment_confirm",
+                        actor=current_user.username if current_user else None)
+
     # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     try:
@@ -1876,6 +1883,14 @@ async def qoldiqlar_tovar_hujjat_revert(
             note=f"Hujjat tasdiqini bekor qilish: {doc.number}",
         )
     doc.status = "draft"
+
+    # Stock drift fix: revert dan keyin ham harakatlar yig'indisiga moslash
+    from app.services.stock_service import reconcile_stock
+    db.flush()
+    for _wh, _pid in {(it.warehouse_id, it.product_id) for it in doc.items}:
+        reconcile_stock(db, _wh, _pid, reason="stock_adjustment_revert",
+                        actor=current_user.username if current_user else None)
+
     db.commit()
     return RedirectResponse(url="/qoldiqlar/tovar/hujjat?reverted=1", status_code=303)
 
