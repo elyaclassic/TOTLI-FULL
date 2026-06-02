@@ -84,3 +84,18 @@ def test_reconcile_idempotent(db):
     reconcile_stock(db, 1, 1, reason="x"); db.commit()
     old, new = reconcile_stock(db, 1, 1, reason="x"); db.commit()
     assert old == new == 42.0
+
+
+def test_reconcile_fixes_transfer_churn_drift(db):
+    """QLD adjustment + transfer churn → stored noto'g'ri bo'lsa ham reconcile ledger'ga tushiradi."""
+    _wh(db, 2); _prod(db, 249)
+    # Movement ledger: QLD +235.65, transfer churn (net 0), OT-0002/0004 out, production
+    for ch in [235.65, -32.5, +32.5, -32.5, +32.5, -32.5, -32.5, -2.5, -20, -10, +66.96, -3.7, -5.35, -6.56]:
+        _mv(db, 2, 249, ch, op="adjustment")
+    # Stored noto'g'ri (drift simulatsiyasi)
+    s = Stock(warehouse_id=2, product_id=249, quantity=254.50)
+    db.add(s); db.commit()
+    old, new = reconcile_stock(db, 2, 249, reason="data_fix"); db.commit()
+    assert abs(old - 254.50) < 0.01
+    assert abs(new - 189.50) < 0.01   # ledger = jismoniy haqiqat
+    db.refresh(s); assert abs(s.quantity - 189.50) < 0.01
