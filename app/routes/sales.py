@@ -1184,14 +1184,53 @@ async def sales_delete_item(
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
 
+def _revert_return_sale_exchange(db, order, current_user):
+    """Qaytarish/almashtirish (return_sale) tasdiqini bekor qilish — XAVFSIZ minimal.
+
+    Faqat yetkazilmagan (status='confirmed') va to'lovsiz almashtirishni bekor qiladi:
+    qaytarish (parent) + juft sotuv (child) ikkalasi 'cancelled' bo'ladi + partner balans recompute.
+    Yetkazilgan ('delivered'/'completed') yoki to'lovli almashtirishni RAD etadi (to'liq Sub-2 keyin).
+    """
+    child = db.query(Order).filter(Order.parent_order_id == order.id, Order.type == "sale").first()
+    docs = [order] + ([child] if child else [])
+    doc_ids = [d.id for d in docs]
+    # Xavfsizlik: yetkazilgan (stock harakatlangan) yoki to'lovli bo'lsa bu yerda bekor qilmaymiz
+    if any((d.status or "") in ("delivered", "completed") for d in docs):
+        return RedirectResponse(
+            url="/sales?error=exchange_revert&detail=" + quote(
+                "Yetkazilgan almashtirishni bu yerdan bekor qilib bo'lmaydi. Admin bilan bog'laning."),
+            status_code=303)
+    if db.query(Payment.id).filter(Payment.order_id.in_(doc_ids)).first():
+        return RedirectResponse(
+            url="/sales?error=exchange_revert&detail=" + quote(
+                "To'lovli almashtirishni bu yerdan bekor qilib bo'lmaydi. Admin bilan bog'laning."),
+            status_code=303)
+    affected = set()
+    for d in docs:
+        d.status = "cancelled"
+        if d.partner_id:
+            affected.add(d.partner_id)
+    db.flush()
+    from app.services.partner_balance_service import recompute_partner_balance
+    for pid in affected:
+        recompute_partner_balance(db, pid, reason="exchange_revert", ref=order.number,
+                                  actor=current_user.username if current_user else None)
+    db.commit()
+    return RedirectResponse(url="/sales?reverted=1&number=" + quote(order.number), status_code=303)
+
+
 @router.post("/{order_id}/revert")
 async def sales_revert(
     order_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    order = db.query(Order).filter(Order.id == order_id, Order.type == "sale").first()
+    order = db.query(Order).filter(Order.id == order_id).first()
     if not order:
+        raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
+    if order.type == "return_sale":
+        return _revert_return_sale_exchange(db, order, current_user)
+    if order.type != "sale":
         raise HTTPException(status_code=404, detail="Sotuv topilmadi")
     # Bug 1 — paid > 0 bo'lgan orderni revert qilish taqiqlanadi (refund kerak)
     if (order.paid or 0) > 0:
