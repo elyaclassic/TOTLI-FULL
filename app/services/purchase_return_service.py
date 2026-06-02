@@ -57,9 +57,11 @@ def confirm_return(db: Session, doc: PurchaseReturn, current_user=None, client_h
                 created_at=doc.date,
             )
         if doc.partner_id:
-            partner = db.query(Partner).filter(Partner.id == doc.partner_id).first()
-            if partner:
-                partner.balance = (partner.balance or 0) + float(doc.total or 0)
+            from app.services.partner_balance_service import recompute_partner_balance
+            db.flush()
+            recompute_partner_balance(db, doc.partner_id, reason="purchase_return_confirm",
+                                      ref=doc.number,
+                                      actor=current_user.username if current_user else None)
         try:
             from app.utils.audit import log_action
             log_action(db, user=current_user, action="confirm",
@@ -97,9 +99,11 @@ def cancel_return(db: Session, doc: PurchaseReturn, current_user=None, client_ho
                 note=f"Qaytarish bekor qilindi: {doc.number}", created_at=doc.date,
             )
         if doc.partner_id:
-            partner = db.query(Partner).filter(Partner.id == doc.partner_id).first()
-            if partner:
-                partner.balance = (partner.balance or 0) - float(doc.total or 0)
+            from app.services.partner_balance_service import recompute_partner_balance
+            db.flush()
+            recompute_partner_balance(db, doc.partner_id, reason="purchase_return_cancel",
+                                      ref=doc.number,
+                                      actor=current_user.username if current_user else None)
         db.commit()
     except Exception:
         db.rollback()

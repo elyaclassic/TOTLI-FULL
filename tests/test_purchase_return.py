@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.models.database import Base, PurchaseReturn, PurchaseReturnItem, Partner, Warehouse, Product, Stock, Unit
+from app.models.database import Base, PurchaseReturn, PurchaseReturnItem, Partner, Warehouse, Product, Stock, Unit, PartnerBalanceDoc, PartnerBalanceDocItem
 
 @pytest.fixture
 def db():
@@ -31,6 +31,10 @@ def _seed(db):
     db.add(Product(id=1, name="Yong'oq", unit_id=1, purchase_price=1000.0))
     db.add(Partner(id=1, name="Shakar aka", type="supplier", balance=-50000.0))  # biz 50k qarzdormiz
     db.add(Stock(warehouse_id=1, product_id=1, quantity=10.0))
+    # Boshlang'ich balansni hujjat sifatida kiritamiz — recompute uni hujjatlardan tiklaydi
+    doc = PartnerBalanceDoc(number="KNT-SEED-1", status="confirmed", date=_dt.datetime(2026, 5, 1))
+    db.add(doc); db.flush()
+    db.add(PartnerBalanceDocItem(doc_id=doc.id, partner_id=1, balance=-50000.0))
     db.commit()
 
 def test_confirm_reduces_stock_and_debt(db):
