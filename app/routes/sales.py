@@ -532,6 +532,70 @@ async def sales_exchange_detail(
     })
 
 
+@router.get("/exchange/{order_id}/edit", response_class=HTMLResponse)
+async def sales_exchange_edit(request: Request, order_id: int,
+                              db: Session = Depends(get_db),
+                              current_user: User = Depends(require_admin)):
+    parent = db.query(Order).options(
+        joinedload(Order.items).joinedload(OrderItem.product), joinedload(Order.partner),
+    ).filter(Order.id == order_id).first()
+    if not parent:
+        raise HTTPException(status_code=404, detail="Obmen topilmadi")
+    if parent.parent_order_id:
+        return RedirectResponse(url=f"/sales/exchange/{parent.parent_order_id}/edit", status_code=303)
+    child = db.query(Order).options(joinedload(Order.items).joinedload(OrderItem.product)).filter(
+        Order.parent_order_id == parent.id).first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Obmen ning sale qismi topilmadi")
+    if not _exchange_editable(parent, child):
+        return RedirectResponse(url=f"/sales/exchange/{parent.id}?error=" + quote(
+            "Faqat yetkazilmagan (qoralama/tasdiqlangan) almashtirishni tahrirlash mumkin."), status_code=303)
+    products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    return templates.TemplateResponse("sales/exchange_edit.html", {
+        "request": request, "parent": parent, "child": child,
+        "products": products, "current_user": current_user,
+        "page_title": f"Tahrir: {parent.number} ↔ {child.number}",
+    })
+
+
+@router.post("/exchange/{order_id}/update")
+async def sales_exchange_update(request: Request, order_id: int,
+                                db: Session = Depends(get_db),
+                                current_user: User = Depends(require_admin)):
+    parent = db.query(Order).filter(Order.id == order_id).first()
+    if not parent or parent.parent_order_id:
+        raise HTTPException(status_code=404, detail="Obmen topilmadi")
+    child = db.query(Order).filter(Order.parent_order_id == parent.id, Order.type == "sale").first()
+    if not child:
+        raise HTTPException(status_code=404, detail="Obmen ning sale qismi topilmadi")
+    if not _exchange_editable(parent, child):
+        return RedirectResponse(url=f"/sales/exchange/{parent.id}?error=" + quote(
+            "Yetkazilgan almashtirishni tahrirlab bo'lmaydi."), status_code=303)
+    form = await request.form()
+    def _lines(prefix):
+        pids = form.getlist(f"{prefix}_product_id")
+        qtys = form.getlist(f"{prefix}_quantity")
+        prices = form.getlist(f"{prefix}_price")
+        out = []
+        for i in range(min(len(pids), len(qtys), len(prices))):
+            try:
+                pid = int(pids[i]); qty = float(qtys[i]); price = float(prices[i])
+            except (ValueError, TypeError):
+                continue
+            if pid > 0 and qty > 0:
+                out.append((pid, qty, price))
+        return out
+    ret_lines = _lines("ret")
+    new_lines = _lines("new")
+    if not ret_lines or not new_lines:
+        return RedirectResponse(url=f"/sales/exchange/{parent.id}/edit?error=" + quote(
+            "Qaytarish va yangi sotuvda kamida bitta mahsulot bo'lishi kerak."), status_code=303)
+    _apply_exchange_edit(db, parent, child, ret_lines=ret_lines, new_lines=new_lines,
+                         actor=current_user.username if current_user else None)
+    db.commit()
+    return RedirectResponse(url=f"/sales/exchange/{parent.id}?edited=1", status_code=303)
+
+
 @router.get("/edit/{order_id}", response_class=HTMLResponse)
 async def sales_edit(
     request: Request,
