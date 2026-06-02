@@ -453,6 +453,36 @@ async def qoldiqlar_kassa_hujjat_delete(
     return RedirectResponse(url="/qoldiqlar#kassa", status_code=303)
 
 
+@router.post("/kassa/hujjat/{doc_id}/update")
+async def qoldiqlar_kassa_hujjat_update(
+    doc_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Kassa qoldiq hujjati qatorlari summasini tahrirlash (faqat qoralama)."""
+    doc = db.query(CashBalanceDoc).filter(CashBalanceDoc.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Hujjat topilmadi")
+    if doc.status != "draft":
+        return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
+    form = await request.form()
+    item_ids = form.getlist("item_id")
+    balances = form.getlist("balance")
+    for i, iid in enumerate(item_ids):
+        try:
+            item = db.query(CashBalanceDocItem).filter(
+                CashBalanceDocItem.id == int(iid),
+                CashBalanceDocItem.doc_id == doc_id,
+            ).first()
+            if item is not None and i < len(balances) and str(balances[i]).strip() != "":
+                item.balance = float(balances[i])
+        except (ValueError, TypeError):
+            continue
+    db.commit()
+    return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
+
+
 # --- Kontragent qoldiq HUJJATLARI (1C uslubida) ---
 @router.get("/kontragent/hujjat/new", response_class=HTMLResponse)
 async def qoldiqlar_kontragent_hujjat_new(
@@ -594,12 +624,12 @@ async def qoldiqlar_kontragent_hujjat_tasdiqlash(
     )
     if claim.rowcount == 0:
         return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}?already=1", status_code=303)
-    for item in doc.items:
-        partner = db.query(Partner).filter(Partner.id == item.partner_id).first()
-        if partner:
-            item.previous_balance = partner.balance
-            partner.balance = (partner.balance or 0) + item.balance  # Mavjud balansga QO'SHISH
     # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
+    from app.services.partner_balance_service import recompute_partner_balance
+    db.flush()
+    for pid in {item.partner_id for item in doc.items if item.partner_id}:
+        recompute_partner_balance(db, pid, reason="balance_doc_confirm", ref=doc.number,
+                                  actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
 
@@ -616,11 +646,12 @@ async def qoldiqlar_kontragent_hujjat_revert(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if doc.status != "confirmed":
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
-    for item in doc.items:
-        partner = db.query(Partner).filter(Partner.id == item.partner_id).first()
-        if partner and item.previous_balance is not None:
-            partner.balance = item.previous_balance
     doc.status = "draft"
+    from app.services.partner_balance_service import recompute_partner_balance
+    db.flush()
+    for pid in {item.partner_id for item in doc.items if item.partner_id}:
+        recompute_partner_balance(db, pid, reason="balance_doc_revert", ref=doc.number,
+                                  actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kontragent/hujjat/{doc_id}", status_code=303)
 
@@ -1231,75 +1262,15 @@ async def qoldiqlar_kontragent_recalculate(
     """Barcha kontragent balanslarini qayta hisoblash (admin).
     Hisoblash: sotuvlar qarz + qoldiq hujjatlari - xaridlar - kirim to'lovlar + chiqim to'lovlar - qaytarishlar
     """
-    from sqlalchemy import or_
+    from app.services.partner_balance_service import compute_partner_balance, recompute_partner_balance
     partners = db.query(Partner).filter(Partner.is_active == True).all()
     updated = 0
     for partner in partners:
-        bal = 0.0
-        # 1. Sotuvlar — qarz (confirmed/completed)
-        sale_debt = db.query(func.coalesce(func.sum(Order.debt), 0)).filter(
-            Order.partner_id == partner.id,
-            Order.type == "sale",
-            Order.status.in_(["confirmed", "completed", "delivered"]),
-        ).scalar()
-        bal += float(sale_debt or 0)
-
-        # 2. Qaytarishlar — kredit (confirmed/completed)
-        return_total = db.query(func.coalesce(func.sum(Order.total), 0)).filter(
-            Order.partner_id == partner.id,
-            Order.type == "return_sale",
-            Order.status.in_(["confirmed", "completed", "delivered"]),
-        ).scalar()
-        bal -= float(return_total or 0)
-
-        # 3. Xaridlar — kredit (confirmed)
-        purchase_total = db.query(func.coalesce(func.sum(Purchase.total + func.coalesce(Purchase.total_expenses, 0)), 0)).filter(
-            Purchase.partner_id == partner.id,
-            Purchase.status == "confirmed",
-        ).scalar()
-        bal -= float(purchase_total or 0)
-
-        # 4. To'lovlar (confirmed)
-        # POS naqd sotuvlarda order.debt=0 lekin Payment yaratiladi (kassa uchun).
-        # Bu paymentlarni hisobga olmaslik kerak — aks holda balans manfiy bo'ladi.
-        pos_paid_order_ids = db.query(Order.id).filter(
-            Order.partner_id == partner.id,
-            Order.type == "sale",
-            Order.debt == 0,
-            Order.paid > 0,
-            Order.status.in_(["confirmed", "completed", "delivered"]),
-        ).subquery()
-
-        income_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-            Payment.partner_id == partner.id,
-            Payment.type == "income",
-            or_(Payment.status == "confirmed", Payment.status.is_(None)),
-            or_(Payment.order_id == None, ~Payment.order_id.in_(pos_paid_order_ids)),
-        ).scalar()
-        bal -= float(income_total or 0)
-
-        expense_total = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-            Payment.partner_id == partner.id,
-            Payment.type == "expense",
-            or_(Payment.status == "confirmed", Payment.status.is_(None)),
-        ).scalar()
-        bal += float(expense_total or 0)
-
-        # 5. Qoldiq hujjatlari (confirmed) — qo'shish
-        balance_doc_total = (
-            db.query(func.coalesce(func.sum(PartnerBalanceDocItem.balance), 0))
-            .join(PartnerBalanceDoc, PartnerBalanceDocItem.doc_id == PartnerBalanceDoc.id)
-            .filter(
-                PartnerBalanceDocItem.partner_id == partner.id,
-                PartnerBalanceDoc.status == "confirmed",
-            )
-            .scalar()
-        )
-        bal += float(balance_doc_total or 0)
-
-        old_bal = partner.balance or 0
-        if abs(old_bal - bal) > 0.01:
-            partner.balance = bal
+        old_bal = float(partner.balance or 0)
+        new_bal = compute_partner_balance(db, partner.id)
+        if abs(old_bal - new_bal) > 0.01:
+            recompute_partner_balance(db, partner.id, reason="manual_recalc_all",
+                                      actor=current_user.username if current_user else None)
             updated += 1
 
     db.commit()
@@ -1324,9 +1295,38 @@ async def qoldiqlar_kontragent_save(
     if not balance_str:
         return RedirectResponse(url="/qoldiqlar#kontragent", status_code=303)
     try:
-        partner.balance = float(balance_str)
+        new_value = float(balance_str)
     except (TypeError, ValueError):
         return RedirectResponse(url="/qoldiqlar#kontragent", status_code=303)
+    from app.services.partner_balance_service import compute_partner_balance, recompute_partner_balance
+    current = compute_partner_balance(db, partner.id)
+    delta = new_value - current
+    if abs(delta) > 0.01:
+        now = datetime.now()
+        prefix = f"KNT-{now.strftime('%Y%m%d')}-"
+        last = (
+            db.query(PartnerBalanceDoc)
+            .filter(PartnerBalanceDoc.number.like(f"{prefix}%"))
+            .order_by(PartnerBalanceDoc.number.desc())
+            .first()
+        )
+        try:
+            next_num = int(last.number.split("-")[-1]) + 1 if last else 1
+        except (ValueError, AttributeError):
+            next_num = 1
+        number = f"{prefix}{str(next_num).zfill(4)}"
+        adj_doc = PartnerBalanceDoc(
+            number=number,
+            status="confirmed",
+            date=now,
+            user_id=current_user.id if current_user else None,
+        )
+        db.add(adj_doc)
+        db.flush()
+        db.add(PartnerBalanceDocItem(doc_id=adj_doc.id, partner_id=partner.id, balance=delta))
+        db.flush()
+        recompute_partner_balance(db, partner.id, reason="manual_balance_edit", ref=adj_doc.number,
+                                  actor=current_user.username if current_user else None)
     db.commit()
     return RedirectResponse(url="/qoldiqlar#kontragent", status_code=303)
 
