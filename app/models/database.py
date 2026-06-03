@@ -1042,9 +1042,30 @@ class OrderItem(Base):
     discount_percent = Column(Float, default=0)
     total = Column(Float)
     
+    cost_price = Column(Float, default=0)  # Sotuv vaqtidagi tan narx snapshot (C2)
+
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
     warehouse = relationship("Warehouse", foreign_keys=[warehouse_id])
+
+
+from sqlalchemy import event as _sa_event, text as _sa_text
+
+
+@_sa_event.listens_for(OrderItem, "before_insert")
+def _snapshot_order_item_cost(mapper, connection, target):
+    """C2: har OrderItem insert'da cost_price bo'sh bo'lsa, Product.purchase_price'dan
+    sotuv vaqtidagi tan narxni qotiradi. Barcha yaratish nuqtasini avtomatik qamraydi."""
+    if (target.cost_price or 0) > 0:
+        return
+    if not target.product_id:
+        return
+    row = connection.execute(
+        _sa_text("SELECT purchase_price FROM products WHERE id = :pid"),
+        {"pid": target.product_id},
+    ).first()
+    if row and row[0]:
+        target.cost_price = float(row[0] or 0)
 
 
 class PosDraft(Base):
@@ -2052,6 +2073,20 @@ def ensure_visit_feedback_columns():
         logger.error(f"ensure_visit_feedback_columns: {e}")
 
 
+def ensure_order_item_cost_price():
+    """order_items jadvaliga cost_price ustunini qo'shadi (tan narx snapshot, C2)."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(order_items)"))
+            cols = [row[1] for row in r]
+            if "cost_price" not in cols:
+                conn.execute(text("ALTER TABLE order_items ADD COLUMN cost_price FLOAT DEFAULT 0"))
+                print("order_items.cost_price ustuni qo'shildi.")
+    except Exception as e:
+        print(f"ensure_order_item_cost_price: {e}")
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
     ensure_agent_tasks()
@@ -2073,6 +2108,7 @@ def init_db():
     ensure_stock_unique_index()
     ensure_agent_commission_column()
     ensure_cash_balance_doc_previous_opening()
+    ensure_order_item_cost_price()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
