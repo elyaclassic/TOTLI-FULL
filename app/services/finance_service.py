@@ -69,6 +69,33 @@ def sync_cash_balance(db: Session, cash_id: int) -> None:
     cash.balance = computed
 
 
+def recompute_cash_balance(db: Session, cash_id: int, *, reason: str,
+                           ref: str = None, actor: str = None) -> tuple:
+    """Kassa balansini formuladan qayta hisoblab set qiladi + AuditLog yozadi.
+
+    db.commit() CHAQIRMAYDI — chaqiruvchining tranzaksiyasiga qo'shiladi (atomik).
+    Qaytaradi: (old_balance, new_balance).
+    """
+    from app.models.database import AuditLog
+    cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
+    if not cash:
+        return (0.0, 0.0)
+    old = float(cash.balance or 0)
+    new, _, _ = cash_balance_formula(db, cash_id)
+    cash.balance = new
+    log = AuditLog(
+        user_name=actor or "system",
+        action="recompute",
+        entity_type="cash_balance",
+        entity_id=cash_id,
+        entity_number=ref,
+        details=f"reason={reason}; {old:.2f} -> {new:.2f}; delta={new - old:+.2f}",
+    )
+    db.add(log)
+    db.flush()
+    return (old, new)
+
+
 def delete_cash_transfer_atomic(db: Session, transfer: CashTransfer) -> dict:
     """
     Kassa o'tkazmasi hujjatini atomik o'chirish.
