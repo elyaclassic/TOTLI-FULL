@@ -251,6 +251,50 @@ async def driver_delivery_status(
                                         note=f"Yetkazilmagan qoldiq qaytarish: {target_oi.product.name if target_oi.product else ''} ({diff:.0f} dona)",
                                         created_at=datetime.now(),
                                     )
+                    # O'CHIRILGAN itemlar: ilova (deliveries_screen.dart) yetkazishda to'liq
+                    # YAKUNIY ro'yxat yuboradi — o'chirilgan item removeAt bilan ro'yxatdan
+                    # chiqariladi. Shu sababli modified_items'da YO'Q order item = haydovchi
+                    # o'chirgan => qty=0 + yetkazilmagan qoldiqni stockka qaytarish.
+                    sent_pids = set()
+                    sent_names = set()
+                    for mi in modified_items:
+                        _p = mi.get("product_id")
+                        if _p is not None:
+                            try:
+                                sent_pids.add(int(_p))
+                            except (ValueError, TypeError):
+                                pass
+                        _n = (mi.get("name") or "").strip()
+                        if _n:
+                            sent_names.add(_n)
+                    for oi in list(order.items):
+                        matched = (oi.product_id in sent_pids) or (
+                            oi.product and (oi.product.name or "").strip() in sent_names)
+                        if matched:
+                            continue
+                        old_qty = float(oi.quantity or 0)
+                        if old_qty <= 0:
+                            continue
+                        # Stock dispatch'da ('out_for_delivery') chiqarilgan bo'lsa qaytarish
+                        # (reduction logikasi bilan bir xil guard).
+                        if (order.status or "") in ("confirmed", "out_for_delivery"):
+                            wh_id = oi.warehouse_id or order.warehouse_id
+                            if wh_id and oi.product_id:
+                                create_stock_movement(
+                                    db=db,
+                                    warehouse_id=wh_id,
+                                    product_id=oi.product_id,
+                                    quantity_change=+old_qty,
+                                    operation_type="delivery_partial",
+                                    document_type="Sale",
+                                    document_id=order.id,
+                                    document_number=order.number,
+                                    user_id=getattr(driver, 'employee_id', None),
+                                    note=f"Yetkazishda o'chirilgan (stock qaytdi): {oi.product.name if oi.product else ''} ({old_qty:.0f} dona)",
+                                    created_at=datetime.now(),
+                                )
+                        oi.quantity = 0
+                        oi.total = 0
                     order.total = sum(float(oi.total or 0) for oi in order.items)
                     order.subtotal = order.total
                     order.debt = max(0.0, order.total - float(order.paid or 0))
