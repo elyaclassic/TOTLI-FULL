@@ -1415,6 +1415,18 @@ def _production_revert_one(db: Session, production) -> Optional[str]:
     return None
 
 
+def _cancel_production_with_revert(db: Session, production) -> Optional[str]:
+    """Production'ni bekor qiladi; 'completed' bo'lsa AVVAL stock'ni qaytaradi (C3 fix).
+    Xato (masalan output sotilgan, qaytarib bo'lmaydi) bo'lsa xabar qaytaradi va status
+    o'zgarmaydi; aks holda status='cancelled' qo'yadi va None qaytaradi."""
+    if production.status == "completed":
+        err = _production_revert_one(db, production)  # output -, xom ashyo +, status->draft
+        if err:
+            return err
+    production.status = "cancelled"
+    return None
+
+
 @router.post("/orders/bulk-revert")
 async def production_orders_bulk_revert(
     request: Request,
@@ -1948,7 +1960,13 @@ async def cancel_production(prod_id: int, db: Session = Depends(get_db), current
             url="/production/orders?error=cancel&detail=" + quote("Faqat hujjat yaratgan operator yoki admin bekor qila oladi."),
             status_code=303,
         )
-    production.status = "cancelled"
+    err = _cancel_production_with_revert(db, production)
+    if err:
+        db.rollback()
+        return RedirectResponse(
+            url="/production/orders?error=cancel&detail=" + quote("Bekor qilib bo'lmaydi: " + err),
+            status_code=303,
+        )
     db.commit()
     return RedirectResponse(url="/production/orders", status_code=303)
 
