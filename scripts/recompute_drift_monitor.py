@@ -1,11 +1,12 @@
 """TOTLI BI Recompute Drift Monitor — 2026-06-02
 
-Kunlik: partner balans va stock keshini KANONIK formula bilan solishtiradi.
+Kunlik: partner balans, stock kesh va kassa balansini KANONIK formula bilan solishtiradi.
 Drift bo'lsa Yordamchim bot (CLAUDE_BOT_TOKEN) orqali egasiga alert yuboradi.
 
 XAVFSIZ: faqat o'qiydi, hech narsa yozmaydi.
 - Partner drift: compute_partner_balance(db, pid) vs stored (faol, pid!=1)
 - Stock drift:   compute_stock_quantity(db, wh, pid) vs stored (move_count>0)
+- Cash drift:    cash_balance_formula(db, cid)[0] vs stored (barcha kassalar)
 
 Ishlatish:
     python scripts/recompute_drift_monitor.py            # tekshir + drift bo'lsa alert
@@ -75,13 +76,15 @@ def log(msg: str) -> None:
 
 
 def main():
-    from app.models.database import SessionLocal, Partner, Stock, StockMovement
+    from app.models.database import SessionLocal, Partner, Stock, StockMovement, CashRegister
     from app.services.partner_balance_service import compute_partner_balance
     from app.services.stock_service import compute_stock_quantity
+    from app.services.finance_service import cash_balance_formula
 
     db = SessionLocal()
     p_drift = []
     s_drift = []
+    c_drift = []
     try:
         for p in db.query(Partner).filter(Partner.is_active == True):  # noqa: E712
             if p.id == 1:
@@ -100,21 +103,27 @@ def main():
             computed = compute_stock_quantity(db, s.warehouse_id, s.product_id)
             if abs(stored - computed) > STOCK_THRESHOLD:
                 s_drift.append((s.warehouse_id, s.product_id, stored, computed, computed - stored))
+        for c in db.query(CashRegister).all():
+            stored = float(c.balance or 0)
+            computed, _, _ = cash_balance_formula(db, c.id)
+            if abs(stored - computed) > PARTNER_THRESHOLD:
+                c_drift.append((c.id, c.name, stored, computed, computed - stored))
     finally:
         db.close()
 
     p_drift.sort(key=lambda x: abs(x[4]), reverse=True)
     s_drift.sort(key=lambda x: abs(x[4]), reverse=True)
-    total = len(p_drift) + len(s_drift)
+    c_drift.sort(key=lambda x: abs(x[4]), reverse=True)
+    total = len(p_drift) + len(s_drift) + len(c_drift)
 
     if total == 0:
-        msg = "Recompute drift YO'Q (partner + stock toza)."
+        msg = "Recompute drift YO'Q (partner + stock + kassa toza)."
         log(msg)
         if not QUIET:
             print(msg)
         return
 
-    lines = [f"⚠️ <b>Recompute drift</b>: partner {len(p_drift)}, stock {len(s_drift)}"]
+    lines = [f"⚠️ <b>Recompute drift</b>: partner {len(p_drift)}, stock {len(s_drift)}, kassa {len(c_drift)}"]
     if p_drift:
         lines.append("\n<b>Partner balans:</b>")
         for pid, name, st, co, d in p_drift[:8]:
@@ -123,9 +132,13 @@ def main():
         lines.append("\n<b>Stock:</b>")
         for wh, pid, st, co, d in s_drift[:8]:
             lines.append(f"  wh{wh}/p{pid}: {st:.1f} vs {co:.1f} ({d:+.1f})")
+    if c_drift:
+        lines.append("\n<b>Kassa balans:</b>")
+        for cid, name, st, co, d in c_drift[:8]:
+            lines.append(f"  #{cid} {str(name)[:20]}: {st:,.0f} vs {co:,.0f} ({d:+,.0f})")
     msg = "\n".join(lines)
     print(msg)
-    log(f"DRIFT partner={len(p_drift)} stock={len(s_drift)}")
+    log(f"DRIFT partner={len(p_drift)} stock={len(s_drift)} kassa={len(c_drift)}")
     send_telegram(msg)
 
 
