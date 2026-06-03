@@ -136,6 +136,19 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 order_type_display = "obmen"
             else:
                 order_type_display = order_type
+            # Qarz hisobi (haydovchi qancha yig'ishi kerakligini ko'rsatadi):
+            #  - oddiy sotuv: total - paid
+            #  - ALMASHTIRISH yangi sotuv (sale + parent): NETTO — qaytarilgan tovar
+            #    (parent return_sale) yangi tovarni qoplaydi, faqat farq qarz bo'ladi
+            #  - QAYTARISH (return_sale): qarz emas (kredit) => 0
+            if (order_type or "") == "return_sale":
+                debt_display = 0.0
+            elif has_parent and order_type == "sale" and order:
+                _parent_ord = db.query(Order).filter(Order.id == order.parent_order_id).first()
+                _ret_total = float(_parent_ord.total or 0) if _parent_ord and (_parent_ord.type or "") == "return_sale" else 0.0
+                debt_display = max(total - paid - _ret_total, 0)
+            else:
+                debt_display = max(total - paid, 0)
             result.append({
                 "id": d.id,
                 "delivery_ids": [d.id],
@@ -155,7 +168,7 @@ async def driver_deliveries(request: Request, token: str = None, date: str = Non
                 "notes": d.notes or "",
                 "total": total,
                 "paid": paid,
-                "debt": max(total - paid, 0),
+                "debt": debt_display,
                 "latitude": lat,
                 "longitude": lng,
                 "items": items,
