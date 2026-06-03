@@ -276,6 +276,21 @@ def _log_price_history(db: Session, product, old_pp: float, new_pp: float) -> No
     ))
 
 
+def _is_anomalous_cost(new_cost: float, old_cost: float, sale_price: float) -> bool:
+    """Yangi tan narx g'ayritabiiymi? (C2 anomaliya qo'riq).
+    True bo'lsa purchase_price yozilmaydi (eski saqlanadi)."""
+    nc = float(new_cost or 0)
+    if nc <= 0:
+        return True  # 0/manfiy — yozmaymiz
+    sp = float(sale_price or 0)
+    if sp > 0 and nc > sp:
+        return True  # sotuv narxidan baland
+    oc = float(old_cost or 0)
+    if oc > 0 and nc > 3 * oc:
+        return True  # eski narxdan 3 baravar oshган
+    return False
+
+
 def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_unit: float) -> None:
     """Tayyor mahsulot Product.purchase_price + Stock.cost_price ni production'ning
     dona-boshiga material narxiga (cost_per_unit) flat tayinlaydi. Weighted-avg/self-feedback YO'Q
@@ -291,6 +306,12 @@ def _update_output_cost_and_price(db: Session, out_wh_id: int, recipe, cost_per_
         Stock.product_id == recipe.product_id,
     ).first()
     old = output_product.purchase_price or 0
+    if _is_anomalous_cost(cost, old, output_product.sale_price or 0):
+        logger.warning(
+            "PRICE ANOMALY SKIPPED %s: yangi tannarx %.0f (eski %.0f, sotuv %.0f) — saqlanmadi",
+            output_product.name, cost, old, output_product.sale_price or 0,
+        )
+        return
     output_product.purchase_price = cost
     if product_stock is not None and hasattr(Stock, "cost_price"):
         product_stock.cost_price = cost

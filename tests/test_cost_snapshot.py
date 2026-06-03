@@ -38,3 +38,13 @@ def test_cogs_uses_snapshot_not_current_price(db):
     db.add(oi2); db.flush()
     cost2 = float(getattr(oi2, "cost_price", 0) or 0) or float(p.purchase_price or 0)
     assert cost2 == 9999  # fallback (snapshot yo'q)
+
+
+def test_production_cost_anomaly_guard(db):
+    """Anomaliya narx (>sale_price yoki >3x old) purchase_price'ni o'zgartirmasin."""
+    from app.routes.production import _is_anomalous_cost
+    assert _is_anomalous_cost(new_cost=12000, old_cost=5000, sale_price=10000) is True   # >sale
+    assert _is_anomalous_cost(new_cost=16000, old_cost=5000, sale_price=99999) is True    # >3x old
+    assert _is_anomalous_cost(new_cost=5500, old_cost=5000, sale_price=10000) is False    # normal
+    assert _is_anomalous_cost(new_cost=5000, old_cost=0, sale_price=10000) is False       # birinchi marta
+    assert _is_anomalous_cost(new_cost=0, old_cost=5000, sale_price=10000) is True        # 0/manfiy
