@@ -27,11 +27,23 @@ def _payment_amount_uzs(db: Session, payment: Payment) -> float:
     on_date = payment.date.date() if payment.date else None
     rate = get_rate(db, currency, "UZS", on_date)
     if not rate or rate <= 0:
-        logger.warning(
-            "partner_balance: %s to'lov #%s uchun %s->UZS kurs topilmadi, xom amount ishlatildi",
+        # H4: sana kursi yo'q — eng yaqin (eng erta) mavjud kursga fallback.
+        # XOM summani SO'M deb OLMAYMIZ ($100 -> 100 so'm bug edi).
+        from app.models.database import ExchangeRate
+        er = (
+            db.query(ExchangeRate)
+            .filter(ExchangeRate.from_currency == currency, ExchangeRate.to_currency == "UZS")
+            .order_by(ExchangeRate.effective_date.asc(), ExchangeRate.id.asc())
+            .first()
+        )
+        rate = float(er.rate or 0) if er else 0.0
+    if not rate or rate <= 0:
+        # Hech qanday kurs yo'q — to'lovni 0 deb olamiz (xom summa EMAS) + baland log.
+        logger.error(
+            "partner_balance: %s to'lov #%s uchun %s->UZS kurs UMUMAN yo'q — 0 deb olindi (KURS KIRITING!)",
             currency, getattr(payment, "id", "?"), currency,
         )
-        return amt
+        return 0.0
     return amt * rate
 
 
