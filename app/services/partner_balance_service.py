@@ -46,11 +46,18 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
 
     total = 0.0
 
+    # Agent buyurtmalarida mijoz qarzi YETKAZISHDA yoziladi (delivery_routes.py oqimi:
+    # confirm -> dispatch -> driver "Yetkazdim"). Shu sababli confirmed/out_for_delivery
+    # holatdagi agent orderlar HALI qarz emas — faqat delivered/completed sanaladi.
+    # Oddiy (POS/web) sotuvlar gating'siz: ular completed/delivered holatda yoziladi.
+    AGENT_DEBT_STATUSES = ("delivered", "completed")
     for o in db.query(Order).filter(
         Order.partner_id == partner_id,
         Order.type.in_(["sale", "return_sale"]),
         Order.status.notin_(["cancelled", "draft"]),
     ):
+        if (o.source == "agent") and (o.status not in AGENT_DEBT_STATUSES):
+            continue
         if o.type == "sale":
             total += float(o.total or 0)
         else:
