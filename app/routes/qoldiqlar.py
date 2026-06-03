@@ -392,19 +392,17 @@ async def qoldiqlar_kassa_hujjat_tasdiqlash(
     )
     if claim.rowcount == 0:
         return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}?already=1", status_code=303)
-    from app.services.finance_service import cash_balance_formula as _cash_balance_formula
+    from app.services.finance_service import recompute_cash_balance
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
         if cash:
-            item.previous_balance = cash.balance
-            # Hozirgi hisoblangan balans
-            current_balance, income_sum, expense_sum = _cash_balance_formula(db, cash.id)
-            # Qo'shish: eski balansga kiritilgan qiymatni qo'shamiz
+            item.previous_balance = cash.balance                        # display (o'zgarmaydi)
+            item.previous_opening = float(cash.opening_balance or 0)    # revert uchun
             delta = float(item.balance or 0)
-            target = current_balance + delta
-            # opening_balance ni shunday moslaymizki: opening + income - expense = target
-            cash.opening_balance = target - income_sum + expense_sum
-            cash.balance = target
+            cash.opening_balance = float(cash.opening_balance or 0) + delta
+            recompute_cash_balance(db, cash.id, reason="qoldiq_doc_confirm",
+                                   ref=getattr(doc, "number", None),
+                                   actor=getattr(current_user, "username", None))
     # Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi
     db.commit()
     return RedirectResponse(url=f"/qoldiqlar/kassa/hujjat/{doc_id}", status_code=303)
@@ -422,11 +420,18 @@ async def qoldiqlar_kassa_hujjat_revert(
         raise HTTPException(status_code=404, detail="Hujjat topilmadi")
     if doc.status != "confirmed":
         raise HTTPException(status_code=400, detail="Faqat tasdiqlangan hujjatning tasdiqini bekor qilish mumkin")
-    from app.services.finance_service import cash_balance_formula as _cash_balance_formula
+    from app.services.finance_service import recompute_cash_balance, cash_balance_formula as _cash_balance_formula
     for item in doc.items:
         cash = db.query(CashRegister).filter(CashRegister.id == item.cash_register_id).first()
-        if cash and item.previous_balance is not None:
-            # Oldingi balansga qaytish uchun opening_balance ni moslash
+        if not cash:
+            continue
+        if item.previous_opening is not None:
+            cash.opening_balance = float(item.previous_opening)
+            recompute_cash_balance(db, cash.id, reason="qoldiq_doc_revert",
+                                   ref=getattr(doc, "number", None),
+                                   actor=getattr(current_user, "username", None))
+        elif item.previous_balance is not None:
+            # Eski hujjat (previous_opening yo'q) — orqaga moslik
             current_balance, income_sum, expense_sum = _cash_balance_formula(db, cash.id)
             target = float(item.previous_balance)
             cash.opening_balance = target - income_sum + expense_sum
