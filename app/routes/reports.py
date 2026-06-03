@@ -2541,7 +2541,8 @@ def _compute_sales_and_cogs(db: Session, dt_from: datetime, dt_to: datetime) -> 
             .all()
         )
         for oi, prod in sale_items:
-            cogs += float(prod.purchase_price or 0) * float(oi.quantity or 0)
+            unit_cost = float(getattr(oi, "cost_price", 0) or 0) or float(prod.purchase_price or 0)
+            cogs += unit_cost * float(oi.quantity or 0)
     return sale_orders, revenue, cogs, sale_items
 
 
@@ -2602,7 +2603,8 @@ def _compute_daily_trend(sale_orders: list, sale_items: list) -> tuple:
             continue
         key = o.date.strftime("%Y-%m-%d")
         if key in daily_data:
-            daily_data[key]["cogs"] += float(prod.purchase_price or 0) * float(oi.quantity or 0)
+            _uc = float(getattr(oi, "cost_price", 0) or 0) or float(prod.purchase_price or 0)
+            daily_data[key]["cogs"] += _uc * float(oi.quantity or 0)
     labels = sorted(daily_data.keys())
     revenues = [daily_data[k]["revenue"] for k in labels]
     profits = [daily_data[k]["revenue"] - daily_data[k]["cogs"] for k in labels]
