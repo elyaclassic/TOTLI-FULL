@@ -135,6 +135,9 @@
                         <i class="bi bi-truck"></i> Yo'lga chiqarish (<span id="bulkDispatchCount">0</span>)
                     </button>
                     {% endif %}
+                    <button type="button" id="bulkRevertBtn" class="btn btn-sm btn-outline-warning" disabled onclick="revertSelected()">
+                        <i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish (<span id="bulkRevertCount">0</span>)
+                    </button>
                     <button type="button" id="bulkExcelBtn" class="btn btn-sm btn-outline-success" disabled onclick="exportSelectedToExcel()">
                         <i class="bi bi-file-earmark-excel"></i> Tanlanganlar Excel (<span id="bulkCount">0</span>)
                     </button>
@@ -649,6 +652,14 @@
             if (modalCount) modalCount.textContent = dispatchCount;
             btnDispatch.disabled = dispatchCount === 0;
         }
+        // Revert (tasdiqni bekor): confirmed/completed/waiting_production uchun (per-row revert bilan bir xil)
+        const btnRevert = document.getElementById('bulkRevertBtn');
+        if (btnRevert) {
+            const revertStatuses = ['confirmed', 'completed', 'waiting_production'];
+            const revertCount = checked.filter(cb => revertStatuses.includes(cb.dataset.status)).length;
+            document.getElementById('bulkRevertCount').textContent = revertCount;
+            btnRevert.disabled = revertCount === 0;
+        }
     }
     function exportSelectedToExcel() {
         const excelStatuses = ['confirmed', 'completed', 'waiting_production'];
@@ -690,6 +701,40 @@
             }
         }
         alert("Tasdiqlandi: " + success + " ta\nXato: " + failed + " ta");
+        location.reload();
+    }
+    async function revertSelected() {
+        const revertStatuses = ['confirmed', 'completed', 'waiting_production'];
+        const targets = Array.from(document.querySelectorAll('.order-cb:checked'))
+            .filter(cb => revertStatuses.includes(cb.dataset.status));
+        if (targets.length === 0) { alert("Belgilangan tasdiqlangan buyurtma yo'q"); return; }
+        const numbers = targets.map(cb => cb.dataset.num).join(', ');
+        if (!confirm(targets.length + " ta buyurtma tasdiqini bekor qilasizmi?\n\nDraft ga qaytadi, ombor va yetkazish ham qaytariladi.\n\n" + numbers)) return;
+
+        const btn = document.getElementById('bulkRevertBtn');
+        btn.disabled = true;
+        btn.textContent = 'Bekor qilinmoqda...';
+
+        let success = 0, failed = 0;
+        for (const cb of targets) {
+            try {
+                const fd = new FormData();
+                fd.append('csrf_token', CSRF_TOKEN);
+                const r = await fetch('/sales/' + cb.dataset.id + '/revert', {
+                    method: 'POST',
+                    body: fd,
+                    redirect: 'manual',
+                });
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') {
+                    success++;
+                } else {
+                    failed++;
+                }
+            } catch (e) {
+                failed++;
+            }
+        }
+        alert("Tasdiq bekor qilindi: " + success + " ta\nXato: " + failed + " ta");
         location.reload();
     }
     async function dispatchSelected() {
