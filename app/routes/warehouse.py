@@ -36,7 +36,7 @@ from app.models.database import (
     ProductPrice,
     StockMovement,
 )
-from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document, NegativeStockError
 from app.deps import require_auth, require_admin
 from app.services.period_service import is_period_closed
 from app.utils.user_scope import get_warehouses_for_user
@@ -1839,20 +1839,29 @@ async def warehouse_otxod_confirm(
         kg = qty * kg_per
         total_kg += kg
 
-        # Vozvrat omboridan chiqim
-        create_stock_movement(
-            db=db,
-            warehouse_id=warehouse_id,
-            product_id=pid,
-            quantity_change=-qty,
-            operation_type="otxod_chiqim",
-            document_type="StockAdjustmentDoc",
-            document_id=doc.id,
-            document_number=doc_number,
-            user_id=current_user.id if current_user else None,
-            note=f"Otxod ishlab chiqarish: {product.name} {qty:.2f} → {kg:.2f} kg",
-            created_at=doc.date,
-        )
+        # Vozvrat omboridan chiqim (H2: strict_negative — stock yetmasa REJECT, manfiy bo'lmaydi)
+        try:
+            create_stock_movement(
+                db=db,
+                warehouse_id=warehouse_id,
+                product_id=pid,
+                quantity_change=-qty,
+                operation_type="otxod_chiqim",
+                document_type="StockAdjustmentDoc",
+                document_id=doc.id,
+                document_number=doc_number,
+                user_id=current_user.id if current_user else None,
+                note=f"Otxod ishlab chiqarish: {product.name} {qty:.2f} → {kg:.2f} kg",
+                created_at=doc.date,
+                strict_negative=True,
+            )
+        except NegativeStockError as e:
+            db.rollback()
+            return RedirectResponse(
+                url=f"/warehouse/otxod/{warehouse_id}?error=" + quote(
+                    f"{product.name}: omborda yetarli emas (mavjud {float(e.current_qty or 0):.2f}, kerak {qty:.2f})."),
+                status_code=303,
+            )
 
         # Hujjat itemlari
         db.add(StockAdjustmentDocItem(
@@ -2003,19 +2012,29 @@ async def warehouse_utilizatsiya_confirm(
         if not product:
             continue
 
-        create_stock_movement(
-            db=db,
-            warehouse_id=warehouse_id,
-            product_id=pid,
-            quantity_change=-qty,
-            operation_type="utilizatsiya",
-            document_type="StockAdjustmentDoc",
-            document_id=doc.id,
-            document_number=doc_number,
-            user_id=current_user.id if current_user else None,
-            note=f"Utilizatsiya: {product.name} {qty:.2f}",
-            created_at=doc.date,
-        )
+        # H2: strict_negative — stock yetmasa REJECT (manfiy bo'lmaydi)
+        try:
+            create_stock_movement(
+                db=db,
+                warehouse_id=warehouse_id,
+                product_id=pid,
+                quantity_change=-qty,
+                operation_type="utilizatsiya",
+                document_type="StockAdjustmentDoc",
+                document_id=doc.id,
+                document_number=doc_number,
+                user_id=current_user.id if current_user else None,
+                note=f"Utilizatsiya: {product.name} {qty:.2f}",
+                created_at=doc.date,
+                strict_negative=True,
+            )
+        except NegativeStockError as e:
+            db.rollback()
+            return RedirectResponse(
+                url=f"/warehouse/utilizatsiya/{warehouse_id}?error=" + quote(
+                    f"{product.name}: omborda yetarli emas (mavjud {float(e.current_qty or 0):.2f}, kerak {qty:.2f})."),
+                status_code=303,
+            )
 
         db.add(StockAdjustmentDocItem(
             doc_id=doc.id,
