@@ -1189,8 +1189,7 @@ async def report_stock_import(
             ).first()
         if not wh or not product:
             continue
-        if tannarx > 0:
-            product.purchase_price = tannarx
+        # C2: hisobot READ-ONLY — Product.purchase_price'ni o'zgartirmaymiz (eski mutatsiya).
         if sotuv_narxi > 0:
             product.sale_price = sotuv_narxi
         items_data.append((product.id, wh.id, qty, tannarx, sotuv_narxi))
