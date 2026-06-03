@@ -52,6 +52,37 @@
         </div>
         <div class="card-body p-0">
             {% if doc %}
+            {% if doc.status == 'draft' %}
+            <form method="post" action="/qoldiqlar/kassa/hujjat/{{ doc.id }}/update">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>N</th>
+                        <th>Kassa</th>
+                        <th class="text-end">Summa (so'm) — tahrirlash mumkin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in doc.items %}
+                    <tr>
+                        <td class="muted-cell">{{ loop.index }}</td>
+                        <td>{{ item.cash_register.name if item.cash_register else '-' }}</td>
+                        <td class="text-end" style="width:220px;">
+                            <input type="hidden" name="item_id" value="{{ item.id }}">
+                            <input type="number" name="balance" step="any" value="{{ (item.balance or 0)|round(2) }}" class="form-control form-control-sm text-end" style="margin-left:auto;">
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="3" class="text-muted text-center py-4">Qatorlar yo'q.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <div class="px-3 py-3">
+                <button type="submit" class="top-btn btn btn-primary"><i class="bi bi-save"></i> O'zgarishlarni saqlash</button>
+                <span class="text-muted small ms-2">Saqlagandan keyin "Tasdiqlash" bosing.</span>
+            </div>
+            </form>
+            {% else %}
             <table class="table mb-0">
                 <thead>
                     <tr>
@@ -72,6 +103,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            {% endif %}
             {% else %}
             {% if cash_registers %}
             <form method="post" action="/qoldiqlar/kassa/hujjat">

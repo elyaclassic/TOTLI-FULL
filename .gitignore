@@ -160,3 +160,6 @@ app/bot/data/photos/
 # Bir martalik admin skriptlar (lokal, repo'ga kerak emas)
 scripts/_*.py
 scripts/_*.ps1
+
+# graphify knowledge graph artefaktlari (lokal, AST-only, repo'ga kerak emas)
+graphify-out/

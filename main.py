@@ -344,26 +344,32 @@ async def startup():
             db.close()
     except Exception as e:
         print("[Startup] ensure_xxx_column:", e)
-    try:
-        from app.utils.scheduler import start_scheduler
-        start_scheduler()
-    except Exception as e:
-        print("[Startup] Scheduler ishga tushmadi:", e)
-    try:
-        from app.utils.telegram_bot import start_telegram_bot
-        start_telegram_bot()
-    except Exception as e:
-        print("[Startup] Telegram chat bot ishga tushmadi:", e)
-    try:
-        from app.bot.main import start_bot
-        await start_bot()
-    except Exception as e:
-        print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
+    if os.environ.get("TOTLI_ENV") == "dev":
+        # DEV/sandbox (8081): scheduler va Telegram botlar O'TKAZIB YUBORILADI.
+        # Aks holda 8081 jonli kameralarni double-poll qiladi va bot tokenida
+        # 409 getUpdates conflict bo'lib JONLI botni buzadi.
+        print("[Startup] DEV rejim (TOTLI_ENV=dev) — scheduler va Telegram botlar o'tkazib yuborildi")
+    else:
+        try:
+            from app.utils.scheduler import start_scheduler
+            start_scheduler()
+        except Exception as e:
+            print("[Startup] Scheduler ishga tushmadi:", e)
+        try:
+            from app.utils.telegram_bot import start_telegram_bot
+            start_telegram_bot()
+        except Exception as e:
+            print("[Startup] Telegram chat bot ishga tushmadi:", e)
+        try:
+            from app.bot.main import start_bot
+            await start_bot()
+        except Exception as e:
+            print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
     # Senior/Expert botlar endi ALOHIDA jarayonda (scripts/senior_bots_standalone.py)
     # — server reload/crash ularni o'ldirmasin, watchdog jarayon-tirikligini bilsin.
     # BOTS_IN_PROCESS=1 .env'da bo'lsagina uvicorn ichida ishga tushadi (rollback).
     # AKS HOLDA standalone bilan birga ishlatsa: bir token 2 getUpdates -> 409.
-    if os.getenv("BOTS_IN_PROCESS", "0") == "1":
+    if os.getenv("BOTS_IN_PROCESS", "0") == "1" and os.environ.get("TOTLI_ENV") != "dev":
         try:
             from app.bot.senior_bot import start_senior_bot
             await start_senior_bot()
