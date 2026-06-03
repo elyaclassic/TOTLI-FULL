@@ -279,7 +279,24 @@
                                 {% endif %}
                             </td>
                             <td>
-                                {% if order.status == 'draft' %}
+                                {% if is_exchange %}
+                                {# Almashtirish holati ex_child (yangi sotuv) yetkazish progressidan.
+                                   "Almashtirildi" FAQAT haydovchi yetkazganda (delivered) ko'rsatiladi. #}
+                                {% set exs = ex_child.status %}
+                                {% if exs == 'delivered' or exs == 'completed' %}
+                                <span class="badge-done">Almashtirildi</span>
+                                {% elif exs == 'out_for_delivery' %}
+                                <span class="badge-waiting" title="Almashtirish yo'lda — haydovchi hali yetkazmagan">Yo'lda</span>
+                                {% elif exs == 'confirmed' %}
+                                <span class="badge-waiting" title="Almashtirish tasdiqlangan — hali yo'lga chiqmagan">Tasdiqlangan</span>
+                                {% elif exs == 'draft' %}
+                                <span class="badge-waiting">Draft</span>
+                                {% elif exs == 'cancelled' or order.status == 'cancelled' %}
+                                <span class="badge-cancelled">Bekor</span>
+                                {% else %}
+                                <span class="badge-waiting">{{ exs }}</span>
+                                {% endif %}
+                                {% elif order.status == 'draft' %}
                                 <span class="badge-waiting">Draft</span>
                                 {% elif order.status == 'confirmed' %}
                                 <span class="badge-done">{% if order.type == 'return_sale' %}Almashtirildi{% else %}Tasdiqlangan{% endif %}</span>
