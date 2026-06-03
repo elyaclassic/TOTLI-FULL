@@ -550,10 +550,33 @@ async def sales_exchange_edit(request: Request, order_id: int,
     if not _exchange_editable(parent, child):
         return RedirectResponse(url=f"/sales/exchange/{parent.id}?error=" + quote(
             "Faqat yetkazilmagan (qoralama/tasdiqlangan) almashtirishni tahrirlash mumkin."), status_code=303)
-    products = db.query(Product).filter(Product.is_active == True).order_by(Product.name).all()
+    # Agent katalogi: is_for_agent mahsulotlar (agent ilovasi bilan bir xil) +
+    # almashtirishda allaqachon tanlangan mahsulotlar (eski qatorlar to'g'ri ko'rinishi uchun).
+    existing_pids = {it.product_id for it in parent.items} | {it.product_id for it in child.items}
+    catalog_filter = Product.is_for_agent == True
+    if existing_pids:
+        catalog_filter = or_(catalog_filter, Product.id.in_(existing_pids))
+    products = db.query(Product).filter(
+        Product.is_active == True, catalog_filter
+    ).order_by(Product.name).all()
+    # Agent narx turi: child (yangi sotuv) order'dan yoki partnerdan (default Agent #4).
+    _DEFAULT_AGENT_PT = 4
+    partner = parent.partner
+    pt_id = child.price_type_id or (
+        int(partner.price_type_id) if partner and getattr(partner, "price_type_id", None) else _DEFAULT_AGENT_PT
+    )
+    # Narx jadvali: product_id -> agent narx turidagi sotuv narxi (formada avtomatik to'ldirish).
+    agent_prices = {}
+    pid_list = [p.id for p in products]
+    if pid_list:
+        for pp in db.query(ProductPrice).filter(
+            ProductPrice.product_id.in_(pid_list),
+            ProductPrice.price_type_id == pt_id,
+        ).all():
+            agent_prices[pp.product_id] = float(pp.sale_price or 0)
     return templates.TemplateResponse("sales/exchange_edit.html", {
         "request": request, "parent": parent, "child": child,
-        "products": products, "current_user": current_user,
+        "products": products, "agent_prices": agent_prices, "current_user": current_user,
         "page_title": f"Tahrir: {parent.number} ↔ {child.number}",
     })
 

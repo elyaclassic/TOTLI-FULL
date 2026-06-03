@@ -19,7 +19,7 @@
         <tbody>
         {% for it in items %}
           <tr>
-            <td><select name="{{ prefix }}_product_id" class="form-select form-select-sm">
+            <td><select name="{{ prefix }}_product_id" class="form-select form-select-sm" onchange="fillPrice(this)">
               {% for p in products %}<option value="{{ p.id }}" {% if p.id==it.product_id %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
             </select></td>
             <td><input type="number" name="{{ prefix }}_quantity" class="form-control form-control-sm" step="any" min="0" value="{{ it.quantity }}"></td>
@@ -38,7 +38,7 @@
 </div>
 <template id="rowtpl">
   <tr>
-    <td><select name="__P___product_id" class="form-select form-select-sm">
+    <td><select name="__P___product_id" class="form-select form-select-sm" onchange="fillPrice(this)">
       {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
     </select></td>
     <td><input type="number" name="__P___quantity" class="form-control form-control-sm" step="any" min="0" value="1"></td>
@@ -47,6 +47,18 @@
   </tr>
 </template>
 <script>
+// Agent narx turidagi narxlar: product_id -> sotuv narxi
+var AGENT_PRICES = {{ agent_prices|tojson }};
+// Mahsulot tanlanganda narxni agent narx turidan avtomatik to'ldiradi (tahrirlash mumkin)
+function fillPrice(sel){
+  var pid = sel.value;
+  var row = sel.closest('tr');
+  if (!row) return;
+  var priceInput = row.querySelector('input[name$="_price"]');
+  if (priceInput && Object.prototype.hasOwnProperty.call(AGENT_PRICES, pid)){
+    priceInput.value = AGENT_PRICES[pid];
+  }
+}
 // XSS-xavfsiz: <template> node klonlash (innerHTML EMAS), name atributini DOM orqali
 function addRow(prefix){
   var tpl = document.getElementById('rowtpl');
