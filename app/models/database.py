@@ -606,6 +606,7 @@ class CashBalanceDocItem(Base):
     cash_register_id = Column(Integer, ForeignKey("cash_registers.id"))
     balance = Column(Float, default=0)
     previous_balance = Column(Float, default=None)  # Tasdiqdan oldingi balans (revert uchun)
+    previous_opening = Column(Float, default=None)  # Confirm vaqtidagi opening_balance (revert uchun)
 
     doc = relationship("CashBalanceDoc", back_populates="items")
     cash_register = relationship("CashRegister")
@@ -2019,6 +2020,20 @@ def ensure_agent_commission_column():
         logger.error(f"ensure_agent_commission_column: {e}")
 
 
+def ensure_cash_balance_doc_previous_opening():
+    """cash_balance_doc_items jadvaliga previous_opening ustunini qo'shadi (revert opening-restore uchun)."""
+    from sqlalchemy import text
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(cash_balance_doc_items)"))
+            cols = [row[1] for row in r]
+            if "previous_opening" not in cols:
+                conn.execute(text("ALTER TABLE cash_balance_doc_items ADD COLUMN previous_opening FLOAT"))
+                print("cash_balance_doc_items.previous_opening ustuni qo'shildi.")
+    except Exception as e:
+        print(f"ensure_cash_balance_doc_previous_opening: {e}")
+
+
 def ensure_visit_feedback_columns():
     """Visit jadvaliga fikr/muammo ustunlarini qo'shadi (Bosqich 3)."""
     try:
@@ -2057,6 +2072,7 @@ def init_db():
     ensure_currency_columns()
     ensure_stock_unique_index()
     ensure_agent_commission_column()
+    ensure_cash_balance_doc_previous_opening()
     print("Database tayyor (mavjud ma'lumotlar saqlanadi).")
 
 
