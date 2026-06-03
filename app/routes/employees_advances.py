@@ -333,6 +333,8 @@ async def employee_advance_edit_save(
     adv.advance_date = adv_date
     adv.note = note or None
     adv.confirmed_at = datetime.now()
+    db.flush()
+    _ensure_advance_payment(db, adv, current_user)
     db.commit()
     next_param = (next_ids or "").strip()
     if next_param:
@@ -368,6 +370,8 @@ async def employee_advance_confirm(
     )
     if claim.rowcount == 0:
         return RedirectResponse(url="/employees/advances?already=1", status_code=303)
+    db.refresh(adv)
+    _ensure_advance_payment(db, adv, current_user)
     db.commit()
     return RedirectResponse(url="/employees/advances?confirmed=1", status_code=303)
 
@@ -393,6 +397,64 @@ def _cancel_linked_advance_payment(db: Session, adv: EmployeeAdvance) -> bool:
     from app.routes.finance import _sync_cash_balance
     _sync_cash_balance(db, pay.cash_register_id)
     return True
+
+
+def _ensure_advance_payment(db: Session, adv: EmployeeAdvance, current_user) -> None:
+    """Tasdiqlangan avans uchun kassa chiqim Payment'ini TA'MINLAYDI.
+
+    Avval bekor qilingan Payment'ni qayta tiklaydi (un-cancel), topilmasa yangi yaratadi.
+    Kassa balansini sinxronlaydi. Aktiv Payment allaqachon bo'lsa hech narsa qilmaydi (dublikatdan saqlanish).
+    Kassa biriktirilmagan avans uchun hech narsa qilmaydi.
+
+    Bug C1 (2026-06-03): faqat 'add' Payment yaratardi; confirm/edit/bulk-confirm
+    confirmed_at qo'yib Payment yaratmasdi => unconfirm->reconfirm da kassa kamaymas edi."""
+    if not adv.cash_register_id:
+        return
+    emp = db.query(Employee).filter(Employee.id == adv.employee_id).first()
+    emp_name = ((emp.full_name if emp else None) or f"Xodim {adv.employee_id}")[:100]
+    desc = f"Avans: {emp_name}"
+    base_filter = [
+        Payment.cash_register_id == adv.cash_register_id,
+        Payment.description == desc,
+        Payment.amount == float(adv.amount or 0),
+        func.date(Payment.date) == adv.advance_date,
+        Payment.type == "expense",
+    ]
+    # 1) Aktiv (confirmed) Payment bormi? => qo'shimcha kerak emas
+    if db.query(Payment).filter(*base_filter, Payment.status == "confirmed").first():
+        return
+    # 2) Bekor qilingan Payment'ni qayta tiklash
+    cancelled = db.query(Payment).filter(*base_filter, Payment.status == "cancelled").order_by(Payment.id.desc()).first()
+    if cancelled:
+        cancelled.status = "confirmed"
+    else:
+        # 3) Yangi Payment yaratish (add bilan bir xil)
+        today = datetime.now()
+        prefix = f"PAY-{today.strftime('%Y%m%d')}-"
+        last_pay = db.query(Payment).filter(Payment.number.like(prefix + "%")).order_by(Payment.number.desc()).first()
+        last_seq = 0
+        if last_pay and last_pay.number:
+            try:
+                last_seq = int(last_pay.number.split("-")[-1])
+            except (ValueError, IndexError):
+                last_seq = 0
+        db.add(Payment(
+            number=f"{prefix}{last_seq + 1:04d}",
+            date=datetime.combine(adv.advance_date, today.time()),
+            type="expense",
+            cash_register_id=adv.cash_register_id,
+            partner_id=None,
+            order_id=None,
+            amount=float(adv.amount or 0),
+            payment_type="cash",
+            category="other",
+            description=desc,
+            user_id=current_user.id if current_user else None,
+            status="confirmed",
+        ))
+    from app.routes.finance import _sync_cash_balance
+    db.flush()
+    _sync_cash_balance(db, adv.cash_register_id)
 
 
 @router.post("/advances/unconfirm/{advance_id}")
@@ -516,7 +578,13 @@ async def employee_advances_bulk_confirm(
     if not ids:
         return RedirectResponse(url="/employees/advances?error=" + quote("Hech qaysi avans tanlanmagan."), status_code=303)
     now = datetime.now()
-    updated = db.query(EmployeeAdvance).filter(EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None)).update({EmployeeAdvance.confirmed_at: now}, synchronize_session=False)
+    unconfirmed_advs = db.query(EmployeeAdvance).filter(
+        EmployeeAdvance.id.in_(ids), EmployeeAdvance.confirmed_at.is_(None)
+    ).all()
+    for adv in unconfirmed_advs:
+        adv.confirmed_at = now
+        _ensure_advance_payment(db, adv, current_user)
+    updated = len(unconfirmed_advs)
     db.commit()
     base = "/employees/advances?bulk_confirmed=" + str(updated)
     extra = _advances_list_redirect_params(form)
