@@ -39,7 +39,7 @@
     </div>
 
     <!-- Sana filtri (default: bugun) -->
-    <form method="get" class="row g-2 mb-3 align-items-end" style="max-width:720px;">
+    <form method="get" class="row g-2 mb-3 align-items-end">
         <div class="col-auto">
             <label class="form-label small mb-1">Dan</label>
             <input type="date" name="date_from" value="{{ filter_date_from or '' }}" class="form-control form-control-sm">
@@ -47,6 +47,42 @@
         <div class="col-auto">
             <label class="form-label small mb-1">Gacha</label>
             <input type="date" name="date_to" value="{{ filter_date_to or '' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Kassa</label>
+            <select name="cash_id" class="form-select form-select-sm">
+                <option value="">— Barchasi —</option>
+                {% for c in cash_registers %}
+                <option value="{{ c.id }}" {% if sel_cash_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Yo'nalish</label>
+            <select name="direction_id" class="form-select form-select-sm">
+                <option value="">— Barchasi —</option>
+                {% for d in directions %}
+                <option value="{{ d.id }}" {% if sel_direction_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Bo'lim</label>
+            <select name="department_id" class="form-select form-select-sm">
+                <option value="">— Barchasi —</option>
+                {% for d in departments %}
+                <option value="{{ d.id }}" {% if sel_department_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-auto">
+            <label class="form-label small mb-1">Tur</label>
+            <select name="kind" class="form-select form-select-sm">
+                <option value="">— Barchasi —</option>
+                {% for val, lbl in kind_options %}
+                <option value="{{ val }}" {% if sel_kind == val %}selected{% endif %}>{{ lbl }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="col-auto">
             <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-funnel"></i> Filtr</button>

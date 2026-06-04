@@ -296,18 +296,30 @@ async def finance_harajatlar(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     show_all: Optional[str] = None,
+    cash_id: Optional[int] = None,
+    direction_id: Optional[int] = None,
+    department_id: Optional[int] = None,
+    kind: Optional[str] = None,
 ):
     """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida).
 
     Default: faqat bugun. ?show_all=1 → barcha sanalar. ?date_from=..&date_to=.. → aniq oraliq.
+    Filtrlar: cash_id (kassa), direction_id (yo'nalish), department_id (bo'lim),
+    kind (tur: hd|xarid|other|expense|sale_return). Yo'nalish/Bo'lim HD hujjatlarga (va
+    xaridlarga) tegishli — ular o'rnatilsa yo'nalishsiz oddiy to'lovlar chiqarib tashlanadi.
     """
     ensure_payments_status_column(db)
+    kind = (kind or "").strip() or None
+    # Yo'nalish/Bo'lim filtri o'rnatilsa, yo'nalishsiz oddiy Payment'lar chiqariladi
+    _dirdept = bool(direction_id or department_id)
     if date_from is None and date_to is None and show_all != "1":
         _today_str = datetime.now().date().isoformat()
         date_from = _today_str
         date_to = _today_str
     cash_registers = db.query(CashRegister).all()
     partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
+    directions = db.query(Direction).filter(Direction.is_active == True).order_by(Direction.name).all()
+    departments = db.query(Department).filter(Department.is_active == True).order_by(Department.name).all()
     expense_docs_q = (
         db.query(ExpenseDoc)
         .filter(ExpenseDoc.status != "deleted")
@@ -317,6 +329,17 @@ async def finance_harajatlar(
             joinedload(ExpenseDoc.department),
         )
     )
+    # Filtrlar (HD hujjatlar): kassa, yo'nalish, bo'lim
+    if cash_id:
+        expense_docs_q = expense_docs_q.filter(ExpenseDoc.cash_register_id == cash_id)
+    if direction_id:
+        expense_docs_q = expense_docs_q.filter(ExpenseDoc.direction_id == direction_id)
+    if department_id:
+        expense_docs_q = expense_docs_q.filter(ExpenseDoc.department_id == department_id)
+    # Tur filtri: HD'ni faqat kind bo'sh yoki 'expense_doc' bo'lganda ko'rsatamiz
+    _show_hd = kind in (None, "expense_doc")
+    if not _show_hd:
+        expense_docs_q = expense_docs_q.filter(ExpenseDoc.id == -1)
     _df_main = str(date_from or "").strip()[:10] if date_from else ""
     _dt_main = str(date_to or "").strip()[:10] if date_to else ""
     if _df_main:
@@ -341,6 +364,16 @@ async def finance_harajatlar(
         )
         .filter(Purchase.status == "confirmed", Purchase.total_expenses > 0)
     )
+    # Filtrlar (xarid xarajatlari): kassa/yo'nalish/bo'lim (expense_* ustunlari)
+    if cash_id:
+        purchases_with_expenses_q = purchases_with_expenses_q.filter(Purchase.expense_cash_register_id == cash_id)
+    if direction_id:
+        purchases_with_expenses_q = purchases_with_expenses_q.filter(Purchase.expense_direction_id == direction_id)
+    if department_id:
+        purchases_with_expenses_q = purchases_with_expenses_q.filter(Purchase.expense_department_id == department_id)
+    _show_xarid = kind in (None, "supplier_payment")
+    if not _show_xarid:
+        purchases_with_expenses_q = purchases_with_expenses_q.filter(Purchase.id == -1)
     _df = str(date_from or "").strip()[:10] if date_from else ""
     _dt = str(date_to or "").strip()[:10] if date_to else ""
     if _df:
@@ -391,6 +424,14 @@ async def finance_harajatlar(
         .filter(Payment.type == "expense", Payment.status != "cancelled")
         .order_by(Payment.date.desc())
     )
+    # Filtrlar (PAY/boshqa chiqim): kassa, kategoriya; yo'nalish/bo'lim o'rnatilsa
+    # yo'nalishsiz oddiy to'lovlar chiqariladi (HD/xarid yuqorida alohida ko'rsatiladi)
+    if cash_id:
+        q = q.filter(Payment.cash_register_id == cash_id)
+    if kind:
+        q = q.filter(Payment.category == kind)
+    if _dirdept:
+        q = q.filter(Payment.id == -1)
     if (date_from or "").strip():
         try:
             df = datetime.strptime(str(date_from).strip()[:10], "%Y-%m-%d").date()
@@ -415,6 +456,15 @@ async def finance_harajatlar(
         .join(Purchase, PurchaseExpense.purchase_id == Purchase.id)
         .filter(Purchase.status == "confirmed")
     )
+    # Filtrlar (xarid xarajat satrlari): expense_* ustunlari
+    if cash_id:
+        purchase_expenses_q = purchase_expenses_q.filter(Purchase.expense_cash_register_id == cash_id)
+    if direction_id:
+        purchase_expenses_q = purchase_expenses_q.filter(Purchase.expense_direction_id == direction_id)
+    if department_id:
+        purchase_expenses_q = purchase_expenses_q.filter(Purchase.expense_department_id == department_id)
+    if kind and kind != "supplier_payment":
+        purchase_expenses_q = purchase_expenses_q.filter(Purchase.id == -1)
     if filter_date_from:
         try:
             df = datetime.strptime(filter_date_from[:10], "%Y-%m-%d").date()
@@ -515,21 +565,34 @@ async def finance_harajatlar(
         stat_to_excl = stat_from + timedelta(days=1)
 
     # audit_correction — kassa balansini moslash, real harajat emas (istisno qilinadi)
+    def _apply_stat_filters(pq):
+        # Stat kartalari filtrlarga mos bo'lsin (kassa/tur/yo'nalish/bo'lim)
+        if cash_id:
+            pq = pq.filter(Payment.cash_register_id == cash_id)
+        if kind:
+            pq = pq.filter(Payment.category == kind)
+        if _dirdept:
+            pq = pq.join(ExpenseDoc, ExpenseDoc.payment_id == Payment.id)
+            if direction_id:
+                pq = pq.filter(ExpenseDoc.direction_id == direction_id)
+            if department_id:
+                pq = pq.filter(ExpenseDoc.department_id == department_id)
+        return pq
     try:
         _status_ok = or_(Payment.status == "confirmed", Payment.status.is_(None))
-        period_payments = db.query(Payment).filter(
+        period_payments = _apply_stat_filters(db.query(Payment).filter(
             Payment.type == "expense",
             Payment.date >= stat_from,
             Payment.date < stat_to_excl,
             or_(Payment.category != "audit_correction", Payment.category.is_(None)),
             _status_ok
-        ).all()
+        )).all()
     except OperationalError:
-        period_payments = db.query(Payment).filter(
+        period_payments = _apply_stat_filters(db.query(Payment).filter(
             Payment.type == "expense",
             Payment.date >= stat_from,
             Payment.date < stat_to_excl,
-        ).all()
+        )).all()
     # Payment'lardan qaysilari ExpenseDoc bilan bog'langan (HD-...)
     payment_ids = [p.id for p in period_payments if p.id]
     hd_payment_ids = set()
@@ -559,6 +622,19 @@ async def finance_harajatlar(
         "stats": stats,
         "filter_date_from": filter_date_from,
         "filter_date_to": filter_date_to,
+        "directions": directions,
+        "departments": departments,
+        "sel_cash_id": cash_id,
+        "sel_direction_id": direction_id,
+        "sel_department_id": department_id,
+        "sel_kind": kind or "",
+        "kind_options": [
+            ("expense_doc", "Harajat hujjati (HD)"),
+            ("supplier_payment", "Xarid xarajati"),
+            ("other", "Boshqa to'lov"),
+            ("expense", "Oddiy harajat"),
+            ("sale_return", "Sotuv qaytarish"),
+        ],
         "current_user": current_user,
         "page_title": "Harajatlar jurnali",
         "finance_harajatlar": True,
