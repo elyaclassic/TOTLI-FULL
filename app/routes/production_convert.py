@@ -270,9 +270,13 @@ async def convert_create(
 
     # Target Stock cost_price — weighted average (target omborda)
     if target_cost_per_kg > 0 and hasattr(Stock, "cost_price"):
+        # M6 fix: target_stock'ni ham qulflash (source'da bor edi) — weighted-avg cost
+        # race: parallel konvertatsiyalar bir xil target'ga eski cost o'qib, bir-birini
+        # ustiga yozishi mumkin edi. with_for_update source bilan izchil.
         target_stock = (
             db.query(Stock)
             .filter(Stock.warehouse_id == target_warehouse_id, Stock.product_id == target_product_id)
+            .with_for_update()
             .first()
         )
         if target_stock:

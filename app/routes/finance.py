@@ -46,6 +46,26 @@ def _next_expense_doc_number(db: Session) -> str:
     return next_doc_number(db, ExpenseDoc, f"HD-{today}-")
 
 
+def _transfer_conversion(db: Session, from_cash_id: int, to_cash_id: int, amount: float):
+    """M8: o'tkazma uchun (exchange_rate, to_amount) qaytaradi.
+
+    Cross-currency (from/to valyutasi farqli) bo'lsa joriy kurs (currency_service.get_rate)
+    bilan to_amount = amount*rate; bir xil valyuta bo'lsa (None, None). Kurs topilmasa
+    ValueError("FROM->TO"). Edit'da to_amount/rate eskirib qolmasligi uchun ishlatiladi.
+    """
+    fc = db.query(CashRegister).filter(CashRegister.id == from_cash_id).first()
+    tc = db.query(CashRegister).filter(CashRegister.id == to_cash_id).first()
+    from_curr = (getattr(fc, "currency", None) or "UZS").upper() if fc else "UZS"
+    to_curr = (getattr(tc, "currency", None) or "UZS").upper() if tc else "UZS"
+    if from_curr == to_curr:
+        return None, None
+    from app.services.currency_service import get_rate
+    rate = get_rate(db, from_curr, to_curr)
+    if not rate or rate <= 0:
+        raise ValueError(f"{from_curr}->{to_curr}")
+    return float(rate), round(float(amount) * float(rate), 2)
+
+
 @router.get("", response_class=HTMLResponse)
 async def finance(
     request: Request,
@@ -924,6 +944,20 @@ async def finance_payment_edit_post(
     cash_new = db.query(CashRegister).filter(CashRegister.id == cash_register_id).first()
     if not cash_new:
         return RedirectResponse(url=f"/finance/payment/{payment_id}/edit?error=cash", status_code=303)
+    # M7 fix: kassa valyutasi o'zgarsa summa noto'g'ri talqin qilinadi (so'm raqami
+    # USD deb yoki aksincha). Avtomatik qayta-konvert noaniq (foydalanuvchi niyati) —
+    # xavfsiz yo'l: valyuta o'zgarishini bloklab, o'chirib-qayta yaratishni so'rash.
+    old_cr = db.query(CashRegister).filter(CashRegister.id == payment.cash_register_id).first()
+    old_curr = (getattr(old_cr, "currency", None) or "UZS").upper() if old_cr else "UZS"
+    new_curr = (getattr(cash_new, "currency", None) or "UZS").upper()
+    if old_curr != new_curr:
+        return RedirectResponse(
+            url=f"/finance/payment/{payment_id}/edit?error=" + quote(
+                f"Kassa valyutasi farq qiladi ({old_curr}->{new_curr}). Summa noto'g'ri "
+                f"talqin qilinmasligi uchun to'lovni o'chirib qayta yarating."
+            ),
+            status_code=303,
+        )
     pid = None
     if partner_id is not None and int(partner_id) > 0:
         p = db.query(Partner).filter(Partner.id == int(partner_id)).first()
@@ -1735,9 +1769,23 @@ async def cash_transfer_edit(
         except ValueError:
             return RedirectResponse(url=f"/cash/transfers/{transfer_id}?error=" + quote("Sana formati notogri."), status_code=303)
 
+    # M8 fix: cross-currency o'tkazmada to_amount/exchange_rate'ni yangi from/to/amount
+    # bo'yicha QAYTA hisoblash (avval eski qiymatlar qolib, qabul qiluvchi kassa balansi
+    # buzilardi). Bir xil valyutaga o'zgartirilsa maydonlar tozalanadi.
+    try:
+        new_rate, new_to_amount = _transfer_conversion(db, from_cash_id, to_cash_id, amount)
+    except ValueError as ex:
+        return RedirectResponse(
+            url=f"/cash/transfers/{transfer_id}?error=" + quote(
+                f"Kurs topilmadi ({ex}). Avval /admin/exchange-rates da kurs kiriting."
+            ),
+            status_code=303,
+        )
     t.from_cash_id = from_cash_id
     t.to_cash_id = to_cash_id
     t.amount = amount
+    t.exchange_rate = new_rate
+    t.to_amount = new_to_amount
     t.date = new_date
     t.note = note or None
     db.commit()
