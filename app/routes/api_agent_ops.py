@@ -1436,6 +1436,31 @@ async def agent_order_return(order_id: int, request: Request, db: Session = Depe
 
 
 @router.post("/agent/order/{order_id}/exchange")
+def _build_return_lines(return_items, parent):
+    """M4: return_items -> [(product_id, qty, price)]. Parent'da BOR va parent qty'ga
+    CLAMP qilingan (xaridan ko'p qaytarib bo'lmaydi). Yaroqsiz/parentsiz itemlar tashlanadi.
+    price parent_oi'dan olinadi (asl narx)."""
+    out = []
+    for it in return_items or []:
+        try:
+            pid = int(it.get("product_id") or 0)
+            qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+        except (ValueError, TypeError):
+            continue
+        if pid <= 0 or qty <= 0:
+            continue
+        parent_oi = next((oi for oi in parent.items if oi.product_id == pid), None)
+        if not parent_oi:
+            continue  # parent'da yo'q mahsulotni qaytarib bo'lmaydi
+        parent_qty = float(parent_oi.quantity or 0)
+        if qty > parent_qty:
+            qty = parent_qty  # clamp: xaridan ko'p emas
+        if qty <= 0:
+            continue
+        out.append((pid, qty, float(parent_oi.price or 0)))
+    return out
+
+
 async def agent_order_exchange(order_id: int, request: Request, db: Session = Depends(get_db)):
     """Agent almashtirish: return + yangi sale ikkalasi atomik."""
     try:
@@ -1467,18 +1492,11 @@ async def agent_order_exchange(order_id: int, request: Request, db: Session = De
         partner_discount = float(partner.discount_percent or 0) if partner else 0
         price_type_id = parent.price_type_id
 
+        # M4 fix: return qty parent xaridiga clamp (xaridan ko'p qaytarib bo'lmaydi);
+        # parent'da yo'q mahsulot tashlanadi. Avval clamp yo'q edi -> soxta kredit/stock kirim.
         ret_subtotal = 0.0
         ret_oi = []
-        for it in return_items:
-            try:
-                pid = int(it.get("product_id") or 0)
-                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
-            except (ValueError, TypeError):
-                continue
-            if pid <= 0 or qty <= 0:
-                continue
-            parent_oi = next((oi for oi in parent.items if oi.product_id == pid), None)
-            price = float(parent_oi.price or 0) if parent_oi else 0
+        for pid, qty, price in _build_return_lines(return_items, parent):
             total_line = qty * price
             ret_subtotal += total_line
             ret_oi.append(OrderItem(product_id=pid, quantity=qty, price=price, discount_percent=0, total=total_line))

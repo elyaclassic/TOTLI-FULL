@@ -1507,6 +1507,23 @@ async def inventory_confirm(
     total_sotuv = sum(float(it.quantity or 0) * float(it.sale_price or 0) for it in doc.items)
     doc.total_tannarx = total_tannarx
     doc.total_sotuv = total_sotuv
+    # M5 fix: bir xil sanada bir xil (ombor,mahsulot)ni qamragan boshqa tasdiqlangan hujjat
+    # bo'lsa — baseline buziladi. Tasdiqni to'xtatib, draft'ga qaytaramiz va ogohlantiramiz.
+    _overlap_num = _inventory_same_day_overlap(db, doc)
+    if _overlap_num:
+        db.execute(
+            _text("UPDATE stock_adjustment_docs SET status='draft' WHERE id=:id"),
+            {"id": doc.id},
+        )
+        db.commit()
+        from urllib.parse import quote as _quote
+        return RedirectResponse(
+            url=f"/inventory/{doc_id}/edit?message=" + _quote(
+                f"Shu sanada {_overlap_num} hujjati bir xil mahsulotlarni qamragan — "
+                f"baseline buzilmasligi uchun sanani o'zgartiring yoki hujjatlarni birlashtiring."
+            ),
+            status_code=303,
+        )
     # Audit fix 2026-05-08: ATOMIK tranzaksiya — status='confirmed' (atomik UPDATE WHERE),
     # form qiymatlari, merge va stock movement yaratishlar BIR commit'da bo'lsin.
     # Avval middle-da db.commit() bor edi → exception bo'lsa half-success holat (status
@@ -1553,6 +1570,38 @@ def _merge_duplicate_stock_rows(db: Session, items) -> None:
                 keep.updated_at = datetime.now()
             for r in rows[1:]:
                 db.delete(r)
+
+
+def _inventory_same_day_overlap(db, doc):
+    """M5: shu hujjat bilan BIR XIL kunda (sana) tasdiqlangan boshqa inventarizatsiya/
+    qoldiq hujjati BIR XIL (ombor, mahsulot)ni qamragan bo'lsa, uning raqamini qaytaradi
+    (aks holda None).
+
+    Sabab: baseline get_stock_at_date (SUM<=doc_date) bo'lib, ikkala hujjat sanasi bir xil
+    bo'lsa, ikkinchisi birinchisining adjustment'ini baseline'ga qo'shib hisoblaydi →
+    ledger delta noto'g'ri va baseline ustiga yoziladi. Turli ombor/mahsulot bo'lsa muammo yo'q.
+    """
+    doc_date = doc.date or datetime.now()
+    day_start = doc_date.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_end = doc_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    my_pairs = {(it.warehouse_id, it.product_id) for it in doc.items}
+    if not my_pairs:
+        return None
+    others = (
+        db.query(StockAdjustmentDoc)
+        .filter(
+            StockAdjustmentDoc.id != doc.id,
+            StockAdjustmentDoc.status == "confirmed",
+            StockAdjustmentDoc.date >= day_start,
+            StockAdjustmentDoc.date <= day_end,
+        )
+        .all()
+    )
+    for od in others:
+        od_pairs = {(oi.warehouse_id, oi.product_id) for oi in od.items}
+        if my_pairs & od_pairs:
+            return od.number or f"#{od.id}"
+    return None
 
 
 def _apply_inventory_stock_changes(db: Session, doc, is_stock_entry: bool, current_user) -> int:
