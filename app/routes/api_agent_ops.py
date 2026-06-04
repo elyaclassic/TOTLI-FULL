@@ -1063,6 +1063,11 @@ async def agent_create_order(
             existing_order.total = new_total
             existing_order.debt = new_total - float(existing_order.paid or 0)
             db.commit()
+            try:
+                from app.services.realtime_bus import publish_event
+                publish_event("order_board")
+            except Exception:
+                pass
             logger.info(f"Agent order merged: #{existing_order.number}, +{len(order_items)} items, total={new_total}")
             return {"success": True, "order_id": existing_order.id, "order_number": existing_order.number, "total": new_total}
 
@@ -1096,6 +1101,11 @@ async def agent_create_order(
             db.add(oi)
         # Draft — partner balance o'zgartirMAYMIZ (faqat tasdiqlangandan keyin)
         db.commit()
+        try:
+            from app.services.realtime_bus import publish_event
+            publish_event("order_board")
+        except Exception:
+            pass
         logger.info(f"Agent order created: #{order_number}, agent={agent.code}, partner={partner.name}, total={total}")
         return {"success": True, "order_id": order.id, "order_number": order_number, "total": total}
     except Exception as e:
@@ -1357,6 +1367,11 @@ async def agent_create_order_batch(
                 results.append({"index": idx, "success": False, "error": str(item_err)})
 
         db.commit()
+        try:
+            from app.services.realtime_bus import publish_event
+            publish_event("order_board")
+        except Exception:
+            pass
         success_count = sum(1 for r in results if r.get("success"))
         logger.info(f"Agent batch orders: agent={agent.code}, total={len(orders_data)}, success={success_count}")
         return {"success": True, "results": results, "total": len(orders_data), "success_count": success_count}

@@ -557,6 +557,11 @@ async def supervisor_confirm_agent_order(
         )
     db.commit()
     try:
+        from app.services.realtime_bus import publish_event
+        publish_event("order_board")
+    except Exception:
+        pass
+    try:
         from app.bot.services.audit_watchdog import audit_agent_order_confirm
         audit_agent_order_confirm(order.id)
     except Exception:

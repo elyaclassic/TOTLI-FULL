@@ -481,6 +481,11 @@ async def driver_delivery_status(
 
         db.commit()
         try:
+            from app.services.realtime_bus import publish_event
+            publish_event("order_board")
+        except Exception:
+            pass
+        try:
             from app.bot.services.audit_watchdog import audit_delivery_status
             audit_delivery_status(delivery.id, new_status, getattr(driver, "full_name", "") or getattr(driver, "code", "—"))
         except Exception:

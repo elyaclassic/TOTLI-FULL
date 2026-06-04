@@ -110,6 +110,11 @@ def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
             )
             db.add(delivery)
             db.commit()
+            try:
+                from app.services.realtime_bus import publish_event
+                publish_event("order_board")
+            except Exception:
+                pass
 
             promoted.append({
                 "order_id": order.id,
