@@ -187,6 +187,7 @@ async def driver_delivery_status(
     longitude: float = Form(None),
     notes: str = Form(""),
     items: str = Form(None),
+    is_full_list: bool = Form(True),
     naqd: float = Form(0),
     plastik: float = Form(0),
     token: str = Form(...),
@@ -264,55 +265,73 @@ async def driver_delivery_status(
                                         note=f"Yetkazilmagan qoldiq qaytarish: {target_oi.product.name if target_oi.product else ''} ({diff:.0f} dona)",
                                         created_at=datetime.now(),
                                     )
-                    # O'CHIRILGAN itemlar: ilova (deliveries_screen.dart) yetkazishda to'liq
-                    # YAKUNIY ro'yxat yuboradi — o'chirilgan item removeAt bilan ro'yxatdan
-                    # chiqariladi. Shu sababli modified_items'da YO'Q order item = haydovchi
-                    # o'chirgan => qty=0 + yetkazilmagan qoldiqni stockka qaytarish.
-                    sent_pids = set()
-                    sent_names = set()
-                    for mi in modified_items:
-                        _p = mi.get("product_id")
-                        if _p is not None:
-                            try:
-                                sent_pids.add(int(_p))
-                            except (ValueError, TypeError):
-                                pass
-                        _n = (mi.get("name") or "").strip()
-                        if _n:
-                            sent_names.add(_n)
-                    for oi in list(order.items):
-                        matched = (oi.product_id in sent_pids) or (
-                            oi.product and (oi.product.name or "").strip() in sent_names)
-                        if matched:
-                            continue
-                        old_qty = float(oi.quantity or 0)
-                        if old_qty <= 0:
-                            continue
-                        # Stock dispatch'da ('out_for_delivery') chiqarilgan bo'lsa qaytarish
-                        # (reduction logikasi bilan bir xil guard).
-                        if (order.status or "") in ("confirmed", "out_for_delivery"):
-                            wh_id = oi.warehouse_id or order.warehouse_id
-                            if wh_id and oi.product_id:
-                                create_stock_movement(
-                                    db=db,
-                                    warehouse_id=wh_id,
-                                    product_id=oi.product_id,
-                                    quantity_change=+old_qty,
-                                    operation_type="delivery_partial",
-                                    document_type="Sale",
-                                    document_id=order.id,
-                                    document_number=order.number,
-                                    user_id=getattr(driver, 'employee_id', None),
-                                    note=f"Yetkazishda o'chirilgan (stock qaytdi): {oi.product.name if oi.product else ''} ({old_qty:.0f} dona)",
-                                    created_at=datetime.now(),
-                                )
-                        oi.quantity = 0
-                        oi.total = 0
+                    # O'CHIRILGAN itemlar (absence-based): ilova (deliveries_screen.dart)
+                    # yetkazishda to'liq YAKUNIY ro'yxat yuboradi — o'chirilgan item
+                    # removeAt bilan ro'yxatdan chiqariladi. Shu sababli modified_items'da
+                    # YO'Q order item = haydovchi o'chirgan => qty=0 + qoldiqni stockka qaytar.
+                    #
+                    # H7 fix: bu absence-based mantiq FAQAT ro'yxat to'liq ekani kafolatlanganda
+                    # ishlaydi (is_full_list, default=True — joriy/eski APK'lar shu kontraktda).
+                    # Agar klient is_full_list=False yuborsa (faqat o'zgargan itemlar), absent
+                    # itemlar NOLLANMAYDI — qisman ro'yxat butun buyurtmani o'chirib yubormaydi.
+                    if is_full_list:
+                        sent_pids = set()
+                        sent_names = set()
+                        for mi in modified_items:
+                            _p = mi.get("product_id")
+                            if _p is not None:
+                                try:
+                                    sent_pids.add(int(_p))
+                                except (ValueError, TypeError):
+                                    pass
+                            _n = (mi.get("name") or "").strip()
+                            if _n:
+                                sent_names.add(_n)
+                        for oi in list(order.items):
+                            matched = (oi.product_id in sent_pids) or (
+                                oi.product and (oi.product.name or "").strip() in sent_names)
+                            if matched:
+                                continue
+                            old_qty = float(oi.quantity or 0)
+                            if old_qty <= 0:
+                                continue
+                            # Observability: absence orqali nollanish auditda ko'rinsin
+                            logger.warning(
+                                f"Driver absence-delete: order={order.number} "
+                                f"product_id={oi.product_id} qty {old_qty:.0f}->0 "
+                                f"(yuborilgan {len(sent_pids)} item)"
+                            )
+                            # Stock dispatch'da ('out_for_delivery') chiqarilgan bo'lsa qaytarish
+                            # (reduction logikasi bilan bir xil guard).
+                            if (order.status or "") in ("confirmed", "out_for_delivery"):
+                                wh_id = oi.warehouse_id or order.warehouse_id
+                                if wh_id and oi.product_id:
+                                    create_stock_movement(
+                                        db=db,
+                                        warehouse_id=wh_id,
+                                        product_id=oi.product_id,
+                                        quantity_change=+old_qty,
+                                        operation_type="delivery_partial",
+                                        document_type="Sale",
+                                        document_id=order.id,
+                                        document_number=order.number,
+                                        user_id=getattr(driver, 'employee_id', None),
+                                        note=f"Yetkazishda o'chirilgan (stock qaytdi): {oi.product.name if oi.product else ''} ({old_qty:.0f} dona)",
+                                        created_at=datetime.now(),
+                                    )
+                            oi.quantity = 0
+                            oi.total = 0
                     order.total = sum(float(oi.total or 0) for oi in order.items)
                     order.subtotal = order.total
                     order.debt = max(0.0, order.total - float(order.paid or 0))
             except Exception as e:
-                logger.warning(f"Items update xatosi: {e}")
+                # H1 fix: item-update xatosi YUTILMAYDI. Avval bu blok faqat warning
+                # log qilib davom etardi -> qisman yangilangan order JIM 'delivered'
+                # bo'lib commit bo'lardi (noto'g'ri total/qarz + stock leak). Endi
+                # atomik rollback + xato qaytariladi -> haydovchi qayta urinadi.
+                db.rollback()
+                logger.error(f"Items update xatosi (rollback, yetkazish to'xtatildi): {e}")
+                return {"success": False, "error": "Mahsulotlarni yangilashda xato — qayta urinib ko'ring"}
 
         if new_status == "failed" and delivery.order_id:
             order = db.query(Order).filter(Order.id == delivery.order_id).first()
