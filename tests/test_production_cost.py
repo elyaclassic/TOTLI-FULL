@@ -69,7 +69,10 @@ def test_update_output_no_history_when_unchanged(db):
         ProductPriceHistory.product_id == p.id).count() == 0
 
 
-def test_update_output_anomaly_warns_but_completes(db, caplog):
+def test_update_output_anomaly_warns_and_skips(db, caplog):
+    # C2 fix (2026-06-04): g'ayritabiiy tannarx (50000 > sotuv 10000) endi YOZILMAYDI
+    # (eski 100 saqlanadi) + "PRICE ANOMALY SKIPPED" warning. Eski test "warns but
+    # completes" (yozardi) edi — yangi qo'riq overwrite'ni bloklaydi.
     import logging
     from app.routes.production import _update_output_cost_and_price
     p, r = _mk_output(db, pp=100, sale=10000)
@@ -77,7 +80,7 @@ def test_update_output_anomaly_warns_but_completes(db, caplog):
     with caplog.at_level(logging.WARNING):
         _update_output_cost_and_price(db, 1, r, 50000.0)
     db.refresh(p)
-    assert p.purchase_price == 50000.0
+    assert p.purchase_price == 100, "Anomaliya bloklanib, eski tannarx saqlanishi kerak"
     assert any("PRICE ANOMALY" in m for m in caplog.messages)
 
 

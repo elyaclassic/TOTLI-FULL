@@ -111,14 +111,17 @@ def test_compute_uzs_payment_not_converted(db):
     assert compute_partner_balance(db, p.id) == 50000.0
 
 
-def test_compute_usd_no_rate_uses_raw_amount(db):
+def test_compute_usd_no_rate_returns_zero_not_raw(db):
+    # H4 fix (2026-06-04): USD to'lovda kurs umuman topilmasa, XOM summa (100) SO'M
+    # deb hisoblanmaydi (~12000x xato) — 0 qaytariladi (+ logger.error). Bu test eski
+    # "xom summa" xatti-harakatini emas, yangi to'g'ri 0 xatti-harakatini tekshiradi.
     p = _partner(db)
     usd = CashRegister(name="Asosiy $", payment_type="naqd", currency="USD", is_active=True, opening_balance=0)
     db.add(usd); db.flush()
     db.add(Payment(partner_id=p.id, type="expense", status="confirmed",
                    amount=100, cash_register_id=usd.id, date=datetime(2026,6,1)))
     db.commit()
-    assert compute_partner_balance(db, p.id) == 100.0
+    assert compute_partner_balance(db, p.id) == 0.0
 
 
 from app.models.database import AuditLog
