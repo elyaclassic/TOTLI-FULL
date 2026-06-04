@@ -1,0 +1,95 @@
+{# app/templates/board/order_board.html #}
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Buyurtma board — TOTLI HOLVA</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background:#0f1115; color:#e8eaed; font-family: system-ui, sans-serif; height:100vh; overflow:hidden; }
+  .board { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; height:100vh; padding:10px; }
+  .col { background:#171a21; border-radius:10px; display:flex; flex-direction:column; overflow:hidden; }
+  .col-head { padding:12px; font-size:20px; font-weight:800; text-align:center; border-bottom:2px solid #2a2f3a; letter-spacing:.5px; }
+  .col-body { flex:1; overflow-y:auto; padding:8px; }
+  .c-confirmed .col-head { color:#4da3ff; }
+  .c-waiting_production .col-head { color:#ffb74d; }
+  .c-out_for_delivery .col-head { color:#9c8bff; }
+  .c-delivered .col-head { color:#5ed16a; }
+  .card { background:#1f242e; border-radius:8px; padding:12px; margin-bottom:8px; border-left:5px solid #3a4150; }
+  .card.overdue { border-left-color:#ff4d4f; background:#2a1a1c; }
+  .card .name { font-size:22px; font-weight:800; line-height:1.1; }
+  .card .meta { font-size:14px; color:#9aa0ab; margin-top:4px; }
+  .card .amt { font-size:16px; font-weight:700; color:#cfd3da; }
+  .card .drv { font-size:14px; color:#9c8bff; margin-top:2px; }
+  .empty { color:#5a606b; text-align:center; padding:20px; font-size:14px; }
+  .conn { position:fixed; bottom:6px; right:10px; font-size:11px; color:#5a606b; }
+</style>
+</head>
+<body>
+<div class="board" id="board"></div>
+<div class="conn" id="conn">…</div>
+<script>
+const COLS = [
+  ["confirmed", "TASDIQLANGAN"],
+  ["waiting_production", "ISHLAB CHIQARILMOQDA"],
+  ["out_for_delivery", "YO'LDA"],
+  ["delivered", "YETKAZILDI (bugun)"],
+];
+const STAGE_LABEL = {confirmed:"", waiting_production:"⏳ ishlab chiqarish", out_for_delivery:"", delivered:"✓"};
+
+function fmt(n){ return (n||0).toLocaleString('ru-RU'); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function sinceMin(iso){ if(!iso) return ""; const d=new Date(iso); const m=Math.floor((Date.now()-d.getTime())/60000); if(m<1) return "hozir"; if(m<60) return m+" daq"; return Math.floor(m/60)+" soat"; }
+
+function render(data){
+  const board = document.getElementById('board');
+  board.innerHTML = "";
+  for(const [key, title] of COLS){
+    const items = data[key] || [];
+    const col = document.createElement('div');
+    col.className = "col c-"+key;
+    let html = `<div class="col-head">${title} (${items.length})</div><div class="col-body">`;
+    if(!items.length){ html += `<div class="empty">—</div>`; }
+    for(const o of items){
+      const drv = o.driver ? `<div class="drv">🚚 ${esc(o.driver)}</div>` : "";
+      const extra = STAGE_LABEL[o.status] || "";
+      html += `<div class="card ${o.overdue?'overdue':''}">
+        <div class="name">${esc(o.partner)}</div>
+        <div class="amt">${esc(o.number)} · ${fmt(o.total)} so'm</div>
+        <div class="meta">${(o.items_count||0)} mahsulot${extra?(' · '+extra):''} · ${sinceMin(o.stage_since)}</div>
+        ${drv}
+      </div>`;
+    }
+    html += `</div>`;
+    col.innerHTML = html;
+    board.appendChild(col);
+  }
+}
+
+let reloadTimer = null;
+async function reload(){
+  try{
+    const r = await fetch('/sales/board/data', {credentials:'same-origin'});
+    if(r.ok){ render(await r.json()); }
+  }catch(e){}
+}
+function scheduleReload(){ clearTimeout(reloadTimer); reloadTimer = setTimeout(reload, 500); }
+
+reload();
+setInterval(reload, 30000);
+
+function connectWS(){
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const ws = new WebSocket(`${proto}://${location.host}/ws/dashboard/v2`);
+  const conn = document.getElementById('conn');
+  ws.onopen = ()=>{ conn.textContent = "● jonli"; };
+  ws.onmessage = ()=>{ scheduleReload(); };
+  ws.onclose = ()=>{ conn.textContent = "○ qayta ulanmoqda…"; setTimeout(connectWS, 3000); };
+  ws.onerror = ()=>{ try{ws.close();}catch(e){} };
+  setInterval(()=>{ try{ if(ws.readyState===1) ws.send('ping'); }catch(e){} }, 25000);
+}
+connectWS();
+</script>
+</body>
+</html>
