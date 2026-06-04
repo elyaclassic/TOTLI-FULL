@@ -495,6 +495,7 @@ async def sales_create(
             db.add(OrderItem(order_id=order.id, product_id=pid, warehouse_id=item_wh_id, quantity=qty, price=price, total=total_row))
             order.subtotal = (order.subtotal or 0) + total_row
             order.total = (order.total or 0) + total_row
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))  # debt total bilan sinxron
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order.id}", status_code=303)
 
@@ -738,6 +739,7 @@ async def sales_add_item(
         db.add(OrderItem(order_id=order_id, product_id=product_id, quantity=quantity, price=price, total=total_row))
     order.subtotal = (order.subtotal or 0) + total_row
     order.total = (order.total or 0) + total_row
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))  # debt total bilan sinxron
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
@@ -803,6 +805,7 @@ async def sales_add_items(
             db.add(OrderItem(order_id=order_id, product_id=pid, warehouse_id=order.warehouse_id, quantity=qty, price=price, total=total_row))
         order.subtotal = (order.subtotal or 0) + total_row
         order.total = (order.total or 0) + total_row
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))  # debt total bilan sinxron
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
 
@@ -836,6 +839,7 @@ async def sales_update_item(
     item.total = new_total
     order.subtotal = (order.subtotal or 0) + delta
     order.total = (order.total or 0) + delta
+    order.debt = max(0.0, (order.total or 0) - (order.paid or 0))  # debt total bilan sinxron
     db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}?message=item-updated", status_code=303)
 
@@ -1301,6 +1305,7 @@ async def sales_delete_item(
     if item:
         order.total = (order.total or 0) - (item.total or 0)
         order.subtotal = (order.subtotal or 0) - (item.total or 0)
+        order.debt = max(0.0, (order.total or 0) - (order.paid or 0))  # debt total bilan sinxron
         db.delete(item)
         db.commit()
     return RedirectResponse(url=f"/sales/edit/{order_id}", status_code=303)
