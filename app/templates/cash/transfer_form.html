@@ -384,8 +384,8 @@
             <dd class="col-sm-9 sum-cell">
                 {% set from_cur = (transfer.from_cash.currency if transfer.from_cash else 'UZS') or 'UZS' %}
                 {% set to_cur = (transfer.to_cash.currency if transfer.to_cash else 'UZS') or 'UZS' %}
-                {% set from_label = "so'm" if from_cur == 'UZS' else from_cur %}
-                {% set to_label = "so'm" if to_cur == 'UZS' else to_cur %}
+                {% set from_label = "$" if from_cur == 'USD' else ("so'm" if from_cur == 'UZS' else from_cur) %}
+                {% set to_label = "$" if to_cur == 'USD' else ("so'm" if to_cur == 'UZS' else to_cur) %}
                 {% if transfer.to_amount and transfer.exchange_rate and from_cur != to_cur %}
                 {{ "{:,.2f}".format(transfer.amount or 0) }} {{ from_label }} → {{ "{:,.0f}".format(transfer.to_amount or 0) }} {{ to_label }} <span class="muted-cell">(kurs {{ "{:,.0f}".format(transfer.exchange_rate or 0) }})</span>
                 {% else %}

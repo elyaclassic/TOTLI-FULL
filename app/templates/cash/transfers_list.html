@@ -95,7 +95,17 @@
                         </td>
                         <td>{{ t.from_cash.name if t.from_cash else '—' }}</td>
                         <td>{{ t.to_cash.name if t.to_cash else '—' }}</td>
-                        <td class="text-end sum-cell">{{ "{:,.0f}".format(t.amount or 0) }} so'm</td>
+                        <td class="text-end sum-cell">
+                            {% set fcur = (t.from_cash.currency if t.from_cash else 'UZS') or 'UZS' %}
+                            {% set tcur = (t.to_cash.currency if t.to_cash else 'UZS') or 'UZS' %}
+                            {% set flbl = "$" if fcur == 'USD' else ("so'm" if fcur == 'UZS' else fcur) %}
+                            {% set tlbl = "$" if tcur == 'USD' else ("so'm" if tcur == 'UZS' else tcur) %}
+                            {% if t.to_amount and t.exchange_rate and fcur != tcur %}
+                            {{ "{:,.0f}".format(t.amount or 0) }} {{ flbl }} → {{ "{:,.0f}".format(t.to_amount or 0) }} {{ tlbl }}
+                            {% else %}
+                            {{ "{:,.0f}".format(t.amount or 0) }} {{ flbl }}
+                            {% endif %}
+                        </td>
                         <td>{{ t.user.full_name if t.user else t.user.username if t.user else '—' }}</td>
                         <td>
                             {% if t.approved_by %}
