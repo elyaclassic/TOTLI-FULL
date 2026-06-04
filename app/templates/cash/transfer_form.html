@@ -372,6 +372,8 @@
                 <span class="badge-waiting">Tasdiqlash kutilmoqda</span>
                 {% elif transfer.status == 'confirmed' %}
                 <span class="badge-done">Tasdiqlangan</span>
+                {% elif transfer.status == 'completed' %}
+                <span class="badge-done">completed</span>
                 {% else %}
                 <span class="badge-inactive">{{ transfer.status }}</span>
                 {% endif %}

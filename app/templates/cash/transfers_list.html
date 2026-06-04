@@ -89,6 +89,8 @@
                             <span class="badge-waiting">Tasdiqlash kutilmoqda</span>
                             {% elif t.status == 'confirmed' %}
                             <span class="badge-done">Tasdiqlangan</span>
+                            {% elif t.status == 'completed' %}
+                            <span class="badge-done">completed</span>
                             {% else %}
                             <span class="badge-inactive">{{ t.status }}</span>
                             {% endif %}
