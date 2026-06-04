@@ -296,9 +296,9 @@ async def finance_harajatlar(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     show_all: Optional[str] = None,
-    cash_id: Optional[int] = None,
-    direction_id: Optional[int] = None,
-    department_id: Optional[int] = None,
+    cash_id: Optional[str] = None,
+    direction_id: Optional[str] = None,
+    department_id: Optional[str] = None,
     kind: Optional[str] = None,
 ):
     """Harajatlar jurnali — harajat hujjatlari va boshqa chiqimlar (1C uslubida).
@@ -309,6 +309,16 @@ async def finance_harajatlar(
     xaridlarga) tegishli — ular o'rnatilsa yo'nalishsiz oddiy to'lovlar chiqarib tashlanadi.
     """
     ensure_payments_status_column(db)
+    # Bo'sh dropdown ("") -> None; raqamli filtrlarni xavfsiz int'ga aylantirish
+    # (FastAPI Optional[int] bo'sh satrni parse qila olmaydi -> 422)
+    def _to_int(v):
+        try:
+            return int(v) if v not in (None, "") else None
+        except (ValueError, TypeError):
+            return None
+    cash_id = _to_int(cash_id)
+    direction_id = _to_int(direction_id)
+    department_id = _to_int(department_id)
     kind = (kind or "").strip() or None
     # Yo'nalish/Bo'lim filtri o'rnatilsa, yo'nalishsiz oddiy Payment'lar chiqariladi
     _dirdept = bool(direction_id or department_id)
