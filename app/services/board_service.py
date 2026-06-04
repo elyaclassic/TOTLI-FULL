@@ -6,12 +6,16 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models.database import Order, Delivery
 
-ACTIVE_STATUSES = ("confirmed", "waiting_production", "out_for_delivery")
-COLUMNS = ("confirmed", "waiting_production", "out_for_delivery", "delivered")
+ACTIVE_STATUSES = (
+    Order.STATUS_CONFIRMED,
+    Order.STATUS_WAITING_PRODUCTION,
+    Order.STATUS_OUT_FOR_DELIVERY,
+)
+COLUMNS = (*ACTIVE_STATUSES, Order.STATUS_DELIVERED)
 
 
 def _stage_since(o):
-    if o.status == "out_for_delivery" and getattr(o, "dispatched_at", None):
+    if o.status == Order.STATUS_OUT_FOR_DELIVERY and getattr(o, "dispatched_at", None):
         return o.dispatched_at
     return o.date
 
@@ -27,7 +31,7 @@ def build_board_snapshot(db: Session) -> dict:
             or_(
                 Order.status.in_(ACTIVE_STATUSES),
                 and_(
-                    Order.status == "delivered",
+                    Order.status == Order.STATUS_DELIVERED,
                     func.date(Order.delivery_date) == today,
                 ),
             ),
@@ -36,7 +40,7 @@ def build_board_snapshot(db: Session) -> dict:
         .all()
     )
     driver_by_order = {}
-    oids = [o.id for o in orders if o.status == "out_for_delivery"]
+    oids = [o.id for o in orders if o.status == Order.STATUS_OUT_FOR_DELIVERY]
     if oids:
         for d in (
             db.query(Delivery).options(joinedload(Delivery.driver))
@@ -49,17 +53,18 @@ def build_board_snapshot(db: Session) -> dict:
     for o in orders:
         dd = o.delivery_date
         overdue = bool(o.status in ACTIVE_STATUSES and dd and dd <= today)
+        _ss = _stage_since(o)
         card = {
             "id": o.id,
             "number": o.number or "",
             "partner": (o.partner.name if o.partner else "—"),
             "total": float(o.total or 0),
-            "items_count": len(o.items or []),
+            "items_count": len(o.items),
             "status": o.status,
             "delivery_date": dd.isoformat() if dd else None,
             "driver": driver_by_order.get(o.id, ""),
             "overdue": overdue,
-            "stage_since": (_stage_since(o).isoformat() if _stage_since(o) else None),
+            "stage_since": _ss.isoformat() if _ss else None,
         }
         if o.status in cols:
             cols[o.status].append(card)

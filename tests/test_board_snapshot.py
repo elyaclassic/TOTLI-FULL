@@ -49,3 +49,20 @@ def test_board_snapshot_excludes_pos_and_old_delivered(db):
     snap = build_board_snapshot(db)
     total = sum(len(v) for v in snap.values())
     assert total == 0
+
+
+def test_board_snapshot_delivered_today_vs_yesterday(db):
+    from app.models.database import Order, Partner
+    from app.services.board_service import build_board_snapshot
+    p = Partner(name="Q", balance=0, code="P_B4")
+    db.add(p); db.flush()
+    db.add(Order(number="AGT-D1", date=datetime.now(), type="sale", source="agent",
+                 partner_id=p.id, total=1, paid=1, debt=0, status="delivered",
+                 delivery_date=date.today()))
+    db.add(Order(number="AGT-D2", date=datetime.now(), type="sale", source="agent",
+                 partner_id=p.id, total=1, paid=1, debt=0, status="delivered",
+                 delivery_date=date.today() - timedelta(days=1)))
+    db.commit()
+    snap = build_board_snapshot(db)
+    assert len(snap["delivered"]) == 1
+    assert snap["delivered"][0]["number"] == "AGT-D1"
