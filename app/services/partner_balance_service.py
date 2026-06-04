@@ -132,3 +132,77 @@ def recompute_partner_balance(db: Session, partner_id: int, *, reason: str,
         details=f"reason={reason}; {old:.2f} -> {new:.2f}; delta={new - old:+.2f}",
     ))
     return (old, new)
+
+
+def recompute_partner_order_debts(db: Session, partner_id: int) -> int:
+    """M2: partner sale orderlari paid/debt'ini confirmed kirim to'lovlardan qayta-derive.
+
+    Muammo: driver/agent to'lov confirm FIFO bir nechta orderga taqsimlaydi, lekin
+    revert/edit faqat bitta orderni qaytarib, per-order debt drift qoldiradi. Bu funksiya
+    kanonik qayta-derive: avval order_id'li to'lovlar o'z orderiga, so'ng order_id'siz
+    (yoki ortiqcha) FIFO eng eski orderdan. Partner balansi (compute_partner_balance)
+    bundan MUSTAQIL — bu faqat per-order ko'rsatkichni izchil qiladi.
+
+    Qaytaradi: o'zgartirilgan order soni. db.commit() CHAQIRMAYDI.
+    """
+    orders = (
+        db.query(Order)
+        .filter(
+            Order.partner_id == partner_id,
+            Order.type == "sale",
+            Order.status.notin_(["cancelled", "draft"]),
+        )
+        .order_by(Order.date.asc(), Order.id.asc())
+        .all()
+    )
+    # debt-eligible: agent orderlar faqat delivered/completed (compute_partner_balance bilan izchil)
+    eligible = [
+        o for o in orders
+        if not ((o.source == "agent") and (o.status not in ("delivered", "completed")))
+    ]
+    by_id = {o.id: o for o in eligible}
+    applied = {o.id: 0.0 for o in eligible}
+
+    fifo_pool = 0.0
+    payments = (
+        db.query(Payment)
+        .filter(
+            Payment.partner_id == partner_id,
+            Payment.type == "income",
+            or_(Payment.status == "confirmed", Payment.status.is_(None)),
+        )
+        .all()
+    )
+    for p in payments:
+        amt = float(p.amount or 0)
+        if amt <= 0:
+            continue
+        o = by_id.get(p.order_id) if p.order_id else None
+        if o is not None:
+            room = max(0.0, float(o.total or 0) - applied[o.id])
+            take = min(room, amt)
+            applied[o.id] += take
+            fifo_pool += (amt - take)  # ortiqcha -> FIFO
+        else:
+            fifo_pool += amt
+    # FIFO pool -> qolgan qarzli orderlarga (eng eski birinchi)
+    for o in eligible:
+        if fifo_pool <= 1e-9:
+            break
+        room = max(0.0, float(o.total or 0) - applied[o.id])
+        if room <= 0:
+            continue
+        take = min(room, fifo_pool)
+        applied[o.id] += take
+        fifo_pool -= take
+    # yozish (faqat o'zgarganini)
+    changed = 0
+    for o in eligible:
+        total = float(o.total or 0)
+        new_paid = round(applied[o.id], 2)
+        new_debt = round(max(0.0, total - applied[o.id]), 2)
+        if abs(float(o.paid or 0) - new_paid) > 0.01 or abs(float(o.debt or 0) - new_debt) > 0.01:
+            o.paid = new_paid
+            o.debt = new_debt
+            changed += 1
+    return changed

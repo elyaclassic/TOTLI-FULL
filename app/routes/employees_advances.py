@@ -379,18 +379,28 @@ async def employee_advance_confirm(
 def _cancel_linked_advance_payment(db: Session, adv: EmployeeAdvance) -> bool:
     """Avansga bog'liq Payment yozuvini status='cancelled' qiladi va kassa balansini sinxronizatsiya qiladi.
     Topilsa True, topilmasa False qaytaradi (orphan holatda silent skip)."""
-    emp = db.query(Employee).filter(Employee.id == adv.employee_id).first()
-    if not emp or not adv.cash_register_id:
+    if not adv.cash_register_id:
         return False
-    emp_name = (emp.full_name or f"Xodim {adv.employee_id}")[:100]
-    pay = db.query(Payment).filter(
-        Payment.cash_register_id == adv.cash_register_id,
-        Payment.description == f"Avans: {emp_name}",
-        Payment.amount == float(adv.amount or 0),
-        func.date(Payment.date) == adv.advance_date,
-        Payment.status == "confirmed",
-        Payment.type == "expense",
-    ).order_by(Payment.id.desc()).first()
+    # M1: avval FK orqali aniq bog'langan Payment (fuzzy noto'g'ri Payment o'chirardi)
+    pay = None
+    if adv.payment_id:
+        pay = db.query(Payment).filter(
+            Payment.id == adv.payment_id, Payment.status == "confirmed", Payment.type == "expense",
+        ).first()
+    if not pay:
+        # Fallback (FK NULL — eski yozuvlar): fuzzy match
+        emp = db.query(Employee).filter(Employee.id == adv.employee_id).first()
+        if not emp:
+            return False
+        emp_name = (emp.full_name or f"Xodim {adv.employee_id}")[:100]
+        pay = db.query(Payment).filter(
+            Payment.cash_register_id == adv.cash_register_id,
+            Payment.description == f"Avans: {emp_name}",
+            Payment.amount == float(adv.amount or 0),
+            func.date(Payment.date) == adv.advance_date,
+            Payment.status == "confirmed",
+            Payment.type == "expense",
+        ).order_by(Payment.id.desc()).first()
     if not pay:
         return False
     pay.status = "cancelled"
@@ -410,6 +420,18 @@ def _ensure_advance_payment(db: Session, adv: EmployeeAdvance, current_user) -> 
     confirmed_at qo'yib Payment yaratmasdi => unconfirm->reconfirm da kassa kamaymas edi."""
     if not adv.cash_register_id:
         return
+    from app.routes.finance import _sync_cash_balance
+    # 0) M1: FK orqali aniq bog'langan Payment bormi? Bo'lsa shuni ta'minlash (fuzzy emas)
+    if adv.payment_id:
+        linked = db.query(Payment).filter(Payment.id == adv.payment_id).first()
+        if linked:
+            if linked.status != "confirmed":
+                linked.status = "confirmed"
+                db.flush()
+                _sync_cash_balance(db, linked.cash_register_id)
+            return
+        # FK bor lekin Payment yo'q (o'chirilgan) — yangidan yaratamiz (pastda)
+        adv.payment_id = None
     emp = db.query(Employee).filter(Employee.id == adv.employee_id).first()
     emp_name = ((emp.full_name if emp else None) or f"Xodim {adv.employee_id}")[:100]
     desc = f"Avans: {emp_name}"
@@ -420,13 +442,16 @@ def _ensure_advance_payment(db: Session, adv: EmployeeAdvance, current_user) -> 
         func.date(Payment.date) == adv.advance_date,
         Payment.type == "expense",
     ]
-    # 1) Aktiv (confirmed) Payment bormi? => qo'shimcha kerak emas
-    if db.query(Payment).filter(*base_filter, Payment.status == "confirmed").first():
+    # 1) Aktiv (confirmed) Payment bormi (fuzzy)? => FK ni bog'lab qo'yamiz, qo'shimcha kerak emas
+    active = db.query(Payment).filter(*base_filter, Payment.status == "confirmed").first()
+    if active:
+        adv.payment_id = active.id
         return
     # 2) Bekor qilingan Payment'ni qayta tiklash
     cancelled = db.query(Payment).filter(*base_filter, Payment.status == "cancelled").order_by(Payment.id.desc()).first()
     if cancelled:
         cancelled.status = "confirmed"
+        adv.payment_id = cancelled.id
     else:
         # 3) Yangi Payment yaratish (add bilan bir xil)
         today = datetime.now()
@@ -438,7 +463,7 @@ def _ensure_advance_payment(db: Session, adv: EmployeeAdvance, current_user) -> 
                 last_seq = int(last_pay.number.split("-")[-1])
             except (ValueError, IndexError):
                 last_seq = 0
-        db.add(Payment(
+        _new_pay = Payment(
             number=f"{prefix}{last_seq + 1:04d}",
             date=datetime.combine(adv.advance_date, today.time()),
             type="expense",
@@ -451,8 +476,10 @@ def _ensure_advance_payment(db: Session, adv: EmployeeAdvance, current_user) -> 
             description=desc,
             user_id=current_user.id if current_user else None,
             status="confirmed",
-        ))
-    from app.routes.finance import _sync_cash_balance
+        )
+        db.add(_new_pay)
+        db.flush()
+        adv.payment_id = _new_pay.id  # M1: FK bog'lash
     db.flush()
     _sync_cash_balance(db, adv.cash_register_id)
 

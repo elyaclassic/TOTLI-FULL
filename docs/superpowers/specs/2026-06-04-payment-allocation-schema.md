@@ -1,8 +1,15 @@
 # Spec: Payment allokatsiya / FK bog'lash (M1 + M2 + M3)
 
 **Sana:** 2026-06-04
-**Status:** TAYYOR — tungi deploy kutmoqda (schema o'zgarishi + ma'lumot migratsiyasi)
+**Status:** ✅ IMPLEMENTED branch `fix-m1-m2-m3-payment-alloc` — tungi deploy kutmoqda
 **Audit:** [[project-audit-findings-20260603]] M1, M2, M3 (MEDIUM)
+
+## ✅ Implementatsiya holati (2026-06-04)
+- **Kod tayyor** branch'da: ORM (payment_id), ensure_*_column, 6 endpoint FK, M2 recompute helper, M3 `_delete_linked_agent_payment` helper.
+- **6 TDD test** `tests/test_medium_m1_m2_m3.py` GREEN. To'liq suite 277 passed (1 login flake).
+- **⚠️ Jonli DB'da `payment_id` ustunlari ALLAQACHON mavjud** (ikkala jadval), hammasi NULL → deploy'da schema ALTER YO'Q (ensure idempotent no-op). Kod FK-NULL'da fuzzy fallback qiladi (backfilgacha xavfsiz).
+- **Backfill validatsiya** (jonli DB nusxasida dry-run): **M1 = 7/7, M3 = 5/5 toza** bog'lanadi (0 ambiguous, 0 notfound). `scripts/backfill_payment_links.py`.
+- Risk pasaydi: ustunlar bor + backfill toza → ish soatlarida ham deploy qilsa bo'ladi, lekin ehtiyot uchun tungi.
 
 ## Muammo (umumiy sinf)
 
