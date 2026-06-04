@@ -1355,10 +1355,80 @@ async def production_orders_fix_dates_from_numbers(
 
 
 def _production_revert_one(db: Session, production) -> Optional[str]:
-    """Bitta buyurtmani tasdiqdan qaytaradi. Muvaffaqiyat bo'lsa None, xato bo'lsa xabar qaytaradi."""
+    """Bitta buyurtmani tasdiqdan qaytaradi. Muvaffaqiyat -> None, xato -> xabar.
+
+    H6 fix: revert asl stock harakatlaridan (production_consumption / production_output
+    va oldingi revertlar) NET hisoblab AYNAN ko'zgu qiladi — retsept yoki production_items'dan
+    qayta hisoblamaydi. Bu (a) production_items completion'dan keyin tahrirlangan yoki
+    (b) ingredient ombori consumption'dagidan farqli bo'lgan hollarda asimmetrik drift'ni
+    oldini oladi. Harakat topilmasa (juda eski data) eski retsept mantiqiga qaytadi.
+    """
     if production.status != "completed":
         return None
     logger.info("production_revert: start #%s", production.number)
+
+    moves = db.query(StockMovement).filter(
+        StockMovement.document_type == "Production",
+        StockMovement.document_id == production.id,
+    ).all()
+    if not moves:
+        return _production_revert_from_recipe(db, production)
+
+    # Net qo'llanilgan o'zgarish: (ombor, mahsulot) -> sum(quantity_change)
+    net: dict = {}
+    for m in moves:
+        key = (m.warehouse_id, m.product_id)
+        net[key] = net.get(key, 0.0) + float(m.quantity_change or 0)
+
+    # Guard: production qo'shgan (net>0 = tayyor mahsulot) miqdor hozir stock'da bo'lishi
+    # shart — sotilgan/iste'mol qilingan bo'lsa revert qila olmaymiz (xom ashyo net<0 doim xavfsiz).
+    for (wh_id, product_id), net_qty in net.items():
+        if net_qty > 1e-9:
+            stock = db.query(Stock).filter(
+                Stock.warehouse_id == wh_id, Stock.product_id == product_id,
+            ).first()
+            have = float(stock.quantity or 0) if stock else 0.0
+            if have + 1e-6 < net_qty:
+                wh = db.query(Warehouse).filter(Warehouse.id == wh_id).first()
+                pr = db.query(Product).filter(Product.id == product_id).first()
+                wh_name = (wh.name if wh else None) or f"#{wh_id}"
+                pr_name = (pr.name if pr else None) or f"#{product_id}"
+                logger.warning(
+                    "production_revert: INSUFFICIENT #%s wh=%s prod=%s need=%.1f have=%.1f",
+                    production.number, wh_id, product_id, net_qty, have,
+                )
+                return f"«{wh_name}» da «{pr_name}» dan kerak: {net_qty:,.1f}, mavjud: {have:,.1f}"
+
+    # Net'ni nolga keltiruvchi teskari harakatlar (aynan ko'zgu — ombor/miqdor asl movement'dan)
+    reversed_keys = 0
+    for (wh_id, product_id), net_qty in net.items():
+        if abs(net_qty) < 1e-9:
+            continue
+        create_stock_movement(
+            db=db,
+            warehouse_id=wh_id,
+            product_id=product_id,
+            quantity_change=-net_qty,
+            operation_type="production_revert",
+            document_type="Production",
+            document_id=production.id,
+            document_number=production.number,
+            note=("Tasdiqni bekor qilish (movement-mirror): "
+                  + ("tayyor mahsulot qaytarildi" if net_qty > 0 else "xom ashyo qaytarildi")),
+        )
+        reversed_keys += 1
+    production.status = "draft"
+    logger.info("production_revert: OK #%s reversed=%d keys (movement-mirror)",
+                production.number, reversed_keys)
+    return None
+
+
+def _production_revert_from_recipe(db: Session, production) -> Optional[str]:
+    """Eski revert mantiqi (FALLBACK, H6) — retsept/production_items'dan qayta hisoblaydi.
+    Faqat StockMovement topilmagan juda eski productionlar uchun ishlatiladi."""
+    if production.status != "completed":
+        return None
+    logger.info("production_revert(fallback): start #%s", production.number)
     recipe = db.query(Recipe).filter(Recipe.id == production.recipe_id).first()
     if not recipe:
         return "Retsept topilmadi"

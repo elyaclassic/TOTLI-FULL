@@ -22,6 +22,7 @@ from app.deps import require_auth, require_admin
 from app.services.period_service import is_period_closed
 from app.utils.db_schema import ensure_payments_status_column, ensure_cash_opening_balance_column
 from app.utils.audit import log_action
+from app.utils.doc_number import next_doc_number
 from app.constants import QUERY_LIMIT_DEFAULT
 
 router = APIRouter(prefix="/finance", tags=["finance"])
@@ -40,16 +41,9 @@ def _sync_cash_balance(db: Session, cash_id: int) -> None:
 
 
 def _next_expense_doc_number(db: Session) -> str:
+    # H5 fix: id.desc() emas, prefiks bo'yicha MAX(suffix)+1 (uniform helper)
     today = datetime.now().strftime("%Y%m%d")
-    q = db.query(ExpenseDoc).filter(ExpenseDoc.number.isnot(None)).filter(ExpenseDoc.number.like(f"HD-{today}-%"))
-    last = q.order_by(ExpenseDoc.id.desc()).first()
-    if not last or not last.number:
-        return f"HD-{today}-0001"
-    try:
-        num = int(last.number.split("-")[-1])
-        return f"HD-{today}-{num + 1:04d}"
-    except (IndexError, ValueError):
-        return f"HD-{today}-0001"
+    return next_doc_number(db, ExpenseDoc, f"HD-{today}-")
 
 
 @router.get("", response_class=HTMLResponse)
@@ -769,19 +763,8 @@ async def finance_payment_post(
     pay_date_end = pay_dt.replace(hour=23, minute=59, second=59, microsecond=999999)
     today_str = datetime.now().strftime('%Y%m%d')
     today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    last_pay = db.query(Payment).filter(
-        Payment.number.like(f"PAY-{pay_date_str}-%"),
-        Payment.date >= pay_date_start,
-        Payment.date <= pay_date_end,
-    ).order_by(Payment.id.desc()).first()
-    if last_pay and last_pay.number:
-        try:
-            seq = int(last_pay.number.split("-")[-1]) + 1
-        except (ValueError, IndexError):
-            seq = db.query(Payment).filter(Payment.date >= pay_date_start).count() + 1
-    else:
-        seq = 1
-    pay_number = f"PAY-{pay_date_str}-{seq:04d}"
+    # H5 fix: count()+1 fallback emas, prefiks bo'yicha MAX(suffix)+1 (uniform helper)
+    pay_number = next_doc_number(db, Payment, f"PAY-{pay_date_str}-")
     desc = (description or "").strip() or ("Kirim" if type == "income" else "Chiqim")
     payment = Payment(
         number=pay_number,
@@ -1684,8 +1667,8 @@ async def cash_transfer_create(
         except ValueError:
             return RedirectResponse(url="/cash/transfers/new?error=" + quote("Sana formati notogri."), status_code=303)
 
-    last_t = db.query(CashTransfer).order_by(CashTransfer.id.desc()).first()
-    num = f"KK-{op_date.strftime('%Y%m%d')}-{(last_t.id + 1) if last_t else 1:04d}"
+    # H5 fix: global CashTransfer id+1 emas, prefiks bo'yicha MAX(suffix)+1
+    num = next_doc_number(db, CashTransfer, f"KK-{op_date.strftime('%Y%m%d')}-")
     t = CashTransfer(
         number=num,
         date=op_date,
@@ -1819,8 +1802,8 @@ async def cash_transfer_sotuvchi_send(
             ink_note = f"Inkasator: {inkasator.name}"
             full_note = (full_note + " | " + ink_note) if full_note else ink_note
 
-    last_t = db.query(CashTransfer).order_by(CashTransfer.id.desc()).first()
-    num = f"KK-{datetime.now().strftime('%Y%m%d')}-{((last_t.id + 1) if last_t else 1):04d}"
+    # H5 fix: global CashTransfer id+1 emas, prefiks bo'yicha MAX(suffix)+1
+    num = next_doc_number(db, CashTransfer, f"KK-{datetime.now().strftime('%Y%m%d')}-")
     t = CashTransfer(
         number=num,
         from_cash_id=src_id,

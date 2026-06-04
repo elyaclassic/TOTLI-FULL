@@ -41,6 +41,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
+from app.utils.doc_number import next_doc_number
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY, QUERY_LIMIT_LIST
 
 router = APIRouter(prefix="/qoldiqlar", tags=["qoldiqlar"])
@@ -330,10 +331,8 @@ async def qoldiqlar_kassa_hujjat_create(
         return RedirectResponse(url="/qoldiqlar/kassa/hujjat/new", status_code=303)
 
     today = datetime.now()
-    count = db.query(CashBalanceDoc).filter(
-        CashBalanceDoc.date >= today.replace(hour=0, minute=0, second=0)
-    ).count()
-    number = f"KLD-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    # H5 fix: count()+1 (o'chirilgan gap -> dublikat) emas, MAX(suffix)+1
+    number = next_doc_number(db, CashBalanceDoc, f"KLD-{today.strftime('%Y%m%d')}-")
 
     doc = CashBalanceDoc(
         number=number,
@@ -1078,11 +1077,8 @@ async def qoldiqlar_xodim_hujjat_create(
     if not items_data:
         return RedirectResponse(url="/qoldiqlar/xodim/hujjat/new", status_code=303)
 
-    count = db.query(EmployeeBalanceDoc).filter(
-        EmployeeBalanceDoc.date >= doc_date.replace(hour=0, minute=0, second=0),
-        EmployeeBalanceDoc.date < doc_date.replace(hour=23, minute=59, second=59)
-    ).count()
-    number = f"XOD-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    # H5 fix: count()+1 (o'chirilgan gap -> dublikat) emas, MAX(suffix)+1
+    number = next_doc_number(db, EmployeeBalanceDoc, f"XOD-{doc_date.strftime('%Y%m%d')}-")
 
     doc = EmployeeBalanceDoc(
         number=number,
@@ -1459,10 +1455,8 @@ async def qoldiqlar_tovar_hujjat_create(
     else:
         doc_date = datetime.now()
 
-    count = db.query(StockAdjustmentDoc).filter(
-        StockAdjustmentDoc.date >= doc_date.replace(hour=0, minute=0, second=0)
-    ).count()
-    number = f"QLD-{doc_date.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+    # H5 fix: count()+1 (o'chirilgan gap -> dublikat) emas, MAX(suffix)+1
+    number = next_doc_number(db, StockAdjustmentDoc, f"QLD-{doc_date.strftime('%Y%m%d')}-")
 
     total_tannarx = sum(qty * cp for _, _, qty, cp, _ in items_data)
     total_sotuv = sum(qty * sp for _, _, qty, _, sp in items_data)
@@ -1557,10 +1551,8 @@ async def qoldiqlar_tovar_import_excel(
                 status_code=303,
             )
         today = datetime.now()
-        count = db.query(StockAdjustmentDoc).filter(
-            StockAdjustmentDoc.date >= today.replace(hour=0, minute=0, second=0)
-        ).count()
-        number = f"QLD-{today.strftime('%Y%m%d')}-{str(count + 1).zfill(4)}"
+        # H5 fix: count()+1 (o'chirilgan gap -> dublikat) emas, MAX(suffix)+1
+        number = next_doc_number(db, StockAdjustmentDoc, f"QLD-{today.strftime('%Y%m%d')}-")
         total_tannarx = sum(qty * cp for _, _, qty, cp, _ in items_data)
         total_sotuv = sum(qty * sp for _, _, qty, _, sp in items_data)
         doc = StockAdjustmentDoc(

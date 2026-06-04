@@ -16,6 +16,7 @@ from app.models.database import (
 )
 from app.utils.auth import get_user_from_token
 from app.services.stock_service import create_stock_movement
+from app.utils.doc_number import next_doc_number
 from app.logging_config import get_logger
 from app.constants import QUERY_LIMIT_DEFAULT, QUERY_LIMIT_HISTORY
 
@@ -363,6 +364,17 @@ async def driver_delivery_status(
                     from app.services.partner_balance_service import recompute_partner_balance
                     db.flush()
                     recompute_partner_balance(db, order.partner_id, reason="delivery_failed")
+                # H3 fix: obmen (return_sale) yetkazish muvaffaqiyatsiz bo'lsa, bog'langan
+                # child sale draft'ni ham bekor qilish. Delivered yo'li (pastda) child'ni
+                # 'confirmed' qiladi — failed yo'li simmetrik tarzda 'cancelled' qilishi kerak,
+                # aks holda child draft abadiy yetim qoladi (obmen tashlandi, lekin draft turaveradi).
+                if (order.type or "") == "return_sale":
+                    from sqlalchemy import text as _text
+                    db.execute(
+                        _text("UPDATE orders SET status='cancelled' "
+                              "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
+                        {"pid": order.id},
+                    )
 
         if new_status == "delivered":
             delivery.delivered_at = datetime.now()
@@ -403,9 +415,8 @@ async def driver_delivery_status(
                 if not cash_register:
                     cash_register = db.query(CashRegister).filter(CashRegister.is_active == True).first()
                 if cash_register:
-                    last_p = db.query(Payment).order_by(Payment.id.desc()).first()
-                    next_num = (last_p.id + 1) if last_p else 1
-                    p_number = f"DLV-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
+                    # H5 fix: global Payment id+1 emas, prefiks bo'yicha MAX(suffix)+1
+                    p_number = next_doc_number(db, Payment, f"DLV-{datetime.now().strftime('%Y%m%d')}-")
                     partner_name = order.partner.name if order and order.partner else ""
                     payment = Payment(
                         number=p_number,
