@@ -85,9 +85,9 @@ function connectWS(){
   const conn = document.getElementById('conn');
   ws.onopen = ()=>{ conn.textContent = "● jonli"; };
   ws.onmessage = ()=>{ scheduleReload(); };
-  ws.onclose = ()=>{ conn.textContent = "○ qayta ulanmoqda…"; setTimeout(connectWS, 3000); };
+  let pingId = setInterval(()=>{ try{ if(ws.readyState===1) ws.send('ping'); }catch(e){} }, 25000);
+  ws.onclose = ()=>{ clearInterval(pingId); conn.textContent = "○ qayta ulanmoqda…"; setTimeout(connectWS, 3000); };
   ws.onerror = ()=>{ try{ws.close();}catch(e){} };
-  setInterval(()=>{ try{ if(ws.readyState===1) ws.send('ping'); }catch(e){} }, 25000);
 }
 connectWS();
 </script>

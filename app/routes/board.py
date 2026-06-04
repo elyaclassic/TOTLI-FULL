@@ -5,14 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.core import templates
 from app.models.database import get_db, User
-from app.deps import require_auth
+from app.deps import require_admin_or_manager
 from app.services.board_service import build_board_snapshot
 
 router = APIRouter(prefix="/sales", tags=["board"])
 
 
 @router.get("/board", response_class=HTMLResponse)
-async def order_board_page(request: Request, current_user: User = Depends(require_auth)):
+async def order_board_page(request: Request, current_user: User = Depends(require_admin_or_manager)):
     """To'liq-ekran buyurtma board sahifasi."""
     return templates.TemplateResponse("board/order_board.html", {
         "request": request,
@@ -22,6 +22,6 @@ async def order_board_page(request: Request, current_user: User = Depends(requir
 
 
 @router.get("/board/data", response_class=JSONResponse)
-async def order_board_data(db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+async def order_board_data(db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     """Joriy snapshot (JSON) — boshlang'ich yuklash + qayta-sinxron uchun."""
     return build_board_snapshot(db)
