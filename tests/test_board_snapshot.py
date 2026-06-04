@@ -66,3 +66,10 @@ def test_board_snapshot_delivered_today_vs_yesterday(db):
     snap = build_board_snapshot(db)
     assert len(snap["delivered"]) == 1
     assert snap["delivered"][0]["number"] == "AGT-D1"
+
+
+def test_board_routes_registered(db):
+    from app.routes.board import router
+    paths = [getattr(r, "path", None) for r in router.routes]
+    assert "/sales/board" in paths
+    assert "/sales/board/data" in paths
