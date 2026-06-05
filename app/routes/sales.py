@@ -1227,7 +1227,7 @@ async def sales_dispatch(
             document_number=order.number,
             user_id=current_user.id if current_user else None,
             note=f"Sotuv yo'lga chiqarildi: {order.number}",
-            created_at=order.date or _dt.now(),
+            created_at=_dt.now(),  # YO'LGA CHIQQAN sana (order.date emas — orqaga-sana tarixiy qoldiqni buzadi)
         )
 
     # Delivery hujjatini yaratish (DLV-YYYYMMDD-NNNN ketma-ket raqam bilan)
@@ -1402,7 +1402,7 @@ async def sales_revert(
                 document_number=order.number,
                 user_id=current_user.id if current_user else None,
                 note=f"Yo'lga chiqarishni bekor qilish: {order.number}",
-                created_at=order.date or datetime.now(),
+                created_at=datetime.now(),  # BEKOR QILINGAN lahza (order.date emas)
             )
         # Yetkazilmagan delivery'larni cancel qilish
         from app.models.database import Delivery as DeliveryModel
@@ -1439,7 +1439,7 @@ async def sales_revert(
             document_number=order.number,
             user_id=current_user.id if current_user else None,
             note=f"Sotuv tasdiqini bekor qilish: {order.number}",
-            created_at=order.date or datetime.now(),
+            created_at=datetime.now(),  # BEKOR QILINGAN lahza (order.date emas)
         )
     order.previous_partner_balance = None
     # Yetkazilmagan delivery larni cancel qilish (cancelled/failed/delivered emasini)

@@ -79,8 +79,9 @@ def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
             if r.rowcount != 1:
                 continue
 
-            # Stok kamaytirish
-            apply_sale_stock_deduction(db, order, None, note_prefix="Auto-dispatch (production tayyor)")
+            # Stok kamaytirish — harakat sanasi YO'LGA CHIQQAN lahza (now), order.date emas
+            apply_sale_stock_deduction(db, order, None, note_prefix="Auto-dispatch (production tayyor)",
+                                       movement_date=now)
 
             # Delivery yaratish
             partner = db.query(Partner).filter(Partner.id == order.partner_id).first() if order.partner_id else None

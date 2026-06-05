@@ -235,13 +235,20 @@ def compute_missing_items(db: Session, order) -> list:
     return missing
 
 
-def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: str = "Sotuv") -> None:
+def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: str = "Sotuv",
+                               movement_date=None) -> None:
     """Order itemlari uchun "sale" StockMovementlarini yaratadi (stock chiqim).
-    sales.py va delivery_routes.py:supervisor_confirm_agent_order o'rtasidagi DRY uchun.
+    Agent buyurtma yo'lga chiqarilganda chaqiriladi.
+
+    movement_date: harakat sanasi. Berilsa shu (YO'LGA CHIQQAN lahza), aks holda now().
+    MUHIM: order.date (buyurtma yozilgan sana) ISHLATILMAYDI — stock fizik ravishda
+    yo'lga chiqqan kunda ayriladi, yozilgan kunda emas. Orqaga-sana tarixiy qoldiqni
+    retroaktiv buzadi (qoldiq hisoboti muammosi).
 
     Eslatma: caller bu funksiyani chaqirgunga qadar ombor yetishmovchiligini tekshirgan
     bo'lishi kerak — bu funksiya faqat movement yaratadi, validation qilmaydi."""
     from datetime import datetime as _dt
+    mv_date = movement_date or _dt.now()
     valid_items = [it for it in order.items if it.product_id and (it.quantity or 0) > 0]
     for it in valid_items:
         wh_id = it.warehouse_id if it.warehouse_id else order.warehouse_id
@@ -258,7 +265,7 @@ def apply_sale_stock_deduction(db: Session, order, current_user, note_prefix: st
             document_number=order.number,
             user_id=current_user.id if current_user else None,
             note=f"{note_prefix}: {order.number}",
-            created_at=order.date or _dt.now(),
+            created_at=mv_date,  # YO'LGA CHIQQAN sana (order.date emas)
             strict_negative=True,  # D5 audit fix: sale stock'ni manfiy qilolmaydi
         )
 
