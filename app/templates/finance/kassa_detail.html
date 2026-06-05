@@ -161,6 +161,8 @@
                             <td>
                                 {% if p_status == 'cancelled' %}
                                     <span class="badge-cancelled">Bekor qilindi</span>
+                                {% elif p_status == 'pending' %}
+                                    <span class="badge-waiting">Kutilmoqda (inkassatsiya)</span>
                                 {% else %}
                                     <span class="badge-done">Tasdiqlangan</span>
                                 {% endif %}
