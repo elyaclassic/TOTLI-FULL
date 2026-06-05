@@ -35,7 +35,7 @@
                         <select class="form-select" name="direction_id">
                             <option value="">— Tanlash —</option>
                             {% for d in directions %}
-                            <option value="{{ d.id }}" {% if doc and doc.direction_id == d.id %}selected{% endif %}>{{ d.name }}</option>
+                            <option value="{{ d.id }}" {% if (doc and doc.direction_id == d.id) or (not doc and loop.first) %}selected{% endif %}>{{ d.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -44,7 +44,7 @@
                         <select class="form-select" name="department_id">
                             <option value="">— Tanlash —</option>
                             {% for dep in departments %}
-                            <option value="{{ dep.id }}" {% if doc and doc.department_id == dep.id %}selected{% endif %}>{{ dep.name }}</option>
+                            <option value="{{ dep.id }}" {% if (doc and doc.department_id == dep.id) or (not doc and 'Ishlab chiqarish' in dep.name) %}selected{% endif %}>{{ dep.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
