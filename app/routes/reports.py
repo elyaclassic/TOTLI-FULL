@@ -1997,7 +1997,13 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
     )
     if period_only:
         q_orders = q_orders.filter(Order.date >= date_from_start, Order.date <= date_to_end)
+    # compute_partner_balance bilan izchil: agent orderlar faqat delivered/completed
+    # da balansga kiradi (confirmed/out_for_delivery/waiting_production hali qarz emas).
+    # Aks holda recon ending balance haqiqiy partner balansidan farq qiladi.
+    AGENT_DEBT_STATUSES = ("delivered", "completed")
     for o in q_orders.order_by(Order.date):
+        if (o.source == "agent") and (o.status not in AGENT_DEBT_STATUSES):
+            continue
         debit = float(o.total or 0) if o.type == "sale" else 0.0
         credit = float(o.total or 0) if o.type == "return_sale" else 0.0
         doc_label = f"{'Sotuv' if o.type == 'sale' else 'Qaytarish'} {o.number or ''} {o.date.strftime('%d.%m.%Y %H:%M') if o.date else ''}".strip()
