@@ -200,18 +200,21 @@ async def convert_create(
         actual_kg = target_kg
 
     # Stock lock + yetishmovchilik tekshiruvi (race safety)
+    from app.services.stock_reservation import get_reserved_quantity
     source_stock = (
         db.query(Stock)
         .filter(Stock.warehouse_id == source_warehouse_id, Stock.product_id == source_product_id)
         .with_for_update()
         .first()
     )
-    have = float(source_stock.quantity or 0) if source_stock else 0.0
+    reserved = get_reserved_quantity(db, source_warehouse_id, source_product_id)
+    have = (float(source_stock.quantity or 0) if source_stock else 0.0) - reserved
     if have + 1e-6 < source_units:
         unit_label = "dona" if is_piece else "kg"
+        res_hint = f", {reserved:g} band (waiting buyurtmalar)" if reserved > 1e-6 else ""
         return RedirectResponse(
             url="/production/convert?error=stock&detail=" + quote(
-                f"Manba omborda yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}"
+                f"Manba omborda yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}{res_hint}"
             ),
             status_code=303,
         )
