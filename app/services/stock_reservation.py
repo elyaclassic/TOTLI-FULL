@@ -74,3 +74,23 @@ def get_all_reservations(db) -> dict:
         .all()
     )
     return {(r.wh, r.pid): float(r.qty or 0) for r in rows}
+
+
+def reservation_override(current_user, force) -> bool:
+    """force truthy VA role admin/manager bo'lsa True (band e'tiborga olinmaydi)."""
+    if not force:
+        return False
+    role = getattr(current_user, "role", None) if current_user else None
+    return role in ("admin", "manager", "menejer")
+
+
+def log_reservation_override(db, current_user, entity_type, entity_number, reserved) -> None:
+    """Band ustidan o'tilganda audit log (faqat haqiqiy band chetlab o'tilganda chaqirilsin)."""
+    from app.models.database import AuditLog
+    db.add(AuditLog(
+        user_name=getattr(current_user, "username", None) or "system",
+        action="reservation_override",
+        entity_type=entity_type,
+        entity_number=entity_number,
+        details=f"reserved={float(reserved or 0):g} bypassed",
+    ))
