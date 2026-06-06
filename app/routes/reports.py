@@ -989,19 +989,21 @@ def _stock_report_as_of_date(db: Session, report_date, wh_id: int = None):
         report_date = datetime.combine(report_date, datetime.max.time())
     else:
         report_date = report_date.replace(hour=23, minute=59, second=59, microsecond=999999)
+    # quantity_after EMAS — ledger yig'indisi: SUM(quantity_change) WHERE created_at <= cutoff.
+    # quantity_after insert vaqtida yoziladi → orqaga-sanali harakatlarda noto'g'ri bo'ladi.
+    from sqlalchemy import func as _sqfunc
     q = (
-        db.query(StockMovement)
+        db.query(
+            StockMovement.warehouse_id,
+            StockMovement.product_id,
+            _sqfunc.coalesce(_sqfunc.sum(StockMovement.quantity_change), 0).label("qty"),
+        )
         .filter(StockMovement.created_at <= report_date)
-        .order_by(StockMovement.warehouse_id, StockMovement.product_id, StockMovement.created_at.desc())
+        .group_by(StockMovement.warehouse_id, StockMovement.product_id)
     )
     if wh_id:
         q = q.filter(StockMovement.warehouse_id == wh_id)
-    rows = q.all()
-    last_by_key = {}
-    for m in rows:
-        key = (m.warehouse_id, m.product_id)
-        if key not in last_by_key:
-            last_by_key[key] = float(m.quantity_after or 0)
+    last_by_key = {(r.warehouse_id, r.product_id): float(r.qty or 0) for r in q.all()}
     if not last_by_key:
         return []
     wh_ids = list({k[0] for k in last_by_key})
@@ -1010,7 +1012,7 @@ def _stock_report_as_of_date(db: Session, report_date, wh_id: int = None):
     products = {p.id: p for p in db.query(Product).filter(Product.id.in_(prod_ids)).all()}
     result = []
     for (wid, pid), qty in last_by_key.items():
-        if qty == 0:
+        if abs(qty) < 1e-6:
             continue
         wh = warehouses.get(wid)
         prod = products.get(pid)

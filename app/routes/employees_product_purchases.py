@@ -140,7 +140,7 @@ async def products_by_warehouse(
     """Berilgan ombor uchun mavjud mahsulotlarni qaytaradi (qoldiq > 0).
 
     `date` parametri berilsa — shu sanagacha bo'lgan qoldiqni hisoblaydi
-    (stock_movement.quantity_after orqali). Aks holda hozirgi Stock ko'rsatadi.
+    (ledger SUM(quantity_change) <= cutoff). Aks holda hozirgi Stock ko'rsatadi.
     """
     from sqlalchemy import func as sqla_func
     from app.models.database import StockMovement
@@ -166,24 +166,12 @@ async def products_by_warehouse(
     )
 
     if cutoff:
-        # Vaqt-aware: har mahsulot uchun cutoff'dan oldingi oxirgi movement.quantity_after
-        max_id_rows = (
-            db.query(
-                StockMovement.product_id,
-                sqla_func.max(StockMovement.id).label("mid"),
-            )
-            .filter(
-                StockMovement.warehouse_id == warehouse_id,
-                StockMovement.created_at <= cutoff,
-            )
-            .group_by(StockMovement.product_id)
-            .all()
+        # Vaqt-aware qoldiq: ledger yig'indisi (SUM(quantity_change) <= cutoff).
+        # quantity_after EMAS — u insert vaqtida yoziladi → orqaga-sanali harakatda noto'g'ri.
+        from app.utils.stock_at_date import get_stock_at_date_batch
+        last_qty = get_stock_at_date_batch(
+            db, warehouse_id, [p.id for p in products], cutoff
         )
-        last_qty: dict = {}
-        max_ids = [r.mid for r in max_id_rows if r.mid]
-        if max_ids:
-            for mv in db.query(StockMovement).filter(StockMovement.id.in_(max_ids)).all():
-                last_qty[mv.product_id] = float(mv.quantity_after or 0)
         items = []
         for p in products:
             avail = last_qty.get(p.id, 0.0)
