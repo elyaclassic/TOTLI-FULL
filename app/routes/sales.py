@@ -941,6 +941,7 @@ async def sales_confirm(
     from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
     from app.utils.stock_at_date import get_stock_at_date
     _override = reservation_override(current_user, force)
+    _bypassed = []
     insufficient = []
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
@@ -948,7 +949,7 @@ async def sales_confirm(
             have = get_stock_at_date(db, wh_id, item.product_id)
             _rr = get_reserved_quantity(db, wh_id, item.product_id)
             if _rr > 1e-6:
-                log_reservation_override(db, current_user, "Sale", order.number, _rr)
+                _bypassed.append(_rr)
         else:
             have = get_available_stock(db, wh_id, item.product_id)
         need = float(item.quantity or 0)
@@ -965,6 +966,10 @@ async def sales_confirm(
             ),
             status_code=303,
         )
+
+    # Zaxira chetlash audit — faqat buyurtma to'siqsiz o'tganda yoziladi (fantom yozuvdan himoya)
+    for _rr in _bypassed:
+        log_reservation_override(db, current_user, "Sale", order.number, _rr)
 
     # Atomik UPDATE — status'ni delivered'ga o'tkazish
     claim = db.execute(
@@ -3767,19 +3772,18 @@ async def sales_pos_complete(
         else:
             order.payment_due_date = (datetime.now() + timedelta(days=7)).date()
     # with_for_update() — bir vaqtda 2 so'rov bir xil zaxirani olishini oldini olish
+    from app.services.stock_reservation import reservation_override as _ovr, log_reservation_override as _logovr
+    _pos_force = (form.get("force") or "").strip() in ("1", "true", "True")
+    _pos_override = _ovr(current_user, 1 if _pos_force else 0)
+    _pos_bypassed = []
     for pid, qty in items_for_stock:
         stock = db.query(Stock).filter(
             Stock.warehouse_id == order.warehouse_id,
             Stock.product_id == pid
         ).with_for_update().first()
         # Band ayriladi — lekin admin/manager force bilan o'tkaza oladi (Faza 2-B).
-        from app.services.stock_reservation import reservation_override as _ovr, log_reservation_override as _logovr
-        _pos_force = (form.get("force") or "").strip() in ("1", "true", "True")
-        _pos_override = _ovr(current_user, 1 if _pos_force else 0)
         _real_res = get_reserved_quantity(db, order.warehouse_id, pid)
         avail = (float(stock.quantity or 0) if stock else 0.0) - (0.0 if _pos_override else _real_res)
-        if _pos_override and _real_res > 1e-6:
-            _logovr(db, current_user, "Sale", order.number, _real_res)
         if avail + 1e-6 < qty:
             prod = db.query(Product).filter(Product.id == pid).first()
             name = prod.name if prod else f"#{pid}"
@@ -3791,6 +3795,11 @@ async def sales_pos_complete(
             if warehouse and warehouse.id:
                 url += "&warehouse_id=" + str(warehouse.id)
             return RedirectResponse(url=url, status_code=303)
+        if _pos_override and _real_res > 1e-6:
+            _pos_bypassed.append(_real_res)
+    # Zaxira chetlash audit — faqat barcha mahsulotlar tekshirilgandan keyin (fantom yozuvdan himoya)
+    for _rr in _pos_bypassed:
+        _logovr(db, current_user, "Sale", order.number, _rr)
     for pid, qty in items_for_stock:
         create_stock_movement(
             db=db,
