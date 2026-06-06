@@ -29,6 +29,7 @@ from app.models.database import (
 )
 from app.deps import require_auth, require_admin
 from app.services.stock_service import create_stock_movement
+from app.services.stock_reservation import get_available_stock
 from app.utils.db_schema import ensure_employee_quota_column, ensure_advance_is_product_column
 
 router = APIRouter(prefix="/employees", tags=["employees-product-purchases"])
@@ -261,8 +262,7 @@ async def employee_product_purchase_add(
         if not product:
             continue
         # Qoldiq tekshirish
-        stock = db.query(Stock).filter(Stock.warehouse_id == warehouse_id, Stock.product_id == pid).first()
-        available = float(stock.quantity if stock else 0)
+        available = get_available_stock(db, warehouse_id, pid)
         if available + 1e-6 < qty:
             return RedirectResponse(
                 url="/employees/mahsulot?error=" + quote(
