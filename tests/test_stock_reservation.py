@@ -97,3 +97,13 @@ def test_try_confirm_older_no_driver_blocks_newer(db, sample_warehouse, sample_p
 
     assert o1.status == "waiting_production", "Eski (driver yo'q) kutadi"
     assert o2.status == "waiting_production", "Yangi O1 bandini o'g'irlamasligi kerak"
+
+
+def test_pos_blocked_by_agent_reservation(db, sample_warehouse, sample_product, sample_stock):
+    """waiting agent buyurtma band qilgan mahsulotni POS-tekshiruv ko'rmasligi kerak.
+    sample_stock=100; agent 60 band qiladi -> POS uchun mavjud 40."""
+    from app.services.stock_reservation import get_available_stock
+    _waiting_order(db, sample_warehouse.id, sample_product.id, 60, datetime(2026, 6, 4), "AGT")
+    db.commit()
+    # POS yangi iste'molchi (before_order=None) -> 100 - 60 = 40
+    assert get_available_stock(db, sample_warehouse.id, sample_product.id) == 40.0
