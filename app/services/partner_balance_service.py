@@ -63,7 +63,12 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
     # holatdagi agent orderlar HALI qarz emas — faqat delivered/completed sanaladi.
     # Oddiy (POS/web) sotuvlar gating'siz: ular completed/delivered holatda yoziladi.
     AGENT_DEBT_STATUSES = ("delivered", "completed")
-    for o in db.query(Order).filter(
+    # populate_existing(): raw SQL `UPDATE orders SET status=...` (driver "Yetkazdim",
+    # POS confirm) ORM identity-map'ni yangilamaydi → stale status bilan order hisobga
+    # olinmay qolardi (manfiy drift). populate_existing query natijasini DB'dan fresh
+    # o'qib identity-map obyektlarini yangilaydi. Chaqiruvchilar recompute'dan oldin
+    # flush qiladi, shuning uchun yo'qoladigan o'zgarish yo'q.
+    for o in db.query(Order).populate_existing().filter(
         Order.partner_id == partner_id,
         Order.type.in_(["sale", "return_sale"]),
         Order.status.notin_(["cancelled", "draft"]),
