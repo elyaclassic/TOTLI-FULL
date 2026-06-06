@@ -56,3 +56,21 @@ def get_available_stock_at_date(db, warehouse_id, product_id, cutoff=None) -> fl
     from app.utils.stock_at_date import get_stock_at_date
     physical = get_stock_at_date(db, warehouse_id, product_id, cutoff=cutoff)
     return float(physical or 0.0) - get_reserved_quantity(db, warehouse_id, product_id)
+
+
+def get_all_reservations(db) -> dict:
+    """Barcha waiting_production band miqdorlari: {(warehouse_id, product_id): qty}.
+    Bitta guruhlangan query (per-qator alohida query o'rniga)."""
+    wh_expr = func.coalesce(OrderItem.warehouse_id, Order.warehouse_id)
+    rows = (
+        db.query(
+            wh_expr.label("wh"),
+            OrderItem.product_id.label("pid"),
+            func.coalesce(func.sum(OrderItem.quantity), 0.0).label("qty"),
+        )
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.status == "waiting_production", Order.type == "sale")
+        .group_by(wh_expr, OrderItem.product_id)
+        .all()
+    )
+    return {(r.wh, r.pid): float(r.qty or 0) for r in rows}
