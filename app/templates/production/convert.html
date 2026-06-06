@@ -75,7 +75,7 @@
             <label class="form-label">Izoh (sabab)</label>
             <input type="text" name="note" class="form-control" placeholder="Masalan: yarim-tayyor malinali yetmadi">
           </div>
-          {% if current_user and current_user.role in ['admin', 'manager', 'menejer', 'rahbar', 'raxbar'] %}
+          {% if user_can_override(current_user) %}
           <div class="col-12">
             <label class="d-flex align-items-center gap-1 small text-warning" style="cursor:pointer;"
                    title="Waiting buyurtmalarga band qilingan manba mahsulotni baribir ishlatish (audit logga yoziladi)">

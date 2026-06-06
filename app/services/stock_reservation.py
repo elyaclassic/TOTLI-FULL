@@ -8,6 +8,18 @@ from sqlalchemy import func, or_, and_
 
 from app.models.database import Order, OrderItem, Stock
 
+# Band ustidan o'tish (reservation override) qila oladigan rollar — MARKAZLASHTIRILGAN.
+# Helper (reservation_override) VA template'lar (app/core.py Jinja global `user_can_override`)
+# shu yagona ro'yxatdan foydalanadi — rol o'zgarsa faqat shu yerni yangilang.
+OVERRIDE_ROLES = ("admin", "manager", "menejer", "rahbar", "raxbar")
+
+
+def user_can_override(current_user) -> bool:
+    """Foydalanuvchi reservation override qila oladimi (faqat rol bo'yicha; force'siz).
+    Template'larda Jinja global sifatida ishlatiladi."""
+    role = getattr(current_user, "role", None) if current_user else None
+    return role in OVERRIDE_ROLES
+
 
 def get_reserved_quantity(db, warehouse_id, product_id, before_order=None) -> float:
     """waiting_production buyurtmalar band qilgan miqdor (wh+pid bo'yicha).
@@ -77,11 +89,10 @@ def get_all_reservations(db) -> dict:
 
 
 def reservation_override(current_user, force) -> bool:
-    """force truthy VA role admin/manager/rahbar bo'lsa True (band e'tiborga olinmaydi)."""
+    """force truthy VA user_can_override (rol) bo'lsa True (band e'tiborga olinmaydi)."""
     if not force:
         return False
-    role = getattr(current_user, "role", None) if current_user else None
-    return role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+    return user_can_override(current_user)
 
 
 def log_reservation_override(db, current_user, entity_type, entity_number, reserved) -> None:

@@ -50,3 +50,9 @@ def _tojson(val):
 
 
 templates.env.filters["tojson"] = _tojson
+
+
+# Reservation override rol-tekshiruvi — markazlashtirilgan (stock_reservation.OVERRIDE_ROLES).
+# Template'lar `{% if user_can_override(current_user) %}` deb ishlatadi (5 joyda rol ro'yxati DRY).
+from app.services.stock_reservation import user_can_override as _user_can_override
+templates.env.globals["user_can_override"] = _user_can_override
