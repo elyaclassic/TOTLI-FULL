@@ -242,6 +242,16 @@ async def report_stock(
     else:
         values = _stock_report_filtered(db, wh_id)
     stocks = [{"warehouse": v["warehouse"], "product": v["product"], "quantity": v["quantity"]} for v in values]
+    # Band/Erkin — faqat joriy ko'rinishda (band = hozirgi tushuncha, tarixiy sanaga emas)
+    show_reserved = not (report_date and str(report_date).strip())
+    if show_reserved:
+        from app.services.stock_reservation import get_all_reservations
+        reserved_map = get_all_reservations(db)
+        for s in stocks:
+            wh = s.get("warehouse"); pr = s.get("product")
+            rq = reserved_map.get((wh.id if wh else None, pr.id if pr else None), 0.0)
+            s["reserved"] = rq
+            s["free"] = float(s.get("quantity") or 0) - rq
     if low:
         filtered = []
         for v in stocks:
@@ -270,6 +280,7 @@ async def report_stock(
         "selected_warehouse_id": wh_id,
         "report_date": (report_date or "").strip()[:10] or None,
         "today": today_str,
+        "show_reserved": show_reserved,
         "merged": merged,
         "cleared": cleared,
         "recalculated": recalculated,
