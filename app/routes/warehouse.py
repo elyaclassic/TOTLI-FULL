@@ -622,6 +622,7 @@ async def warehouse_transfer_save(
 @router.post("/transfers/{transfer_id}/confirm")
 async def warehouse_transfer_confirm(
     transfer_id: int,
+    force: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -650,21 +651,28 @@ async def warehouse_transfer_confirm(
     from datetime import datetime as _dt
     _now = _dt.now()
     _cutoff = transfer.date if (transfer.date and transfer.date < _now) else None
-    from app.services.stock_reservation import get_available_stock_at_date, get_reserved_quantity
+    from app.utils.stock_at_date import get_stock_at_date
+    from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
+    _override = reservation_override(current_user, force)
     for item in items:
         need = float(item.quantity or 0)
-        have = get_available_stock_at_date(db, transfer.from_warehouse_id, item.product_id, cutoff=_cutoff)
+        physical = get_stock_at_date(db, transfer.from_warehouse_id, item.product_id, cutoff=_cutoff)
+        real_reserved = get_reserved_quantity(db, transfer.from_warehouse_id, item.product_id)
+        reserved = 0.0 if _override else real_reserved
+        have = physical - reserved
         if have + 1e-6 < need:
             prod = db.query(Product).filter(Product.id == item.product_id).first()
             name = prod.name if prod else f"#{item.product_id}"
-            reserved = get_reserved_quantity(db, transfer.from_warehouse_id, item.product_id)
             avail_display = "0" if abs(have) < 1e-6 else ("%.6f" % have).rstrip("0").rstrip(".")
             date_hint = f" ({transfer.date.strftime('%d.%m.%Y')} sanasida)" if _cutoff else ""
-            res_hint = f", {reserved:g} band (waiting buyurtmalar)" if reserved > 1e-6 else ""
+            res_hint = f", {real_reserved:g} band (waiting buyurtmalar)" if real_reserved > 1e-6 else ""
+            rb = "&reserved_block=1" if real_reserved > 1e-6 else ""
             return RedirectResponse(
-                url=f"/warehouse/transfers/{transfer_id}?error=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {item.quantity}, mavjud: {avail_display}{res_hint}{date_hint})"),
+                url=f"/warehouse/transfers/{transfer_id}?error=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {item.quantity}, mavjud: {avail_display}{res_hint}{date_hint})") + rb,
                 status_code=303,
             )
+        if _override and real_reserved > 1e-6:
+            log_reservation_override(db, current_user, "WarehouseTransfer", transfer.number, real_reserved)
     from app.services.stock_service import create_stock_movement
     for item in items:
         # Stock.quantity ni faqat create_stock_movement o'zgartiradi (ikki marta o'zgarmaslik uchun)
@@ -813,6 +821,7 @@ async def warehouse_transfer(
     to_warehouse_id: int = Form(...),
     product_id: int = Form(...),
     quantity: float = Form(...),
+    force: int = Form(0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -822,23 +831,27 @@ async def warehouse_transfer(
         return RedirectResponse(url="/warehouse/movement?error=1&detail=" + quote("Qayerdan va qayerga ombor bir xil bo'lmasin."), status_code=303)
     if quantity <= 0:
         return RedirectResponse(url="/warehouse/movement?error=1&detail=" + quote("Miqdor 0 dan katta bo'lishi kerak."), status_code=303)
-    from app.services.stock_reservation import get_reserved_quantity
+    from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
     source = db.query(Stock).filter(
         Stock.warehouse_id == from_warehouse_id,
         Stock.product_id == product_id,
     ).first()
     need_q = float(quantity or 0)
-    reserved_q = get_reserved_quantity(db, from_warehouse_id, product_id)
+    real_reserved_q = get_reserved_quantity(db, from_warehouse_id, product_id)
+    _override = reservation_override(current_user, force)
+    reserved_q = 0.0 if _override else real_reserved_q
     have_q = (float(source.quantity or 0) if source else 0) - reserved_q
     if not source or (have_q + 1e-6 < need_q):
         product = db.query(Product).filter(Product.id == product_id).first()
         name = product.name if product else f"#{product_id}"
         avail_display = "0" if abs(have_q) < 1e-6 else ("%.6f" % have_q).rstrip("0").rstrip(".")
-        res_hint = f", {reserved_q:g} band (waiting buyurtmalar)" if reserved_q > 1e-6 else ""
+        res_hint = f", {real_reserved_q:g} band (waiting buyurtmalar)" if real_reserved_q > 1e-6 else ""
         return RedirectResponse(
             url="/warehouse/movement?error=1&detail=" + quote(f"Qayerdan omborda «{name}» yetarli emas (kerak: {quantity}, mavjud: {avail_display}{res_hint})"),
             status_code=303,
         )
+    if _override and real_reserved_q > 1e-6:
+        log_reservation_override(db, current_user, "WarehouseTransfer", f"movement {from_warehouse_id}->{to_warehouse_id}", real_reserved_q)
     from app.services.stock_service import create_stock_movement
     from datetime import datetime as _dt
     _now = _dt.now()
