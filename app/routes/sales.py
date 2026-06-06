@@ -97,6 +97,7 @@ from app.utils.production_order import (
 )
 from app.utils.db_schema import ensure_orders_payment_due_date_column, ensure_order_item_warehouse_id_column
 from app.services.stock_service import create_stock_movement
+from app.services.stock_reservation import get_available_stock, get_reserved_quantity
 from app.services.finance_service import sync_cash_balance as _sync_cash_balance
 from app.services.pos_helpers import (
     get_pos_price_type as _get_pos_price_type,
@@ -939,11 +940,7 @@ async def sales_confirm(
     insufficient = []
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        have = float(stock.quantity or 0) if stock else 0.0
+        have = get_available_stock(db, wh_id, item.product_id)
         need = float(item.quantity or 0)
         if have + 1e-6 < need:
             pname = item.product.name if item.product else f"#{item.product_id}"
@@ -1120,11 +1117,7 @@ async def sales_dispatch(
     insufficient_items = []
     for item in items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
-        stock = db.query(Stock).filter(
-            Stock.warehouse_id == wh_id,
-            Stock.product_id == item.product_id,
-        ).first()
-        available = float(stock.quantity) if stock and stock.quantity else 0.0
+        available = get_available_stock(db, wh_id, item.product_id, before_order=order)
         if available + 1e-6 < float(item.quantity):
             # Semi-finished omborda yetarli mahsulot bormi?
             semi_avail = 0.0
@@ -2784,7 +2777,7 @@ async def sales_pos_employee_product(
         if not product:
             return JSONResponse({"ok": False, "error": f"Mahsulot topilmadi: id={pid}"}, status_code=404)
         stock = db.query(Stock).filter(Stock.warehouse_id == wh.id, Stock.product_id == pid).with_for_update().first()
-        avail = float(stock.quantity if stock else 0)
+        avail = float(stock.quantity if stock else 0) - get_reserved_quantity(db, wh.id, pid)
         if avail + 1e-6 < qty:
             return JSONResponse({
                 "ok": False,
