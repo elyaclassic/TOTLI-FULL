@@ -45,3 +45,14 @@ def get_available_stock(db, warehouse_id, product_id, before_order=None) -> floa
     )
     reserved = get_reserved_quantity(db, warehouse_id, product_id, before_order)
     return float(physical or 0.0) - reserved
+
+
+def get_available_stock_at_date(db, warehouse_id, product_id, cutoff=None) -> float:
+    """Berilgan sanadagi (cutoff) mavjud stock − band. cutoff=None → joriy qoldiq.
+
+    Transfer (vaqt-aware) darvozalari uchun: get_stock_at_date sanagacha qoldiqni
+    beradi, undan joriy band (waiting_production) ayriladi.
+    """
+    from app.utils.stock_at_date import get_stock_at_date
+    physical = get_stock_at_date(db, warehouse_id, product_id, cutoff=cutoff)
+    return float(physical or 0.0) - get_reserved_quantity(db, warehouse_id, product_id)
