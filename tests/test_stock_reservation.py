@@ -73,3 +73,27 @@ def test_try_confirm_fifo_older_wins(db, sample_warehouse, sample_product):
 
     assert o1.status == "out_for_delivery", "Eski buyurtma dispatch bo'lishi kerak"
     assert o2.status == "waiting_production", "Yangi buyurtma band tufayli kutishi kerak"
+
+
+def test_try_confirm_older_no_driver_blocks_newer(db, sample_warehouse, sample_product):
+    """Eski waiting buyurtma driver'siz (dispatch bo'lolmaydi) ham band qiladi →
+    yangi (driver bor) buyurtma uning bandini o'g'irlab dispatch bo'lmasligi kerak.
+    Bu test reservation YO'Q bo'lsa FAIL bo'ladi (haqiqiy TDD guard)."""
+    from app.models.database import Stock, Driver
+    from app.services.agent_order_service import try_confirm_waiting_orders
+
+    db.add(Stock(warehouse_id=sample_warehouse.id, product_id=sample_product.id, quantity=10))
+    db.add(Driver(code="DRV1", full_name="Driver", is_active=True))
+    db.flush()
+
+    o1 = _waiting_order(db, sample_warehouse.id, sample_product.id, 10, datetime(2026, 6, 4), "OLD")
+    o2 = _waiting_order(db, sample_warehouse.id, sample_product.id, 10, datetime(2026, 6, 5), "NEW")
+    o1.pending_driver_id = None   # eski, lekin driver yo'q → dispatch bo'lolmaydi
+    o2.pending_driver_id = 1
+    db.commit()
+
+    try_confirm_waiting_orders(db)
+    db.refresh(o1); db.refresh(o2)
+
+    assert o1.status == "waiting_production", "Eski (driver yo'q) kutadi"
+    assert o2.status == "waiting_production", "Yangi O1 bandini o'g'irlamasligi kerak"
