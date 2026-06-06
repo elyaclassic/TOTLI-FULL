@@ -310,6 +310,61 @@ def _document_url(doc_type: str, doc_id: int) -> str:
     return "#"
 
 
+@router.get("/incomplete-obmen", response_class=HTMLResponse)
+async def report_incomplete_obmen(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Tugallanmagan obmenlar: qaytarish (parent) hali yetkazilmagan, lekin sotuv
+    (child) delivered. Bunda qaytarish krediti qo'llanmaydi → mijozda xayoliy qarz.
+    Admin qaytarishni yakunlashi (yetkazib berish) kerak."""
+    rows = []
+    parents = (
+        db.query(Order)
+        .filter(
+            Order.type == "return_sale",
+            Order.status.in_(["draft", "confirmed", "waiting_production", "out_for_delivery"]),
+        )
+        .all()
+    )
+    for parent in parents:
+        child = (
+            db.query(Order)
+            .filter(
+                Order.parent_order_id == parent.id,
+                Order.type == "sale",
+                Order.status.in_(["delivered", "completed"]),
+            )
+            .first()
+        )
+        if not child:
+            continue
+        partner = (
+            db.query(Partner).filter(Partner.id == parent.partner_id).first()
+            if parent.partner_id else None
+        )
+        rows.append({
+            "return_number": parent.number,
+            "return_id": parent.id,
+            "return_status": parent.status,
+            "sale_number": child.number,
+            "sale_id": child.id,
+            "partner_name": partner.name if partner else "—",
+            "partner_balance": float(partner.balance or 0) if partner else 0,
+            "amount": float(parent.total or 0),
+            "date": parent.date.strftime("%d.%m.%Y %H:%M") if parent.date else "—",
+        })
+    rows.sort(key=lambda r: r["amount"], reverse=True)
+    return templates.TemplateResponse("reports/incomplete_obmen.html", {
+        "request": request,
+        "rows": rows,
+        "total_amount": sum(r["amount"] for r in rows),
+        "current_user": current_user,
+        "page_title": "Tugallanmagan obmenlar",
+    })
+
+
 @router.get("/stock/no-history", response_class=HTMLResponse)
 async def report_stock_no_history(
     request: Request,
