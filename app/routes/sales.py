@@ -3762,10 +3762,13 @@ async def sales_pos_complete(
             Stock.warehouse_id == order.warehouse_id,
             Stock.product_id == pid
         ).with_for_update().first()
-        if not stock or (stock.quantity or 0) < qty:
+        # Band (waiting_production reservation) ayriladi — agentga va'da qilingan
+        # mahsulotni POS sotmasligi uchun. Row lock saqlanadi (konkurensiya).
+        avail = (float(stock.quantity or 0) if stock else 0.0) - get_reserved_quantity(db, order.warehouse_id, pid)
+        if avail + 1e-6 < qty:
             prod = db.query(Product).filter(Product.id == pid).first()
             name = prod.name if prod else f"#{pid}"
-            mavjud = float(stock.quantity or 0) if stock else 0
+            mavjud = avail
             order.status = "cancelled"
             db.commit()
             detail = f"Yetarli yo'q: {name} (savatda: {qty}, omborda: {mavjud:.0f})"
