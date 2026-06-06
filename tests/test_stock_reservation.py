@@ -50,3 +50,26 @@ def test_available_before_order_excludes_self(db, sample_warehouse, sample_produ
     from app.services.stock_reservation import get_available_stock
     o1 = _waiting_order(db, sample_warehouse.id, sample_product.id, 30, datetime(2026, 6, 4), "W1")
     assert get_available_stock(db, sample_warehouse.id, sample_product.id, before_order=o1) == 100.0
+
+
+def test_try_confirm_fifo_older_wins(db, sample_warehouse, sample_product):
+    """2 waiting buyurtma 1 mahsulotga, stock faqat bittasiga yetadi →
+    eski (date kichik) dispatch bo'ladi, yangi waiting'da qoladi."""
+    from app.models.database import Stock, Driver
+    from app.services.agent_order_service import try_confirm_waiting_orders
+
+    db.add(Stock(warehouse_id=sample_warehouse.id, product_id=sample_product.id, quantity=10))
+    db.add(Driver(code="DRV1", full_name="Driver", is_active=True))
+    db.flush()
+
+    o1 = _waiting_order(db, sample_warehouse.id, sample_product.id, 10, datetime(2026, 6, 4), "OLD")
+    o2 = _waiting_order(db, sample_warehouse.id, sample_product.id, 10, datetime(2026, 6, 5), "NEW")
+    o1.pending_driver_id = 1
+    o2.pending_driver_id = 1
+    db.commit()
+
+    try_confirm_waiting_orders(db)
+    db.refresh(o1); db.refresh(o2)
+
+    assert o1.status == "out_for_delivery", "Eski buyurtma dispatch bo'lishi kerak"
+    assert o2.status == "waiting_production", "Yangi buyurtma band tufayli kutishi kerak"

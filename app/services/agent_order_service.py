@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.database import Order, Stock, Delivery, Partner, Product
 from app.services.stock_service import apply_sale_stock_deduction
+from app.services.stock_reservation import get_available_stock
 
 
 def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
@@ -54,12 +55,7 @@ def try_confirm_waiting_orders(db: Session) -> List[Dict[str, Any]]:
                 if not wh_id:
                     enough = False
                     break
-                stock = (
-                    db.query(Stock)
-                    .filter(Stock.warehouse_id == wh_id, Stock.product_id == it.product_id)
-                    .first()
-                )
-                have = float(stock.quantity or 0) if stock else 0.0
+                have = get_available_stock(db, wh_id, it.product_id, before_order=order)
                 need = float(it.quantity or 0)
                 if have + 1e-6 < need:
                     enough = False
