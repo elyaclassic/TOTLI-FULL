@@ -74,7 +74,7 @@
                             </button>
                         </div>
 
-                        {% if current_user and current_user.role in ['admin', 'manager', 'menejer'] %}
+                        {% if current_user and current_user.role in ['admin', 'manager', 'menejer', 'rahbar', 'raxbar'] %}
                         <label class="d-flex align-items-center gap-1 mt-2 small text-warning" style="cursor:pointer;"
                                title="Waiting buyurtmalarga band qilingan mahsulotni baribir sotish (audit logga yoziladi)">
                           <input type="checkbox" name="force" value="1" id="posForceReserve"

@@ -17,6 +17,12 @@ def test_override_manager_with_force():
     assert reservation_override(_U("manager"), 1) is True
 
 
+def test_override_rahbar_with_force():
+    from app.services.stock_reservation import reservation_override
+    assert reservation_override(_U("rahbar"), 1) is True
+    assert reservation_override(_U("raxbar"), 1) is True
+
+
 def test_override_seller_denied():
     from app.services.stock_reservation import reservation_override
     assert reservation_override(_U("sotuvchi"), 1) is False

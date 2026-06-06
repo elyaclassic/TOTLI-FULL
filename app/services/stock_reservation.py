@@ -77,11 +77,11 @@ def get_all_reservations(db) -> dict:
 
 
 def reservation_override(current_user, force) -> bool:
-    """force truthy VA role admin/manager bo'lsa True (band e'tiborga olinmaydi)."""
+    """force truthy VA role admin/manager/rahbar bo'lsa True (band e'tiborga olinmaydi)."""
     if not force:
         return False
     role = getattr(current_user, "role", None) if current_user else None
-    return role in ("admin", "manager", "menejer")
+    return role in ("admin", "manager", "menejer", "rahbar", "raxbar")
 
 
 def log_reservation_override(db, current_user, entity_type, entity_number, reserved) -> None:

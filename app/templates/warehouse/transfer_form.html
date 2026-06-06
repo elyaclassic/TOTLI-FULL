@@ -79,7 +79,7 @@
         <div class="mt-2 pt-2 border-top border-danger border-opacity-25">
             <strong>Nima qilish:</strong> Qayerdan omborda mavjud bo'lmagan mahsulot qatorini <strong>×</strong> tugmasi bilan o'chiring yoki <a href="/qoldiqlar/tovar/hujjat/new" class="alert-link">Qoldiqlar → Tovar qoldiq hujjati</a> orqali avval shu omborda qoldiq kiriting. Keyin «Saqlash» bosing va yana «Tasdiqlash»ni bosing.
         </div>
-        {% if request.query_params.get('reserved_block') and current_user and current_user.role in ['admin', 'manager', 'menejer'] and transfer and transfer.status != 'confirmed' %}
+        {% if request.query_params.get('reserved_block') and current_user and current_user.role in ['admin', 'manager', 'menejer', 'rahbar', 'raxbar'] and transfer and transfer.status != 'confirmed' %}
         <div class="mt-2">
           <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm?force=1" class="d-inline"
                 onsubmit="return confirm('DIQQAT: bu mahsulot waiting buyurtmalarga band qilingan. Baribir o\'tkazasizmi? (audit logga yoziladi)');">
