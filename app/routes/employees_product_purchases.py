@@ -246,6 +246,11 @@ async def employee_product_purchase_add(
         return RedirectResponse(url="/employees/mahsulot?error=" + quote("Ombor topilmadi"), status_code=303)
 
     # Qatorlarni yig'ish
+    from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
+    from app.utils.stock_at_date import get_stock_at_date
+    _emp_force = (form.get("force") or "").strip() in ("1", "true", "True")
+    _emp_override = reservation_override(current_user, _emp_force)
+    _emp_bypassed = []
     items = []
     total = 0.0
     item_notes = []
@@ -261,8 +266,14 @@ async def employee_product_purchase_add(
         product = db.query(Product).filter(Product.id == pid).first()
         if not product:
             continue
-        # Qoldiq tekshirish
-        available = get_available_stock(db, warehouse_id, pid)
+        # Qoldiq tekshirish (admin/manager/rahbar force bilan band'ni chetlab o'tishi mumkin)
+        if _emp_override:
+            available = get_stock_at_date(db, warehouse_id, pid)
+            _rr = get_reserved_quantity(db, warehouse_id, pid)
+            if _rr > 1e-6:
+                _emp_bypassed.append(_rr)
+        else:
+            available = get_available_stock(db, warehouse_id, pid)
         if available + 1e-6 < qty:
             return RedirectResponse(
                 url="/employees/mahsulot?error=" + quote(
@@ -277,6 +288,9 @@ async def employee_product_purchase_add(
 
     if not items:
         return RedirectResponse(url="/employees/mahsulot?error=" + quote("Hech qanday mahsulot kiritilmagan"), status_code=303)
+
+    for _rr in _emp_bypassed:
+        log_reservation_override(db, current_user, "EmployeeAdvance", "mahsulot xaridi", _rr)
 
     # 1) EmployeeAdvance yaratish (is_product=True)
     final_note = (note + " | " if note else "") + ", ".join(item_notes)

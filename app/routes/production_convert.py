@@ -165,6 +165,7 @@ async def convert_create(
     target_product_id: int = Form(...),
     quantity: float = Form(...),
     note: str = Form(""),
+    force: int = Form(0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
@@ -200,24 +201,28 @@ async def convert_create(
         actual_kg = target_kg
 
     # Stock lock + yetishmovchilik tekshiruvi (race safety)
-    from app.services.stock_reservation import get_reserved_quantity
+    from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
     source_stock = (
         db.query(Stock)
         .filter(Stock.warehouse_id == source_warehouse_id, Stock.product_id == source_product_id)
         .with_for_update()
         .first()
     )
-    reserved = get_reserved_quantity(db, source_warehouse_id, source_product_id)
+    real_reserved = get_reserved_quantity(db, source_warehouse_id, source_product_id)
+    _conv_override = reservation_override(current_user, force)
+    reserved = 0.0 if _conv_override else real_reserved
     have = (float(source_stock.quantity or 0) if source_stock else 0.0) - reserved
     if have + 1e-6 < source_units:
         unit_label = "dona" if is_piece else "kg"
-        res_hint = f", {reserved:g} band (waiting buyurtmalar)" if reserved > 1e-6 else ""
+        res_hint = f", {real_reserved:g} band (waiting buyurtmalar)" if real_reserved > 1e-6 else ""
         return RedirectResponse(
             url="/production/convert?error=stock&detail=" + quote(
                 f"Manba omborda yetmaydi: {source.name} kerak {source_units} {unit_label}, bor {have} {unit_label}{res_hint}"
             ),
             status_code=303,
         )
+    if _conv_override and real_reserved > 1e-6:
+        log_reservation_override(db, current_user, "ProductConversion", f"konversiya {source.name}", real_reserved)
 
     source_cost = float(getattr(source_stock, "cost_price", None) or 0)
     if source_cost <= 0:

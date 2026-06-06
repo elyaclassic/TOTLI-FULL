@@ -121,6 +121,14 @@
           </button>
         </div>
 
+        {% if current_user and current_user.role in ['admin', 'manager', 'menejer', 'rahbar', 'raxbar'] %}
+        <label class="d-flex align-items-center gap-1 mt-3 small text-warning" style="cursor:pointer;"
+               title="Waiting buyurtmalarga band qilingan mahsulotni baribir xodimga yozish (audit logga yoziladi)">
+          <input type="checkbox" name="force" value="1"
+                 onchange="if(this.checked && !confirm('Band ustidan o\'tib yozmoqchimisiz? Audit logga yoziladi.')) this.checked=false;">
+          ⚠️ Band ustidan o'tish (admin/manager)
+        </label>
+        {% endif %}
         <div class="d-flex gap-2 mt-3">
           <button type="submit" class="btn btn-primary"><i class="bi bi-check-lg"></i> Saqlash</button>
           <a href="/employees/mahsulot" class="btn btn-outline-secondary">Bekor qilish</a>
