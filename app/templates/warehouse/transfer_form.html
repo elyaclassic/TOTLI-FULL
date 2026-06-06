@@ -83,6 +83,7 @@
         <div class="mt-2">
           <form method="post" action="/warehouse/transfers/{{ transfer.id }}/confirm?force=1" class="d-inline"
                 onsubmit="return confirm('DIQQAT: bu mahsulot waiting buyurtmalarga band qilingan. Baribir o\'tkazasizmi? (audit logga yoziladi)');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
             <button type="submit" class="btn btn-warning btn-sm"><i class="bi bi-exclamation-triangle"></i> Baribir o'tkaz (admin/manager)</button>
           </form>
         </div>
