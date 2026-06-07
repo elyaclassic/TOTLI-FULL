@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.core import templates
-from app.models.database import get_db, Employee, EmployeeChangeDoc, User
+from app.models.database import get_db, Employee, EmployeeChangeDoc, EmploymentDoc, User
 from app.deps import require_auth
 from app.services.employee_salary_service import get_effective_salary
 
@@ -129,6 +129,20 @@ def _refresh_employee_current(db, emp):
             emp.department = ch.new_department; dep_set = True
         if pos_set and dep_set:
             break
+    # Hech qaysi tasdiqlangan change position/dept bermasa — hire hujjatiga qaytadi
+    # (bekor qilingandan keyin kesh stale qolmasin; tarix bilan kelishadi).
+    if not pos_set or not dep_set:
+        hire = (
+            db.query(EmploymentDoc)
+            .filter(EmploymentDoc.employee_id == emp.id, EmploymentDoc.confirmed_at.isnot(None))
+            .order_by(EmploymentDoc.doc_date.desc(), EmploymentDoc.id.desc())
+            .first()
+        )
+        if hire:
+            if not pos_set and hire.position:
+                emp.position = hire.position
+            if not dep_set and hire.department:
+                emp.department = hire.department
 
 
 @router.post("/change/{doc_id}/confirm")

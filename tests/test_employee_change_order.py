@@ -90,3 +90,19 @@ def test_payroll_uses_effective_by_month(db):
     _change(db, e, 2_000_000, _d(2026, 5, 15))
     assert get_effective_salary(db, e.id, _d(2026, 5, 1))[0] == 1_500_000
     assert get_effective_salary(db, e.id, _d(2026, 6, 1))[0] == 2_000_000
+
+
+def test_cancel_reverts_position_to_hire(db):
+    """Bekor qilingan lavozim o'zgarishi keshni hire holatiga qaytarsin (stale qolmasin)."""
+    from app.routes.employees_changes import _refresh_employee_current
+    from datetime import date as _d, datetime as _dt
+    e = _emp(db, salary=1_000_000, position="Brigadir")  # kesh hozir stale "Brigadir"
+    hire = EmploymentDoc(number="IQ-rev", employee_id=e.id, doc_date=_d(2026, 1, 1), hire_date=_d(2026, 1, 1),
+                         salary=1_000_000, salary_type="oylik", position="Ishchi", confirmed_at=_dt(2026, 1, 1))
+    db.add(hire)
+    ch = EmployeeChangeDoc(number="KO-rev", employee_id=e.id, doc_date=_d(2026, 2, 1), effective_date=_d(2026, 2, 1),
+                           change_position=True, old_position="Ishchi", new_position="Brigadir",
+                           status="cancelled", confirmed_at=None)
+    db.add(ch); db.flush()
+    _refresh_employee_current(db, e)
+    assert e.position == "Ishchi"  # hire'ga qaytdi (bekor qilingan change hisobga olinmadi)
