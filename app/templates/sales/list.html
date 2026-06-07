@@ -86,7 +86,7 @@
   </div>
   <button type="button" id="toggleSensitiveBtn" class="btn btn-outline-secondary btn-sm"
           onclick="toggleSensitiveStats()" title="Tannarx va Foyda'ni ko'rsatish/yashirish">
-    <i id="toggleSensitiveIcon" class="bi bi-eye"></i> <span id="toggleSensitiveText" class="d-none d-md-inline">Tannarx/Foyda</span>
+    <i id="toggleSensitiveIcon" class="bi bi-eye"></i>
   </button>
 </div>
 <script>
@@ -96,9 +96,7 @@ function toggleSensitiveStats() {
   var nowHidden = (els[0].style.display === 'none');
   els.forEach(function(e) { e.style.display = nowHidden ? '' : 'none'; });
   var icon = document.getElementById('toggleSensitiveIcon');
-  var txt = document.getElementById('toggleSensitiveText');
   if (icon) icon.className = nowHidden ? 'bi bi-eye-slash' : 'bi bi-eye';
-  if (txt) txt.textContent = nowHidden ? 'Yashirish' : 'Tannarx/Foyda';
 }
 </script>
 {% endif %}
