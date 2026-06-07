@@ -69,22 +69,38 @@
 
 {% if show_profit %}
 <!-- Admin/raxbar qatori: Chegirma · Tannarx · Foyda -->
-<div class="d-flex flex-nowrap gap-3 mb-3">
+<div class="d-flex flex-nowrap gap-3 mb-3 align-items-center">
   <div class="mini-stat" style="flex:1;border-left:4px solid #ec4899;">
     <div class="num" style="color:#9d174d;">{{ "{:,.0f}".format(chegirma_sum) }}</div>
     <div class="lbl"><i class="bi bi-percent"></i> Chegirma</div>
   </div>
-  <div class="mini-stat" style="flex:1;border-left:4px solid #f59e0b;">
+  <div class="mini-stat sensitive-stat" style="flex:1;border-left:4px solid #f59e0b;display:none;">
     <div class="num" style="color:#92400e;">{{ "{:,.0f}".format(tannarx_sum) }}</div>
     <div class="lbl"><i class="bi bi-wallet2"></i> Tannarx</div>
   </div>
-  <div class="mini-stat" style="flex:1;border-left:4px solid {% if foyda_sum >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
+  <div class="mini-stat sensitive-stat" style="flex:1;border-left:4px solid {% if foyda_sum >= 0 %}#16a34a{% else %}#dc2626{% endif %};display:none;">
     <div class="num" style="color:{% if foyda_sum >= 0 %}#16a34a{% else %}#dc2626{% endif %};">
       {{ "{:,.0f}".format(foyda_sum) }}
     </div>
     <div class="lbl"><i class="bi bi-graph-up-arrow"></i> Foyda ({{ "{:.1f}".format(foyda_margin_pct) }}%)</div>
   </div>
+  <button type="button" id="toggleSensitiveBtn" class="btn btn-outline-secondary btn-sm"
+          onclick="toggleSensitiveStats()" title="Tannarx va Foyda'ni ko'rsatish/yashirish">
+    <i id="toggleSensitiveIcon" class="bi bi-eye"></i> <span id="toggleSensitiveText" class="d-none d-md-inline">Tannarx/Foyda</span>
+  </button>
 </div>
+<script>
+function toggleSensitiveStats() {
+  var els = document.querySelectorAll('.sensitive-stat');
+  if (!els.length) return;
+  var nowHidden = (els[0].style.display === 'none');
+  els.forEach(function(e) { e.style.display = nowHidden ? '' : 'none'; });
+  var icon = document.getElementById('toggleSensitiveIcon');
+  var txt = document.getElementById('toggleSensitiveText');
+  if (icon) icon.className = nowHidden ? 'bi bi-eye-slash' : 'bi bi-eye';
+  if (txt) txt.textContent = nowHidden ? 'Yashirish' : 'Tannarx/Foyda';
+}
+</script>
 {% endif %}
 
 {% if naqd_sum is defined %}
