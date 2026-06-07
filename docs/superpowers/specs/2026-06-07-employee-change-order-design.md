@@ -17,10 +17,11 @@ Ish haqi / lavozim / bo'lim / ish haqi turi o'zgarishini **hujjatlashtirilgan bu
 2. **Effective-date bo'yicha oylik:** oylik hisob o'sha oyga kuchda bo'lgan stavkani oladi (o'tmish/kelajak sanaga to'g'ri).
 
 ## 4. Effective-date semantikasi (oylik hisob)
-- Har oy (M) uchun **bazaviy ish haqi = o'sha oyning OXIRGI kuniga kuchda bo'lgan stavka** = `effective_date ≤ oyning oxirgi kuni` bo'lgan eng so'nggi tasdiqlangan hujjat (change yoki hire).
-- **Proratsiya YO'Q** (oy o'rtasidagi o'zgarish ham butun oyga yangi stavka) — mavjud `Salary.base_salary` butun-oy tizimiga mos. (Kelajakda proratsiya qo'shilishi mumkin.)
+- Har oy (M) uchun **bazaviy ish haqi = o'sha oyning BIRINCHI kuniga (1-sana) kuchda bo'lgan stavka** = `effective_date ≤ oyning 1-sanasi` bo'lgan eng so'nggi tasdiqlangan hujjat (change yoki hire).
+- **Oy o'rtasidagi o'zgarish KEYINGI oydan kuchga kiradi** (foydalanuvchi qarori 2026-06-07). Masalan: effective_date = 20-mart → mart uchun (1-mart ≤ 20-mart emas) eski stavka; aprel uchun (20-mart ≤ 1-aprel) yangi stavka. effective_date = 1-mart → mart shu oyning o'zida yangi stavka.
+- **Proratsiya YO'Q** (butun oy bitta stavkada) — mavjud `Salary.base_salary` butun-oy tizimiga mos.
 - Manba ustuvorligi: eng so'nggi effective `EmployeeChangeDoc` → bo'lmasa `EmploymentDoc` (hire) → bo'lmasa `Employee.salary` (fallback).
-- Markaziy helper: `get_effective_salary(db, employee_id, as_of_date) -> (salary, salary_type)` — hire + barcha tasdiqlangan change'larni hisobga olib, `as_of_date` ga kuchda bo'lgan qiymatni qaytaradi. Oylik hisob buni oyning oxirgi kuni bilan chaqiradi.
+- Markaziy helper: `get_effective_salary(db, employee_id, as_of_date) -> (salary, salary_type)` — hire + barcha tasdiqlangan change'larni hisobga olib, `as_of_date` ga (shu sana ham kiradi: `effective_date ≤ as_of_date`) kuchda bo'lgan qiymatni qaytaradi. Oylik hisob buni **oyning 1-sanasi** bilan chaqiradi.
 
 ## 5. Ma'lumotlar modeli
 Yangi jadval `employee_change_docs` (`EmployeeChangeDoc`):
@@ -72,7 +73,7 @@ Yaratish/tasdiq/bekor: admin / manager / rahbar (mavjud `user_can_override` yoki
 ## 9. Edge case'lar
 - Bir buyruqda bir nechta maydon (masalan lavozim oshishi = position + salary birga) — har biri ixtiyoriy, faqat belgilangani yoziladi.
 - Kelajak sanali buyruq: Employee hozir o'zgarmaydi; oylik hisob effective oyda oladi. Employee.salary display keshi effective bo'lganda yangilanadi (tasdiq vaqtida `effective_date ≤ bugun` tekshiruvi; kelajak uchun — kesh keyingi tegishli hisob/ochishda yangilanadi yoki lazy `get_effective_salary` ishlatiladi).
-- Bir oyda 2 o'zgarish: oy oxiriga eng so'nggi effective oladi (butun oy shu stavkada).
+- Oy 1-sanasiga kuchda bo'lgan stavka olinadi; oy ichida kiritilgan o'zgarish(lar) keyingi oydan kuchga kiradi (4-bo'lim qoidasi).
 - O'tmishdagi (back-dated) buyruq: o'sha oydan keyingi tasdiqlanmagan oyliklar qayta hisoblanishi mumkin (tasdiqlangan/to'langan oyliklarga tegmaymiz — ogohlantirish).
 
 ## 10. Test
