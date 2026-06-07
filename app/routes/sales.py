@@ -151,6 +151,9 @@ async def sales_list(
     pt_filter = (payment_type or "").strip().lower()
     if pt_filter:
         from sqlalchemy import func as _pf
+        from app.services.sales_metrics import SALE_REALIZED as _REALIZED
+        # Qoralama/bekor qilingan chiqariladi — yuqoridagi breakdown (SALE_REALIZED) bilan izchil
+        q = q.filter(Order.status.in_(_REALIZED))
         if pt_filter == "qarz":
             q = q.filter(Order.debt > 0.01)
         else:
