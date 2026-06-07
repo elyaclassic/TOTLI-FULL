@@ -188,6 +188,20 @@ function toggleSensitiveStats() {
             {% else %}
             <span class="badge-inactive">{{ order.status }}</span>
             {% endif %}
+            {% set _pts = order_pay_types.get(order.id, []) %}
+            {% set _has_qarz = order.debt and order.debt > 0.01 and order.status not in ('cancelled', 'draft') %}
+            {% if _pts or _has_qarz %}
+            <div class="mt-1 d-flex flex-wrap gap-1">
+              {% for _pt in _pts %}
+                {% if _pt == 'naqd' %}<span class="badge rounded-pill" style="background:#dcfce7;color:#166534;font-size:9px;">Naqd</span>
+                {% elif _pt == 'plastik' %}<span class="badge rounded-pill" style="background:#dbeafe;color:#1e40af;font-size:9px;">Plastik</span>
+                {% elif _pt == 'terminal' %}<span class="badge rounded-pill" style="background:#f3e8ff;color:#6b21a8;font-size:9px;">Terminal</span>
+                {% elif _pt == 'click' %}<span class="badge rounded-pill" style="background:#ffedd5;color:#9a3412;font-size:9px;">Click</span>
+                {% endif %}
+              {% endfor %}
+              {% if _has_qarz %}<span class="badge rounded-pill" style="background:#fee2e2;color:#991b1b;font-size:9px;">Qarz</span>{% endif %}
+            </div>
+            {% endif %}
           </td>
           <td class="muted-cell">
             {% if order.delivery_date %}

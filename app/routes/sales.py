@@ -193,6 +193,27 @@ async def sales_list(
     pg = paginate(q, page or 1, per_page=50)
     orders = pg["items"]
 
+    # Har sotuvning to'lov turi badge'lari — sahifadagi orderlar uchun BITTA batch query
+    _pay_norm = {"cash": "naqd", "naqd": "naqd", "card": "plastik", "plastik": "plastik",
+                 "terminal": "terminal", "click": "click"}
+    _pt_order = ["naqd", "plastik", "terminal", "click"]
+    _ord_ids = [o.id for o in orders]
+    order_pay_types = {}
+    if _ord_ids:
+        for _oid, _ptv in db.query(Payment.order_id, Payment.payment_type).filter(
+            Payment.order_id.in_(_ord_ids),
+            Payment.type == "income",
+            Payment.status == "confirmed",
+        ).distinct().all():
+            _n = _pay_norm.get((_ptv or "").strip().lower())
+            if _n:
+                lst = order_pay_types.setdefault(_oid, [])
+                if _n not in lst:
+                    lst.append(_n)
+    # Izchil tartib (naqd, plastik, terminal, click)
+    for _oid in order_pay_types:
+        order_pay_types[_oid] = [t for t in _pt_order if t in order_pay_types[_oid]]
+
     from sqlalchemy import func as sa_func
     from app.services.sales_metrics import SALE_REALIZED
     stats_row = db.query(
@@ -308,6 +329,7 @@ async def sales_list(
     return templates.TemplateResponse("sales/list.html", {
         "request": request,
         "orders": orders,
+        "order_pay_types": order_pay_types,
         "total_sum": total_sum,
         "naqd_sum": naqd_sum,
         "plastik_sum": plastik_sum,
