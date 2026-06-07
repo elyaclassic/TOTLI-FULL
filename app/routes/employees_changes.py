@@ -10,14 +10,13 @@ from app.core import templates
 from app.models.database import get_db, Employee, EmployeeChangeDoc, EmploymentDoc, User
 from app.deps import require_auth
 from app.services.employee_salary_service import get_effective_salary
+from app.services.stock_reservation import OVERRIDE_ROLES  # markazlashtirilgan rol-ro'yxati (DRY)
 
 router = APIRouter(prefix="/employees", tags=["employee-changes"])
 
-_ALLOWED = ("admin", "manager", "menejer", "rahbar", "raxbar")
-
 
 def _can(user):
-    return user and (getattr(user, "role", None) or "").strip().lower() in _ALLOWED
+    return user and (getattr(user, "role", None) or "").strip().lower() in OVERRIDE_ROLES
 
 
 @router.get("/changes", response_class=HTMLResponse)
