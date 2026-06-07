@@ -75,6 +75,7 @@ from app.routes import employees_product_purchases as employees_product_purchase
 from app.routes import employees_attendance as employees_attendance_routes
 from app.routes import employees_salary as employees_salary_routes
 from app.routes import employees_employment as employees_employment_routes
+from app.routes import employees_changes as employees_changes_routes
 from app.routes import production as production_routes
 from app.routes import production_convert as production_convert_routes
 from app.routes import chat as chat_routes
@@ -152,6 +153,7 @@ app.include_router(employees_product_purchases_routes.router)
 app.include_router(employees_attendance_routes.router)
 app.include_router(employees_salary_routes.router)
 app.include_router(employees_employment_routes.router)
+app.include_router(employees_changes_routes.router)
 app.include_router(production_routes.router)
 app.include_router(production_convert_routes.router)
 app.include_router(chat_routes.router)
