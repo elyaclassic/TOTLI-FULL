@@ -4,7 +4,13 @@
 <div class="container-fluid">
     <div class="page-header mb-3">
         <h5 class="mb-0"><i class="bi bi-pencil-square"></i> Xodimni tahrirlash</h5>
-        <a href="/employees" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          {% if user_can_override(current_user) %}
+          <a href="/employees/change/new?employee_id={{ emp.id }}" class="top-btn btn btn-sm btn-outline-primary"><i class="bi bi-pencil-square"></i> Kadr o'zgarishi</a>
+          <a href="/employees/changes?employee_id={{ emp.id }}" class="top-btn btn btn-sm btn-outline-secondary"><i class="bi bi-clock-history"></i> O'zgarishlar tarixi</a>
+          {% endif %}
+          <a href="/employees" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Ro'yxatga</a>
+        </div>
     </div>
     {% if request.query_params.get('error') %}
     <div class="alert alert-danger py-2 small">{{ request.query_params.get('error') }}</div>
