@@ -77,3 +77,16 @@ def test_confirm_refreshes_employee_cache(db):
     _refresh_employee_current(db, e)
     assert e.salary == 1_700_000
     assert e.position == "Brigadir"
+
+
+def test_payroll_uses_effective_by_month(db):
+    from app.services.employee_salary_service import get_effective_salary
+    from datetime import date as _d
+    e = _emp(db, salary=1_000_000)
+    _hire(db, e, 1_000_000, _d(2026, 1, 1))
+    _change(db, e, 1_500_000, _d(2026, 4, 1))
+    assert get_effective_salary(db, e.id, _d(2026, 3, 1))[0] == 1_000_000
+    assert get_effective_salary(db, e.id, _d(2026, 4, 1))[0] == 1_500_000
+    _change(db, e, 2_000_000, _d(2026, 5, 15))
+    assert get_effective_salary(db, e.id, _d(2026, 5, 1))[0] == 1_500_000
+    assert get_effective_salary(db, e.id, _d(2026, 6, 1))[0] == 2_000_000

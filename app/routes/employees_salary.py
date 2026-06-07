@@ -93,38 +93,14 @@ async def employee_salary_page(
             if remaining > 0:
                 prev_credit_by_emp[s.employee_id] = remaining
     emp_ids = [e.id for e in employees]
+    from datetime import date as _date
+    from app.services.employee_salary_service import get_effective_salary
+    _eff_ref = _date(int(year), int(month), 1)
     latest_doc_salary = {}
-    if emp_ids:
-        subq_conf = (
-            db.query(EmploymentDoc.employee_id, func.max(EmploymentDoc.doc_date).label("max_date"))
-            .filter(EmploymentDoc.employee_id.in_(emp_ids), EmploymentDoc.confirmed_at.isnot(None))
-            .group_by(EmploymentDoc.employee_id)
-        ).subquery()
-        docs_confirmed = (
-            db.query(EmploymentDoc.employee_id, EmploymentDoc.salary)
-            .join(subq_conf, (EmploymentDoc.employee_id == subq_conf.c.employee_id) & (EmploymentDoc.doc_date == subq_conf.c.max_date))
-            .filter(EmploymentDoc.employee_id.in_(emp_ids), EmploymentDoc.confirmed_at.isnot(None))
-            .all()
-        )
-        for row in docs_confirmed:
-            if (row.salary or 0) > 0:
-                latest_doc_salary[row.employee_id] = float(row.salary)
-        missing = [eid for eid in emp_ids if eid not in latest_doc_salary]
-        if missing:
-            subq = (
-                db.query(EmploymentDoc.employee_id, func.max(EmploymentDoc.doc_date).label("max_date"))
-                .filter(EmploymentDoc.employee_id.in_(missing))
-                .group_by(EmploymentDoc.employee_id)
-            ).subquery()
-            docs_latest = (
-                db.query(EmploymentDoc.employee_id, EmploymentDoc.salary)
-                .join(subq, (EmploymentDoc.employee_id == subq.c.employee_id) & (EmploymentDoc.doc_date == subq.c.max_date))
-                .filter(EmploymentDoc.employee_id.in_(missing))
-                .all()
-            )
-            for row in docs_latest:
-                if (row.salary or 0) > 0:
-                    latest_doc_salary[row.employee_id] = float(row.salary)
+    for _eid in emp_ids:
+        _sal, _ = get_effective_salary(db, _eid, _eff_ref)
+        if _sal:
+            latest_doc_salary[_eid] = float(_sal)
     advance_sums = {}
     product_purchase_sums = {}  # mahsulot xaridi (kvota qo'llanadi)
     from calendar import monthrange
