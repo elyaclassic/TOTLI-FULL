@@ -32,6 +32,14 @@
       <option value="waiting_production" {% if selected_status == 'waiting_production' %}selected{% endif %}>Ishlab chiqarishda</option>
       <option value="cancelled" {% if selected_status == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
     </select>
+    <select name="payment_type" class="form-select form-select-sm" style="flex:1; min-width:120px;">
+      <option value="">To'lov: barchasi</option>
+      <option value="naqd" {% if selected_payment_type == 'naqd' %}selected{% endif %}>Naqd</option>
+      <option value="plastik" {% if selected_payment_type == 'plastik' %}selected{% endif %}>Plastik</option>
+      <option value="terminal" {% if selected_payment_type == 'terminal' %}selected{% endif %}>Terminal</option>
+      <option value="click" {% if selected_payment_type == 'click' %}selected{% endif %}>Click</option>
+      <option value="qarz" {% if selected_payment_type == 'qarz' %}selected{% endif %}>Qarz</option>
+    </select>
     <button type="submit" class="btn btn-primary btn-sm text-nowrap" style="flex-shrink:0;">
       <i class="bi bi-funnel-fill"></i> Ko'rsatish
     </button>

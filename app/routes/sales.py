@@ -118,6 +118,7 @@ async def sales_list(
     date_to: Optional[str] = None,
     warehouse_id: Optional[str] = None,
     status: Optional[str] = None,
+    payment_type: Optional[str] = None,
     sort_by: Optional[str] = None,
     sort_dir: Optional[str] = None,
     page: Optional[int] = None,
@@ -145,6 +146,24 @@ async def sales_list(
     status_filter = (status or "").strip()
     if status_filter:
         q = q.filter(Order.status == status_filter)
+    # To'lov turi filtri — ekrandagi breakdown bilan izchil (Payment income+confirmed);
+    # qarz = to'lanmagan qoldiq (Order.debt > 0).
+    pt_filter = (payment_type or "").strip().lower()
+    if pt_filter:
+        from sqlalchemy import func as _pf
+        if pt_filter == "qarz":
+            q = q.filter(Order.debt > 0.01)
+        else:
+            _pt_aliases = {
+                "naqd": ("cash", "naqd"), "plastik": ("card", "plastik"),
+                "terminal": ("terminal",), "click": ("click",),
+            }.get(pt_filter, (pt_filter,))
+            _pay_sub = db.query(Payment.order_id).filter(
+                Payment.type == "income",
+                Payment.status == "confirmed",
+                _pf.lower(Payment.payment_type).in_(_pt_aliases),
+            )
+            q = q.filter(Order.id.in_(_pay_sub))
     sort_col = (sort_by or "date").strip().lower()
     sort_order = (sort_dir or "desc").strip().lower()
     if sort_order not in ("asc", "desc"):
@@ -276,6 +295,7 @@ async def sales_list(
         "date_to": (date_to or "").strip()[:10] or "",
         "warehouse_id": str(wh_id) if wh_id else "",
         "status": status_filter or "",
+        "payment_type": pt_filter or "",
         "sort_by": sort_by_val,
         "sort_dir": sort_order,
     }
@@ -296,6 +316,7 @@ async def sales_list(
         "date_to": (date_to or "").strip()[:10] or None,
         "selected_warehouse_id": wh_id,
         "selected_status": status_filter,
+        "selected_payment_type": pt_filter,
         "sort_by": sort_by_val,
         "sort_dir": sort_order,
         "filter_params": "&".join(f"{k}={v}" for k, v in filter_params.items() if v),
