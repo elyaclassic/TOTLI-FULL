@@ -164,6 +164,18 @@ async def change_confirm(doc_id: int, db: Session = Depends(get_db), current_use
     return RedirectResponse(url=f"/employees/changes?employee_id={doc.employee_id}&confirmed=1", status_code=303)
 
 
+@router.get("/change/{doc_id}/print", response_class=HTMLResponse)
+async def change_print(doc_id: int, request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+    doc = db.query(EmployeeChangeDoc).filter(EmployeeChangeDoc.id == doc_id).first()
+    if not doc:
+        return RedirectResponse(url="/employees/changes?error=" + quote("Hujjat topilmadi"), status_code=303)
+    emp = db.query(Employee).filter(Employee.id == doc.employee_id).first()
+    return templates.TemplateResponse("employees/change_print.html", {
+        "request": request, "doc": doc, "emp": emp, "current_user": current_user,
+        "page_title": doc.number,
+    })
+
+
 @router.post("/change/{doc_id}/cancel")
 async def change_cancel(doc_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     if not _can(current_user):

@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h4 class="mb-3">Kadr o'zgarishlari</h4>
+  {% if request.query_params.get('error') %}<div class="alert alert-danger py-2">{{ request.query_params.get('error') }}</div>{% endif %}
+  <table class="table table-sm">
+    <thead><tr>
+      <th>&#8470;</th><th>Xodim</th><th>Sana</th><th>Kuchga kiradi</th><th>O'zgarish</th><th>Sabab</th><th>Kim</th><th>Holat</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for d in docs %}
+      <tr>
+        <td>{{ d.number }}</td>
+        <td>{{ emp_map[d.employee_id].full_name if d.employee_id in emp_map else d.employee_id }}</td>
+        <td>{{ d.doc_date.strftime('%d.%m.%Y') if d.doc_date else '' }}</td>
+        <td>{{ d.effective_date.strftime('%d.%m.%Y') if d.effective_date else '' }}</td>
+        <td class="small">
+          {% if d.change_salary %}Ish haqi: {{ "{:,.0f}".format(d.old_salary or 0) }} &rarr; {{ "{:,.0f}".format(d.new_salary or 0) }}<br>{% endif %}
+          {% if d.change_position %}Lavozim: {{ d.old_position or '&mdash;' }} &rarr; {{ d.new_position or '&mdash;' }}<br>{% endif %}
+          {% if d.change_department %}Bo'lim: {{ d.old_department or '&mdash;' }} &rarr; {{ d.new_department or '&mdash;' }}<br>{% endif %}
+          {% if d.change_salary_type %}Tur: {{ d.old_salary_type or '&mdash;' }} &rarr; {{ d.new_salary_type or '&mdash;' }}{% endif %}
+        </td>
+        <td class="small">{{ d.reason or '' }}</td>
+        <td class="small">{{ d.user.username if d.user else '' }}</td>
+        <td>
+          {% if d.status == 'confirmed' %}<span class="badge bg-success">Tasdiqlangan</span>
+          {% elif d.status == 'cancelled' %}<span class="badge bg-secondary">Bekor</span>
+          {% else %}<span class="badge bg-warning text-dark">Qoralama</span>{% endif %}
+        </td>
+        <td>
+          <a href="/employees/change/{{ d.id }}/print" class="btn btn-sm btn-outline-secondary" title="Chop etish"><i class="bi bi-printer"></i></a>
+          {% if d.status == 'draft' and user_can_override(current_user) %}
+          <form method="post" action="/employees/change/{{ d.id }}/confirm" class="d-inline" onsubmit="return confirm('Tasdiqlaysizmi?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button class="btn btn-sm btn-success">Tasdiq</button>
+          </form>
+          {% elif d.status == 'confirmed' and user_can_override(current_user) %}
+          <form method="post" action="/employees/change/{{ d.id }}/cancel" class="d-inline" onsubmit="return confirm('Bekor qilasizmi? Joriy holat qayta hisoblanadi.');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <button class="btn btn-sm btn-outline-danger">Bekor</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container py-4" style="max-width:700px;">
+  <h4 class="text-center">KADR O'ZGARISHI BUYRUG'I</h4>
+  <p class="text-center">&#8470; {{ doc.number }} &mdash; {{ doc.doc_date.strftime('%d.%m.%Y') if doc.doc_date else '' }}</p>
+  <p><b>Xodim:</b> {{ emp.full_name if emp else doc.employee_id }}</p>
+  <p><b>Kuchga kirish sanasi:</b> {{ doc.effective_date.strftime('%d.%m.%Y') if doc.effective_date else '' }}</p>
+  <table class="table table-bordered">
+    <tr><th></th><th>Eski</th><th>Yangi</th></tr>
+    {% if doc.change_salary %}<tr><td>Ish haqi</td><td>{{ "{:,.0f}".format(doc.old_salary or 0) }}</td><td>{{ "{:,.0f}".format(doc.new_salary or 0) }}</td></tr>{% endif %}
+    {% if doc.change_position %}<tr><td>Lavozim</td><td>{{ doc.old_position or '&mdash;' }}</td><td>{{ doc.new_position or '&mdash;' }}</td></tr>{% endif %}
+    {% if doc.change_department %}<tr><td>Bo'lim</td><td>{{ doc.old_department or '&mdash;' }}</td><td>{{ doc.new_department or '&mdash;' }}</td></tr>{% endif %}
+    {% if doc.change_salary_type %}<tr><td>Ish haqi turi</td><td>{{ doc.old_salary_type or '&mdash;' }}</td><td>{{ doc.new_salary_type or '&mdash;' }}</td></tr>{% endif %}
+  </table>
+  <p><b>Sabab:</b> {{ doc.reason or '' }}</p>
+  <p><b>Kim:</b> {{ doc.user.username if doc.user else '' }}</p>
+  <button class="btn btn-primary d-print-none" onclick="window.print()">Chop etish</button>
+</div>
+{% endblock %}
