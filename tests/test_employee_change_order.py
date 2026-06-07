@@ -62,3 +62,18 @@ def test_effective_latest_of_two_changes(db):
     _change(db, e, 1_800_000, date(2026, 4, 1))
     assert get_effective_salary(db, e.id, date(2026, 5, 1))[0] == 1_800_000
     assert get_effective_salary(db, e.id, date(2026, 3, 1))[0] == 1_500_000
+
+
+def test_confirm_refreshes_employee_cache(db):
+    from app.routes.employees_changes import _refresh_employee_current
+    from datetime import date as _d, datetime as _dt
+    e = _emp(db, salary=1_000_000, position="Ishchi")
+    _hire(db, e, 1_000_000, _d(2026, 1, 1))
+    ch = EmployeeChangeDoc(number="KO-x", employee_id=e.id, doc_date=_d(2026, 1, 1),
+                           effective_date=_d(2026, 1, 1), change_salary=True, old_salary=1_000_000,
+                           new_salary=1_700_000, change_position=True, old_position="Ishchi",
+                           new_position="Brigadir", status="confirmed", confirmed_at=_dt(2026, 1, 1))
+    db.add(ch); db.flush()
+    _refresh_employee_current(db, e)
+    assert e.salary == 1_700_000
+    assert e.position == "Brigadir"
