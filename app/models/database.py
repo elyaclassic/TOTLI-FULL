@@ -1403,6 +1403,37 @@ class EmploymentDoc(Base):
     user = relationship("User")
 
 
+class EmployeeChangeDoc(Base):
+    """Kadr o'zgarishi buyrug'i — ish haqi/lavozim/bo'lim o'zgarishi (effective-date'li)."""
+    __tablename__ = "employee_change_docs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    number = Column(String(50), unique=True, index=True)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+    doc_date = Column(Date, nullable=False)
+    effective_date = Column(Date, nullable=False)
+    change_salary = Column(Boolean, default=False)
+    old_salary = Column(Float, nullable=True)
+    new_salary = Column(Float, nullable=True)
+    change_salary_type = Column(Boolean, default=False)
+    old_salary_type = Column(String(50), nullable=True)
+    new_salary_type = Column(String(50), nullable=True)
+    change_position = Column(Boolean, default=False)
+    old_position = Column(String(100), nullable=True)
+    new_position = Column(String(100), nullable=True)
+    change_department = Column(Boolean, default=False)
+    old_department = Column(String(100), nullable=True)
+    new_department = Column(String(100), nullable=True)
+    reason = Column(String(500), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), default="draft")
+    confirmed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    employee = relationship("Employee", backref="change_docs")
+    user = relationship("User")
+
+
 # Ishlab chiqarish guruhi (masalan qiyomchilar): bitta operator nomidan yozilgan ish kunlik tabel bo'yicha guruh a'zolari orasida teng bo'linadi
 production_group_members = Table(
     "production_group_members",
@@ -1893,6 +1924,41 @@ def ensure_employee_salary_type():
         print(f"ensure_employee_salary_type: {e}")
 
 
+def ensure_employee_change_docs():
+    """employee_change_docs jadvali bo'lishini ta'minlash."""
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS employee_change_docs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    number VARCHAR(50) UNIQUE,
+                    employee_id INTEGER NOT NULL,
+                    doc_date DATE NOT NULL,
+                    effective_date DATE NOT NULL,
+                    change_salary BOOLEAN DEFAULT 0,
+                    old_salary FLOAT,
+                    new_salary FLOAT,
+                    change_salary_type BOOLEAN DEFAULT 0,
+                    old_salary_type VARCHAR(50),
+                    new_salary_type VARCHAR(50),
+                    change_position BOOLEAN DEFAULT 0,
+                    old_position VARCHAR(100),
+                    new_position VARCHAR(100),
+                    change_department BOOLEAN DEFAULT 0,
+                    old_department VARCHAR(100),
+                    new_department VARCHAR(100),
+                    reason VARCHAR(500),
+                    user_id INTEGER,
+                    status VARCHAR(20) DEFAULT 'draft',
+                    confirmed_at DATETIME,
+                    created_at DATETIME
+                )
+            """))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS idx_ecd_emp ON employee_change_docs (employee_id)"))
+    except Exception as e:
+        print(f"ensure_employee_change_docs: {e}")
+
+
 def ensure_employee_piecework_tasks_table():
     """employee_piecework_tasks jadvali mavjudligini ta'minlash."""
     try:
@@ -2097,6 +2163,7 @@ def init_db():
     ensure_purchase_expense_direction_department()
     ensure_piecework_tasks_table()
     ensure_employee_salary_type()
+    ensure_employee_change_docs()
     ensure_employee_piecework_tasks_table()
     ensure_dismissal_docs_table()
     ensure_production_groups_tables()
