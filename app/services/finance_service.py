@@ -61,10 +61,16 @@ def cash_balance_formula(db: Session, cash_id: int, as_of_date=None) -> tuple:
 
 
 def sync_cash_balance(db: Session, cash_id: int) -> None:
-    """Kassa balansini qayta hisoblash va saqlash."""
+    """Kassa balansini qayta hisoblash va saqlash.
+
+    SessionLocal `autoflush=False` — shuning uchun sync'dan OLDIN kutilayotgan
+    Payment/CashTransfer'larni DB'ga yuboramiz (flush), aks holda cash_balance_formula
+    ORM SUM-query ularni ko'rmay qoladi va balans drift bo'ladi (avans 'add' yo'li:
+    Payment db.add qilingan, lekin flush qilinmagan holda sync chaqirilardi)."""
     cash = db.query(CashRegister).filter(CashRegister.id == cash_id).first()
     if not cash:
         return
+    db.flush()
     computed, _, _ = cash_balance_formula(db, cash_id)
     cash.balance = computed
 
