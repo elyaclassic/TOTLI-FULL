@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-
 {% block content %}
 {% if request.query_params.get('info') %}
 <div class="alert alert-info alert-dismissible fade show" role="alert">
@@ -13,182 +12,374 @@
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
 </div>
 {% endif %}
-<div class="page-header mb-3 d-flex justify-content-between align-items-center">
-    <div>
-        <h5 class="mb-0"><i class="bi bi-cart-check"></i> Agent buyurtmalari</h5>
-        <p class="text-muted mb-0 small">Agentlar tomonidan yaratilgan buyurtmalar</p>
-    </div>
+
+<div class="container-fluid py-2">
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+    <h5 class="mb-0">
+      <i class="bi bi-cart-check text-success"></i> Agent buyurtmalari
+      <span class="badge bg-success-subtle text-success ms-1">{{ range_label }}: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm</span>
+    </h5>
     <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
-</div>
+  </div>
 
-<!-- Filtr -->
-<div class="mb-3 d-flex gap-2 flex-wrap">
-    <a href="/supervisor/agent-orders?status=all" class="btn btn-sm {{ 'btn-primary' if current_status == 'all' else 'btn-outline-secondary' }}">Barchasi</a>
-    <a href="/supervisor/agent-orders?status=draft" class="btn btn-sm {{ 'btn-warning text-dark' if current_status == 'draft' else 'btn-outline-warning' }}">
-        Yangi (kutmoqda)
-        {% if draft_count is defined and draft_count > 0 %}<span class="badge bg-danger ms-1">{{ draft_count }}</span>{% endif %}
+  <!-- Status tablari (sana + agent filtrini saqlaydi) -->
+  {% set _qs = '&date_from=' ~ date_from ~ '&date_to=' ~ date_to ~ ('&agent_id=' ~ sel_agent_id if sel_agent_id else '') %}
+  <div class="mb-2 d-flex gap-2 flex-wrap">
+    <a href="/supervisor/agent-orders?status=all{{ _qs }}" class="btn btn-sm {{ 'btn-primary' if current_status == 'all' else 'btn-outline-secondary' }}">Barchasi</a>
+    <a href="/supervisor/agent-orders?status=draft{{ _qs }}" class="btn btn-sm {{ 'btn-warning text-dark' if current_status == 'draft' else 'btn-outline-warning' }}">
+      Yangi (kutmoqda){% if draft_count is defined and draft_count > 0 %}<span class="badge bg-danger ms-1">{{ draft_count }}</span>{% endif %}
     </a>
-    <a href="/supervisor/agent-orders?status=waiting_production" class="btn btn-sm {{ 'btn-secondary' if current_status == 'waiting_production' else 'btn-outline-secondary' }}">
-        <i class="bi bi-hourglass-split"></i> Production kutmoqda
-        {% if waiting_count is defined and waiting_count > 0 %}<span class="badge bg-danger ms-1">{{ waiting_count }}</span>{% endif %}
+    <a href="/supervisor/agent-orders?status=waiting_production{{ _qs }}" class="btn btn-sm {{ 'btn-secondary' if current_status == 'waiting_production' else 'btn-outline-secondary' }}">
+      <i class="bi bi-hourglass-split"></i> Production kutmoqda{% if waiting_count is defined and waiting_count > 0 %}<span class="badge bg-danger ms-1">{{ waiting_count }}</span>{% endif %}
     </a>
-    <a href="/supervisor/agent-orders?status=confirmed" class="btn btn-sm {{ 'btn-info' if current_status == 'confirmed' else 'btn-outline-info' }}">Tasdiqlangan</a>
-    <a href="/supervisor/agent-orders?status=delivered" class="btn btn-sm {{ 'btn-success' if current_status == 'delivered' else 'btn-outline-success' }}">Bajarilgan</a>
-    <a href="/supervisor/agent-orders?status=cancelled" class="btn btn-sm {{ 'btn-danger' if current_status == 'cancelled' else 'btn-outline-danger' }}">Bekor qilingan</a>
-</div>
+    <a href="/supervisor/agent-orders?status=confirmed{{ _qs }}" class="btn btn-sm {{ 'btn-info' if current_status == 'confirmed' else 'btn-outline-info' }}">Tasdiqlangan</a>
+    <a href="/supervisor/agent-orders?status=delivered{{ _qs }}" class="btn btn-sm {{ 'btn-success' if current_status == 'delivered' else 'btn-outline-success' }}">Bajarilgan</a>
+    <a href="/supervisor/agent-orders?status=cancelled{{ _qs }}" class="btn btn-sm {{ 'btn-danger' if current_status == 'cancelled' else 'btn-outline-danger' }}">Bekor qilingan</a>
+  </div>
 
-{% for order in orders %}
-<div class="card mb-3 {{ 'border-warning' if order.status == 'draft' else 'border-light' }}">
-    <div class="card-body p-3">
-        <div class="row align-items-center">
-            <!-- Buyurtma asosiy info -->
-            <div class="col-md-7">
-                <div class="d-flex align-items-center mb-2">
-                    <h6 class="mb-0 me-2">
-                        <a href="/sales/edit/{{ order.id }}" class="text-decoration-none">{{ order.number }}</a>
-                    </h6>
-                    {% if order.status == 'draft' %}
-                    <span class="badge bg-warning text-dark">Yangi</span>
-                    {% elif order.status == 'waiting_production' %}
-                    <span class="badge bg-secondary"><i class="bi bi-hourglass-split"></i> Production kutmoqda</span>
-                    {% if missing_items.get(order.id) %}
-                    <div class="small mt-1" style="background:#fff3cd;border-left:3px solid #ff9800;padding:4px 8px;border-radius:3px;">
-                        <strong style="color:#b35900;"><i class="bi bi-exclamation-triangle-fill"></i> Yetishmaydi:</strong>
-                        {% for m in missing_items[order.id] %}
-                        <div style="margin-left:18px;">
-                            <span style="color:#d32f2f;font-weight:600;">{{ m.product }}</span>
-                            — kerak <strong>{{ m.need|round(1) }}</strong>, bor <strong>{{ m.have|round(1) }}</strong>,
-                            yetmaydi: <strong style="color:#d32f2f;">−{{ m.missing|round(1) }}</strong>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    {% endif %}
-                    {% if production_info.get(order.id) %}
-                    <div class="small text-muted mt-1" title="Ishlab chiqarish boshlangan">
-                        <i class="bi bi-gear"></i>
-                        {% for s in production_info[order.id] %}{{ s }}{% if not loop.last %}<br>{% endif %}{% endfor %}
-                    </div>
-                    {% endif %}
-                    {% elif order.status == 'confirmed' %}
-                    <span class="badge bg-info">Tasdiqlangan</span>
-                    {% elif order.status == 'completed' %}
-                    <span class="badge bg-success">Bajarilgan</span>
-                    {% elif order.status == 'cancelled' %}
-                    <span class="badge bg-danger">Bekor</span>
-                    {% endif %}
-                    <span class="ms-2 text-muted small">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '' }}</span>
-                </div>
-                <div class="mb-1">
-                    {% if order.agent_id %}
-                        {% for a in agents if a.id == order.agent_id %}
-                        <small class="badge bg-primary bg-opacity-10 text-primary me-1">{{ a.full_name }}</small>
-                        {% endfor %}
-                    {% endif %}
-                    <i class="bi bi-arrow-right text-muted mx-1"></i>
-                    <strong>{{ order.partner.name if order.partner else '—' }}</strong>
-                </div>
-                {% if order.partner %}
-                <div class="small text-muted">
-                    {% if order.partner.address %}<i class="bi bi-geo-alt"></i> {{ order.partner.address }}{% endif %}
-                    {% if order.partner.phone %} &bull; <i class="bi bi-telephone"></i> {{ order.partner.phone }}{% endif %}
-                    {% if order.partner.latitude %}
-                    <span class="text-success ms-1"><i class="bi bi-pin-map-fill"></i> GPS</span>
-                    {% endif %}
-                </div>
-                {% endif %}
-                <!-- Mahsulotlar -->
-                <div class="mt-2">
-                    <table class="table table-sm table-borderless mb-0" style="font-size: 13px;">
-                        {% for item in order.items %}
-                        <tr>
-                            <td class="py-0 ps-0">{{ item.product.name if item.product else '#' ~ item.product_id }}</td>
-                            <td class="py-0 text-end" style="width:60px;">x{{ item.quantity|round(0)|int }}</td>
-                            <td class="py-0 text-end fw-semibold" style="width:90px;">{{ "{:,.0f}".format(item.total or 0) }}</td>
-                        </tr>
-                        {% endfor %}
-                        <tr class="border-top">
-                            <td class="py-0 ps-0 fw-bold">Jami:</td>
-                            <td></td>
-                            <td class="py-0 text-end fw-bold" style="font-size:15px;">{{ "{:,.0f}".format(order.total or 0) }}</td>
-                        </tr>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Amallar -->
-            <div class="col-md-5 text-end">
-                {% if order.status == 'draft' %}
-                <div class="d-flex flex-column gap-2 align-items-end">
-                    <!-- Tasdiqlash -->
-                    <form action="/supervisor/agent-orders/confirm/{{ order.id }}" method="POST" class="d-flex gap-1 align-items-center">
-                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
-                        <select name="driver_id" class="form-select form-select-sm" style="width:160px;" required>
-                            <option value="">Haydovchi tanlang</option>
-                            {% for d in drivers %}
-                            <option value="{{ d.id }}">{{ d.full_name }} ({{ d.vehicle_number or '' }})</option>
-                            {% endfor %}
-                        </select>
-                        <button type="submit" class="btn btn-success btn-sm">
-                            <i class="bi bi-check-lg"></i> Tasdiqlash
-                        </button>
-                    </form>
-                    <!-- O'zgartirish va O'chirish (faqat admin) -->
-                    <div class="d-flex gap-1">
-                        <a href="/sales/edit/{{ order.id }}" class="btn btn-outline-primary btn-sm">
-                            <i class="bi bi-pencil"></i> O'zgartirish
-                        </a>
-                        {% if current_user and current_user.role == 'admin' %}
-                        <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
-                              onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
-                            <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
-                            <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirish (faqat admin)">
-                                <i class="bi bi-trash"></i> O'chirish
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
-                </div>
-                {% elif order.status in ('confirmed', 'completed', 'waiting_production') %}
-                <div class="d-flex flex-column gap-2 align-items-end">
-                    {% if order.status == 'confirmed' %}
-                    <span class="text-info"><i class="bi bi-truck"></i> Haydovchiga berilgan</span>
-                    {% elif order.status == 'completed' %}
-                    <span class="text-success"><i class="bi bi-check-circle"></i> Yakunlangan</span>
-                    {% else %}
-                    <span class="text-warning"><i class="bi bi-hourglass-split"></i> Production kutilmoqda</span>
-                    {% endif %}
-                    <form action="/sales/{{ order.id }}/revert" method="POST" class="d-inline"
-                          onsubmit="return confirm('{{ order.number }} tasdiqlashni bekor qilasizmi? Draft ga qaytadi, ombor va yetkazish qaytariladi.')">
-                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
-                        <button type="submit" class="btn btn-outline-warning btn-sm" title="Tasdiqlashni bekor qilish — buyurtma Draft ga qaytadi, undan keyin o'zgartirish/o'chirish mumkin">
-                            <i class="bi bi-arrow-counterclockwise"></i> Tasdiqlashni bekor qilish
-                        </button>
-                    </form>
-                </div>
-                {% elif order.status == 'cancelled' %}
-                <div class="d-flex flex-column gap-2 align-items-end">
-                    <span class="text-danger"><i class="bi bi-x-circle"></i> Bekor qilingan</span>
-                    {% if current_user and current_user.role == 'admin' %}
-                    <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" class="d-inline"
-                          onsubmit="return confirm('{{ order.number }} buyurtmani o\'chirasizmi? Bu qaytarilmaydi!')">
-                        <input type="hidden" name="csrf_token" value="{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm" title="O'chirish (faqat admin)">
-                            <i class="bi bi-trash"></i> O'chirish
-                        </button>
-                    </form>
-                    {% endif %}
-                </div>
-                {% endif %}
-            </div>
+  <div class="data-table">
+    <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <i class="bi bi-funnel"></i>
+        <form method="get" action="/supervisor/agent-orders" id="orderDateFilterForm" class="d-flex align-items-center gap-2 flex-wrap mb-0">
+          <input type="hidden" name="status" value="{{ current_status }}">
+          <select name="agent_id" class="form-select form-select-sm" style="width:170px;" onchange="document.getElementById('orderDateFilterForm').submit()">
+            <option value="0">Barcha agentlar</option>
+            {% for a in agents %}
+            <option value="{{ a.id }}" {% if sel_agent_id == a.id %}selected{% endif %}>{{ a.full_name }}</option>
+            {% endfor %}
+          </select>
+          <div class="btn-group btn-group-sm" role="group">
+            <button type="button" class="btn btn-outline-success" onclick="setQuickRange('today')"><i class="bi bi-calendar-day"></i> Bugun</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="setQuickRange('yesterday')">Kecha</button>
+            <button type="button" class="btn btn-outline-secondary" onclick="setQuickRange('week')">1 hafta</button>
+          </div>
+          <input type="date" name="date_from" id="orderDateFrom" value="{{ date_from }}" class="form-control form-control-sm" style="width:140px;" onchange="document.getElementById('orderDateFilterForm').submit()">
+          <span class="text-muted small">—</span>
+          <input type="date" name="date_to" id="orderDateTo" value="{{ date_to }}" class="form-control form-control-sm" style="width:140px;" onchange="document.getElementById('orderDateFilterForm').submit()">
+        </form>
+        <div class="input-group input-group-sm" style="width: 240px;">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" id="orderSearchInput" class="form-control form-control-sm" placeholder="Mijoz, raqam, agent, tel..." oninput="filterOrderRows()">
+          <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('orderSearchInput').value=''; filterOrderRows();" title="Tozalash"><i class="bi bi-x"></i></button>
         </div>
+        <span id="orderSearchCount" class="text-muted small" style="display:none;"></span>
+      </div>
+      <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" id="bulkConfirmBtn" class="btn btn-sm btn-success" disabled onclick="confirmSelected()">
+          <i class="bi bi-check2-all"></i> Belgilanganlar tasdiqlash (<span id="bulkConfirmCount">0</span>)
+        </button>
+        {% if current_user and current_user.role in ['admin', 'manager'] %}
+        <button type="button" id="bulkDispatchBtn" class="btn btn-sm btn-warning" disabled data-bs-toggle="modal" data-bs-target="#bulkDispatchModal">
+          <i class="bi bi-truck"></i> Yo'lga chiqarish (<span id="bulkDispatchCount">0</span>)
+        </button>
+        {% endif %}
+        <button type="button" id="bulkRevertBtn" class="btn btn-sm btn-outline-warning" disabled onclick="revertSelected()">
+          <i class="bi bi-arrow-counterclockwise"></i> Tasdiqni bekor qilish (<span id="bulkRevertCount">0</span>)
+        </button>
+        <button type="button" id="bulkExcelBtn" class="btn btn-sm btn-outline-success" disabled onclick="exportSelectedToExcel()">
+          <i class="bi bi-file-earmark-excel"></i> Tanlanganlar Excel (<span id="bulkCount">0</span>)
+        </button>
+      </div>
     </div>
-</div>
-{% else %}
-<div class="text-center text-muted py-5">
-    <i class="bi bi-inbox" style="font-size:48px;"></i>
-    <p class="mt-2">Buyurtmalar topilmadi</p>
-</div>
-{% endfor %}
 
-<div class="mt-2 text-muted small">Jami: {{ orders|length }} ta buyurtma</div>
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead>
+          <tr>
+            <th style="width:32px;"><input type="checkbox" onclick="toggleAllOrders(this)" title="Hammasini belgilash"></th>
+            <th>RAQAM</th>
+            <th>AGENT</th>
+            <th>SANA</th>
+            <th>MIJOZ</th>
+            <th class="text-end">MIQDOR</th>
+            <th>JAMI</th>
+            <th>STATUS</th>
+            <th>HAYDOVCHI</th>
+            <th>YETKAZILGAN</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for order in orders %}
+          {% set ex_child = exchange_children.get(order.id) if exchange_children else None %}
+          {% set is_exchange = ex_child is not none and order.type == 'return_sale' %}
+          {% set ex_diff = (ex_child.total or 0) - (order.total or 0) if is_exchange else 0 %}
+          {% set dispatch_id = ex_child.id if is_exchange else order.id %}
+          {% set dispatch_status = ex_child.status if is_exchange else order.status %}
+          <tr class="order-row">
+            <td>
+              {% if order.status in ('confirmed', 'completed', 'draft', 'waiting_production', 'out_for_delivery') %}
+              <input type="checkbox" class="order-cb"
+                     data-id="{{ order.id }}" data-status="{{ order.status }}" data-num="{{ order.number }}"
+                     data-dispatch-id="{{ dispatch_id }}" data-dispatch-status="{{ dispatch_status }}"
+                     data-is-exchange="{{ '1' if is_exchange else '0' }}" onclick="updateBulkBtn()">
+              {% endif %}
+            </td>
+            <td>
+              {% if is_exchange %}
+              <a href="/sales/exchange/{{ order.id }}">{{ order.number }}</a>
+              <span class="badge bg-warning text-dark ms-1" title="Obmen: {{ order.number }} (qaytgan) + {{ ex_child.number }} (yangi)">Обмен</span>
+              {% else %}
+              <a href="/sales/edit/{{ order.id }}">{{ order.number }}</a>
+              {% endif %}
+            </td>
+            <td><small class="fw-semibold">{{ agent_names.get(order.agent_id, '—') }}</small></td>
+            <td class="muted-cell"><small>{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</small></td>
+            <td>
+              {% if order.partner %}{{ order.partner.name }}
+                {% if order.partner.phone %}<br><small class="text-muted"><i class="bi bi-telephone"></i> {{ order.partner.phone }}</small>{% endif %}
+              {% else %}-{% endif %}
+            </td>
+            <td class="text-end">
+              {% if is_exchange %}
+              {% set ret_qty = order.items|sum(attribute='quantity') %}
+              {% set new_qty = ex_child.items|sum(attribute='quantity') if ex_child else 0 %}
+              <span title="Qaytgan: {{ ret_qty }} / Yangi: {{ new_qty }}">{{ "{:g}".format(new_qty - ret_qty) if (new_qty - ret_qty) != 0 else "0" }}</span>
+              {% else %}{{ "{:g}".format(order.items|sum(attribute='quantity') or 0) }}{% endif %}
+            </td>
+            <td class="fw-bold">
+              {% if is_exchange %}
+              <span title="Qaytgan: {{ '{:,.0f}'.format(order.total or 0) }} / Yangi: {{ '{:,.0f}'.format(ex_child.total or 0) }}">{{ "{:+,.0f}".format(ex_diff) if ex_diff else "0" }}</span>
+              {% else %}{{ "{:,.0f}".format(order.total or 0) }}{% endif %}
+            </td>
+            <td>
+              {% if is_exchange %}
+                {% set exs = ex_child.status %}
+                {% if exs in ('delivered', 'completed') %}<span class="badge-done">Almashtirildi</span>
+                {% elif exs == 'out_for_delivery' %}<span class="badge-waiting" title="Almashtirish yo'lda">Yo'lda</span>
+                {% elif exs == 'confirmed' %}<span class="badge-waiting" title="Almashtirish tasdiqlangan">Tasdiqlangan</span>
+                {% elif exs == 'draft' %}<span class="badge-waiting">Draft</span>
+                {% elif exs == 'cancelled' or order.status == 'cancelled' %}<span class="badge-cancelled">Bekor</span>
+                {% else %}<span class="badge-waiting">{{ exs }}</span>{% endif %}
+              {% elif order.status == 'draft' %}<span class="badge-waiting">Yangi</span>
+              {% elif order.status == 'confirmed' %}<span class="badge-done">{% if order.type == 'return_sale' %}Almashtirildi{% else %}Tasdiqlangan{% endif %}</span>
+              {% elif order.status == 'completed' %}<span class="badge-done">Bajarilgan</span>
+              {% elif order.status == 'out_for_delivery' %}<span class="badge-waiting">Yo'lda</span>
+              {% elif order.status == 'cancelled' %}<span class="badge-cancelled">Bekor</span>
+              {% elif order.status == 'waiting_production' %}
+              <span class="badge-waiting" title="Production kutmoqda">Production kutmoqda</span>
+              {% if missing_items.get(order.id) %}
+              <div class="small mt-1" style="color:#d32f2f;font-weight:600;line-height:1.2;">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                {% for m in missing_items[order.id] %}{{ m.product }} (−{{ m.missing|round(1) }}){% if not loop.last %}, {% endif %}{% endfor %}
+              </div>
+              {% endif %}
+              {% if production_info.get(order.id) %}
+              <div class="small text-muted mt-1"><i class="bi bi-gear"></i> {% for s in production_info[order.id] %}{{ s }}{% if not loop.last %}<br>{% endif %}{% endfor %}</div>
+              {% endif %}
+              {% else %}<span class="badge-waiting">{{ order.status }}</span>{% endif %}
+            </td>
+            <td class="muted-cell"><small>{{ order_drivers.get(order.id, '—') }}</small></td>
+            <td class="muted-cell"><small>{% if order_delivered_at and order_delivered_at.get(order.id) %}{{ order_delivered_at[order.id].strftime('%d.%m.%Y %H:%M') }}{% else %}—{% endif %}</small></td>
+            <td class="text-nowrap">
+              {% if order.status == 'draft' %}
+              <button type="button" class="btn btn-sm btn-outline-success py-0 px-2" title="Tasdiqlash" onclick="openConfirmModal({{ order.id }}, '{{ order.number }}')"><i class="bi bi-check-lg"></i></button>
+              <a href="/sales/edit/{{ order.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+              {% endif %}
+              {% if current_user and current_user.role in ['admin', 'manager'] %}
+              {% if (order.status == 'confirmed' and order.type != 'return_sale') or (is_exchange and ex_child and ex_child.status == 'confirmed') %}
+              {% set _dispatch_target = ex_child if is_exchange else order %}
+              <button type="button" class="btn btn-sm btn-outline-warning py-0 px-2" data-bs-toggle="modal" data-bs-target="#dispatchModal-{{ _dispatch_target.id }}" title="Yuklash (yo'lga chiqarish)"><i class="bi bi-truck"></i></button>
+              {% with order=_dispatch_target %}{% include 'sales/dispatch_modal.html' ignore missing %}{% endwith %}
+              {% endif %}
+              {% endif %}
+              {% if order.status in ('confirmed', 'completed', 'waiting_production', 'out_for_delivery') or is_exchange %}
+              {% if is_exchange %}
+              <a href="/sales/exchange/{{ order.id }}/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Obmen yuk xati (Excel)"><i class="bi bi-file-earmark-excel"></i></a>
+              {% else %}
+              <a href="/sales/{{ order.id }}/nakladnoy/excel" class="btn btn-sm btn-outline-success py-0 px-2" title="Yuk xati (Excel)"><i class="bi bi-file-earmark-excel"></i></a>
+              {% endif %}
+              {% endif %}
+              {% if order.status in ('confirmed', 'completed', 'waiting_production') %}
+              <form action="/sales/{{ order.id }}/revert" method="POST" style="display:inline" onsubmit="return confirm('Tasdiqlashni bekor qilasizmi? Draft ga qaytadi, ombor va yetkazish ham qaytariladi.')">
+                <button type="submit" class="btn btn-sm btn-outline-warning py-0 px-2" title="Tasdiqlashni bekor qilish"><i class="bi bi-arrow-counterclockwise"></i></button>
+              </form>
+              {% endif %}
+              {% if order.status in ('cancelled', 'draft') and current_user and current_user.role == 'admin' %}
+              <form action="/supervisor/agent-orders/delete/{{ order.id }}" method="POST" style="display:inline" onsubmit="return confirm('Buyurtmani o`chirasizmi? Bu qaytarilmaydi.')">
+                <button type="submit" class="btn btn-sm btn-outline-secondary py-0 px-2" title="O'chirish (faqat admin)"><i class="bi bi-trash"></i></button>
+              </form>
+              {% endif %}
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="11" class="text-center text-muted py-4"><i class="bi bi-inbox"></i> Tanlangan oraliqda buyurtma yo'q</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+{% if current_user and current_user.role in ['admin', 'manager'] %}
+<div class="modal fade" id="bulkDispatchModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-truck"></i> Belgilanganlarni yo'lga chiqarish (<span id="bulkDispatchModalCount">0</span>)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label" for="bulkDispatchDate">Yuklash sanasi *</label>
+          <input type="date" id="bulkDispatchDate" class="form-control" value="{{ today_iso }}" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="bulkDispatchDriver">Haydovchi *</label>
+          <select id="bulkDispatchDriver" class="form-select" required>
+            <option value="">— Tanlang —</option>
+            {% for d in active_drivers %}<option value="{{ d.id }}">{{ d.full_name }}{% if d.vehicle_number %} ({{ d.vehicle_number }}){% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="alert alert-info py-2 small mb-0">
+          <i class="bi bi-info-circle"></i> Tanlangan barcha buyurtmalar bir xil sana va haydovchi bilan yo'lga chiqariladi.
+          Almashtirish (Обмен) hujjatlarda yangi sotuv qismi yuboriladi. Mahsulot yetishmaganlar ishlab chiqarishga jo'natiladi.
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Bekor</button>
+        <button type="button" id="bulkDispatchSubmit" class="btn btn-warning" onclick="dispatchSelected()"><i class="bi bi-truck"></i> Yo'lga chiqarish</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<script>
+    var DRIVERS = [
+        {% for d in drivers %}{ id: {{ d.id }}, name: {{ d.full_name | tojson }} }{% if not loop.last %},{% endif %}{% endfor %}
+    ];
+    var CSRF_TOKEN = "{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}";
+
+    function setQuickRange(kind) {
+        var today = new Date();
+        var d = function(dt) { return dt.toISOString().slice(0, 10); };
+        var from, to;
+        if (kind === 'today') { from = to = d(today); }
+        else if (kind === 'yesterday') { var y = new Date(today); y.setDate(y.getDate() - 1); from = to = d(y); }
+        else if (kind === 'week') { var w = new Date(today); w.setDate(w.getDate() - 6); from = d(w); to = d(today); }
+        document.getElementById('orderDateFrom').value = from;
+        document.getElementById('orderDateTo').value = to;
+        document.getElementById('orderDateFilterForm').submit();
+    }
+    function filterOrderRows() {
+        var input = document.getElementById('orderSearchInput');
+        var countEl = document.getElementById('orderSearchCount');
+        if (!input) return;
+        var term = input.value.trim().toLowerCase();
+        var rows = document.querySelectorAll('tbody tr.order-row');
+        var shown = 0;
+        rows.forEach(function(row) {
+            var match = !term || row.textContent.toLowerCase().indexOf(term) !== -1;
+            row.style.display = match ? '' : 'none';
+            if (match) shown++;
+        });
+        if (countEl) {
+            if (term) { countEl.style.display = ''; countEl.textContent = shown + ' ta topildi'; }
+            else { countEl.style.display = 'none'; }
+        }
+    }
+    function toggleAllOrders(masterCb) {
+        document.querySelectorAll('tbody tr.order-row').forEach(function(row) {
+            if (row.style.display === 'none') return;
+            var cb = row.querySelector('.order-cb');
+            if (cb) cb.checked = masterCb.checked;
+        });
+        updateBulkBtn();
+    }
+    function updateBulkBtn() {
+        const checked = Array.from(document.querySelectorAll('.order-cb:checked'));
+        const excelStatuses = ['confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
+        const excelCount = checked.filter(cb => excelStatuses.includes(cb.dataset.status)).length;
+        document.getElementById('bulkCount').textContent = excelCount;
+        document.getElementById('bulkExcelBtn').disabled = excelCount === 0;
+        const draftCount = checked.filter(cb => cb.dataset.status === 'draft').length;
+        document.getElementById('bulkConfirmCount').textContent = draftCount;
+        document.getElementById('bulkConfirmBtn').disabled = draftCount === 0;
+        const btnDispatch = document.getElementById('bulkDispatchBtn');
+        if (btnDispatch) {
+            const dispatchCount = checked.filter(cb => cb.dataset.dispatchStatus === 'confirmed').length;
+            document.getElementById('bulkDispatchCount').textContent = dispatchCount;
+            const modalCount = document.getElementById('bulkDispatchModalCount');
+            if (modalCount) modalCount.textContent = dispatchCount;
+            btnDispatch.disabled = dispatchCount === 0;
+        }
+        const btnRevert = document.getElementById('bulkRevertBtn');
+        if (btnRevert) {
+            const revertStatuses = ['confirmed', 'completed', 'waiting_production'];
+            const revertCount = checked.filter(cb => revertStatuses.includes(cb.dataset.status)).length;
+            document.getElementById('bulkRevertCount').textContent = revertCount;
+            btnRevert.disabled = revertCount === 0;
+        }
+    }
+    function exportSelectedToExcel() {
+        const excelStatuses = ['confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
+        const ids = Array.from(document.querySelectorAll('.order-cb:checked')).filter(cb => excelStatuses.includes(cb.dataset.status)).map(cb => cb.dataset.id);
+        if (ids.length === 0) { alert("Hech qanday tasdiqlangan/kutilayotgan buyurtma tanlanmagan"); return; }
+        window.location.href = '/sales/nakladnoy/excel/bulk?ids=' + ids.join(',');
+    }
+    async function confirmSelected() {
+        const drafts = Array.from(document.querySelectorAll('.order-cb:checked')).filter(cb => cb.dataset.status === 'draft');
+        if (drafts.length === 0) { alert("Belgilangan draft buyurtma yo'q"); return; }
+        const numbers = drafts.map(cb => cb.dataset.num).join(', ');
+        if (!confirm(drafts.length + " ta buyurtmani tasdiqlaysizmi?\n\n" + numbers + "\n\nHaydovchi keyinroq \"Yuklash\" bosqichida tanlanadi.")) return;
+        const btn = document.getElementById('bulkConfirmBtn'); btn.disabled = true; btn.textContent = 'Tasdiqlanmoqda...';
+        let success = 0, failed = 0;
+        for (const cb of drafts) {
+            try {
+                const fd = new FormData(); fd.append('csrf_token', CSRF_TOKEN);
+                const r = await fetch('/supervisor/agent-orders/confirm/' + cb.dataset.id, { method: 'POST', body: fd, redirect: 'manual' });
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') success++; else failed++;
+            } catch (e) { failed++; }
+        }
+        alert("Tasdiqlandi: " + success + " ta\nXato: " + failed + " ta"); location.reload();
+    }
+    async function revertSelected() {
+        const revertStatuses = ['confirmed', 'completed', 'waiting_production'];
+        const targets = Array.from(document.querySelectorAll('.order-cb:checked')).filter(cb => revertStatuses.includes(cb.dataset.status));
+        if (targets.length === 0) { alert("Belgilangan tasdiqlangan buyurtma yo'q"); return; }
+        const numbers = targets.map(cb => cb.dataset.num).join(', ');
+        if (!confirm(targets.length + " ta buyurtma tasdiqini bekor qilasizmi?\n\nDraft ga qaytadi, ombor va yetkazish ham qaytariladi.\n\n" + numbers)) return;
+        const btn = document.getElementById('bulkRevertBtn'); btn.disabled = true; btn.textContent = 'Bekor qilinmoqda...';
+        let success = 0, failed = 0;
+        for (const cb of targets) {
+            try {
+                const fd = new FormData(); fd.append('csrf_token', CSRF_TOKEN);
+                const r = await fetch('/sales/' + cb.dataset.id + '/revert', { method: 'POST', body: fd, redirect: 'manual' });
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') success++; else failed++;
+            } catch (e) { failed++; }
+        }
+        alert("Tasdiq bekor qilindi: " + success + " ta\nXato: " + failed + " ta"); location.reload();
+    }
+    async function dispatchSelected() {
+        const targets = Array.from(document.querySelectorAll('.order-cb:checked')).filter(cb => cb.dataset.dispatchStatus === 'confirmed');
+        if (targets.length === 0) { alert("Yo'lga chiqariladigan tasdiqlangan buyurtma yo'q"); return; }
+        const dateInput = document.getElementById('bulkDispatchDate');
+        const drvInput = document.getElementById('bulkDispatchDriver');
+        if (!dateInput || !dateInput.value) { alert("Yuklash sanasini tanlang"); return; }
+        if (!drvInput || !drvInput.value) { alert("Haydovchini tanlang"); return; }
+        const submitBtn = document.getElementById('bulkDispatchSubmit'); const origText = submitBtn.textContent;
+        submitBtn.disabled = true; submitBtn.textContent = "Jo'natilmoqda...";
+        let success = 0, failed = 0;
+        for (const cb of targets) {
+            try {
+                const fd = new FormData(); fd.append('csrf_token', CSRF_TOKEN);
+                fd.append('delivery_date', dateInput.value); fd.append('driver_id', drvInput.value);
+                const r = await fetch('/sales/' + cb.dataset.dispatchId + '/dispatch', { method: 'POST', body: fd, redirect: 'manual' });
+                if (r.status === 0 || r.status === 200 || r.status === 303 || r.type === 'opaqueredirect') success++; else failed++;
+            } catch (e) { failed++; }
+        }
+        submitBtn.textContent = origText;
+        alert("Yo'lga chiqarildi: " + success + " ta\nXato: " + failed + " ta\n\nMahsulot yetishmaganlar ishlab chiqarishga jo'natilgan."); location.reload();
+    }
+    function _appendHidden(form, name, value) { var i = document.createElement('input'); i.type = 'hidden'; i.name = name; i.value = value; form.appendChild(i); }
+    function openConfirmModal(orderId, orderNum) {
+        if (!confirm(orderNum + " buyurtmasini tasdiqlaysizmi?\n\nHaydovchi keyinroq \"Yuklash\" bosqichida tanlanadi.")) return;
+        var form = document.createElement('form'); form.method = 'POST';
+        form.action = '/supervisor/agent-orders/confirm/' + orderId;
+        _appendHidden(form, 'csrf_token', CSRF_TOKEN);
+        document.body.appendChild(form); form.submit();
+    }
+</script>
 {% endblock %}

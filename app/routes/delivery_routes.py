@@ -430,16 +430,77 @@ async def supervisor_dashboard(request: Request, db: Session = Depends(get_db), 
 async def supervisor_agent_orders(
     request: Request,
     status: str = "all",
+    agent_id: int = 0,
+    date_from: str = None,
+    date_to: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent buyurtmalari alohida sahifa — tasdiqlash va yetkazishga berish."""
-    q = db.query(Order).filter(Order.source == "agent").options(
-        joinedload(Order.partner), joinedload(Order.items)
-    )
+    """Barcha agentlar buyurtmalari bitta board'da — bulk tasdiqlash + yo'lga chiqarish.
+
+    Per-agent (/agents/{id}) sahifasidagi bulk UX (checkbox + bulk confirm/dispatch/revert/
+    Excel + sana darchasi + qidiruv) shu yerda BARCHA agentlar uchun birlashgan. Bulk
+    endpointlar order ID bilan ishlaydi (agent-agnostik): /supervisor/agent-orders/confirm,
+    /sales/{id}/dispatch, /sales/{id}/revert. Status tab + agent filtri qo'shimcha.
+    """
+    from datetime import datetime as _dt
+    from app.models.database import Delivery
+
+    today = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d") if date_from else today
+    except (ValueError, TypeError):
+        d_from = today
+    try:
+        d_to = (_dt.strptime(date_to, "%Y-%m-%d") if date_to else today).replace(hour=23, minute=59, second=59)
+    except (ValueError, TypeError):
+        d_to = today.replace(hour=23, minute=59, second=59)
+    sel_agent_id = agent_id if (agent_id and agent_id > 0) else None
+
+    q = db.query(Order).filter(
+        Order.source == "agent",
+        Order.date >= d_from,
+        Order.date <= d_to,
+        Order.parent_order_id.is_(None),  # obmen child (sale) yashirin, parent ko'rsatiladi
+    ).options(joinedload(Order.partner), joinedload(Order.items))
     if status and status != "all":
         q = q.filter(Order.status == status)
-    orders = q.order_by(Order.created_at.desc()).limit(100).all()
+    if sel_agent_id:
+        q = q.filter(Order.agent_id == sel_agent_id)
+    orders = q.order_by(Order.id.desc()).all()
+
+    agent_names = {a.id: a.full_name for a in db.query(Agent).all()}
+
+    # Obmen parent -> child sale
+    exchange_children = {}
+    if orders:
+        parent_ids = [o.id for o in orders if o.type == "return_sale"]
+        if parent_ids:
+            for ch in db.query(Order).filter(Order.parent_order_id.in_(parent_ids)).all():
+                exchange_children[ch.parent_order_id] = ch
+
+    # Har order uchun haydovchi + yetkazilgan vaqt (obmen child orqali ham)
+    order_drivers, order_delivered_at = {}, {}
+    if orders:
+        order_ids = [o.id for o in orders]
+        child_to_parent = {}
+        for parent_id, ch in exchange_children.items():
+            order_ids.append(ch.id)
+            child_to_parent[ch.id] = parent_id
+        deliveries = db.query(Delivery).filter(Delivery.order_id.in_(order_ids)).all()
+        driver_map = {d.id: d.full_name for d in db.query(Driver).filter(
+            Driver.id.in_([dl.driver_id for dl in deliveries if dl.driver_id])).all()}
+        for dl in deliveries:
+            if dl.driver_id and dl.driver_id in driver_map:
+                order_drivers.setdefault(dl.order_id, driver_map[dl.driver_id])
+                _pid = child_to_parent.get(dl.order_id)
+                if _pid:
+                    order_drivers.setdefault(_pid, driver_map[dl.driver_id])
+            if dl.delivered_at:
+                order_delivered_at.setdefault(dl.order_id, dl.delivered_at)
+                _pid = child_to_parent.get(dl.order_id)
+                if _pid:
+                    order_delivered_at.setdefault(_pid, dl.delivered_at)
     # Topilma 2A: waiting_production buyurtma uchun qaysi Production (qaysi mahsulot) ko'rsatilsin
     from app.models.database import Production as _Production, Stock as _Stock
     production_info = {}
@@ -474,21 +535,44 @@ async def supervisor_agent_orders(
                     missing.append({"product": pname, "need": need, "have": have, "missing": gap})
             if missing:
                 missing_items[o.id] = missing
-    drivers = db.query(Driver).filter(Driver.is_active == True).all()
-    agents = db.query(Agent).filter(Agent.is_active == True).all()
+    drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
+    agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
     draft_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "draft").scalar() or 0
     waiting_count = db.query(func.count(Order.id)).filter(Order.source == "agent", Order.status == "waiting_production").scalar() or 0
+
+    total_count = sum(1 for o in orders if o.status != "cancelled")
+    total_sum = sum(float(o.total or 0) for o in orders if o.status != "cancelled")
+    is_today_only = (d_from.date() == today.date() and d_to.date() == today.date())
+    if is_today_only:
+        range_label = "Bugun"
+    elif d_from.date() == d_to.date():
+        range_label = d_from.strftime("%d.%m.%Y")
+    else:
+        range_label = f"{d_from.strftime('%d.%m')}–{d_to.strftime('%d.%m')}"
+
     return templates.TemplateResponse("supervisor/agent_orders.html", {
         "request": request,
         "current_user": current_user,
         "orders": orders,
         "drivers": drivers,
+        "active_drivers": drivers,
         "agents": agents,
+        "agent_names": agent_names,
+        "sel_agent_id": sel_agent_id,
+        "exchange_children": exchange_children,
+        "order_drivers": order_drivers,
+        "order_delivered_at": order_delivered_at,
         "current_status": status,
         "draft_count": draft_count,
         "waiting_count": waiting_count,
         "production_info": production_info,
         "missing_items": missing_items,
+        "today_iso": _dt.now().date().isoformat(),
+        "today_orders_count": total_count,
+        "today_orders_total": total_sum,
+        "range_label": range_label,
+        "date_from": d_from.strftime("%Y-%m-%d"),
+        "date_to": d_to.strftime("%Y-%m-%d"),
         "page_title": "Agent buyurtmalari",
     })
 
