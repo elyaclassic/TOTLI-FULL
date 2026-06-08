@@ -192,8 +192,27 @@ def _check_production_shortage(db: Session, production, items_to_use: list) -> l
     return shortage_lines
 
 
-def _consume_raw_materials(db: Session, production, items_actual: list) -> None:
+def _production_movement_ts(db: Session, production):
+    """Production stock harakatlari uchun created_at.
+
+    Birinchi tasdiq: production.created_at (stock-at-date asl ishlab-chiqarish vaqtiga
+    bog'lansin). LEKIN revert'dan keyin QAYTA-TASDIQ bo'lsa — HOZIRGI vaqt: aks holda
+    yangi harakatlar asl 1-tasdiq bilan bayt-bayt bir xil created_at bo'lib, ombor
+    jurnalida soxta "Dublikat yozuv" ko'rinadi (qoldiqqa ta'siri yo'q, faqat ko'rinish)."""
+    from app.models.database import StockMovement
+    reverted = db.query(StockMovement.id).filter(
+        StockMovement.document_id == production.id,
+        StockMovement.document_type == "Production",
+        StockMovement.operation_type == "production_revert",
+    ).first() is not None
+    if reverted:
+        return datetime.now()
+    return production.created_at or datetime.now()
+
+
+def _consume_raw_materials(db: Session, production, items_actual: list, created_at=None) -> None:
     """Xom ashyo hisobdan chiqarish — har bir item uchun production_consumption StockMovement."""
+    ts = created_at or production.created_at or datetime.now()
     for product_id, actual_use in items_actual:
         if actual_use <= 0:
             continue
@@ -208,7 +227,7 @@ def _consume_raw_materials(db: Session, production, items_actual: list) -> None:
             document_id=production.id,
             document_number=production.number,
             note=f"Ishlab chiqarish (xom ashyo): {production.number}",
-            created_at=production.created_at or datetime.now(),
+            created_at=ts,
         )
 
 
@@ -348,7 +367,8 @@ def _do_complete_production_stock(db: Session, production, recipe):
         )
 
     items_actual = [(pid, req if (req and req > 0) else 0.0) for pid, req in items_to_use]
-    _consume_raw_materials(db, production, items_actual)
+    mv_ts = _production_movement_ts(db, production)  # revert'dan keyin qayta-tasdiq → now() (dublikat ko'rinmasin)
+    _consume_raw_materials(db, production, items_actual, mv_ts)
     total_material_cost = _calculate_total_material_cost(db, items_actual)
     output_units = production_output_quantity_for_stock(db, production, recipe)
     cost_per_unit = (total_material_cost / output_units) if output_units > 0 else 0
@@ -363,7 +383,7 @@ def _do_complete_production_stock(db: Session, production, recipe):
         document_id=production.id,
         document_number=production.number,
         note=f"Ishlab chiqarish (tayyor mahsulot): {production.number}",
-        created_at=production.created_at or datetime.now(),
+        created_at=mv_ts,
     )
     db.flush()
     logger.info(
