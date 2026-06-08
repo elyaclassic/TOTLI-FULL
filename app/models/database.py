@@ -1195,6 +1195,7 @@ class AgentPayment(Base):
     status = Column(String(20), default="pending")  # pending, confirmed, cancelled
     confirmed_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     confirmed_at = Column(DateTime, nullable=True)
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)  # M3: bog'langan kassa kirim Payment (category-match o'rniga)
     created_at = Column(DateTime, default=datetime.now)
 
     agent = relationship("Agent")
@@ -1369,6 +1370,7 @@ class EmployeeAdvance(Base):
     note = Column(String(500), nullable=True)
     is_product = Column(Boolean, default=False)  # Mahsulot avansi (oylikdan kvota o'tib ushlanadi)
     confirmed_at = Column(DateTime, nullable=True)  # Tasdiqlangan vaqti
+    payment_id = Column(Integer, ForeignKey("payments.id"), nullable=True)  # M1: bog'langan kassa chiqim Payment (fuzzy-match o'rniga)
     created_at = Column(DateTime, default=datetime.now)
     
     employee = relationship("Employee", backref="advances")

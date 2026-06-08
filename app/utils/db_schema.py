@@ -43,6 +43,32 @@ def ensure_payments_status_column(db: Session) -> None:
         db.rollback()
 
 
+def ensure_employee_advance_payment_id_column(db: Session) -> None:
+    """M1: employee_advances jadvaliga payment_id ustuni (bog'langan Payment FK)."""
+    try:
+        db.execute(text("ALTER TABLE employee_advances ADD COLUMN payment_id INTEGER REFERENCES payments(id)"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
+def ensure_agent_payment_payment_id_column(db: Session) -> None:
+    """M3: agent_payments jadvaliga payment_id ustuni (bog'langan Payment FK)."""
+    try:
+        db.execute(text("ALTER TABLE agent_payments ADD COLUMN payment_id INTEGER REFERENCES payments(id)"))
+        db.commit()
+    except OperationalError as e:
+        db.rollback()
+        if "duplicate column" not in str(e).lower():
+            raise
+    except Exception:
+        db.rollback()
+
+
 def ensure_cash_opening_balance_column(db: Session) -> None:
     """Agar cash_registers jadvalida opening_balance ustuni bo'lmasa, qo'shadi."""
     try:

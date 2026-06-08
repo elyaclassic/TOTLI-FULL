@@ -701,7 +701,7 @@ async def supervisor_reject_agent_order(
     order.status = "cancelled"
     # Site 1: delivery_revert — recompute partner balance after order cancelled
     if order.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, order.partner_id,
@@ -1114,6 +1114,27 @@ async def supervisor_agent_payments_export(
     )
 
 
+def _delete_linked_agent_payment(db, ap) -> int:
+    """M3: AgentPayment'ga bog'langan kassa Payment'ini o'chiradi.
+    Avval FK (ap.payment_id) orqali aniq; FK NULL (eski) bo'lsa category-match fallback.
+    Qaytaradi: o'chirilgan Payment soni."""
+    deleted = 0
+    if ap.payment_id:
+        linked = db.query(Payment).filter(Payment.id == ap.payment_id).first()
+        if linked:
+            db.delete(linked)
+            deleted += 1
+        return deleted
+    for p in db.query(Payment).filter(
+        Payment.partner_id == ap.partner_id,
+        Payment.amount == float(ap.amount or 0),
+        Payment.category == "agent_collection",
+    ).all():
+        db.delete(p)
+        deleted += 1
+    return deleted
+
+
 @router.post("/supervisor/agent-payments/confirm/{payment_id}")
 async def supervisor_confirm_agent_payment(
     request: Request,
@@ -1196,6 +1217,8 @@ async def supervisor_confirm_agent_payment(
         status="confirmed",
     )
     db.add(payment)
+    db.flush()
+    ap.payment_id = payment.id  # M3: FK bog'lash (category-match o'rniga aniq Payment)
     logger.info(
         f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), amount={ap.amount}"
     )
@@ -1222,7 +1245,7 @@ async def supervisor_confirm_agent_payment(
 
     # Site 2: agent_payment_confirm — recompute after Payment added + FIFO debt reduction
     if ap.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, ap.partner_id,
@@ -1329,7 +1352,7 @@ async def supervisor_confirm_driver_payment(
 
     # Site 3: driver payment confirm — recompute after Payment confirmed + order.paid updated
     if p.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, p.partner_id,
@@ -1337,6 +1360,7 @@ async def supervisor_confirm_driver_payment(
             ref=getattr(p, "number", None),
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("Haydovchi to'lovi tasdiqlandi"), status_code=303)
@@ -1378,7 +1402,7 @@ async def supervisor_revert_driver_payment(
 
     # Site 4: driver payment cancel — recompute after Payment set to pending + order.debt restored
     if p.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, p.partner_id,
@@ -1386,6 +1410,7 @@ async def supervisor_revert_driver_payment(
             ref=getattr(p, "number", None),
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov bekor qilindi"), status_code=303)
@@ -1475,7 +1500,7 @@ async def supervisor_edit_driver_payment(
 
     # Site 5: driver payment edit — single recompute after all amount/order updates
     if p.partner_id and was_confirmed:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, p.partner_id,
@@ -1483,6 +1508,7 @@ async def supervisor_edit_driver_payment(
             ref=getattr(p, "number", None),
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov tahrirlandi"), status_code=303)
@@ -1502,15 +1528,10 @@ async def supervisor_revert_agent_payment(
     if ap.status != "confirmed":
         return RedirectResponse(url="/supervisor/agent-payments?error=not_confirmed", status_code=303)
 
-    # 1. Tegishli Payment ni o'chirish (agar yaratilgan bo'lsa)
-    # AGT- raqamli to'lovlarni topish
-    payments = db.query(Payment).filter(
-        Payment.partner_id == ap.partner_id,
-        Payment.amount == float(ap.amount or 0),
-        Payment.category == "agent_collection",
-    ).all()
-    for p in payments:
-        db.delete(p)
+    # 1. Tegishli Payment ni o'chirish (M3 helper: FK orqali aniq — avval category-match
+    #    BARCHA bir xil summali agent_collection to'lovni o'chirib, noto'g'ri drift berardi)
+    _delete_linked_agent_payment(db, ap)
+    ap.payment_id = None
 
     # 2. Statusni pending ga qaytarish
     ap.status = "pending"
@@ -1519,7 +1540,7 @@ async def supervisor_revert_agent_payment(
 
     # Site 6: agent payment cancel — recompute after Payment deleted + status pending
     if ap.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, ap.partner_id,
@@ -1527,6 +1548,7 @@ async def supervisor_revert_agent_payment(
             ref=None,
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, ap.partner_id)  # M2: per-order debt izchillash
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
@@ -1548,19 +1570,13 @@ async def supervisor_delete_agent_payment(
     partner_id_for_recompute = None
     if ap.status == "confirmed":
         partner_id_for_recompute = ap.partner_id
-        payments = db.query(Payment).filter(
-            Payment.partner_id == ap.partner_id,
-            Payment.amount == float(ap.amount or 0),
-            Payment.category == "agent_collection",
-        ).all()
-        for p in payments:
-            db.delete(p)
+        _delete_linked_agent_payment(db, ap)  # M3 helper: FK orqali aniq
 
     db.delete(ap)
 
     # Site 7: agent payment delete — recompute after Payment deleted + ap deleted
     if partner_id_for_recompute:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(
             db, partner_id_for_recompute,
@@ -1568,6 +1584,7 @@ async def supervisor_delete_agent_payment(
             ref=None,
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, partner_id_for_recompute)  # M2: per-order debt izchillash
 
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
