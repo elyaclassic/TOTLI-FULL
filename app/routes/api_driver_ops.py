@@ -471,6 +471,43 @@ async def driver_delivery_status(
                                   "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
                             {"uid": getattr(driver, "employee_id", None), "pid": order.id},
                         )
+                    # Obmen ildiz-sabab fix (Approach A): yuqoridagi return->child blokining
+                    # AKSI. Real hayotda yangi tovar SOTUVI (child) birinchi yetkaziladi va
+                    # eski tovar QAYTARISHI (parent return) alohida dispatch talab qiladi →
+                    # admin uni unutadi → 'confirmed'da qotadi → mijozda XAYOLIY QARZ
+                    # (sale debet qo'llanadi, return kredit qo'llanmaydi). Bu yerda child
+                    # delivered bo'lganda bog'langan parent return'ni ham yakunlaymiz:
+                    # Vozvrat omborga kirim + status=delivered + balans recompute.
+                    # Atomik rowcount==1 → idempotent; designed flow'da (return birinchi
+                    # delivered) bu blok zararsiz no-op (return allaqachon delivered → rowcount=0).
+                    elif (order.type or "") == "sale" and order.parent_order_id:
+                        parent_ret = db.query(Order).filter(
+                            Order.id == order.parent_order_id,
+                            Order.type == "return_sale",
+                        ).first()
+                        if parent_ret and parent_ret.status not in ("delivered", "cancelled"):
+                            claim_ret = db.execute(
+                                _text("UPDATE orders SET status='delivered' "
+                                      "WHERE id=:rid AND type='return_sale' "
+                                      "AND status NOT IN ('delivered', 'cancelled')"),
+                                {"rid": parent_ret.id},
+                            )
+                            if claim_ret.rowcount == 1:
+                                from app.services.stock_service import apply_return_stock_addition
+                                db.refresh(parent_ret)
+                                apply_return_stock_addition(
+                                    db, parent_ret, None,
+                                    note_prefix="Obmen qaytarish (child sale yetkazildi)",
+                                    user_id=getattr(driver, "employee_id", None),
+                                )
+                                if parent_ret.partner_id:
+                                    from app.services.partner_balance_service import recompute_partner_balance
+                                    db.flush()
+                                    recompute_partner_balance(
+                                        db, parent_ret.partner_id,
+                                        reason="obmen_return_autocomplete",
+                                        ref=getattr(parent_ret, "number", None),
+                                    )
                     # SQLAlchemy obyektini refresh — yangi status ko'rinsin
                     db.refresh(order)
 

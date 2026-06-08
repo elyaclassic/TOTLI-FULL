@@ -102,6 +102,28 @@ def _driver_delivered(db, order, driver):
                       "WHERE parent_order_id=:pid AND type='sale' AND status='draft'"),
                 {"uid": getattr(driver, "employee_id", None), "pid": order.id},
             )
+        # Approach A aksi: obmen child sotuv delivered -> parent return ham yakunlanadi.
+        # (api_driver_ops.py dagi real blok bilan sinxron saqlanadi.)
+        elif (order.type or "") == "sale" and order.parent_order_id:
+            from app.models.database import Order as _Order
+            parent_ret = db.query(_Order).filter(
+                _Order.id == order.parent_order_id, _Order.type == "return_sale",
+            ).first()
+            if parent_ret and parent_ret.status not in ("delivered", "cancelled"):
+                claim_ret = db.execute(
+                    _text("UPDATE orders SET status='delivered' "
+                          "WHERE id=:rid AND type='return_sale' "
+                          "AND status NOT IN ('delivered', 'cancelled')"),
+                    {"rid": parent_ret.id},
+                )
+                if claim_ret.rowcount == 1:
+                    from app.services.stock_service import apply_return_stock_addition
+                    db.refresh(parent_ret)
+                    apply_return_stock_addition(
+                        db, parent_ret, None,
+                        note_prefix="Obmen qaytarish (child sale yetkazildi)",
+                        user_id=getattr(driver, "employee_id", None),
+                    )
         db.refresh(order)
     db.commit()
     return claim.rowcount
@@ -167,6 +189,52 @@ def test_driver_delivered_returnsale_adds_stock_and_confirms_child_once(db):
         StockMovement.operation_type == "return_sale",
     ).count()
     assert mv_count2 == 1, f"Movement dublikat bo'lmasligi kerak, got {mv_count2}"
+
+
+def test_driver_delivered_obmen_child_finalizes_parent_return(db):
+    """Approach A (ildiz-sabab): obmen CHILD sotuv yetkazilganda, bog'langan PARENT
+    return ham avtomatik yakunlanadi (delivered + Vozvrat stock + recompute).
+
+    Buzuq stsenariy: admin return'ni alohida dispatch qilishni unutadi → child sale
+    out_for_delivery → delivered bo'ladi, parent return esa 'confirmed'da qotib qoladi
+    → mijozda xayoliy qarz (sale debet qo'llanadi, return kredit qo'llanmaydi).
+    Fix: child delivered → parent return ham delivered (mavjud return->child blokining aksi).
+    """
+    from app.models.database import Order, Stock, StockMovement, Partner
+    ret, child, s_ret, drv = _seed_exchange(db)
+
+    # Buzuq holatni qurib chiqamiz: ikkalasi confirmed, return DISPATCH QILINMAGAN,
+    # faqat CHILD sale dispatch qilingan (out_for_delivery).
+    _supervisor_confirm(db, ret)  # ret + child -> confirmed
+    db.execute(
+        _text("UPDATE orders SET status='out_for_delivery' WHERE id=:id AND status='confirmed'"),
+        {"id": child.id},
+    )
+    db.commit()
+    db.refresh(ret); db.refresh(child); db.refresh(s_ret)
+    assert ret.status == "confirmed", "parent return hali yetkazilmagan (admin dispatch unutgan)"
+    assert s_ret.quantity == 20, "qaytgan tovar hali omborda yo'q"
+
+    # Haydovchi CHILD sotuvni 'Yetkazdim' qiladi
+    rc = _driver_delivered(db, child, drv)
+    db.refresh(ret); db.refresh(child); db.refresh(s_ret)
+
+    assert rc == 1
+    assert child.status == "delivered"
+    # ILDIZ-SABAB FIX: parent return ham avtomatik yakunlanadi
+    assert ret.status == "delivered", "child yetkazilganda parent return ham delivered bo'lishi kerak"
+    assert s_ret.quantity == 23, f"qaytgan 3 dona omborga kirishi kerak, got {s_ret.quantity}"
+    mv = db.query(StockMovement).filter(
+        StockMovement.document_id == ret.id,
+        StockMovement.operation_type == "return_sale",
+    ).count()
+    assert mv == 1, f"qaytarish movement faqat 1 marta, got {mv}"
+
+    # Idempotent: child delivered endpoint qayta chaqirilsa stock ikki marta qo'shilmaydi
+    rc2 = _driver_delivered(db, child, drv)
+    db.refresh(s_ret)
+    assert rc2 == 0, "ikkinchi delivered UPDATE rad etilishi kerak (child endi delivered)"
+    assert s_ret.quantity == 23, "qaytgan tovar ikki marta qo'shilmasligi kerak"
 
 
 def test_normal_sale_unaffected_by_change(db):
