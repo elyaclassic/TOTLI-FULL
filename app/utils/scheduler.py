@@ -286,12 +286,13 @@ def start_scheduler():
     )
     # Ishga tushganda 30 soniya keyin bir marta (birinchi snapshot uchun)
     _scheduler.add_job(_live_backup_job, "date", run_date=datetime.now() + timedelta(seconds=30), id="live_backup_first")
-    # Hikvision davomat yuklash — har kuni soat 22:00 da (ish kuni tugagach)
+    # Hikvision davomat yuklash — FAQAT ish vaqti oynalarida.
+    # Xodimlar ertalab 7-10 keladi, kechqurun 17-21 ketadi; oynadan tashqari yangi
+    # hodisa yo'q → kun bo'yi sync resurs/log isrofi edi (osilish/OOM'ga hissa).
+    # Kunlik to'liq sync 22:00 + ish-oyna ichida har 20 daqiqada.
     _scheduler.add_job(_daily_hikvision_sync_job, "cron", hour=22, minute=0, id="hikvision_daily")
-    # Har 10 daqiqada sync qilish (kun davomida yangilanib turishi uchun)
-    _scheduler.add_job(_daily_hikvision_sync_job, "interval", minutes=10, id="hikvision_interval")
-    # Hozir ham bir marta yuklash
-    _scheduler.add_job(_daily_hikvision_sync_job, "date", run_date=datetime.now() + timedelta(minutes=2), id="hikvision_first")
+    _scheduler.add_job(_daily_hikvision_sync_job, "cron", hour="7-10,17-21", minute="*/20",
+                       id="hikvision_worktime", misfire_grace_time=120, max_instances=1, coalesce=True)
     # Kunlik tabel yaratish — har kuni soat 07:00 da
     _scheduler.add_job(_daily_attendance_create, "cron", hour=7, minute=0, id="daily_attendance")
     # Hozir ham bir marta yaratish

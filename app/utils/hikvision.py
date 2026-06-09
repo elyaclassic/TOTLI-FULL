@@ -490,8 +490,9 @@ def sync_hikvision_attendance(
                                     att.notify_checkout_sent = True
                                 except Exception:
                                     pass
+                # Snapshot allaqachon saqlangan bo'lsa qayta yuklamaymiz (har sikl 401 isrofini kamaytirish).
                 image_url = api.get_event_image_url(first_ev)
-                if image_url:
+                if image_url and not getattr(att, "event_snapshot_path", None):
                     try:
                         img_data = api.download_event_image(image_url)
                         if img_data:

@@ -98,6 +98,10 @@ if "%SERVER_RUNNING%"=="1" goto :server_running
 
 :: ====== BIRINCHI MARTA: Server orqa fonda ishga tushirish ======
 echo [3/3] Server orqa fonda ishga tushirilmoqda...
+:: SINGLE-INSTANCE GUARD: port bo'sh ko'rinsa ham osilgan/zombi uvicorn jarayoni
+:: qolib ketgan bo'lishi mumkin (HTTP o'lgan, port bo'shagan, lekin process+scheduler tirik,
+:: RAM yeydi va dublikat yaratadi). Yangi server'dan OLDIN ularni tozalaymiz.
+call :kill_server
 call :start_server
 timeout /t 3 /nobreak >nul
 
