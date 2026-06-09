@@ -721,6 +721,124 @@ async def supervisor_create_agent_order(
         return {"success": False, "error": "Server xatosi"}
 
 
+@router.post("/supervisor/agent-orders/exchange-create")
+async def supervisor_create_agent_exchange(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Admin/menejer agent nomidan ALMASHTIRISH (obmen) yaratadi — draft.
+
+    JSON: {agent_id, partner_id, return_items:[{product_id,qty}], new_items:[{product_id,qty}], note?}.
+    Tarixsiz obmen (parent buyurtma kerak emas), agent ilovasidagi standalone-exchange bilan
+    bir xil: return_sale (Vozvrat ombori) + child sale (Tayyor mahsulot). Narxlar server tomonda
+    mijoz narx turi bo'yicha. Balans farqi = yangi − qaytgan (mijoz faqat farqni qarz oladi).
+    """
+    from app.routes.api_agent_ops import _resolve_price_type_id, _product_price_for_type, VOZVRAT_WAREHOUSE_ID
+    try:
+        body = await request.json()
+        agent_id = int(body.get("agent_id") or 0)
+        partner_id = int(body.get("partner_id") or 0)
+        return_items = body.get("return_items", [])
+        new_items = body.get("new_items", [])
+        note = (body.get("note") or "").strip()[:200]
+
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            return {"success": False, "error": "Agent tanlanmagan"}
+        partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent_id).first()
+        if not partner:
+            return {"success": False, "error": "Mijoz topilmadi (agentga biriktirilmagan)"}
+        if not return_items or not new_items:
+            return {"success": False, "error": "Qaytariladigan va yangi mahsulot kerak"}
+
+        new_warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
+        if not new_warehouse:
+            new_warehouse = db.query(Warehouse).filter(Warehouse.is_active == True).first()
+        if not new_warehouse:
+            return {"success": False, "error": "Ombor topilmadi"}
+
+        price_type_id = _resolve_price_type_id(partner)
+        partner_discount = float(partner.discount_percent or 0)
+
+        def _lines(raw, with_discount):
+            oi, subtotal = [], 0.0
+            for it in raw:
+                try:
+                    pid = int(it.get("product_id") or 0)
+                    qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+                except (ValueError, TypeError):
+                    continue
+                if pid <= 0 or qty <= 0:
+                    continue
+                prod = db.query(Product).filter(Product.id == pid, Product.is_active == True, Product.is_for_agent == True).first()
+                if not prod:
+                    continue
+                price = _product_price_for_type(db, prod, price_type_id)
+                line = qty * price
+                subtotal += line
+                disc = partner_discount if with_discount else 0
+                oi.append(OrderItem(product_id=pid, quantity=qty, price=price, discount_percent=disc, total=line * (1 - disc / 100)))
+            return oi, subtotal
+
+        ret_oi, ret_subtotal = _lines(return_items, with_discount=False)
+        new_oi, new_subtotal = _lines(new_items, with_discount=True)
+        if not ret_oi or not new_oi:
+            return {"success": False, "error": "Yaroqli mahsulotlar yo'q"}
+        new_total = new_subtotal - (new_subtotal * partner_discount / 100)
+
+        today = datetime.now()
+        prefix = f"AGT-{today.strftime('%Y%m%d')}"
+        last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq = 1
+
+        ret_order = Order(
+            number=f"{prefix}-{seq:03d}", date=today, type="return_sale",
+            partner_id=partner_id, warehouse_id=VOZVRAT_WAREHOUSE_ID,
+            agent_id=agent.id, source="agent", price_type_id=price_type_id,
+            subtotal=ret_subtotal, discount_percent=0, discount_amount=0,
+            total=ret_subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
+            note=f"OBMEN qaytarish (qo'lda: {getattr(current_user, 'username', '')}): {note}. Agent: {agent.code}",
+        )
+        db.add(ret_order)
+        db.flush()
+        for oi in ret_oi:
+            oi.order_id = ret_order.id
+            db.add(oi)
+
+        obmen_debt = max(0.0, new_total - ret_subtotal)
+        new_order = Order(
+            number=f"{prefix}-{seq + 1:03d}", date=today, type="sale",
+            partner_id=partner_id, warehouse_id=new_warehouse.id,
+            agent_id=agent.id, source="agent", price_type_id=price_type_id,
+            subtotal=new_subtotal, discount_percent=partner_discount,
+            discount_amount=new_subtotal * partner_discount / 100,
+            total=new_total, paid=0, debt=obmen_debt, status="draft", payment_type="naqd",
+            note=f"OBMEN chiqarish (qo'lda): return={ret_order.number}, farq={obmen_debt:.0f}. Agent: {agent.code}",
+            parent_order_id=ret_order.id,
+        )
+        db.add(new_order)
+        db.flush()
+        for oi in new_oi:
+            oi.order_id = new_order.id
+            db.add(oi)
+
+        db.commit()
+        logger.info(f"Supervisor manual exchange: {ret_order.number}/{new_order.number} agent={agent.code} diff={new_total - ret_subtotal}")
+        return {
+            "success": True,
+            "return_order_number": ret_order.number, "new_order_number": new_order.number,
+            "balance_diff": new_total - ret_subtotal,
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"supervisor_create_agent_exchange: {e}")
+        return {"success": False, "error": "Server xatosi"}
+
+
 @router.post("/supervisor/agent-orders/confirm/{order_id}")
 async def supervisor_confirm_agent_order(
     request: Request,

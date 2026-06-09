@@ -21,6 +21,7 @@
     </h5>
     <div class="d-flex gap-2">
       <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#newOrderModal"><i class="bi bi-plus-lg"></i> Yangi buyurtma</button>
+      <button type="button" class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#exchangeModal"><i class="bi bi-arrow-left-right"></i> Almashtirish</button>
       <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
     </div>
   </div>
@@ -522,6 +523,132 @@
           note:document.getElementById('noNote').value, items:items})});
       var d=await r.json();
       if(d.success){ elMsg.innerHTML='<span class="text-success">✓ '+d.order_number+' yaratildi. Yangilanmoqda…</span>'; setTimeout(function(){location.reload();},800); }
+      else { elMsg.innerHTML='<span class="text-danger">'+(d.error||'Xato')+'</span>'; elSubmit.disabled=false; }
+    }catch(e){ elMsg.innerHTML='<span class="text-danger">Tarmoq xatosi</span>'; elSubmit.disabled=false; }
+  };
+})();
+</script>
+
+<!-- 🔄 Almashtirish modal -->
+<div class="modal fade" id="exchangeModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-arrow-left-right text-primary"></i> Almashtirish (obmen)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-2">
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Agent</label>
+            <select id="exAgent" class="form-select form-select-sm"><option value="">— tanlang —</option>{% for a in agents %}<option value="{{ a.id }}">{{ a.full_name }}</option>{% endfor %}</select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Mijoz</label>
+            <select id="exPartner" class="form-select form-select-sm" disabled><option value="">— avval agent —</option></select>
+          </div>
+        </div>
+        <input id="exSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Mahsulot qidirish (ikkala ro'yxat)..." disabled oninput="exFilter()">
+        <div class="row g-2">
+          <div class="col-md-6">
+            <div class="small fw-bold text-danger mb-1"><i class="bi bi-arrow-down-left"></i> Mijozdan qaytgan</div>
+            <div id="exRetList" class="border rounded" style="max-height:34vh;overflow-y:auto"><div class="text-muted small p-3 text-center">avval mijoz tanlang</div></div>
+          </div>
+          <div class="col-md-6">
+            <div class="small fw-bold text-success mb-1"><i class="bi bi-arrow-up-right"></i> Mijozga berilgan yangi</div>
+            <div id="exNewList" class="border rounded" style="max-height:34vh;overflow-y:auto"><div class="text-muted small p-3 text-center">avval mijoz tanlang</div></div>
+          </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center px-1 mt-2 small">
+          <span>Qaytgan: <b id="exRetTotal">0</b></span>
+          <span>Yangi: <b id="exNewTotal">0</b></span>
+          <span>Farq: <b id="exDiff">0</b> <span id="exDiffLbl" class="text-muted"></span></span>
+        </div>
+        <div class="mt-2"><label class="form-label small fw-bold">Izoh</label><input id="exNote" class="form-control form-control-sm" placeholder="ixtiyoriy"></div>
+        <div id="exMsg" class="small mt-1"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor</button>
+        <button type="button" class="btn btn-primary btn-sm" id="exSubmit" onclick="exSubmitOrder()" disabled><i class="bi bi-check2"></i> Almashtirish yaratish</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var CSRF = "{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}";
+  var products=[], pmap={}, ret={}, neu={};
+  var elAgent=document.getElementById('exAgent'), elPartner=document.getElementById('exPartner'),
+      elSearch=document.getElementById('exSearch'), elRet=document.getElementById('exRetList'),
+      elNew=document.getElementById('exNewList'), elSubmit=document.getElementById('exSubmit'), elMsg=document.getElementById('exMsg');
+  function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
+
+  elAgent.addEventListener('change', async function(){
+    elPartner.innerHTML='<option value="">— yuklanmoqda —</option>'; elPartner.disabled=true; reset('Avval mijoz tanlang');
+    if(!elAgent.value) return;
+    try{ var r=await fetch('/supervisor/agent-orders/partners?agent_id='+elAgent.value); var d=await r.json();
+      elPartner.innerHTML='<option value="">— tanlang —</option>'+(d.partners||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.phone?(' · '+p.phone):'')+'</option>';}).join('');
+      elPartner.disabled=false;
+    }catch(e){ elPartner.innerHTML='<option value="">xato</option>'; }
+  });
+  elPartner.addEventListener('change', async function(){
+    reset('Yuklanmoqda…'); if(!elPartner.value){ reset('Avval mijoz tanlang'); return; }
+    try{ var r=await fetch('/supervisor/agent-orders/products?partner_id='+elPartner.value); var d=await r.json();
+      products=(d.products||[]); pmap={}; ret={}; neu={}; products.forEach(function(p){pmap[p.id]=p;});
+      elSearch.disabled=false; elSearch.value=''; renderBoth();
+    }catch(e){ elRet.innerHTML=elNew.innerHTML='<div class="text-danger small p-3 text-center">xato</div>'; }
+  });
+  function reset(msg){ products=[];pmap={};ret={};neu={}; elSearch.disabled=true; elSearch.value='';
+    elRet.innerHTML=elNew.innerHTML='<div class="text-muted small p-3 text-center">'+msg+'</div>'; updateTotal(); }
+
+  function listHtml(side, cont){
+    var f=(elSearch.value||'').toLowerCase(); var q=(side==='ret')?ret:neu;
+    var shown=products.filter(function(p){return p.name.toLowerCase().indexOf(f)>=0;});
+    if(!shown.length){ cont.innerHTML='<div class="text-muted small p-3 text-center">topilmadi</div>'; return; }
+    cont.innerHTML=shown.map(function(p){ var v=q[p.id]||0;
+      var bg=v>0?(' style="background:'+(side==='ret'?'#fdeaea':'#e9f6f0')+'"'):'';
+      return '<div class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" data-pid="'+p.id+'"'+bg+'>'+
+        '<div class="me-1" style="min-width:0"><div class="small fw-semibold text-truncate" style="max-width:150px">'+p.name+'</div><div class="text-muted" style="font-size:10px">'+fmt(p.price)+'</div></div>'+
+        '<div class="d-flex align-items-center gap-1">'+
+          '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-1" onclick="exStep(\''+side+'\','+p.id+',-1)">−</button>'+
+          '<input type="number" min="0" class="form-control form-control-sm text-center px-0" style="width:44px" value="'+v+'" onchange="exSet(\''+side+'\','+p.id+',this.value)">'+
+          '<button type="button" class="btn btn-sm btn-outline-success py-0 px-1" onclick="exStep(\''+side+'\','+p.id+',1)">+</button>'+
+        '</div></div>';
+    }).join('');
+  }
+  function renderBoth(){ listHtml('ret',elRet); listHtml('new',elNew); updateTotal(); }
+  window.exFilter=function(){ renderBoth(); };
+  window.exStep=function(side,pid,d){ var q=(side==='ret')?ret:neu; var v=(q[pid]||0)+d; if(v<0)v=0;
+    if(v===0)delete q[pid]; else q[pid]=v;
+    var cont=(side==='ret')?elRet:elNew; var row=cont.querySelector('[data-pid="'+pid+'"]');
+    if(row){ var inp=row.querySelector('input'); if(inp)inp.value=v; row.style.background=v>0?(side==='ret'?'#fdeaea':'#e9f6f0'):''; }
+    updateTotal(); };
+  window.exSet=function(side,pid,val){ var q=(side==='ret')?ret:neu; var v=parseFloat(val||'0'); if(!v||v<0)v=0;
+    if(v===0)delete q[pid]; else q[pid]=v;
+    var cont=(side==='ret')?elRet:elNew; var row=cont.querySelector('[data-pid="'+pid+'"]'); if(row) row.style.background=v>0?(side==='ret'?'#fdeaea':'#e9f6f0'):'';
+    updateTotal(); };
+  function sumq(q){ var t=0; Object.keys(q).forEach(function(pid){var p=pmap[pid]; if(p&&q[pid]>0)t+=p.price*q[pid];}); return t; }
+  function updateTotal(){
+    var rt=sumq(ret), nt=sumq(neu), diff=nt-rt;
+    document.getElementById('exRetTotal').textContent=fmt(rt);
+    document.getElementById('exNewTotal').textContent=fmt(nt);
+    document.getElementById('exDiff').textContent=fmt(Math.abs(diff));
+    document.getElementById('exDiffLbl').textContent = diff===0?'(teng)':(diff>0?'(mijoz qarzdor)':'(mijoz haqdor)');
+    elSubmit.disabled=!(elAgent.value && elPartner.value && Object.keys(ret).length>0 && Object.keys(neu).length>0);
+  }
+  window.exSubmitOrder=async function(){
+    if(elSubmit.disabled) return;
+    var rI=Object.keys(ret).filter(function(p){return ret[p]>0;}).map(function(p){return {product_id:parseInt(p),qty:ret[p]};});
+    var nI=Object.keys(neu).filter(function(p){return neu[p]>0;}).map(function(p){return {product_id:parseInt(p),qty:neu[p]};});
+    if(!rI.length || !nI.length) return;
+    elSubmit.disabled=true; elMsg.innerHTML='<span class="text-muted">Yaratilmoqda…</span>';
+    try{
+      var r=await fetch('/supervisor/agent-orders/exchange-create',{method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF},
+        body:JSON.stringify({agent_id:parseInt(elAgent.value),partner_id:parseInt(elPartner.value),
+          note:document.getElementById('exNote').value, return_items:rI, new_items:nI})});
+      var d=await r.json();
+      if(d.success){ elMsg.innerHTML='<span class="text-success">✓ '+d.return_order_number+' / '+d.new_order_number+' yaratildi. Yangilanmoqda…</span>'; setTimeout(function(){location.reload();},900); }
       else { elMsg.innerHTML='<span class="text-danger">'+(d.error||'Xato')+'</span>'; elSubmit.disabled=false; }
     }catch(e){ elMsg.innerHTML='<span class="text-danger">Tarmoq xatosi</span>'; elSubmit.disabled=false; }
   };
