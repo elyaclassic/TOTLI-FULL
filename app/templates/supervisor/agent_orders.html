@@ -19,7 +19,10 @@
       <i class="bi bi-cart-check text-success"></i> Agent buyurtmalari
       <span class="badge bg-success-subtle text-success ms-1">{{ range_label }}: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm</span>
     </h5>
-    <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
+    <div class="d-flex gap-2">
+      <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#newOrderModal"><i class="bi bi-plus-lg"></i> Yangi buyurtma</button>
+      <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
+    </div>
   </div>
 
   <!-- Status tablari (sana + agent filtrini saqlaydi) -->
@@ -381,5 +384,147 @@
         _appendHidden(form, 'csrf_token', CSRF_TOKEN);
         document.body.appendChild(form); form.submit();
     }
+</script>
+
+<!-- ➕ Yangi buyurtma modal -->
+<div class="modal fade" id="newOrderModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-plus-lg text-success"></i> Yangi agent buyurtmasi</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Agent</label>
+            <select id="noAgent" class="form-select form-select-sm">
+              <option value="">— tanlang —</option>
+              {% for a in agents %}<option value="{{ a.id }}">{{ a.full_name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small fw-bold">Mijoz</label>
+            <select id="noPartner" class="form-select form-select-sm" disabled><option value="">— avval agent —</option></select>
+          </div>
+        </div>
+        <label class="form-label small fw-bold mb-1">Mahsulotlar</label>
+        <input id="noSearch" class="form-control form-control-sm mb-2" placeholder="🔍 Mahsulot qidirish..." disabled oninput="noFilter()">
+        <div id="noProdList" class="border rounded mb-2" style="max-height:46vh; overflow-y:auto;">
+          <div class="text-muted small p-3 text-center">Avval agent va mijoz tanlang</div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center px-1 mb-1">
+          <span class="small text-muted"><span id="noCount">0</span> ta mahsulot tanlandi</span>
+          <span class="fw-bold">Jami: <span id="noTotal">0</span> so'm</span>
+        </div>
+        <div class="mb-2"><label class="form-label small fw-bold">Izoh</label><input id="noNote" class="form-control form-control-sm" placeholder="ixtiyoriy"></div>
+        <div id="noMsg" class="small"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Bekor</button>
+        <button type="button" class="btn btn-success btn-sm" id="noSubmit" onclick="noSubmitOrder()" disabled><i class="bi bi-check2"></i> Buyurtma yaratish</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var CSRF = "{{ request.state.csrf_token if request.state.csrf_token is defined else '' }}";
+  var products = [], pmap = {}, qtys = {};
+  var elAgent=document.getElementById('noAgent'), elPartner=document.getElementById('noPartner'),
+      elSearch=document.getElementById('noSearch'), elList=document.getElementById('noProdList'),
+      elSubmit=document.getElementById('noSubmit'), elMsg=document.getElementById('noMsg');
+  function fmt(n){ return (Math.round(n||0)).toLocaleString('ru-RU'); }
+
+  elAgent.addEventListener('change', async function(){
+    elPartner.innerHTML='<option value="">— yuklanmoqda —</option>'; elPartner.disabled=true;
+    resetProducts('Avval mijoz tanlang');
+    if(!elAgent.value) return;
+    try{
+      var r=await fetch('/supervisor/agent-orders/partners?agent_id='+elAgent.value);
+      var d=await r.json();
+      elPartner.innerHTML='<option value="">— tanlang —</option>'+(d.partners||[]).map(function(p){return '<option value="'+p.id+'">'+p.name+(p.phone?(' · '+p.phone):'')+'</option>';}).join('');
+      elPartner.disabled=false;
+    }catch(e){ elPartner.innerHTML='<option value="">xato</option>'; }
+  });
+
+  elPartner.addEventListener('change', async function(){
+    resetProducts('Yuklanmoqda…');
+    if(!elPartner.value) { resetProducts('Avval mijoz tanlang'); return; }
+    try{
+      var r=await fetch('/supervisor/agent-orders/products?partner_id='+elPartner.value);
+      var d=await r.json();
+      products=(d.products||[]); pmap={}; qtys={};
+      products.forEach(function(p){ pmap[p.id]=p; });
+      elSearch.disabled=false; elSearch.value='';
+      renderList();
+    }catch(e){ elList.innerHTML='<div class="text-danger small p-3 text-center">Mahsulotlarni yuklab bo\'lmadi</div>'; }
+  });
+
+  function resetProducts(msg){
+    products=[]; pmap={}; qtys={};
+    elSearch.disabled=true; elSearch.value='';
+    elList.innerHTML='<div class="text-muted small p-3 text-center">'+msg+'</div>';
+    updateTotal();
+  }
+
+  function renderList(){
+    var f=(elSearch.value||'').toLowerCase();
+    var shown=products.filter(function(p){ return p.name.toLowerCase().indexOf(f)>=0; });
+    if(!shown.length){ elList.innerHTML='<div class="text-muted small p-3 text-center">Mahsulot topilmadi</div>'; updateTotal(); return; }
+    elList.innerHTML=shown.map(function(p){
+      var q=qtys[p.id]||0;
+      var active=q>0?' style="background:#e9f6f0"':'';
+      return '<div class="d-flex align-items-center justify-content-between px-2 py-1 border-bottom" data-pid="'+p.id+'"'+active+'>'+
+        '<div class="me-2"><div class="small fw-semibold">'+p.name+'</div><div class="text-muted" style="font-size:11px">'+fmt(p.price)+' so\'m</div></div>'+
+        '<div class="d-flex align-items-center gap-1">'+
+          '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" onclick="noStep('+p.id+',-1)">−</button>'+
+          '<input type="number" min="0" class="form-control form-control-sm text-center px-1" style="width:56px" value="'+q+'" onchange="noSet('+p.id+',this.value)">'+
+          '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2" onclick="noStep('+p.id+',1)">+</button>'+
+        '</div></div>';
+    }).join('');
+    updateTotal();
+  }
+
+  window.noFilter=function(){ renderList(); };
+
+  window.noStep=function(pid,d){
+    var q=(qtys[pid]||0)+d; if(q<0)q=0;
+    if(q===0)delete qtys[pid]; else qtys[pid]=q;
+    var row=elList.querySelector('[data-pid="'+pid+'"]');
+    if(row){ var inp=row.querySelector('input'); if(inp)inp.value=q; row.style.background=q>0?'#e9f6f0':''; }
+    updateTotal();
+  };
+  window.noSet=function(pid,v){
+    var q=parseFloat(v||'0'); if(!q||q<0)q=0;
+    if(q===0)delete qtys[pid]; else qtys[pid]=q;
+    var row=elList.querySelector('[data-pid="'+pid+'"]'); if(row) row.style.background=q>0?'#e9f6f0':'';
+    updateTotal();
+  };
+
+  function updateTotal(){
+    var total=0,count=0;
+    Object.keys(qtys).forEach(function(pid){ var p=pmap[pid]; if(p && qtys[pid]>0){ total+=p.price*qtys[pid]; count++; } });
+    document.getElementById('noTotal').textContent=fmt(total);
+    document.getElementById('noCount').textContent=count;
+    elSubmit.disabled=!(elAgent.value && elPartner.value && count>0);
+  }
+
+  window.noSubmitOrder=async function(){
+    if(elSubmit.disabled) return;
+    var items=Object.keys(qtys).filter(function(pid){return qtys[pid]>0;}).map(function(pid){return {product_id:parseInt(pid), qty:qtys[pid]};});
+    if(!items.length) return;
+    elSubmit.disabled=true; elMsg.innerHTML='<span class="text-muted">Yaratilmoqda…</span>';
+    try{
+      var r=await fetch('/supervisor/agent-orders/create',{method:'POST',
+        headers:{'Content-Type':'application/json','X-CSRF-Token':CSRF},
+        body:JSON.stringify({agent_id:parseInt(elAgent.value),partner_id:parseInt(elPartner.value),
+          note:document.getElementById('noNote').value, items:items})});
+      var d=await r.json();
+      if(d.success){ elMsg.innerHTML='<span class="text-success">✓ '+d.order_number+' yaratildi. Yangilanmoqda…</span>'; setTimeout(function(){location.reload();},800); }
+      else { elMsg.innerHTML='<span class="text-danger">'+(d.error||'Xato')+'</span>'; elSubmit.disabled=false; }
+    }catch(e){ elMsg.innerHTML='<span class="text-danger">Tarmoq xatosi</span>'; elSubmit.disabled=false; }
+  };
+})();
 </script>
 {% endblock %}

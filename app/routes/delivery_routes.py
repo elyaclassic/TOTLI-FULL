@@ -18,12 +18,14 @@ from app.models.database import (
     Partner,
     PartnerLocation,
     Order,
+    OrderItem,
     User,
     AgentPayment,
     Payment,
     CashRegister,
     Product,
     Stock,
+    Warehouse,
 )
 from app.deps import require_admin, require_admin_or_manager
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
@@ -575,6 +577,148 @@ async def supervisor_agent_orders(
         "date_to": d_to.strftime("%Y-%m-%d"),
         "page_title": "Agent buyurtmalari",
     })
+
+
+@router.get("/supervisor/agent-orders/partners")
+async def supervisor_agent_order_partners(
+    agent_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Tanlangan agentning mijozlari (board'dagi 'Yangi buyurtma' modal uchun)."""
+    partners = (
+        db.query(Partner)
+        .filter(Partner.agent_id == agent_id, Partner.is_active == True)
+        .order_by(Partner.name)
+        .all()
+    )
+    return {"partners": [{"id": p.id, "name": p.name, "phone": p.phone or ""} for p in partners]}
+
+
+@router.get("/supervisor/agent-orders/products")
+async def supervisor_agent_order_products(
+    partner_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent mahsulotlari + tanlangan mijoz narx turi bo'yicha narxlar."""
+    from app.routes.api_agent_ops import _resolve_price_type_id, _product_price_for_type
+    partner = db.query(Partner).filter(Partner.id == partner_id).first()
+    if not partner:
+        return {"products": [], "error": "Mijoz topilmadi"}
+    pt = _resolve_price_type_id(partner)
+    prods = (
+        db.query(Product)
+        .filter(Product.is_active == True, Product.is_for_agent == True)
+        .order_by(Product.name)
+        .all()
+    )
+    out = [
+        {
+            "id": p.id,
+            "name": p.name,
+            "price": float(_product_price_for_type(db, p, pt) or 0),
+            "unit": (p.unit.name if getattr(p, "unit", None) else ""),
+        }
+        for p in prods
+    ]
+    return {"products": out, "discount_percent": float(partner.discount_percent or 0)}
+
+
+@router.post("/supervisor/agent-orders/create")
+async def supervisor_create_agent_order(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Admin/menejer agent nomidan qo'lda buyurtma yaratadi (draft). Board'dan tasdiqlanadi.
+
+    JSON: {agent_id, partner_id, items:[{product_id, qty}], note?}.
+    Agent ilovasidagi create bilan bir xil narx/chegirma mantig'i, lekin token emas —
+    agent_id formadan. MERGE qilinmaydi (har doim yangi mustaqil draft sale).
+    """
+    from app.routes.api_agent_ops import _resolve_price_type_id, _product_price_for_type
+    try:
+        body = await request.json()
+        agent_id = int(body.get("agent_id") or 0)
+        partner_id = int(body.get("partner_id") or 0)
+        items = body.get("items", [])
+        note = (body.get("note") or "").strip()[:200]
+
+        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        if not agent:
+            return {"success": False, "error": "Agent tanlanmagan"}
+        partner = db.query(Partner).filter(Partner.id == partner_id, Partner.agent_id == agent_id).first()
+        if not partner:
+            return {"success": False, "error": "Mijoz topilmadi (agentga biriktirilmagan)"}
+        if not items:
+            return {"success": False, "error": "Mahsulot tanlang"}
+
+        warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor mahsulot%"), Warehouse.is_active == True).first()
+        if not warehouse:
+            warehouse = db.query(Warehouse).filter(Warehouse.name.ilike("%tayyor%"), Warehouse.is_active == True).first()
+        if not warehouse:
+            warehouse = db.query(Warehouse).filter(Warehouse.is_active == True).first()
+        if not warehouse:
+            return {"success": False, "error": "Ombor topilmadi"}
+
+        today = datetime.now()
+        prefix = f"AGT-{today.strftime('%Y%m%d')}"
+        last = db.query(Order).filter(Order.number.like(f"{prefix}%")).order_by(Order.id.desc()).first()
+        try:
+            seq = int(last.number.split("-")[-1]) + 1 if last and last.number else 1
+        except (ValueError, IndexError, AttributeError):
+            seq = 1
+        order_number = f"{prefix}-{seq:03d}"
+
+        partner_discount = float(partner.discount_percent or 0)
+        price_type_id = _resolve_price_type_id(partner)
+        subtotal = 0.0
+        order_items = []
+        for it in items:
+            try:
+                pid = int(it.get("product_id") or 0)
+                qty = float(it.get("qty", it.get("quantity", 0)) or 0)
+            except (ValueError, TypeError):
+                continue
+            if pid <= 0 or qty <= 0:
+                continue
+            prod = db.query(Product).filter(Product.id == pid, Product.is_active == True, Product.is_for_agent == True).first()
+            if not prod:
+                continue
+            price = _product_price_for_type(db, prod, price_type_id)
+            line = qty * price
+            subtotal += line
+            order_items.append(OrderItem(
+                product_id=prod.id, quantity=qty, price=price,
+                discount_percent=partner_discount,
+                total=line * (1 - partner_discount / 100),
+            ))
+        if not order_items:
+            return {"success": False, "error": "Yaroqli mahsulot yo'q"}
+
+        discount_amount = subtotal * partner_discount / 100
+        total = subtotal - discount_amount
+        order = Order(
+            number=order_number, date=today, type="sale",
+            partner_id=partner.id, warehouse_id=warehouse.id,
+            agent_id=agent.id, source="agent", price_type_id=price_type_id,
+            subtotal=subtotal, discount_percent=partner_discount, discount_amount=discount_amount,
+            total=total, paid=0, debt=total, status="draft", payment_type="naqd",
+            note=(note + f" [Qo'lda: {getattr(current_user, 'username', '')}]").strip(),
+        )
+        db.add(order)
+        db.flush()
+        for oi in order_items:
+            oi.order_id = order.id
+            db.add(oi)
+        db.commit()
+        logger.info(f"Supervisor manual agent order: {order_number} agent={agent.code} partner={partner.id} total={total}")
+        return {"success": True, "order_id": order.id, "order_number": order_number, "total": total}
+    except Exception as e:
+        db.rollback()
+        logger.error(f"supervisor_create_agent_order: {e}")
+        return {"success": False, "error": "Server xatosi"}
 
 
 @router.post("/supervisor/agent-orders/confirm/{order_id}")
