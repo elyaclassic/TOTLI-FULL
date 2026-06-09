@@ -1030,12 +1030,19 @@ async def agent_create_order(
             return {"success": False, "error": "Mahsulot topilmadi"}
 
         # BIRLASHTIRISH: shu mijozning bugungi draft buyurtmasi bormi?
+        # MUHIM: faqat HAQIQIY mustaqil sotuv draft'iga birlashtiriladi.
+        # type=="sale" + parent_order_id IS NULL filtri OBMEN hujjatlarini chetlab o'tadi:
+        #   - return_sale (obmen qaytarish) ga qo'shilmaydi
+        #   - obmen child sale (parent_order_id bor) ga qo'shilmaydi
+        # Aks holda vizit ichida obmendan keyin yozilgan yangi buyurtma obmen ichiga qo'shilib qolardi.
         today_start = today.replace(hour=0, minute=0, second=0, microsecond=0)
         existing_order = db.query(Order).filter(
             Order.agent_id == agent.id,
             Order.partner_id == partner.id,
             Order.status == "draft",
             Order.source == "agent",
+            Order.type == "sale",
+            Order.parent_order_id.is_(None),
             Order.date >= today_start,
         ).first()
 
