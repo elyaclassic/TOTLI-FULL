@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-2">
+  <div class="page-header">
+    <h4><i class="bi bi-graph-up-arrow text-success"></i> Agent hisoboti
+      <span class="badge bg-success-subtle text-success ms-1">{{ range_label }}</span>
+    </h4>
+    <a href="/supervisor" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Supervayzer</a>
+  </div>
+
+  <!-- Filtr -->
+  <div class="filter-card">
+    <form method="get" action="/supervisor/agent-report" id="repForm" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label">Agent</label>
+        <select name="agent_id" class="form-select form-select-sm" onchange="document.getElementById('repForm').submit()">
+          <option value="0">Barcha agentlar (umumiy)</option>
+          {% for a in agents %}<option value="{{ a.id }}" {% if sel_agent_id == a.id %}selected{% endif %}>{{ a.full_name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Dan</label>
+        <input type="date" name="date_from" id="dFrom" value="{{ date_from }}" class="form-control form-control-sm" onchange="document.getElementById('repForm').submit()">
+      </div>
+      <div class="col-md-2">
+        <label class="form-label">Gacha</label>
+        <input type="date" name="date_to" id="dTo" value="{{ date_to }}" class="form-control form-control-sm" onchange="document.getElementById('repForm').submit()">
+      </div>
+      <div class="col-md-5">
+        <label class="form-label d-block">Tezkor</label>
+        <div class="btn-group btn-group-sm">
+          <button type="button" class="btn btn-outline-success" onclick="repRange('month')">Bu oy</button>
+          <button type="button" class="btn btn-outline-secondary" onclick="repRange('prevmonth')">O'tgan oy</button>
+          <button type="button" class="btn btn-outline-secondary" onclick="repRange('week')">7 kun</button>
+          <button type="button" class="btn btn-outline-secondary" onclick="repRange('today')">Bugun</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  {% set m = sel_row if sel_row else totals %}
+  <!-- KPI kartalar -->
+  <div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+      <div class="mini-stat" style="border-left-color:#017449">
+        <div class="num" style="color:#059669">{{ "{:,.0f}".format(m.sales) }}</div>
+        <div class="lbl"><i class="bi bi-cart3"></i> Savdo qilgan (so'm)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mini-stat" style="border-left-color:#2563eb">
+        <div class="num" style="color:#2563eb">{{ "{:,.0f}".format(m.paid) }}</div>
+        <div class="lbl"><i class="bi bi-cash-stack"></i> Pul topshirgan (so'm)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mini-stat" style="border-left-color:#f59e0b">
+        <div class="num" style="color:#d97706">{{ "{:,.0f}".format(m.cust_debt) }}</div>
+        <div class="lbl"><i class="bi bi-people"></i> Mijozlarda qarz (hozir)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="mini-stat" style="border-left-color:#dc2626">
+        <div class="num" style="color:#dc2626">{{ "{:,.0f}".format(m.self_debt) }}</div>
+        <div class="lbl"><i class="bi bi-wallet2"></i> O'zida qarz (topshirilmagan)</div>
+      </div>
+    </div>
+  </div>
+
+  {% if not sel_agent_id %}
+  <!-- Barcha agentlar jadvali -->
+  <div class="data-table">
+    <div class="card-header"><h3 class="mb-0" style="font-size:15px"><i class="bi bi-people-fill"></i> Agentlar bo'yicha ({{ range_label }})</h3></div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr>
+          <th>Agent</th>
+          <th class="text-end">Savdo</th>
+          <th class="text-end">Topshirgan</th>
+          <th class="text-end">Mijozlarda qarz</th>
+          <th class="text-end">O'zida qarz</th>
+          <th></th>
+        </tr></thead>
+        <tbody>
+          {% for r in rows %}
+          <tr>
+            <td><span class="fw-semibold">{{ r.name }}</span> <span class="text-muted small">{{ r.code }}</span></td>
+            <td class="text-end num-cell">{{ "{:,.0f}".format(r.sales) }}</td>
+            <td class="text-end" style="color:#2563eb;font-weight:600">{{ "{:,.0f}".format(r.paid) }}</td>
+            <td class="text-end" style="color:#d97706;font-weight:600">{{ "{:,.0f}".format(r.cust_debt) }}</td>
+            <td class="text-end" style="color:#dc2626;font-weight:600">{{ "{:,.0f}".format(r.self_debt) }}</td>
+            <td class="text-end"><a href="/supervisor/agent-report?agent_id={{ r.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-sm btn-outline-success py-0"><i class="bi bi-eye"></i> Tafsilot</a></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr class="table-light fw-bold">
+            <td>JAMI</td>
+            <td class="text-end">{{ "{:,.0f}".format(totals.sales) }}</td>
+            <td class="text-end" style="color:#2563eb">{{ "{:,.0f}".format(totals.paid) }}</td>
+            <td class="text-end" style="color:#d97706">{{ "{:,.0f}".format(totals.cust_debt) }}</td>
+            <td class="text-end" style="color:#dc2626">{{ "{:,.0f}".format(totals.self_debt) }}</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+  {% else %}
+  <!-- Bitta agent: mahsulot hisoboti -->
+  <div class="data-table">
+    <div class="card-header d-flex justify-content-between align-items-center">
+      <h3 class="mb-0" style="font-size:15px"><i class="bi bi-box-seam"></i> {{ sel_agent.full_name if sel_agent else '' }} — sotilgan mahsulotlar ({{ range_label }})</h3>
+      <span class="text-muted small">eng ko'p sotilgan yuqorida</span>
+    </div>
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead><tr><th style="width:50px">#</th><th>Mahsulot</th><th class="text-end">Soni / miqdor</th><th class="text-end">Summa (so'm)</th></tr></thead>
+        <tbody>
+          {% for p in product_rows %}
+          <tr>
+            <td>{% if loop.index <= 3 %}<span class="badge bg-warning text-dark">{{ loop.index }}</span>{% else %}{{ loop.index }}{% endif %}</td>
+            <td class="fw-semibold">{{ p.name }}</td>
+            <td class="text-end">{{ "{:,.0f}".format(p.qty) }}</td>
+            <td class="text-end num-cell">{{ "{:,.0f}".format(p.total) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="text-center text-muted py-4">Bu oraliqda sotuv yo'q</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function repRange(kind){
+  var now=new Date(), f, t=new Date();
+  function iso(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  if(kind==='month'){ f=new Date(now.getFullYear(), now.getMonth(), 1); }
+  else if(kind==='prevmonth'){ f=new Date(now.getFullYear(), now.getMonth()-1, 1); t=new Date(now.getFullYear(), now.getMonth(), 0); }
+  else if(kind==='week'){ f=new Date(now); f.setDate(f.getDate()-6); }
+  else { f=new Date(now); }
+  document.getElementById('dFrom').value=iso(f);
+  document.getElementById('dTo').value=iso(t);
+  document.getElementById('repForm').submit();
+}
+</script>
+{% endblock %}

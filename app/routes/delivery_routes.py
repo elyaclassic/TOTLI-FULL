@@ -1059,6 +1059,130 @@ def _get_pending_agent_payments(db):
 # SUPERVISOR: AGENT TO'LOVLARI (INKASSATSIYA)
 # ==========================================
 
+@router.get("/supervisor/agent-report", response_class=HTMLResponse)
+async def supervisor_agent_report(
+    request: Request,
+    agent_id: int = 0,
+    date_from: str = None,
+    date_to: str = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_manager),
+):
+    """Agent hisoboti: oraliqda savdo, topshirilgan pul, mijozlarda qarz, o'zida qarz.
+    agent_id=0 -> barcha agentlar jadvali. agent_id>0 -> tafsilot + mahsulot hisoboti.
+
+    Ta'riflar:
+      - Savdo qilgan   = SUM(Order.total) source=agent, type=sale, bekor emas, oraliqda
+      - Pul topshirgan = SUM(AgentPayment.amount) confirmed, oraliqda (created_at)
+      - Mijozlarda qarz= SUM(Partner.balance>0) agent mijozlari (HOZIRGI, nuqtaviy)
+      - O'zida qarz    = SUM(AgentPayment.amount) pending (HOZIRGI, topshirilmagan)
+    """
+    from datetime import datetime as _dt
+
+    today = _dt.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    # oraliq default: shu oy boshidan bugungacha
+    try:
+        d_from = _dt.strptime(date_from, "%Y-%m-%d") if date_from else today.replace(day=1)
+    except (ValueError, TypeError):
+        d_from = today.replace(day=1)
+    try:
+        d_to = (_dt.strptime(date_to, "%Y-%m-%d") if date_to else today).replace(hour=23, minute=59, second=59)
+    except (ValueError, TypeError):
+        d_to = today.replace(hour=23, minute=59, second=59)
+    sel_agent_id = agent_id if (agent_id and agent_id > 0) else None
+
+    agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
+
+    # --- Savdo (oraliq) agent bo'yicha ---
+    sales_q = (
+        db.query(Order.agent_id, func.coalesce(func.sum(Order.total), 0))
+        .filter(Order.source == "agent", Order.type == "sale", Order.status != "cancelled",
+                Order.date >= d_from, Order.date <= d_to, Order.agent_id.isnot(None))
+        .group_by(Order.agent_id)
+    )
+    sales_by_agent = {aid: float(t or 0) for aid, t in sales_q.all()}
+
+    # --- Topshirilgan (confirmed, oraliq) ---
+    paid_q = (
+        db.query(AgentPayment.agent_id, func.coalesce(func.sum(AgentPayment.amount), 0))
+        .filter(AgentPayment.status == "confirmed",
+                func.date(AgentPayment.created_at) >= d_from.date(),
+                func.date(AgentPayment.created_at) <= d_to.date(),
+                AgentPayment.agent_id.isnot(None))
+        .group_by(AgentPayment.agent_id)
+    )
+    paid_by_agent = {aid: float(t or 0) for aid, t in paid_q.all()}
+
+    # --- O'zida qarz = pending (HOZIRGI) ---
+    pending_q = (
+        db.query(AgentPayment.agent_id, func.coalesce(func.sum(AgentPayment.amount), 0))
+        .filter(AgentPayment.status == "pending", AgentPayment.agent_id.isnot(None))
+        .group_by(AgentPayment.agent_id)
+    )
+    pending_by_agent = {aid: float(t or 0) for aid, t in pending_q.all()}
+
+    # --- Mijozlarda qarz (HOZIRGI Partner.balance>0) ---
+    debt_q = (
+        db.query(Partner.agent_id, func.coalesce(func.sum(Partner.balance), 0))
+        .filter(Partner.agent_id.isnot(None), Partner.balance > 0)
+        .group_by(Partner.agent_id)
+    )
+    cust_debt_by_agent = {aid: float(t or 0) for aid, t in debt_q.all()}
+
+    rows = []
+    for a in agents:
+        rows.append({
+            "id": a.id, "name": a.full_name, "code": a.code,
+            "sales": sales_by_agent.get(a.id, 0.0),
+            "paid": paid_by_agent.get(a.id, 0.0),
+            "cust_debt": cust_debt_by_agent.get(a.id, 0.0),
+            "self_debt": pending_by_agent.get(a.id, 0.0),
+        })
+    # jami (faqat agentlari bor ko'rsatkichlar)
+    totals = {
+        "sales": sum(r["sales"] for r in rows),
+        "paid": sum(r["paid"] for r in rows),
+        "cust_debt": sum(r["cust_debt"] for r in rows),
+        "self_debt": sum(r["self_debt"] for r in rows),
+    }
+
+    # --- Bitta agent: mahsulot hisoboti (top sotilgan) ---
+    sel_agent = None
+    sel_row = None
+    product_rows = []
+    if sel_agent_id:
+        sel_agent = db.query(Agent).filter(Agent.id == sel_agent_id).first()
+        sel_row = next((r for r in rows if r["id"] == sel_agent_id), None)
+        prod_q = (
+            db.query(
+                Product.name,
+                func.coalesce(func.sum(OrderItem.quantity), 0),
+                func.coalesce(func.sum(OrderItem.total), 0),
+            )
+            .join(Order, Order.id == OrderItem.order_id)
+            .join(Product, Product.id == OrderItem.product_id)
+            .filter(Order.source == "agent", Order.type == "sale", Order.status != "cancelled",
+                    Order.agent_id == sel_agent_id, Order.date >= d_from, Order.date <= d_to)
+            .group_by(Product.id, Product.name)
+            .order_by(func.sum(OrderItem.quantity).desc())
+        )
+        for nm, qty, tot in prod_q.all():
+            product_rows.append({"name": nm, "qty": float(qty or 0), "total": float(tot or 0)})
+
+    is_month = (d_from.date() == today.replace(day=1).date() and d_to.date() == today.date())
+    range_label = "Bu oy" if is_month else f"{d_from.strftime('%d.%m.%Y')}–{d_to.strftime('%d.%m.%Y')}"
+
+    return templates.TemplateResponse("supervisor/agent_report.html", {
+        "request": request, "current_user": current_user,
+        "agents": agents, "rows": rows, "totals": totals,
+        "sel_agent_id": sel_agent_id, "sel_agent": sel_agent, "sel_row": sel_row,
+        "product_rows": product_rows,
+        "date_from": d_from.strftime("%Y-%m-%d"), "date_to": d_to.strftime("%Y-%m-%d"),
+        "range_label": range_label,
+        "page_title": "Agent hisoboti",
+    })
+
+
 @router.get("/supervisor/agent-payments", response_class=HTMLResponse)
 async def supervisor_agent_payments(
     request: Request,
