@@ -41,28 +41,34 @@
   {% set m = sel_row if sel_row else totals %}
   <!-- KPI kartalar -->
   <div class="row g-3 mb-3">
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md">
       <div class="mini-stat" style="border-left-color:#017449">
         <div class="num" style="color:#059669">{{ "{:,.0f}".format(m.sales) }}</div>
         <div class="lbl"><i class="bi bi-cart3"></i> Savdo qilgan (so'm)</div>
       </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md">
       <div class="mini-stat" style="border-left-color:#2563eb">
         <div class="num" style="color:#2563eb">{{ "{:,.0f}".format(m.paid) }}</div>
         <div class="lbl"><i class="bi bi-cash-stack"></i> Pul topshirgan (so'm)</div>
       </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md">
       <div class="mini-stat" style="border-left-color:#f59e0b">
         <div class="num" style="color:#d97706">{{ "{:,.0f}".format(m.cust_debt) }}</div>
         <div class="lbl"><i class="bi bi-people"></i> Mijozlarda qarz (hozir)</div>
       </div>
     </div>
-    <div class="col-6 col-md-3">
+    <div class="col-6 col-md">
       <div class="mini-stat" style="border-left-color:#dc2626">
         <div class="num" style="color:#dc2626">{{ "{:,.0f}".format(m.self_debt) }}</div>
         <div class="lbl"><i class="bi bi-wallet2"></i> O'zida qarz (topshirilmagan)</div>
+      </div>
+    </div>
+    <div class="col-6 col-md">
+      <div class="mini-stat" style="border-left-color:#7c3aed;background:#faf5ff">
+        <div class="num" style="color:#7c3aed">{{ "{:,.0f}".format(m.salary) }}</div>
+        <div class="lbl"><i class="bi bi-wallet-fill"></i> Hisoblangan oylik{% if sel_agent_id %} ({{ "%g"|format(m.percent) }}%){% endif %}</div>
       </div>
     </div>
   </div>
@@ -79,6 +85,8 @@
           <th class="text-end">Topshirgan</th>
           <th class="text-end">Mijozlarda qarz</th>
           <th class="text-end">O'zida qarz</th>
+          <th class="text-end">Foiz</th>
+          <th class="text-end">Oylik</th>
           <th></th>
         </tr></thead>
         <tbody>
@@ -89,6 +97,8 @@
             <td class="text-end" style="color:#2563eb;font-weight:600">{{ "{:,.0f}".format(r.paid) }}</td>
             <td class="text-end" style="color:#d97706;font-weight:600">{{ "{:,.0f}".format(r.cust_debt) }}</td>
             <td class="text-end" style="color:#dc2626;font-weight:600">{{ "{:,.0f}".format(r.self_debt) }}</td>
+            <td class="text-end text-muted">{{ "%g"|format(r.percent) }}%</td>
+            <td class="text-end" style="color:#7c3aed;font-weight:700">{{ "{:,.0f}".format(r.salary) }}</td>
             <td class="text-end"><a href="/supervisor/agent-report?agent_id={{ r.id }}&date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-sm btn-outline-success py-0"><i class="bi bi-eye"></i> Tafsilot</a></td>
           </tr>
           {% endfor %}
@@ -100,6 +110,8 @@
             <td class="text-end" style="color:#2563eb">{{ "{:,.0f}".format(totals.paid) }}</td>
             <td class="text-end" style="color:#d97706">{{ "{:,.0f}".format(totals.cust_debt) }}</td>
             <td class="text-end" style="color:#dc2626">{{ "{:,.0f}".format(totals.self_debt) }}</td>
+            <td></td>
+            <td class="text-end" style="color:#7c3aed">{{ "{:,.0f}".format(totals.salary) }}</td>
             <td></td>
           </tr>
         </tfoot>

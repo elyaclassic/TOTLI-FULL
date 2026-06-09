@@ -1131,12 +1131,16 @@ async def supervisor_agent_report(
 
     rows = []
     for a in agents:
+        paid = paid_by_agent.get(a.id, 0.0)
+        pct = float(getattr(a, "commission_percent", 0) or 0)
         rows.append({
             "id": a.id, "name": a.full_name, "code": a.code,
             "sales": sales_by_agent.get(a.id, 0.0),
-            "paid": paid_by_agent.get(a.id, 0.0),
+            "paid": paid,
             "cust_debt": cust_debt_by_agent.get(a.id, 0.0),
             "self_debt": pending_by_agent.get(a.id, 0.0),
+            "percent": pct,
+            "salary": paid * pct / 100.0,  # oylik = foiz% x TOPSHIRGAN pul
         })
     # jami (faqat agentlari bor ko'rsatkichlar)
     totals = {
@@ -1144,6 +1148,7 @@ async def supervisor_agent_report(
         "paid": sum(r["paid"] for r in rows),
         "cust_debt": sum(r["cust_debt"] for r in rows),
         "self_debt": sum(r["self_debt"] for r in rows),
+        "salary": sum(r["salary"] for r in rows),
     }
 
     # --- Bitta agent: mahsulot hisoboti (top sotilgan) ---
