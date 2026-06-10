@@ -132,7 +132,9 @@ async def employee_add(
         tasks = db.query(PieceworkTask).filter(PieceworkTask.id.in_(task_ids)).all()
         employee.piecework_tasks = tasks
     db.commit()
-    return RedirectResponse(url="", status_code=303)
+    # PRG: ro'yxatga (GET) yo'naltiramiz — url="" POST sahifasiga 405 berib oq
+    # ekran chiqarardi, F5 esa xodimni 2x qo'shardi.
+    return RedirectResponse(url="/employees?added=1", status_code=303)
 
 
 @router.get("/edit/{employee_id}", response_class=HTMLResponse)
@@ -301,7 +303,7 @@ async def import_employees(file: UploadFile = File(...), db: Session = Depends(g
             employee.phone = phone
             employee.salary = salary
         db.commit()
-    return RedirectResponse(url="", status_code=303)
+    return RedirectResponse(url="/employees?imported=1", status_code=303)
 
 
 @router.post("/import-from-hikvision-preview")
@@ -354,7 +356,7 @@ async def employees_import_from_hikvision_preview_get(
     current_user: User = Depends(require_auth),
 ):
     """Preview sahifasiga to'g'ridan-to'g'ri kirilsa xodimlar ro'yxatiga yo'naltiradi."""
-    return RedirectResponse(url="", status_code=303)
+    return RedirectResponse(url="/employees", status_code=303)
 
 
 @router.post("/import-from-hikvision")
