@@ -4528,6 +4528,23 @@ async def pos_pay_supplier(
     cash_register = _get_pos_cash_register(db, pt, department_id, current_user=current_user)
     if not cash_register:
         return RedirectResponse(url="/sales/pos?error=payment&detail=Kassa+topilmadi", status_code=303)
+    _desc = note or f"Ta'minotchiga to'lov: {partner.name}"
+    # Takror-yuborish (double/triple submit) himoyasi: oxirgi 60s ichida ayni shu
+    # to'lov yozilgan bo'lsa — yangisini yaratmaymiz (idempotent).
+    _dup = db.query(Payment).filter(
+        Payment.type == "expense",
+        Payment.category == "supplier_payment",
+        Payment.cash_register_id == cash_register.id,
+        Payment.partner_id == partner_id,
+        Payment.amount == amount,
+        Payment.payment_type == pt,
+        Payment.user_id == current_user.id,
+        Payment.description == _desc,
+        Payment.created_at >= datetime.now() - timedelta(seconds=60),
+        func.coalesce(Payment.status, "") != "deleted",
+    ).first()
+    if _dup:
+        return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"To'lov: {partner.name} ga {amount:,.0f} so'm ({pt})"), status_code=303)
     # To'lov yaratish (chiqim)
     today_str = datetime.now().strftime('%Y%m%d')
     last_pay = db.query(Payment).filter(Payment.number.like(f"PAY-{today_str}-%")).order_by(Payment.number.desc()).first()
@@ -4541,7 +4558,7 @@ async def pos_pay_supplier(
         amount=amount,
         payment_type=pt,
         category="supplier_payment",
-        description=note or f"Ta'minotchiga to'lov: {partner.name}",
+        description=_desc,
         user_id=current_user.id,
     ))
     # Kassa balansini kamaytirish
@@ -4595,6 +4612,21 @@ async def pos_expense(
     description = f"Harajat: {expense_type_name}"
     if note:
         description += f" — {note}"
+    # Takror-yuborish (double/triple submit) himoyasi: oxirgi 60s ichida ayni shu
+    # harajat yozilgan bo'lsa — yangisini yaratmaymiz (idempotent).
+    _dup = db.query(Payment).filter(
+        Payment.type == "expense",
+        Payment.category == "expense",
+        Payment.cash_register_id == cash_register.id,
+        Payment.amount == amount,
+        Payment.payment_type == pt,
+        Payment.user_id == current_user.id,
+        Payment.description == description,
+        Payment.created_at >= datetime.now() - timedelta(seconds=60),
+        func.coalesce(Payment.status, "") != "deleted",
+    ).first()
+    if _dup:
+        return RedirectResponse(url="/sales/pos?success=1&number=" + quote(f"Harajat: {expense_type_name} — {amount:,.0f} so'm ({pt})"), status_code=303)
     db.add(Payment(
         number=pay_number,
         type="expense",
