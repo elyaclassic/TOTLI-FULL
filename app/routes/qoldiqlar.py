@@ -877,7 +877,8 @@ async def qoldiqlar_balance_import_multi_apply(
             selected.append((SD_BALANCE_DATA[idx], partner))
 
     if not selected:
-        return HTMLResponse("<p>Hech narsa tanlanmagan.</p> <a href='/qoldiqlar/balance-import/multi'>Orqaga</a>")
+        # PRG: dead-end HTML sahifa o'rniga tanlov sahifasiga 303 redirect
+        return RedirectResponse(url="/qoldiqlar/balance-import/multi?error=" + quote("Hech narsa tanlanmagan"), status_code=303)
 
     diffs = []
     for sd, p in selected:
@@ -887,7 +888,7 @@ async def qoldiqlar_balance_import_multi_apply(
             diffs.append((sd, p, delta))
 
     if not diffs:
-        return HTMLResponse("<p>Tanlanganlarning hech birida balans farqi yo'q.</p> <a href='/qoldiqlar/balance-import/multi'>Orqaga</a>")
+        return RedirectResponse(url="/qoldiqlar/balance-import/multi?error=" + quote("Tanlanganlarning hech birida balans farqi yo'q"), status_code=303)
 
     now = datetime.now()
     prefix = f"KNT-{now.strftime('%Y%m%d')}-"
