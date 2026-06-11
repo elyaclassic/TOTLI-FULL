@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-header mb-3">
+    <h5 class="mb-0"><i class="bi bi-shop"></i> Do'kon bo'yicha sotuv</h5>
+    <div class="d-flex gap-2">
+        <a href="/reports/sales-by-store/export?date_from={{ date_from }}&date_to={{ date_to }}{% if selected_category_id %}&category_id={{ selected_category_id }}{% endif %}{% if name_query %}&name_query={{ name_query }}{% endif %}"
+           class="btn btn-success top-btn"><i class="bi bi-file-earmark-excel"></i> Excel</a>
+        <a href="/reports" class="top-btn btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Hisobotlar</a>
+    </div>
+</div>
+
+<!-- Filtr -->
+<div class="filter-card mb-3">
+    <form method="get" class="d-flex flex-wrap gap-3 align-items-end">
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Dan</label>
+            <input type="datetime-local" name="date_from" class="form-control form-control-sm" value="{{ date_from }}">
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-calendar"></i> Gacha</label>
+            <input type="datetime-local" name="date_to" class="form-control form-control-sm" value="{{ date_to }}">
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-tags"></i> Kategoriya</label>
+            <select name="category_id" class="form-select form-select-sm">
+                <option value="">Barchasi</option>
+                {% for c in categories %}
+                <option value="{{ c.id }}" {% if selected_category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label class="form-label small mb-1"><i class="bi bi-search"></i> Nom (qism)</label>
+            <input type="text" name="name_query" class="form-control form-control-sm" value="{{ name_query }}" placeholder="patir, pechenn..." style="min-width:160px;">
+        </div>
+        <button type="submit" class="btn btn-primary top-btn"><i class="bi bi-funnel"></i> Ko'rsatish</button>
+        {% if selected_category_id or name_query %}
+        <a href="/reports/sales-by-store?date_from={{ date_from }}&date_to={{ date_to }}" class="btn btn-outline-secondary btn-sm" title="Filtrlarni tozalash"><i class="bi bi-x-circle"></i></a>
+        {% endif %}
+    </form>
+</div>
+
+<!-- Statistika -->
+<div class="row g-3 mb-3">
+    <div class="col-6 col-md-3">
+        <div class="mini-stat"><div class="num">{{ items|length }}</div>
+            <div class="lbl"><i class="bi bi-box-seam"></i> Mahsulot turi</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat"><div class="num">{{ columns|length }}</div>
+            <div class="lbl"><i class="bi bi-shop"></i> Do'kon</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat"><div class="num">{{ "{:,.0f}".format(grand_qty) }}</div>
+            <div class="lbl"><i class="bi bi-boxes"></i> Jami miqdor</div></div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="mini-stat"><div class="num" style="color:#065f46;">{{ "{:,.0f}".format(grand_sum) }}</div>
+            <div class="lbl"><i class="bi bi-cash"></i> Jami summa</div></div>
+    </div>
+</div>
+
+{% if not items %}
+<div class="alert alert-info"><i class="bi bi-info-circle"></i> Bu davr uchun sotuv topilmadi.</div>
+{% else %}
+<div class="table-responsive">
+    <table class="table table-sm table-bordered align-middle pivot-table">
+        <thead class="table-light">
+            <tr>
+                <th class="sticky-col" style="min-width:200px;">Mahsulot</th>
+                {% for col in columns %}
+                <th class="text-end" style="min-width:120px;">{{ col.name }}</th>
+                {% endfor %}
+                <th class="text-end table-warning" style="min-width:130px;">JAMI</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for it in items %}
+            <tr>
+                <td class="sticky-col fw-semibold">{{ it.product_name }}</td>
+                {% for col in columns %}
+                {% set cell = it.cells.get(col.key) %}
+                <td class="text-end">
+                    {% if cell %}
+                        <div class="fw-semibold">{{ "{:,.0f}".format(cell.sum) }}</div>
+                        <div class="text-muted small">{{ "{:,.0f}".format(cell.qty) }}</div>
+                    {% else %}
+                        <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                {% endfor %}
+                <td class="text-end table-warning">
+                    <div class="fw-bold">{{ "{:,.0f}".format(it.row_sum) }}</div>
+                    <div class="text-muted small">{{ "{:,.0f}".format(it.row_qty) }}</div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr class="table-secondary fw-bold">
+                <td class="sticky-col">JAMI</td>
+                {% for col in columns %}
+                {% set ct = col_totals.get(col.key) %}
+                <td class="text-end">
+                    <div>{{ "{:,.0f}".format(ct.sum if ct else 0) }}</div>
+                    <div class="text-muted small">{{ "{:,.0f}".format(ct.qty if ct else 0) }}</div>
+                </td>
+                {% endfor %}
+                <td class="text-end table-warning">
+                    <div>{{ "{:,.0f}".format(grand_sum) }}</div>
+                    <div class="text-muted small">{{ "{:,.0f}".format(grand_qty) }}</div>
+                </td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+<p class="text-muted small mt-2">
+    <i class="bi bi-info-circle"></i> Har katakda: yuqorida <b>summa</b>, pastda <span class="text-muted">miqdor</span>.
+    Do'kon = sotuv qatori ombori (yoki buyurtma ombori). Faqat realizatsiya qilingan sotuvlar.
+</p>
+{% endif %}
+
+<style>
+.pivot-table .sticky-col {
+    position: sticky; left: 0; background: #fff; z-index: 2;
+    box-shadow: 2px 0 4px rgba(0,0,0,.04);
+}
+.pivot-table thead .sticky-col, .pivot-table tfoot .sticky-col { z-index: 3; }
+.pivot-table tbody tr:hover .sticky-col { background: #f8f9fa; }
+</style>
+{% endblock %}
