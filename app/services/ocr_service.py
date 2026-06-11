@@ -6,11 +6,41 @@ extract_from_image — Claude CLI subprocess + parse.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
+import shutil
+import subprocess as _sp
+import sys
+
+from app.services.ocr_prompt import OCR_SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
+
+_CLI_TIMEOUT = int(os.environ.get("OCR_CLI_TIMEOUT", "120"))
+_OCR_MODEL = os.environ.get("OCR_MODEL", "claude-opus-4-8[1m]")
 
 
 class OcrParseError(Exception):
     """Claude javobidan haqiqiy JSON ajratib bo'lmadi."""
+
+
+class OcrCliError(Exception):
+    """Claude CLI chaqiruvi muvaffaqiyatsiz."""
+
+
+def _resolve_claude_path() -> str:
+    found = shutil.which("claude")
+    if found:
+        return found
+    if sys.platform == "win32":
+        for c in (
+            os.path.expandvars(r"%APPDATA%\npm\claude.cmd"),
+            os.path.expandvars(r"%LOCALAPPDATA%\npm\claude.cmd"),
+        ):
+            if os.path.exists(c):
+                return c
+    return "claude"
 
 
 _DEFAULTS = {
@@ -79,3 +109,51 @@ def parse_ocr_json(raw: str) -> dict:
         })
     out["qatorlar"] = norm
     return out
+
+
+def extract_from_image(image_path: str) -> dict:
+    """Rasmni Claude CLI Vision orqali o'qib strukturalangan dict qaytaradi.
+
+    Raises:
+        OcrCliError — CLI topilmadi/timeout/xato qaytardi.
+        OcrParseError — javobdan JSON ajratib bo'lmadi.
+    """
+    abs_path = os.path.abspath(image_path)
+    if not os.path.exists(abs_path):
+        raise OcrCliError(f"Rasm topilmadi: {abs_path}")
+
+    prompt = OCR_SYSTEM_PROMPT.format(image_path=abs_path)
+    claude_bin = _resolve_claude_path()
+    args = [claude_bin, "--print", "--model", _OCR_MODEL,
+            "--dangerously-skip-permissions", prompt]
+    if sys.platform == "win32" and claude_bin.lower().endswith((".cmd", ".bat")):
+        args = ["cmd.exe", "/c"] + args
+
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)  # Max obuna OAuth ishlasin
+
+    try:
+        result = _sp.run(
+            args, stdout=_sp.PIPE, stderr=_sp.PIPE, stdin=_sp.DEVNULL,
+            timeout=_CLI_TIMEOUT, env=env,
+        )
+    except _sp.TimeoutExpired as e:
+        raise OcrCliError(f"Claude CLI vaqt tugadi ({_CLI_TIMEOUT}s)") from e
+    except FileNotFoundError as e:
+        raise OcrCliError("`claude` CLI topilmadi (server'da o'rnatilmagan)") from e
+
+    out = (result.stdout or b"").decode("utf-8", "replace").strip()
+    err = (result.stderr or b"").decode("utf-8", "replace").strip()
+    if result.returncode != 0:
+        logger.error(f"[ocr] CLI code={result.returncode} err={err[:300]}")
+        raise OcrCliError(f"Claude xatosi (code={result.returncode}): {(err or out)[:200]}")
+
+    text = out
+    try:
+        env_json = json.loads(out)
+        if isinstance(env_json, dict) and "result" in env_json:
+            text = env_json["result"]
+    except json.JSONDecodeError:
+        pass
+
+    return parse_ocr_json(text)

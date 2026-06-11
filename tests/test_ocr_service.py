@@ -41,3 +41,29 @@ def test_parse_coerces_numbers():
 def test_parse_invalid_raises():
     with pytest.raises(OcrParseError):
         parse_ocr_json("bu umuman JSON emas, hech qanday qavs yo'q")
+
+
+from unittest.mock import patch, MagicMock
+
+
+def test_extract_from_image_success(tmp_path):
+    img = tmp_path / "doc.jpg"
+    img.write_bytes(b"\xff\xd8\xff fake jpeg")
+
+    fake_cli_json = '{"result": "{\\"hujjat_turi\\":\\"chek\\",\\"qatorlar\\":[],\\"jami_summa\\":0}"}'
+    fake = MagicMock(returncode=0, stdout=fake_cli_json.encode(), stderr=b"")
+
+    with patch("app.services.ocr_service._sp.run", return_value=fake):
+        from app.services.ocr_service import extract_from_image
+        r = extract_from_image(str(img))
+    assert r["hujjat_turi"] == "chek"
+
+
+def test_extract_from_image_cli_fail(tmp_path):
+    img = tmp_path / "doc.jpg"
+    img.write_bytes(b"fake")
+    fake = MagicMock(returncode=1, stdout=b"", stderr=b"some error")
+    with patch("app.services.ocr_service._sp.run", return_value=fake):
+        from app.services.ocr_service import extract_from_image, OcrCliError
+        with pytest.raises(OcrCliError):
+            extract_from_image(str(img))
