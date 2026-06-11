@@ -39,6 +39,19 @@ logger = get_logger("delivery_routes")
 router = APIRouter(tags=["delivery"])
 
 
+def _resync_active_cash(db):
+    """Inkassatsiya (agent/driver) oqimi confirmed kassa-Payment yaratganda/o'zgartirganda/
+    o'chirganda kassa STORED balansini formula bilan qayta sinxronlash.
+
+    Bu oqimlar avval sync_cash_balance umuman chaqirmasdi -> har inkassatsiyada
+    CashRegister.balance formula'dan ortda qolib drift to'planardi (Asosiy kassa).
+    Past chastotali supervisor amallari -> barcha faol kassani sync qilish xavfsiz."""
+    from app.services.finance_service import sync_cash_balance
+    db.flush()
+    for _cr in db.query(CashRegister).filter(CashRegister.is_active == True).all():
+        sync_cash_balance(db, _cr.id)
+
+
 @router.get("/delivery", response_class=HTMLResponse)
 async def delivery_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     drivers = db.query(Driver).all()
@@ -1645,6 +1658,7 @@ async def supervisor_confirm_agent_payment(
             actor=current_user.username if current_user else None,
         )
 
+    _resync_active_cash(db)  # kassa balansini sync (inkassatsiya kirimi)
     db.commit()
     try:
         if partner is not None:
@@ -1753,6 +1767,7 @@ async def supervisor_confirm_driver_payment(
         )
         recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
+    _resync_active_cash(db)  # kassa balansini sync (haydovchi inkassatsiya kirimi)
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("Haydovchi to'lovi tasdiqlandi"), status_code=303)
 
@@ -1803,6 +1818,7 @@ async def supervisor_revert_driver_payment(
         )
         recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
+    _resync_active_cash(db)  # kassa balansini sync (to'lov bekor -> kassadan chiqdi)
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov bekor qilindi"), status_code=303)
 
@@ -1901,6 +1917,7 @@ async def supervisor_edit_driver_payment(
         )
         recompute_partner_order_debts(db, p.partner_id)  # M2: per-order debt izchillash
 
+    _resync_active_cash(db)  # kassa balansini sync (summa/kassa o'zgardi)
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov tahrirlandi"), status_code=303)
 
@@ -1941,6 +1958,7 @@ async def supervisor_revert_agent_payment(
         )
         recompute_partner_order_debts(db, ap.partner_id)  # M2: per-order debt izchillash
 
+    _resync_active_cash(db)  # kassa balansini sync (agent to'lov bekor -> kirim qaytarildi)
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
@@ -1977,6 +1995,7 @@ async def supervisor_delete_agent_payment(
         )
         recompute_partner_order_debts(db, partner_id_for_recompute)  # M2: per-order debt izchillash
 
+    _resync_active_cash(db)  # kassa balansini sync (agent to'lov o'chirildi)
     db.commit()
     return RedirectResponse(url="/supervisor/agent-payments", status_code=303)
 
