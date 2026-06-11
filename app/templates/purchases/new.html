@@ -44,7 +44,12 @@
 <div class="container-fluid">
     <div class="page-header mb-3">
         <h5 class="mb-0"><i class="bi bi-box-arrow-in-down text-primary"></i> Yangi tovar kirimi</h5>
-        <div class="d-flex gap-2">
+        <div class="d-flex gap-2 align-items-center">
+            <button type="button" class="top-btn btn btn-outline-info" id="ocrFillBtn" title="Nakladnoy rasmini o'qib formani to'ldirish">
+                <i class="bi bi-camera"></i> Rasmdan to'ldirish
+            </button>
+            <input type="file" id="ocrFileInput" accept="image/*" capture="environment" style="display:none;">
+            <span id="ocrStatus" class="small text-muted"></span>
             {% if from_pos %}
             <a href="/sales/pos" class="top-btn btn btn-outline-primary"><i class="bi bi-cart-check"></i> Sotuv oynasiga</a>
             {% endif %}
@@ -574,6 +579,98 @@
         fetch('/partners/add', { method: 'POST', body: formData })
             .then(function(r) { if (r.ok) { window.location.reload(); } else { return r.text(); } })
             .then(function(t) { if (t && typeof t === 'string') alert('Xatolik: ' + t.slice(0, 100)); });
+    });
+}());
+</script>
+
+<script>
+// OCR — nakladnoy rasmidan formani to'ldirish
+(function() {
+    const btn = document.getElementById('ocrFillBtn');
+    const fileInput = document.getElementById('ocrFileInput');
+    const statusEl = document.getElementById('ocrStatus');
+    if (!btn || !fileInput) return;
+    btn.addEventListener('click', function() { fileInput.click(); });
+
+    function findProduct(name) {
+        const sel = document.getElementById('product_select');
+        if (!sel || !name) return null;
+        const n = name.toLowerCase().trim();
+        let opt = Array.from(sel.options).find(function(o) {
+            return (o.dataset.name || '').toLowerCase().trim() === n;
+        });
+        if (opt) return opt;
+        return Array.from(sel.options).find(function(o) {
+            const dn = (o.dataset.name || '').toLowerCase().trim();
+            return dn && (dn.indexOf(n) !== -1 || n.indexOf(dn) !== -1);
+        }) || null;
+    }
+    function findPartner(name) {
+        const sel = document.getElementById('partner_select');
+        if (!sel || !name) return null;
+        const n = name.toLowerCase().trim();
+        return Array.from(sel.options).find(function(o) {
+            const dn = (o.dataset.name || '').toLowerCase();
+            return dn && (dn.indexOf(n) !== -1 || n.indexOf(dn) !== -1);
+        }) || null;
+    }
+    function fillRow(row, line) {
+        const psi = row.querySelector('.product-search-input');
+        const pid = row.querySelector('.product-id-hidden');
+        const qty = row.querySelector('input[name="quantity"]');
+        const price = row.querySelector('input[name="price"]');
+        const opt = findProduct(line.nomi);
+        if (opt) { psi.value = opt.dataset.name; pid.value = opt.value; psi.style.background = ''; }
+        else { psi.value = line.nomi || ''; pid.value = ''; psi.style.background = '#fff3cd'; }
+        if (qty) qty.value = line.miqdor || '';
+        if (price) price.value = line.narx || '';
+    }
+    function fill(d) {
+        // Sana (OCR "YYYY-MM-DD" -> datetime-local)
+        if (d.sana) {
+            const sd = document.querySelector('input[name="purchase_date"]');
+            if (sd && /^\d{4}-\d{2}-\d{2}$/.test(d.sana)) sd.value = d.sana + 'T00:00';
+        }
+        // Ta'minotchi (nom -> partner)
+        if (d.taminotchi) {
+            const pi = document.getElementById('partner_search_input');
+            const ph = document.getElementById('partner_id_hidden');
+            const po = findPartner(d.taminotchi);
+            if (pi) { pi.value = po ? po.dataset.name : d.taminotchi; pi.style.background = po ? '' : '#fff3cd'; }
+            if (ph) ph.value = po ? po.value : '';
+        }
+        // Qatorlar
+        const tbody = document.getElementById('productsTableBody');
+        const addBtn = document.getElementById('addProductRow');
+        (d.qatorlar || []).forEach(function(line, i) {
+            let rows = tbody.querySelectorAll('.product-row');
+            let row;
+            if (i < rows.length) { row = rows[i]; }
+            else { addBtn.click(); rows = tbody.querySelectorAll('.product-row'); row = rows[rows.length - 1]; }
+            fillRow(row, line);
+        });
+        // Jami qayta hisoblansin
+        document.getElementById('purchaseCreateForm').dispatchEvent(new Event('input'));
+    }
+    fileInput.addEventListener('change', async function() {
+        const f = fileInput.files[0];
+        if (!f) return;
+        statusEl.textContent = '⏳ O\'qiyapman (15-30s)...';
+        statusEl.className = 'small text-muted';
+        const fd = new FormData(); fd.append('file', f);
+        try {
+            const resp = await fetch('/api/ocr/parse', { method: 'POST', body: fd });
+            const j = await resp.json();
+            if (!j.ok) { statusEl.textContent = '⚠️ ' + j.error; statusEl.className = 'small text-danger'; return; }
+            fill(j.data);
+            const low = (j.data.ishonch === 'past');
+            statusEl.textContent = '✅ To\'ldirildi (' + j.data.hujjat_turi + ')' +
+                (low ? ' ⚠️ Past ishonch!' : '') + ' — sariq maydonlarni tasdiqlang.';
+            statusEl.className = 'small ' + (low ? 'text-warning' : 'text-success');
+        } catch (e) {
+            statusEl.textContent = '⚠️ Xato: ' + e;
+            statusEl.className = 'small text-danger';
+        } finally { fileInput.value = ''; }
     });
 }());
 </script>
