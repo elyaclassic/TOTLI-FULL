@@ -89,6 +89,7 @@ from app.routes import api_search as api_search_routes
 from app.routes import api_driver_ops as api_driver_ops_routes
 from app.routes import api_agent_ops as api_agent_ops_routes
 from app.routes import api_agent_advanced as api_agent_advanced_routes
+from app.routes import api_ocr as api_ocr_routes
 from app.routes import agents_routes
 from app.routes import delivery_routes
 from app.routes import sales_deliveries as sales_deliveries_routes
@@ -167,6 +168,7 @@ app.include_router(api_search_routes.router)
 app.include_router(api_driver_ops_routes.router)
 app.include_router(api_agent_ops_routes.router)
 app.include_router(api_agent_advanced_routes.router)
+app.include_router(api_ocr_routes.router)
 app.include_router(agents_routes.router)
 app.include_router(delivery_routes.router)
 app.include_router(sales_deliveries_routes.router)
