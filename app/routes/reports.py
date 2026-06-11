@@ -2936,6 +2936,252 @@ async def sold_products_report(
     })
 
 
+def _sales_by_store_pivot(db, d_from, d_to, category_id=None, name_query=None):
+    """Pivot ma'lumotini quradi: mahsulot × do'kon (miqdor + summa).
+
+    Do'kon = COALESCE(OrderItem.warehouse_id, Order.warehouse_id) — qator
+    darajasidagi ombor (POS multi-ombor sotuvi), aks holda buyurtma ombori.
+    Chegirma va status ta'rifi /reports/sold-products bilan AYNAN bir xil
+    (yagona ta'rif): item.total × (Order.total/Order.subtotal), SALE_REALIZED.
+
+    Qaytaradi: (items, columns, col_totals, grand_qty, grand_sum)
+      items: [{product_id, product_name, cells:{wh_key:{qty,sum}}, row_qty, row_sum}]
+      columns: [{key, name}]  — sotuv bo'lgan do'konlar (tartib: nom)
+      col_totals: {wh_key: {qty, sum}}
+    """
+    from app.services.sales_metrics import SALE_REALIZED
+
+    _discount_ratio = case(
+        (func.coalesce(Order.subtotal, 0) > 0, Order.total / Order.subtotal),
+        else_=1.0,
+    )
+    wh_col = func.coalesce(OrderItem.warehouse_id, Order.warehouse_id)
+    q = (
+        db.query(
+            Product.id,
+            Product.name,
+            wh_col.label("wh_id"),
+            func.sum(OrderItem.quantity).label("qty"),
+            func.sum(OrderItem.total * _discount_ratio).label("summa"),
+        )
+        .join(OrderItem, OrderItem.product_id == Product.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            Order.type == "sale",
+            Order.status.in_(SALE_REALIZED),
+            Order.date >= d_from,
+            Order.date <= d_to,
+        )
+    )
+    if category_id:
+        q = q.filter(Product.category_id == category_id)
+    if name_query and name_query.strip():
+        q = q.filter(Product.name.ilike(f"%{name_query.strip()}%"))
+    q = q.group_by(Product.id, Product.name, wh_col)
+
+    wh_names = {w.id: w.name for w in db.query(Warehouse).order_by(Warehouse.name).all()}
+    UNKNOWN = "_none"  # ombori aniqlanmagan qatorlar uchun ustun kaliti
+
+    pivot = {}
+    used = {}  # wh_key -> name
+    for r in q.all():
+        wid = r.wh_id
+        key = str(wid) if wid is not None else UNKNOWN
+        name = wh_names.get(wid, "Aniqlanmagan") if wid is not None else "Aniqlanmagan"
+        used[key] = name
+        p = pivot.setdefault(r.id, {
+            "product_id": r.id, "product_name": r.name,
+            "cells": {}, "row_qty": 0.0, "row_sum": 0.0,
+        })
+        qty = float(r.qty or 0)
+        summa = float(r.summa or 0)
+        p["cells"][key] = {"qty": qty, "sum": summa}
+        p["row_qty"] += qty
+        p["row_sum"] += summa
+
+    # Ustunlar: nom bo'yicha alfavit, "Aniqlanmagan" oxirida
+    columns = sorted(
+        [{"key": k, "name": v} for k, v in used.items()],
+        key=lambda c: (c["key"] == UNKNOWN, c["name"].lower()),
+    )
+    items = sorted(pivot.values(), key=lambda x: x["row_sum"], reverse=True)
+
+    col_totals = {c["key"]: {"qty": 0.0, "sum": 0.0} for c in columns}
+    grand_qty = grand_sum = 0.0
+    for it in items:
+        grand_qty += it["row_qty"]
+        grand_sum += it["row_sum"]
+        for k, cell in it["cells"].items():
+            col_totals[k]["qty"] += cell["qty"]
+            col_totals[k]["sum"] += cell["sum"]
+
+    return items, columns, col_totals, grand_qty, grand_sum
+
+
+def _parse_report_dates(date_from, date_to):
+    """sold-products bilan bir xil sana parse (T-format yoki kun)."""
+    now = datetime.now()
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+    try:
+        d_from = (datetime.strptime(date_from, "%Y-%m-%dT%H:%M") if date_from and "T" in date_from
+                  else (datetime.strptime(date_from, "%Y-%m-%d") if date_from else today_start))
+    except (ValueError, TypeError):
+        d_from = today_start
+    try:
+        d_to = (datetime.strptime(date_to, "%Y-%m-%dT%H:%M") if date_to and "T" in date_to
+                else (datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                      if date_to else today_end))
+    except (ValueError, TypeError):
+        d_to = today_end
+    return d_from, d_to
+
+
+@router.get("/sales-by-store", response_class=HTMLResponse)
+async def sales_by_store_report(
+    request: Request,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    category_id: Optional[str] = None,
+    name_query: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Do'kon bo'yicha sotuv — pivot: mahsulot × do'kon (miqdor + summa)."""
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    try:
+        category_id = int(category_id) if category_id and str(category_id).strip() else None
+    except (ValueError, TypeError):
+        category_id = None
+
+    d_from, d_to = _parse_report_dates(date_from, date_to)
+    items, columns, col_totals, grand_qty, grand_sum = _sales_by_store_pivot(
+        db, d_from, d_to, category_id=category_id, name_query=name_query
+    )
+    categories = (
+        db.query(Category)
+        .join(Product, Product.category_id == Category.id)
+        .filter(Product.is_active == True)
+        .group_by(Category.id, Category.name)
+        .order_by(Category.name)
+        .all()
+    )
+    return templates.TemplateResponse("reports/sales_by_store.html", {
+        "request": request,
+        "current_user": current_user,
+        "page_title": "Do'kon bo'yicha sotuv",
+        "items": items,
+        "columns": columns,
+        "col_totals": col_totals,
+        "grand_qty": grand_qty,
+        "grand_sum": grand_sum,
+        "categories": categories,
+        "date_from": d_from.strftime("%Y-%m-%dT%H:%M"),
+        "date_to": d_to.strftime("%Y-%m-%dT%H:%M"),
+        "selected_category_id": category_id,
+        "name_query": name_query or "",
+    })
+
+
+@router.get("/sales-by-store/export")
+async def sales_by_store_export(
+    request: Request,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    category_id: Optional[str] = None,
+    name_query: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Do'kon bo'yicha sotuv pivot — Excel. Har do'kon: Summa + Miqdor ustun."""
+    _check_export_rate_limit(request)
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    try:
+        category_id = int(category_id) if category_id and str(category_id).strip() else None
+    except (ValueError, TypeError):
+        category_id = None
+
+    d_from, d_to = _parse_report_dates(date_from, date_to)
+    items, columns, col_totals, grand_qty, grand_sum = _sales_by_store_pivot(
+        db, d_from, d_to, category_id=category_id, name_query=name_query
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Dokon boyicha sotuv"
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    sub_fill = PatternFill(start_color="D9E1F2", end_color="D9E1F2", fill_type="solid")
+    bold_white = Font(bold=True, color="FFFFFF")
+    bold = Font(bold=True)
+
+    ws["A1"] = "Do'kon bo'yicha sotuv (mahsulot × do'kon)"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A2"] = f"Davr: {d_from.strftime('%d.%m.%Y')} — {d_to.strftime('%d.%m.%Y')}"
+
+    # Header 2 qator: do'kon nomi (2 ustun merged) + Summa/Miqdor, oxirida JAMI
+    r1, r2 = 4, 5
+    ws.cell(row=r1, column=1, value="Mahsulot").fill = header_fill
+    ws.cell(row=r1, column=1).font = bold_white
+    ws.merge_cells(start_row=r1, start_column=1, end_row=r2, end_column=1)
+    col = 2
+    col_span = {}  # key -> (summa_col)
+    for c in columns:
+        ws.merge_cells(start_row=r1, start_column=col, end_row=r1, end_column=col + 1)
+        hc = ws.cell(row=r1, column=col, value=c["name"])
+        hc.fill = header_fill
+        hc.font = bold_white
+        ws.cell(row=r2, column=col, value="Summa").fill = sub_fill
+        ws.cell(row=r2, column=col + 1, value="Miqdor").fill = sub_fill
+        col_span[c["key"]] = col
+        col += 2
+    # JAMI bloki
+    ws.merge_cells(start_row=r1, start_column=col, end_row=r1, end_column=col + 1)
+    jc = ws.cell(row=r1, column=col, value="JAMI")
+    jc.fill = header_fill
+    jc.font = bold_white
+    ws.cell(row=r2, column=col, value="Summa").fill = sub_fill
+    ws.cell(row=r2, column=col + 1, value="Miqdor").fill = sub_fill
+    jami_col = col
+
+    # Qatorlar
+    rownum = r2 + 1
+    for it in items:
+        ws.cell(row=rownum, column=1, value=it["product_name"])
+        for c in columns:
+            cell = it["cells"].get(c["key"])
+            base = col_span[c["key"]]
+            ws.cell(row=rownum, column=base, value=round(cell["sum"]) if cell else 0)
+            ws.cell(row=rownum, column=base + 1, value=round(cell["qty"], 2) if cell else 0)
+        ws.cell(row=rownum, column=jami_col, value=round(it["row_sum"]))
+        ws.cell(row=rownum, column=jami_col + 1, value=round(it["row_qty"], 2))
+        rownum += 1
+
+    # JAMI qator
+    tc = ws.cell(row=rownum, column=1, value="JAMI")
+    tc.font = bold
+    for c in columns:
+        ct = col_totals.get(c["key"]) or {"sum": 0, "qty": 0}
+        base = col_span[c["key"]]
+        ws.cell(row=rownum, column=base, value=round(ct["sum"])).font = bold
+        ws.cell(row=rownum, column=base + 1, value=round(ct["qty"], 2)).font = bold
+    ws.cell(row=rownum, column=jami_col, value=round(grand_sum)).font = bold
+    ws.cell(row=rownum, column=jami_col + 1, value=round(grand_qty, 2)).font = bold
+
+    ws.column_dimensions["A"].width = 28
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    fname = f"dokon_sotuv_{d_from.strftime('%Y%m%d')}_{d_to.strftime('%Y%m%d')}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
 # ============================================================
 # Z-hisobotlar tarixi (admin/manager)
 # JSON snapshotlardan o'qiydi — DB jadvali yo'q
