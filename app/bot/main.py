@@ -5,7 +5,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.config import BOT_TOKEN
-from app.bot.handlers import start, reports, ops
+from app.bot.handlers import start, reports, ops, ocr
 
 _bot = None
 _dp = None
@@ -23,6 +23,8 @@ def _create_bot_and_dp():
     # bor — ops FSM state handler esa state bilan cheklangan bo'lgani uchun
     # dispatcher tartibi aniq ishlashini ta'minlash uchun.
     _dp.include_router(ops.router)
+    # OCR (F.photo) — start routerdan OLDIN (start keng F.text filtrli)
+    _dp.include_router(ocr.router)
     _dp.include_router(start.router)
     _dp.include_router(reports.router)
     return _bot, _dp
