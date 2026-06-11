@@ -1060,9 +1060,15 @@ async def agent_create_order(
                 if not found:
                     new_oi.order_id = existing_order.id
                     db.add(new_oi)
-            # Total qayta hisoblash
+            # Total qayta hisoblash — FRESH query orqali.
+            # MUHIM: yangi qator db.add(new_oi) bilan (FK) qo'shildi, lekin
+            # existing_order.items relationship collection'iga append qilinmadi.
+            # db.flush() yuklangan collection'ni expire qilmaydi → eski (yangi
+            # qatorsiz) ro'yxat subtotalni kam hisoblardi (bug: #1554). DB'dan
+            # to'g'ridan o'qiymiz — barcha qator (yangi + yangilangan) hisobga olinadi.
             db.flush()
-            new_subtotal = sum(float(oi.quantity or 0) * float(oi.price or 0) for oi in existing_order.items)
+            fresh_items = db.query(OrderItem).filter(OrderItem.order_id == existing_order.id).all()
+            new_subtotal = sum(float(oi.quantity or 0) * float(oi.price or 0) for oi in fresh_items)
             new_discount = new_subtotal * float(existing_order.discount_percent or 0) / 100
             new_total = new_subtotal - new_discount
             existing_order.subtotal = new_subtotal
