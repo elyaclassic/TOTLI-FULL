@@ -67,3 +67,40 @@ def test_extract_from_image_cli_fail(tmp_path):
         from app.services.ocr_service import extract_from_image, OcrCliError
         with pytest.raises(OcrCliError):
             extract_from_image(str(img))
+
+
+def test_extract_uses_safe_tools_not_dangerous(tmp_path):
+    """XAVFSIZLIK regressiya: prompt injection himoyasi buzilmasligi kerak.
+
+    - `--dangerously-skip-permissions` ISHLATILMAYDI (confused-deputy).
+    - `--allowedTools Read` bor, Bash/Write/Edit disallow.
+    - Prompt args'da EMAS, stdin (input=) orqali — variadic flag yutmasligi
+      uchun, va prompt matni argument sifatida oqib chiqmasligi uchun.
+    """
+    img = tmp_path / "doc.jpg"
+    img.write_bytes(b"fake")
+    captured = {}
+
+    def fake_run(args, **kwargs):
+        captured["args"] = list(args)
+        captured["kwargs"] = kwargs
+        return MagicMock(
+            returncode=0,
+            stdout=b'{"hujjat_turi":"chek","qatorlar":[],"jami_summa":0}',
+            stderr=b"",
+        )
+
+    with patch("app.services.ocr_service._sp.run", side_effect=fake_run):
+        from app.services.ocr_service import extract_from_image
+        extract_from_image(str(img))
+
+    args = captured["args"]
+    assert "--dangerously-skip-permissions" not in args
+    assert "--allowedTools" in args
+    assert "Read" in args
+    assert "Bash" in args  # disallowedTools ichida
+    # Prompt argument sifatida uzatilmaydi — stdin orqali keladi
+    assert "input" in captured["kwargs"]
+    assert b"Read tool" in captured["kwargs"]["input"]
+    # Prompt matni (masalan "moliyaviy") hech bir argda bo'lmasligi kerak
+    assert not any("moliyaviy" in str(a) for a in args)

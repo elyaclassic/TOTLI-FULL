@@ -118,14 +118,26 @@ def extract_from_image(image_path: str) -> dict:
         OcrCliError — CLI topilmadi/timeout/xato qaytardi.
         OcrParseError — javobdan JSON ajratib bo'lmadi.
     """
-    abs_path = os.path.abspath(image_path)
-    if not os.path.exists(abs_path):
+    # realpath — symlink/traversal himoyasi (defense-in-depth). image_path
+    # ichki chaqiruvchidan (endpoint/bot tempfile) keladi, lekin baribir
+    # normallashtirib mavjudligini tekshiramiz.
+    abs_path = os.path.realpath(image_path)
+    if not os.path.isfile(abs_path):
         raise OcrCliError(f"Rasm topilmadi: {abs_path}")
 
     prompt = OCR_SYSTEM_PROMPT.format(image_path=abs_path)
     claude_bin = _resolve_claude_path()
+    # XAVFSIZLIK: rasm ishonchsiz manba (ta'minotchi/internet). Prompt
+    # injection bo'lsa ham Claude faqat Read tool bilan O'QIY oladi — Bash/
+    # Write/Edit/WebFetch BLOKLANGAN. `--dangerously-skip-permissions`
+    # ISHLATILMAYDI (u barcha toolga ruxsat berib confused-deputy ochadi).
+    # MUHIM: --allowedTools/--disallowedTools bo'sh-joy-ajratilgan (variadic)
+    # ro'yxat. Shuning uchun prompt args'ga EMAS, stdin orqali beriladi —
+    # aks holda variadic flag prompt so'zlarini "tool nomi" deb yutadi.
     args = [claude_bin, "--print", "--model", _OCR_MODEL,
-            "--dangerously-skip-permissions", prompt]
+            "--allowedTools", "Read",
+            "--disallowedTools", "Bash", "Write", "Edit", "NotebookEdit",
+            "WebFetch", "WebSearch", "Task", "Glob", "Grep"]
     if sys.platform == "win32" and claude_bin.lower().endswith((".cmd", ".bat")):
         args = ["cmd.exe", "/c"] + args
 
@@ -134,7 +146,8 @@ def extract_from_image(image_path: str) -> dict:
 
     try:
         result = _sp.run(
-            args, stdout=_sp.PIPE, stderr=_sp.PIPE, stdin=_sp.DEVNULL,
+            args, input=prompt.encode("utf-8"),
+            stdout=_sp.PIPE, stderr=_sp.PIPE,
             timeout=_CLI_TIMEOUT, env=env,
         )
     except _sp.TimeoutExpired as e:
