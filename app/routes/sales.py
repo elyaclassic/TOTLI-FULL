@@ -3737,6 +3737,33 @@ async def sales_pos_complete(
             pass
     if not product_ids or len(quantities) < len(product_ids):
         return RedirectResponse(url="/sales/pos?error=empty", status_code=303)
+    # Double-submit (takror yuborish) himoyasi: oxirgi 30s ichida shu kassir+ombor+
+    # mijoz uchun AYNAN bir xil savat (mahsulot+miqdor to'plami) bilan sotuv yozilgan
+    # bo'lsa — yangisini yaratmaymiz, mavjudiga idempotent redirect (POS qayta-bosish/F5).
+    _cart_sig = sorted(
+        (product_ids[i], round(float(quantities[i]), 3))
+        for i in range(min(len(product_ids), len(quantities)))
+        if product_ids[i] and float(quantities[i]) > 0
+    )
+    if _cart_sig:
+        _recent = db.query(Order).filter(
+            Order.type == "sale",
+            Order.warehouse_id == warehouse.id,
+            Order.partner_id == partner.id,
+            Order.user_id == (current_user.id if current_user else None),
+            Order.created_at >= datetime.now() - timedelta(seconds=30),
+            func.coalesce(Order.status, "") != "cancelled",
+        ).order_by(Order.id.desc()).limit(5).all()
+        for _ro in _recent:
+            _ro_sig = sorted(
+                (oi.product_id, round(float(oi.quantity or 0), 3))
+                for oi in db.query(OrderItem).filter(OrderItem.order_id == _ro.id).all()
+            )
+            if _ro_sig == _cart_sig:
+                return RedirectResponse(
+                    url="/sales/pos?success=1&number=" + quote(_ro.number) + "&dup=1",
+                    status_code=303,
+                )
     price_type = _get_pos_price_type(db)
     last_order = db.query(Order).filter(Order.type == "sale").order_by(Order.id.desc()).first()
     new_number = f"S-{datetime.now().strftime('%Y%m%d')}-{(last_order.id + 1) if last_order else 1:04d}"
