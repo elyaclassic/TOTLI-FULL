@@ -282,7 +282,10 @@ def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
     Order.warehouse_id yoki biror OrderItem.warehouse_id shu omborlarda bo'lsa.
     """
     cur.execute("""
-        SELECT DISTINCT o.id, o.number, o.warehouse_id
+        SELECT DISTINCT o.id, o.number, o.warehouse_id,
+               (SELECT GROUP_CONCAT(DISTINCT oi.warehouse_id)
+                FROM order_items oi
+                WHERE oi.order_id = o.id AND oi.warehouse_id IN (1, 7)) AS bad_item_wh
         FROM orders o
         WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
           AND (
@@ -294,9 +297,12 @@ def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
     rows = cur.fetchall()
     if not rows:
         return 0, None
-    msg = f"❌ <b>Noto'g'ri ombordan sotuv</b> (Vozvrat/Xom ashyo): {len(rows)} ta\n"
+    msg = f"❌ <b>Noto'g'ri ombordan sotuv</b> (Vozvrat=7/Xom ashyo=1): {len(rows)} ta\n"
     for r in rows[:5]:
-        msg += f"  #{r[0]} {r[1] or ''} wh={r[2]}\n"
+        item_part = f", qator_wh={r[3]}" if r[3] else ""
+        msg += f"  #{r[0]} {r[1] or ''} order_wh={r[2]}{item_part}\n"
+    if len(rows) > 5:
+        msg += f"  ...va yana {len(rows) - 5} ta\n"
     return len(rows), msg
 
 
