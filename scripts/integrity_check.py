@@ -319,6 +319,32 @@ def check_null_price_type(cur) -> tuple[int, str | None]:
     return len(rows), msg
 
 
+def check_agent_debt_desync(cur) -> tuple[int, str | None]:
+    """Aktiv sotuvda Order.debt == max(0, total − paid) bo'lishi kerak.
+
+    Agent/oddiy sotuvlarda per-order qarz ko'rsatkichi izchilligi.
+    """
+    cur.execute("""
+        SELECT o.id, o.number, o.source, o.total, o.paid, o.debt
+        FROM orders o
+        WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
+    """)
+    bad = []
+    for r in cur.fetchall():
+        total, paid, debt = float(r[3] or 0), float(r[4] or 0), float(r[5] or 0)
+        expected = max(0.0, total - paid)
+        if abs(debt - expected) > 1.0:
+            bad.append((r[0], r[1], r[2], total, paid, debt, expected))
+    if not bad:
+        return 0, None
+    msg = f"⚠️ <b>Qarz desync</b> (debt ≠ total−paid): {len(bad)} ta\n"
+    for b in bad[:5]:
+        msg += f"  #{b[0]} {b[1] or ''} total={b[3]:,.0f} paid={b[4]:,.0f} debt={b[5]:,.0f} kutilgan={b[6]:,.0f}\n"
+    if len(bad) > 5:
+        msg += f"  ...va yana {len(bad) - 5} ta\n"
+    return len(bad), msg
+
+
 # ============================================================
 # MAIN
 # ============================================================

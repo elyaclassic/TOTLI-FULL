@@ -71,3 +71,12 @@ def test_null_price_type_detects():
     cur.execute("INSERT INTO orders (id,type,status,price_type_id) VALUES (3,'sale','draft',NULL)")
     count, msg = ic.check_null_price_type(cur)
     assert count == 1, f"1 NULL kutilgan, topildi {count}"
+
+
+def test_agent_debt_desync_detects():
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,source,total,paid,debt) VALUES (1,'sale','delivered','agent',1000,0,0)")
+    cur.execute("INSERT INTO orders (id,type,status,source,total,paid,debt) VALUES (2,'sale','delivered','agent',800,300,500)")
+    count, msg = ic.check_agent_debt_desync(cur)
+    assert count == 1, f"1 desync kutilgan, topildi {count}"
