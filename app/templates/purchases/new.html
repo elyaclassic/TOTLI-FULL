@@ -658,10 +658,11 @@
         statusEl.textContent = '⏳ O\'qiyapman (15-30s)...';
         statusEl.className = 'small text-muted';
         const fd = new FormData(); fd.append('file', f);
+        const csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
         try {
-            const resp = await fetch('/api/ocr/parse', { method: 'POST', body: fd });
-            const j = await resp.json();
-            if (!j.ok) { statusEl.textContent = '⚠️ ' + j.error; statusEl.className = 'small text-danger'; return; }
+            const resp = await fetch('/api/ocr/parse', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': csrfToken } });
+            const j = await resp.json().catch(function() { return { ok: false, error: 'Server javobi noto\'g\'ri (HTTP ' + resp.status + ')' }; });
+            if (!j.ok) { statusEl.textContent = '⚠️ ' + (j.error || j.detail || 'Xato (HTTP ' + resp.status + ')'); statusEl.className = 'small text-danger'; return; }
             fill(j.data);
             const low = (j.data.ishonch === 'past');
             statusEl.textContent = '✅ To\'ldirildi (' + j.data.hujjat_turi + ')' +
