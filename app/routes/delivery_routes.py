@@ -1211,10 +1211,11 @@ async def supervisor_agent_payments(
     current_user: User = Depends(require_admin_or_manager),
 ):
     """Agent va Haydovchi to'lovlari ro'yxati — supervisor tasdiqlash uchun."""
-    # Sana filtri (default: so'nggi 30 kun — supervisor inkasatsiya darchasi)
+    # Sana filtri (default: BUGUN — supervisor har kuni bugungi inkasatsiyani ko'radi,
+    # 1 oylik darcha emas). Foydalanuvchi date_from kiritsa, o'sha sana ishlatiladi.
     from datetime import datetime as _dt, date as _date, timedelta as _td
     today = _date.today()
-    default_from = today - _td(days=30)
+    default_from = today
     try:
         d_from = _dt.strptime(date_from, "%Y-%m-%d").date() if date_from else default_from
     except (ValueError, TypeError):
