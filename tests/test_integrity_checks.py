@@ -97,3 +97,19 @@ def test_agent_debt_desync_clean():
     cur.execute("INSERT INTO orders (id,type,status,total,paid,debt) VALUES (1,'sale','delivered',800,300,500)")
     count, msg = ic.check_agent_debt_desync(cur)
     assert count == 0 and msg is None
+
+
+def test_partner_balance_drift_detects(db, sample_partner):
+    sample_partner.balance = 999999
+    db.add(sample_partner); db.commit()
+    count, msg = ic.check_partner_balance_drift_orm(db)
+    assert count >= 1, f"drift kutilgan, topildi {count}"
+    assert msg and "balans" in msg.lower()
+
+
+def test_partner_balance_drift_clean(db, sample_partner):
+    from app.services.partner_balance_service import compute_partner_balance
+    sample_partner.balance = compute_partner_balance(db, sample_partner.id)
+    db.add(sample_partner); db.commit()
+    count, msg = ic.check_partner_balance_drift_orm(db)
+    assert count == 0

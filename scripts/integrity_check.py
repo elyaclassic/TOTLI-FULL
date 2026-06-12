@@ -351,6 +351,34 @@ def check_agent_debt_desync(cur) -> tuple[int, str | None]:
     return len(bad), msg
 
 
+def check_partner_balance_drift_orm(db) -> tuple[int, str | None]:
+    """Partner.balance != compute_partner_balance(hujjatlar) — drift.
+
+    USD konversiya tufayli ORM (compute_partner_balance) ishlatadi.
+    `db` — SQLAlchemy Session.
+    """
+    from app.models.database import Partner
+    from app.services.partner_balance_service import compute_partner_balance
+    bad = []
+    for p in db.query(Partner).filter(Partner.is_active == True):
+        try:
+            computed = compute_partner_balance(db, p.id)
+        except Exception:
+            continue
+        stored = float(p.balance or 0)
+        if abs(stored - computed) > 1.0:
+            bad.append((p.id, p.name, stored, computed))
+    if not bad:
+        return 0, None
+    bad.sort(key=lambda x: -abs(x[2] - x[3]))
+    msg = f"❌ <b>Partner balans drift</b>: {len(bad)} ta\n"
+    for b in bad[:5]:
+        msg += f"  #{b[0]} {(b[1] or '')[:20]} balans={b[2]:,.0f} hisob={b[3]:,.0f} farq={b[2]-b[3]:+,.0f}\n"
+    if len(bad) > 5:
+        msg += f"  ...va yana {len(bad) - 5} ta\n"
+    return len(bad), msg
+
+
 # ============================================================
 # MAIN
 # ============================================================
