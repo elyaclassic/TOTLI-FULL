@@ -15,7 +15,8 @@ def _mem_db():
             id INTEGER PRIMARY KEY, number TEXT, type TEXT, status TEXT,
             partner_id INTEGER, warehouse_id INTEGER, price_type_id INTEGER,
             source TEXT, subtotal REAL, total REAL, paid REAL, debt REAL,
-            discount_percent REAL DEFAULT 0, discount_amount REAL DEFAULT 0
+            discount_percent REAL DEFAULT 0, discount_amount REAL DEFAULT 0,
+            payment_type TEXT
         );
         CREATE TABLE order_items (
             id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER,
@@ -113,3 +114,36 @@ def test_partner_balance_drift_clean(db, sample_partner):
     db.add(sample_partner); db.commit()
     count, msg = ic.check_partner_balance_drift_orm(db)
     assert count == 0
+
+
+# --- False-positive exclude testlari (2026-06-12) ---
+
+def test_null_price_type_employee_advance_excluded():
+    """Xodim mahsulot xaridi (employee_advance) narx turisiz ishlaydi — NULL normal."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    # employee_advance + price_type NULL -> false positive, chiqarilishi kerak
+    cur.execute("INSERT INTO orders (id,type,status,price_type_id,payment_type) VALUES (1,'sale','completed',NULL,'employee_advance')")
+    # oddiy sotuv + NULL -> haqiqiy
+    cur.execute("INSERT INTO orders (id,type,status,price_type_id,payment_type) VALUES (2,'sale','completed',NULL,'naqd')")
+    count, msg = ic.check_null_price_type(cur)
+    assert count == 1, f"faqat oddiy sotuv (1) kutilgan, topildi {count}"
+
+
+def test_agent_debt_employee_advance_excluded():
+    """Xodim xaridi debt=0 TO'G'RI (qarz EmployeeAdvance'da) — chiqariladi."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,total,paid,debt,payment_type) VALUES (1,'sale','completed',1000,0,0,'employee_advance')")
+    count, msg = ic.check_agent_debt_desync(cur)
+    assert count == 0, f"xodim xaridi chiqarilishi kerak, topildi {count}"
+
+
+def test_agent_debt_agent_confirmed_excluded():
+    """Agent confirmed/out_for_delivery debt=0 TO'G'RI (qarz yetkazishda) — chiqariladi."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,source,total,paid,debt) VALUES (1,'sale','confirmed','agent',1000,0,0)")
+    cur.execute("INSERT INTO orders (id,type,status,source,total,paid,debt) VALUES (2,'sale','out_for_delivery','agent',500,0,0)")
+    count, msg = ic.check_agent_debt_desync(cur)
+    assert count == 0, f"agent confirmed/out_for_delivery chiqarilishi kerak, topildi {count}"

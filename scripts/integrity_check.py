@@ -307,12 +307,17 @@ def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
 
 
 def check_null_price_type(cur) -> tuple[int, str | None]:
-    """Aktiv sotuvda price_type_id NULL bo'lmasligi kerak (narx turi tanlanmagan)."""
+    """Aktiv sotuvda price_type_id NULL bo'lmasligi kerak (narx turi tanlanmagan).
+
+    Xodim mahsulot xaridi (payment_type=employee_advance) narx turisiz ishlaydi
+    (item.price to'g'ridan) — NULL normal, chiqarib tashlanadi.
+    """
     cur.execute("""
         SELECT o.id, o.number, o.source
         FROM orders o
         WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
           AND o.price_type_id IS NULL
+          AND COALESCE(o.payment_type, '') != 'employee_advance'
     """)
     rows = cur.fetchall()
     if not rows:
@@ -328,12 +333,16 @@ def check_null_price_type(cur) -> tuple[int, str | None]:
 def check_agent_debt_desync(cur) -> tuple[int, str | None]:
     """Aktiv sotuvda Order.debt == max(0, total − paid) bo'lishi kerak.
 
-    Agent/oddiy sotuvlarda per-order qarz ko'rsatkichi izchilligi.
+    Per-order qarz ko'rsatkichi izchilligi. Ikki holat chiqariladi (debt=0 TO'G'RI):
+    - Xodim mahsulot xaridi (employee_advance): qarz EmployeeAdvance'da, Order'da emas
+    - Agent confirmed/out_for_delivery: agent qarzi faqat yetkazilganda yoziladi
     """
     cur.execute("""
         SELECT o.id, o.number, o.source, o.total, o.paid, o.debt
         FROM orders o
         WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
+          AND COALESCE(o.payment_type, '') != 'employee_advance'
+          AND NOT (o.source = 'agent' AND o.status IN ('confirmed', 'out_for_delivery'))
     """)
     bad = []
     for r in cur.fetchall():

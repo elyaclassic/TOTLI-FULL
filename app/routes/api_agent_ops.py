@@ -1503,7 +1503,9 @@ async def agent_order_exchange(order_id: int, request: Request, db: Session = De
 
         partner = db.query(Partner).filter(Partner.id == parent.partner_id).first()
         partner_discount = float(partner.discount_percent or 0) if partner else 0
-        price_type_id = parent.price_type_id
+        # parent.price_type_id NULL bo'lsa (eski/buzilgan order) obmen child ham NULL
+        # qolardi -> _resolve fallback (DEFAULT Agent #4 yoki partner narx turi).
+        price_type_id = parent.price_type_id or _resolve_price_type_id(partner)
 
         # M4 fix: return qty parent xaridiga clamp (xaridan ko'p qaytarib bo'lmaydi);
         # parent'da yo'q mahsulot tashlanadi. Avval clamp yo'q edi -> soxta kredit/stock kirim.
@@ -1768,7 +1770,7 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
         ret_order = Order(
             number=f"{prefix}-{seq_start:03d}", date=today, type="return_sale",
             partner_id=partner_id, warehouse_id=VOZVRAT_WAREHOUSE_ID,
-            agent_id=agent.id, source="agent",
+            agent_id=agent.id, source="agent", price_type_id=_resolve_price_type_id(partner),
             subtotal=ret_subtotal, discount_percent=0, discount_amount=0,
             total=ret_subtotal, paid=0, debt=0, status="draft", payment_type="naqd",
             note=f"OBMEN qaytarish (tarixsiz, sales doctor): {note_user}. Agent: {agent.code}",
@@ -1784,7 +1786,7 @@ async def agent_standalone_exchange(request: Request, db: Session = Depends(get_
         new_order = Order(
             number=f"{prefix}-{seq_start + 1:03d}", date=today, type="sale",
             partner_id=partner_id, warehouse_id=new_warehouse_id,
-            agent_id=agent.id, source="agent",
+            agent_id=agent.id, source="agent", price_type_id=_resolve_price_type_id(partner),
             subtotal=new_subtotal,
             discount_percent=partner_discount,
             discount_amount=new_subtotal * partner_discount / 100,
