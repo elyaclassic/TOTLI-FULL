@@ -7,9 +7,9 @@ Set-Location $root
 
 # Python interpretatorini topish
 $candidates = @(
+    "C:\Users\Администратор\AppData\Local\Programs\Python\Python312\python.exe",
     "C:\Users\Администратор\AppData\Local\Programs\Python\Python314\python.exe",
     "C:\Users\Администратор\AppData\Local\Programs\Python\Python313\python.exe",
-    "C:\Users\Администратор\AppData\Local\Programs\Python\Python312\python.exe",
     "C:\Users\Администратор\AppData\Local\Programs\Python\Python311\python.exe",
     "C:\Program Files\Python314\python.exe",
     "C:\Program Files\Python313\python.exe",
