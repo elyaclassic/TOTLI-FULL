@@ -43,3 +43,21 @@ def test_subtotal_desync_clean():
     cur.execute("INSERT INTO order_items (order_id,quantity,price,total) VALUES (1,1,600,600)")
     count, msg = ic.check_subtotal_desync(cur)
     assert count == 0 and msg is None
+
+
+def test_wrong_warehouse_detects():
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (1,'sale','delivered',7)")
+    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (2,'sale','completed',1)")
+    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (3,'sale','completed',5)")
+    count, msg = ic.check_sale_from_wrong_warehouse(cur)
+    assert count == 2, f"2 noto'g'ri kutilgan, topildi {count}"
+
+
+def test_wrong_warehouse_clean():
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (1,'sale','completed',5)")
+    count, msg = ic.check_sale_from_wrong_warehouse(cur)
+    assert count == 0 and msg is None

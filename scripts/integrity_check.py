@@ -276,6 +276,30 @@ def check_subtotal_desync(cur) -> tuple[int, str | None]:
     return len(bad), msg
 
 
+def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
+    """Sotuv Vozvrat (wh=7) yoki Xom ashyo (wh=1) ombordan bo'lmasligi kerak.
+
+    Order.warehouse_id yoki biror OrderItem.warehouse_id shu omborlarda bo'lsa.
+    """
+    cur.execute("""
+        SELECT DISTINCT o.id, o.number, o.warehouse_id
+        FROM orders o
+        WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
+          AND (
+            o.warehouse_id IN (1, 7)
+            OR EXISTS (SELECT 1 FROM order_items oi
+                       WHERE oi.order_id = o.id AND oi.warehouse_id IN (1, 7))
+          )
+    """)
+    rows = cur.fetchall()
+    if not rows:
+        return 0, None
+    msg = f"❌ <b>Noto'g'ri ombordan sotuv</b> (Vozvrat/Xom ashyo): {len(rows)} ta\n"
+    for r in rows[:5]:
+        msg += f"  #{r[0]} {r[1] or ''} wh={r[2]}\n"
+    return len(rows), msg
+
+
 # ============================================================
 # MAIN
 # ============================================================
