@@ -249,6 +249,33 @@ def check_negative_stock(cur) -> tuple[int, str | None]:
     return len(rows), msg
 
 
+def check_subtotal_desync(cur) -> tuple[int, str | None]:
+    """Order.subtotal != Σ(OrderItem.quantity × price) — subtotal desync.
+
+    Chegirma subtotal'ni o'zgartirmaydi, shuning uchun qty×price bilan
+    solishtiramiz (total emas). cancelled/draft chiqarib tashlanadi.
+    """
+    cur.execute("""
+        SELECT o.id, o.number, o.subtotal,
+               COALESCE((SELECT SUM(oi.quantity * oi.price) FROM order_items oi
+                         WHERE oi.order_id = o.id), 0) AS items_sum
+        FROM orders o
+        WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
+    """)
+    bad = []
+    for r in cur.fetchall():
+        if abs(float(r[2] or 0) - float(r[3] or 0)) > 1.0:
+            bad.append(r)
+    if not bad:
+        return 0, None
+    msg = f"❌ <b>Subtotal desync</b>: {len(bad)} ta\n"
+    for r in bad[:5]:
+        msg += f"  #{r[0]} {r[1] or ''} subtotal={float(r[2] or 0):,.0f} items={float(r[3] or 0):,.0f} farq={float(r[2] or 0)-float(r[3] or 0):+,.0f}\n"
+    if len(bad) > 5:
+        msg += f"  ...va yana {len(bad) - 5} ta\n"
+    return len(bad), msg
+
+
 # ============================================================
 # MAIN
 # ============================================================
