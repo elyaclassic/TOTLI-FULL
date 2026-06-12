@@ -11,7 +11,7 @@ import glob
 from datetime import datetime, date, timedelta
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from app.models.database import SessionLocal, Order, Notification, AttendanceDoc, Attendance, Employee
+from app.models.database import SessionLocal, Order, Notification, AttendanceDoc, Attendance, Employee, Production
 from app.utils.notifications import check_low_stock_and_notify, create_notification
 
 # Baza fayli va backup papkasi
@@ -256,6 +256,45 @@ def _tg_sales_plan_reminder():
         print(f"[Scheduler] Sales plan reminder xato: {e}")
 
 
+def _cleanup_cancelled_productions_job():
+    """Bekor qilingan (status='cancelled') ishlab chiqarish hujjatlarini 1 kundan keyin
+    DB'dan butunlay o'chiradi. Vaqt yaratilgan sanadan (created_at) hisoblanadi.
+    production_items va stages cascade orqali avtomatik o'chadi; StockMovement bog'lanmagan
+    (bekor qilinganda stock allaqachon revert qilingan) — qoldiqqa ta'sir yo'q."""
+    db = SessionLocal()
+    try:
+        cutoff = datetime.now() - timedelta(days=1)
+        stale = db.query(Production).filter(
+            Production.status == "cancelled",
+            Production.created_at < cutoff,
+        ).all()
+        if not stale:
+            return
+        numbers = [p.number for p in stale]
+        for p in stale:
+            db.delete(p)  # cascade: production_items + stages
+        db.commit()
+        msg = f"{len(numbers)} ta bekor qilingan ishlab chiqarish hujjati avto-o'chirildi (1 kun): {', '.join(numbers[:20])}"
+        print(f"[Scheduler] {msg}")
+        try:
+            create_notification(
+                db,
+                title="Bekor hujjatlar tozalandi",
+                message=msg,
+                notification_type="info",
+                priority="low",
+                action_url="/production/orders?status=cancelled",
+                related_entity_type="production",
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        db.rollback()
+        print(f"[Scheduler] Bekor production cleanup xato: {e}")
+    finally:
+        db.close()
+
+
 
 
 _scheduler = None
@@ -308,6 +347,9 @@ def start_scheduler():
                       misfire_grace_time=60, coalesce=True, max_instances=1)
     # Oylik savdo rejasi eslatma — har kuni 09:00 da (ichkarida 1, 10, 20, 25 da yuboradi)
     _scheduler.add_job(_tg_sales_plan_reminder, "cron", hour=9, minute=0, id="tg_sales_plan_reminder")
+    # Bekor qilingan ishlab chiqarish hujjatlarini har kuni 1 kundan keyin avto-o'chirish
+    _scheduler.add_job(_cleanup_cancelled_productions_job, "cron", hour=23, minute=45, id="cleanup_cancelled_prod")
+    _scheduler.add_job(_cleanup_cancelled_productions_job, "date", run_date=datetime.now() + timedelta(minutes=2), id="cleanup_cancelled_prod_first")
     _scheduler.start()
     print("[Scheduler] Reja ishga tushdi (bildirishnomalar + backup + live backup (5min) + Hikvision sync + TG notify + Audit)")
 
