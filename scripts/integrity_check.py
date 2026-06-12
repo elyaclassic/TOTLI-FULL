@@ -300,6 +300,25 @@ def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
     return len(rows), msg
 
 
+def check_null_price_type(cur) -> tuple[int, str | None]:
+    """Aktiv sotuvda price_type_id NULL bo'lmasligi kerak (narx turi tanlanmagan)."""
+    cur.execute("""
+        SELECT o.id, o.number, o.source
+        FROM orders o
+        WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
+          AND o.price_type_id IS NULL
+    """)
+    rows = cur.fetchall()
+    if not rows:
+        return 0, None
+    msg = f"⚠️ <b>Narx turi (price_type) NULL</b>: {len(rows)} ta aktiv sotuv\n"
+    for r in rows[:5]:
+        msg += f"  #{r[0]} {r[1] or ''} source={r[2] or '?'}\n"
+    if len(rows) > 5:
+        msg += f"  ...va yana {len(rows) - 5} ta\n"
+    return len(rows), msg
+
+
 # ============================================================
 # MAIN
 # ============================================================

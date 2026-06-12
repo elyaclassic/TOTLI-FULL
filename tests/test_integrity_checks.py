@@ -61,3 +61,13 @@ def test_wrong_warehouse_clean():
     cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (1,'sale','completed',5)")
     count, msg = ic.check_sale_from_wrong_warehouse(cur)
     assert count == 0 and msg is None
+
+
+def test_null_price_type_detects():
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,type,status,price_type_id) VALUES (1,'sale','completed',NULL)")
+    cur.execute("INSERT INTO orders (id,type,status,price_type_id) VALUES (2,'sale','delivered',4)")
+    cur.execute("INSERT INTO orders (id,type,status,price_type_id) VALUES (3,'sale','draft',NULL)")
+    count, msg = ic.check_null_price_type(cur)
+    assert count == 1, f"1 NULL kutilgan, topildi {count}"
