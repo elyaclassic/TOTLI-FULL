@@ -393,6 +393,10 @@ CHECKS = [
     ("Stale drafts", check_stale_drafts),
     ("Balance entry paid mismatch", check_balance_entry_paid_mismatch),
     ("Manfiy stock", check_negative_stock),
+    ("Subtotal desync (subtotal vs items)", check_subtotal_desync),
+    ("Noto'g'ri ombordan sotuv", check_sale_from_wrong_warehouse),
+    ("Narx turi (price_type) NULL", check_null_price_type),
+    ("Qarz desync (debt vs total-paid)", check_agent_debt_desync),
 ]
 
 
@@ -435,6 +439,35 @@ def main(argv: list[str]) -> int:
 
     conn.close()
 
+    # ORM tekshiruv (partner balance — USD konversiya tufayli ORM kerak)
+    try:
+        env_path = ROOT / ".env"
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8").splitlines():
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        # ROOT (loyiha ildizi) sys.path'da bo'lishi kerak — app paketini ko'rsin
+        _root_str = str(ROOT)
+        if _root_str not in sys.path:
+            sys.path.insert(0, _root_str)
+        from app.models.database import SessionLocal
+        _db = SessionLocal()
+        try:
+            pcount, pmsg = check_partner_balance_drift_orm(_db)
+        finally:
+            _db.close()
+        total_count += pcount
+        if pmsg:
+            issues.append(pmsg)
+            summary.append(f"❌ Partner balans drift: {pcount}")
+        else:
+            summary.append("✅ Partner balans drift")
+    except Exception as e:
+        log(f"Partner balance check xato: {e}")
+        summary.append(f"⚠️ Partner balans drift: ERROR ({e})")
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     if issues:
         text = f"<b>[INTEGRITY {now}]</b>\n\n" + "\n".join(issues)
@@ -445,7 +478,7 @@ def main(argv: list[str]) -> int:
     else:
         log("OK")
         if not quiet:
-            print(f"[INTEGRITY {now}] ✅ Hammasi toza ({len(CHECKS)} ta tekshiruv)")
+            print(f"[INTEGRITY {now}] ✅ Hammasi toza ({len(summary)} ta tekshiruv)")
 
     if verbose:
         print("\n--- Summary ---")
