@@ -719,7 +719,7 @@
                                     </div>
                                     <div style="flex:1 1 0;min-width:140px;">
                                         <label class="form-label small mb-1 text-muted">Agent</label>
-                                        <select name="agent_ids" class="form-select form-select-sm agent-select" required>
+                                        <select name="agent_ids" class="form-select form-select-sm agent-select">
                                             <option value="">— Tanlang —</option>
                                             {% for a in agents %}
                                             <option value="{{ a.id }}">{{ a.full_name }} ({{ a.code }})</option>
