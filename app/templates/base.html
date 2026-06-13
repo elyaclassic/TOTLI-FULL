@@ -940,6 +940,16 @@
                     <i class="bi bi-gear-wide-connected"></i> Ishlab chiqarish buyurtmalari
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Tovar kirim' in (page_title or '') or 'Xarid' in (page_title or '') %}active{% endif %}" href="/purchases">
+                    <i class="bi bi-box-arrow-in-down"></i> Tovarlar kirimi
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'mahsulot harid' in (page_title or '')|lower or 'Xodim mahsulot' in (page_title or '') %}active{% endif %}" href="/employees/mahsulot">
+                    <i class="bi bi-bag-check"></i> Xodim mahsulot haridi
+                </a>
+            </li>
 
             <!-- MA'LUMOTNOMALAR -->
             <li class="nav-item mt-3">
@@ -955,6 +965,11 @@
                     <i class="bi bi-people"></i> Kontragentlar
                 </a>
             </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'Retsept' in (page_title or '') %}active{% endif %}" href="/production/recipes">
+                    <i class="bi bi-journal-text"></i> Retseptlar
+                </a>
+            </li>
 
             <!-- HISOBOTLAR -->
             <li class="nav-item mt-3">
@@ -963,6 +978,11 @@
             <li class="nav-item">
                 <a class="nav-link {% if 'Qoldiq hisoboti' in (page_title or '') %}active{% endif %}" href="/reports/stock">
                     <i class="bi bi-box2-heart"></i> Qoldiq hisoboti
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if 'svertka' in (page_title or '')|lower or 'Kontragent svertka' in (page_title or '') %}active{% endif %}" href="/reports/partner-reconciliation">
+                    <i class="bi bi-arrow-left-right"></i> Kontragent svertka
                 </a>
             </li>
 
@@ -1008,16 +1028,6 @@
             <li class="nav-item">
                 <a class="nav-link {% if page_title == 'Agent hisoboti' %}active{% endif %}" href="/supervisor/agent-report">
                     <i class="bi bi-graph-up-arrow"></i> Agent hisoboti
-                </a>
-            </li>
-
-            <!-- HISOBOTLAR -->
-            <li class="nav-item mt-3">
-                <small class="text-light opacity-50 px-3">HISOBOTLAR</small>
-            </li>
-            <li class="nav-item">
-                <a class="nav-link {% if 'svertka' in (page_title or '')|lower or 'Kontragent svertka' in (page_title or '') %}active{% endif %}" href="/reports/partner-reconciliation">
-                    <i class="bi bi-arrow-left-right"></i> Kontragent svertka
                 </a>
             </li>
 

@@ -32,7 +32,7 @@ from app.models.database import (
     Employee,
     PRODUCTION_STAGE_NAMES,
 )
-from app.deps import require_auth, require_admin, get_current_user
+from app.deps import require_auth, require_admin, require_admin_or_manager, get_current_user
 from app.utils.notifications import check_low_stock_and_notify
 from app.utils.production_order import recipe_kg_per_unit, production_output_quantity_for_stock, notify_managers_production_ready, is_qiyom_recipe, notify_next_stage_operators
 from app.utils.user_scope import get_warehouses_for_user
@@ -742,7 +742,7 @@ async def add_recipe(
     output_quantity: float = Form(1),
     description: str = Form(""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_manager),
 ):
     if output_quantity <= 0:
         raise HTTPException(status_code=400, detail="Chiqish miqdori 0 dan katta bo'lishi kerak")
@@ -853,7 +853,7 @@ async def delete_recipe_stage(
     recipe_id: int,
     stage_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     stage = db.query(RecipeStage).filter(
         RecipeStage.id == stage_id,
@@ -871,7 +871,7 @@ async def delete_recipe_item(
     recipe_id: int,
     item_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
+    current_user: User = Depends(require_admin),
 ):
     item = db.query(RecipeItem).filter(
         RecipeItem.id == item_id,

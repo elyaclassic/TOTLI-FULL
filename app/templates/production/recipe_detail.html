@@ -39,10 +39,12 @@
             {% for s in _stages %}
             <li class="list-group-item d-flex justify-content-between align-items-center flex-grow-1">
                 <span><span class="badge bg-primary rounded-pill me-2">{{ s.stage_number }}</span> {{ s.name }}</span>
+                {% if current_user and current_user.role == 'admin' %}
                 <form method="POST" action="/production/recipes/{{ recipe.id }}/delete-stage/{{ s.id }}" style="display: inline;" onsubmit="return confirm('Ushbu bosqichni o\u2019chirmoqchimisiz?');">
                     <input type="hidden" name="return_q" value="{{ search_q or '' }}">
                     <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                 </form>
+                {% endif %}
             </li>
             {% endfor %}
         </ul>
@@ -190,10 +192,12 @@
                                         onclick="editItem({{ item.id }}, {{ item.product_id if item.product_id else 0 }}, {{ item.quantity }})">
                                         <i class="bi bi-pencil"></i>
                                     </button>
+                                    {% if current_user and current_user.role == 'admin' %}
                                     <form method="POST" action="/production/recipes/{{ recipe.id }}/delete-item/{{ item.id }}" style="display:inline;" onsubmit="return confirm('Ushbu xom ashyoni tarkibdan o\'chirmoqchimisiz?');">
                                         <input type="hidden" name="return_q" value="{{ search_q or '' }}">
                                         <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                     </form>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
