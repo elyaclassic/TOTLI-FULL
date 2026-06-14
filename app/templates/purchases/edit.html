@@ -176,6 +176,7 @@
                                 <tr>
                                     <th>Nomi</th>
                                     <th class="sum-cell">Summa</th>
+                                    <th>Kim to'ladi</th>
                                     {% if purchase.status == 'draft' %}<th style="width:45px;"></th>{% endif %}
                                 </tr>
                             </thead>
@@ -184,6 +185,20 @@
                                 <tr>
                                     <td>{{ exp.name }}</td>
                                     <td class="sum-cell">{{ "{:,.0f}".format(exp.amount) }} <span class="muted-cell">so'm</span></td>
+                                    <td>
+                                        {% if purchase.status == 'draft' %}
+                                        <form method="POST" action="/purchases/{{ purchase.id }}/set-expense-paidby/{{ exp.id }}" style="display:inline;">
+                                            <select name="paid_by" class="form-select form-select-sm" style="min-width:150px;" onchange="this.form.submit()">
+                                                <option value="self" {% if (exp.paid_by or 'supplier') == 'self' %}selected{% endif %}>O'zimiz (kassadan)</option>
+                                                <option value="supplier" {% if (exp.paid_by or 'supplier') == 'supplier' %}selected{% endif %}>Yetkazib beruvchi (qarzga)</option>
+                                            </select>
+                                        </form>
+                                        {% elif (exp.paid_by or 'supplier') == 'self' %}
+                                        <span class="badge bg-info text-dark">O'zimiz (kassadan)</span>
+                                        {% else %}
+                                        <span class="badge bg-warning text-dark">Yetkazib beruvchi (qarzga)</span>
+                                        {% endif %}
+                                    </td>
                                     {% if purchase.status == 'draft' %}
                                     <td>
                                         <form method="POST" action="/purchases/{{ purchase.id }}/delete-expense/{{ exp.id }}" style="display: inline;">
@@ -198,6 +213,7 @@
                                 <tr>
                                     <td class="text-end muted-cell fw-semibold">Xarajatlar jami:</td>
                                     <td class="sum-cell"><strong>{{ "{:,.0f}".format(purchase.total_expenses or 0) }} so'm</strong></td>
+                                    <td></td>
                                     {% if purchase.status == 'draft' %}<td></td>{% endif %}
                                 </tr>
                             </tfoot>
@@ -247,7 +263,7 @@
                                 <button type="submit" class="top-btn btn btn-outline-primary">Saqlash</button>
                             </div>
                         </form>
-                        <small class="muted-cell">Harajatlar jurnalida ko'rsatiladi.</small>
+                        <small class="muted-cell">"O'zimiz" xarajatlari tasdiqlashda shu kassadan ayriladi (qarzga emas). "Yetkazib beruvchi" xarajatlari kontragent qarziga qo'shiladi.</small>
                     </div>
                     {% endif %}
                 </div>
@@ -306,9 +322,17 @@
                         <label class="form-label small mb-0 fw-semibold">Xarajat nomi</label>
                         <input type="text" name="name" class="form-control form-control-sm" placeholder="masalan: Yo'l, Yuk, Boj" required>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-2">
                         <label class="form-label small mb-0 fw-semibold">Summa (so'm)</label>
                         <input type="number" name="amount" class="form-control form-control-sm" step="0.01" min="0" required data-calc>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small mb-0 fw-semibold">Kim to'ladi</label>
+                        <select name="paid_by" class="form-select form-select-sm">
+                            <option value="self" selected>O'zimiz (kassadan ayriladi)</option>
+                            <option value="supplier">Yetkazib beruvchi (qarziga qo'shiladi)</option>
+                        </select>
+                        <div class="form-text">Ikkala holatda ham mahsulot tan narxiga qo'shiladi.</div>
                     </div>
                     <button type="submit" class="top-btn btn btn-outline-primary w-100">
                         <i class="bi bi-plus-circle"></i> Xarajat qo'shish

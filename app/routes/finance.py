@@ -398,7 +398,11 @@ async def finance_harajatlar(
             purchases_with_expenses_q = purchases_with_expenses_q.filter(Purchase.date < datetime.combine(dt + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    purchases_with_expenses = purchases_with_expenses_q.order_by(Purchase.date.desc()).limit(100).all()
+    # 2026-06-14: Purchase xarajatlari endi paid_by bo'yicha aniq ishlanadi:
+    #   self → confirm'da real Payment(expense) yaratiladi (quyida "Barcha chiqimlar"da ko'rinadi),
+    #   supplier → kontragent qarziga (kassadan chiqmaydi → harajat jurnalida emas).
+    # Shuning uchun purchase'ni HD-hujjat sifatida virtual ko'rsatish keraksiz (double bo'lardi).
+    purchases_with_expenses = []
     harajat_hujjatlari = []
     for doc in expense_docs:
         harajat_hujjatlari.append({
@@ -487,7 +491,10 @@ async def finance_harajatlar(
             purchase_expenses_q = purchase_expenses_q.filter(Purchase.date < datetime.combine(dt + timedelta(days=1), datetime.min.time()))
         except ValueError:
             pass
-    purchase_expenses_list = purchase_expenses_q.order_by(Purchase.date.desc()).limit(QUERY_LIMIT_DEFAULT).all()
+    # 2026-06-14: Virtual "Kirim xarajati" qatorlari olib tashlandi — self xarajat real
+    # Payment(expense) sifatida pastda ko'rinadi, supplier xarajat esa qarzga (kassa chiqimi emas).
+    # Eski virtual qator real Payment bilan double bo'lardi.
+    purchase_expenses_list = []
     # Har payment uchun bog'langan ExpenseDoc (HD-... raqamlari klikab bo'lishi uchun)
     payment_ids_expense = [p.id for p in payments if p.id]
     expense_doc_by_payment = {}

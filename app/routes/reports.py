@@ -2068,7 +2068,13 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
     if period_only:
         q_purchases = q_purchases.filter(Purchase.date >= date_from_start, Purchase.date <= date_to_end)
     for p in q_purchases.order_by(Purchase.date):
-        total_val = float((p.total or 0) + (p.total_expenses or 0))
+        # Qarzga faqat 'supplier' (yetkazib beruvchi to'lagan) xarajatlar qo'shiladi.
+        # 'self' (o'zimiz to'lagan) xarajatlar kassadan ayrilgan, qarzga emas.
+        supplier_exp = sum(
+            float(e.amount or 0) for e in p.expenses
+            if (e.paid_by or "supplier") == "supplier"
+        )
+        total_val = float(p.total or 0) + supplier_exp
         doc_label = f"Tovarlar kirimi (xarid) {p.number or ''} {p.date.strftime('%d.%m.%Y %H:%M') if p.date else ''}".strip()
         rows.append({
             "date": p.date,

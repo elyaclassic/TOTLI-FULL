@@ -94,7 +94,15 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
         Purchase.partner_id == partner_id,
         Purchase.status == "confirmed",
     ):
-        total -= float((p.total or 0) + (p.total_expenses or 0))
+        # Xarajatlardan faqat 'supplier' (yetkazib beruvchi to'lagan) qarzga qo'shiladi.
+        # 'self' (o'zimiz to'lagan) xarajatlar kassadan ayriladi, qarzga emas.
+        # paid_by None bo'lsa — eski xulq (supplier), orqaga moslik.
+        supplier_exp = sum(
+            float(e.amount or 0)
+            for e in p.expenses
+            if (e.paid_by or "supplier") == "supplier"
+        )
+        total -= float(p.total or 0) + supplier_exp
 
     for item in (
         db.query(PartnerBalanceDocItem)

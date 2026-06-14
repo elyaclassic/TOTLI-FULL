@@ -175,6 +175,7 @@ async def purchase_create(
     prices = form.getlist("price")
     expense_names = form.getlist("expense_name")
     expense_amounts = form.getlist("expense_amount")
+    expense_paid_bys = form.getlist("expense_paid_by")
     items_data = []
     for i, pid in enumerate(product_ids):
         if not pid or not str(pid).strip():
@@ -255,7 +256,9 @@ async def purchase_create(
         except (TypeError, ValueError):
             amt = 0
         if amt > 0:
-            db.add(PurchaseExpense(purchase_id=purchase.id, name=str(name).strip(), amount=amt))
+            pb = (expense_paid_bys[j] if j < len(expense_paid_bys) else "self") or "self"
+            pb = pb if pb in ("self", "supplier") else "self"
+            db.add(PurchaseExpense(purchase_id=purchase.id, name=str(name).strip(), amount=amt, paid_by=pb))
     db.commit()
     return RedirectResponse(url=f"/purchases/edit/{purchase.id}", status_code=303)
 
@@ -361,7 +364,9 @@ async def purchase_add_expense(
         amount = 0
     if not name or amount <= 0:
         return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
-    db.add(PurchaseExpense(purchase_id=purchase_id, name=name, amount=amount))
+    pb = (form.get("paid_by") or "self").strip()
+    pb = pb if pb in ("self", "supplier") else "self"
+    db.add(PurchaseExpense(purchase_id=purchase_id, name=name, amount=amount, paid_by=pb))
     purchase.total_expenses = (purchase.total_expenses or 0) + amount
     db.commit()
     return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
@@ -400,6 +405,31 @@ async def purchase_set_expense_cash(
         if not dept:
             department_id = None
     purchase.expense_department_id = department_id
+    db.commit()
+    return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
+
+
+@router.post("/{purchase_id}/set-expense-paidby/{expense_id}")
+async def purchase_set_expense_paidby(
+    purchase_id: int,
+    expense_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Xarajatni kim to'laganini o'zgartirish (self | supplier) — faqat qoralama."""
+    purchase = db.query(Purchase).filter(Purchase.id == purchase_id).first()
+    if not purchase or purchase.status != "draft":
+        raise HTTPException(status_code=400, detail="Faqat qoralamani tahrirlash mumkin")
+    expense = db.query(PurchaseExpense).filter(
+        PurchaseExpense.id == expense_id,
+        PurchaseExpense.purchase_id == purchase_id,
+    ).first()
+    if not expense:
+        raise HTTPException(status_code=404, detail="Xarajat topilmadi")
+    form = await request.form()
+    pb = (form.get("paid_by") or "self").strip()
+    expense.paid_by = pb if pb in ("self", "supplier") else "self"
     db.commit()
     return RedirectResponse(url=f"/purchases/edit/{purchase_id}", status_code=303)
 

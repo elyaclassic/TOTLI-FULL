@@ -39,6 +39,67 @@ class DocumentError(Exception):
         super().__init__(detail)
 
 
+def _self_expense_payment_desc(purchase: Purchase) -> str:
+    """'self' xarajat Payment'i uchun aniq tavsif (revert'da topish kaliti)."""
+    return f"Tovar kirim xarajati (o'zimiz): {purchase.number}"
+
+
+def _apply_self_expense_payment(db: Session, purchase: Purchase, current_user: User) -> None:
+    """'self' (o'zimiz to'lagan) xarajatlar yig'indisi uchun tanlangan kassadan
+    Payment(type=expense) yaratadi — kassa balansi kamayadi.
+    partner_id=None: kontragent qarziga TA'SIR QILMAYDI (faqat kassa).
+    Idempotent: shu purchase uchun confirmed self-expense payment bo'lsa, qayta yaratmaydi."""
+    from app.utils.doc_number import next_doc_number
+    from app.services.finance_service import sync_cash_balance
+    self_total = sum(
+        float(e.amount or 0) for e in purchase.expenses
+        if (e.paid_by or "supplier") == "self"
+    )
+    if self_total <= 0 or not purchase.expense_cash_register_id:
+        return
+    desc = _self_expense_payment_desc(purchase)
+    existing = db.query(Payment).filter(
+        Payment.category == "purchase_expense",
+        Payment.status == "confirmed",
+        Payment.description == desc,
+    ).first()
+    if existing:
+        return
+    dt = purchase.date or datetime.now()
+    num = next_doc_number(db, Payment, f"PAY-{dt.strftime('%Y%m%d')}-")
+    pay = Payment(
+        number=num, date=dt, type="expense",
+        cash_register_id=purchase.expense_cash_register_id,
+        partner_id=None, order_id=None, amount=self_total,
+        payment_type="cash", category="purchase_expense",
+        description=desc,
+        user_id=current_user.id if current_user else None,
+        status="confirmed",
+    )
+    db.add(pay)
+    db.flush()
+    sync_cash_balance(db, purchase.expense_cash_register_id)
+
+
+def _cancel_self_expense_payment(db: Session, purchase: Purchase) -> None:
+    """Revert/cancel vaqtida shu purchase uchun yaratilgan self-expense Payment(lar)ni
+    bekor qiladi va kassani qayta sinxronlaydi (pul kassaga qaytadi)."""
+    from app.services.finance_service import sync_cash_balance
+    pays = db.query(Payment).filter(
+        Payment.category == "purchase_expense",
+        Payment.status == "confirmed",
+        Payment.description == _self_expense_payment_desc(purchase),
+    ).all()
+    affected = set()
+    for p in pays:
+        p.status = "cancelled"
+        if p.cash_register_id:
+            affected.add(p.cash_register_id)
+    db.flush()
+    for cid in affected:
+        sync_cash_balance(db, cid)
+
+
 def confirm_purchase_atomic(
     db: Session,
     purchase: Purchase,
@@ -137,6 +198,9 @@ def confirm_purchase_atomic(
             recompute_partner_balance(db, purchase.partner_id, reason="purchase_confirm",
                                       ref=purchase.number,
                                       actor=current_user.username if current_user else None)
+
+        # --- 'self' xarajatlarni tanlangan kassadan ayirish (qarzga emas) ---
+        _apply_self_expense_payment(db, purchase, current_user)
 
         # --- Audit log ---
         log_action(
@@ -333,6 +397,9 @@ def revert_purchase_atomic(
             recompute_partner_balance(db, purchase.partner_id, reason="purchase_revert",
                                       ref=purchase.number,
                                       actor=current_user.username if current_user else None)
+
+        # --- 'self' xarajat Payment'ini bekor qilish (pul kassaga qaytadi) ---
+        _cancel_self_expense_payment(db, purchase)
 
         # --- Status allaqachon atomik UPDATE WHERE bilan o'zgartirildi ---
 

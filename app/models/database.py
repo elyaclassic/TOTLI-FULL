@@ -118,6 +118,10 @@ class PurchaseExpense(Base):
     purchase_id = Column(Integer, ForeignKey("purchases.id"))
     name = Column(String(200))   # Xarajat turi/nomi (yo'l, yuk, boj, ...)
     amount = Column(Float)       # Summa (so'm)
+    # Xarajatni kim to'ladi:
+    #   'self'     — o'zimiz to'ladik: tan narxiga qo'shiladi + tanlangan kassadan ayriladi (qarzga emas)
+    #   'supplier' — yetkazib beruvchi to'ladi: tan narxiga qo'shiladi + kontragent qarziga (kassaga emas)
+    paid_by = Column(String(20), default="self")
     created_at = Column(DateTime, default=datetime.now)
 
     purchase = relationship("Purchase", back_populates="expenses")
@@ -1895,6 +1899,22 @@ def ensure_purchase_expense_cash_register():
         print(f"ensure_purchase_expense_cash_register: {e}")
 
 
+def ensure_purchase_expense_paid_by():
+    """purchase_expenses jadvaliga paid_by ustunini qo'shadi (self | supplier).
+    MUHIM: mavjud xarajatlar avval HAR DOIM yetkazib beruvchi qarziga qo'shilardi,
+    shuning uchun mavjud satrlar uchun default 'supplier' (orqaga moslik — balanslar o'zgarmaydi).
+    Yangi xarajatlar UI'dan 'self' (default) bilan keladi."""
+    try:
+        with engine.begin() as conn:
+            r = conn.execute(text("PRAGMA table_info(purchase_expenses)"))
+            cols = [row[1] for row in r]
+            if "paid_by" not in cols:
+                conn.execute(text("ALTER TABLE purchase_expenses ADD COLUMN paid_by VARCHAR(20) DEFAULT 'supplier'"))
+                print("purchase_expenses.paid_by ustuni qo'shildi (mavjudlar 'supplier').")
+    except Exception as e:
+        print(f"ensure_purchase_expense_paid_by: {e}")
+
+
 def ensure_purchase_expense_direction_department():
     """purchases jadvaliga expense_direction_id va expense_department_id ustunlarini qo'shadi."""
     try:
@@ -2163,6 +2183,7 @@ def init_db():
     ensure_cash_register_payment_type()
     ensure_purchase_expense_cash_register()
     ensure_purchase_expense_direction_department()
+    ensure_purchase_expense_paid_by()
     ensure_piecework_tasks_table()
     ensure_employee_salary_type()
     ensure_employee_change_docs()
