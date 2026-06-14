@@ -18,6 +18,12 @@
     <div class="card">
         <div class="card-header"><span class="fw-bold"><i class="bi bi-pencil-square text-primary"></i> Xodimni tahrirlash</span></div>
         <div class="card-body">
+            <div class="alert alert-info py-2 small d-flex align-items-center gap-2">
+                <i class="bi bi-info-circle"></i>
+                <span>Ish haqi, ish haqi turi, lavozim, bo'lim va bo'lak ishlar bu yerdan o'zgartirilmaydi — ular faqat
+                {% if user_can_override(current_user) %}<a href="/employees/change/new?employee_id={{ emp.id }}" class="fw-semibold">«Kadr o'zgarishi»</a>{% else %}«Kadr o'zgarishi»{% endif %}
+                hujjati orqali (tarix va kuchga kirish sanasi bilan) o'zgaradi.</span>
+            </div>
             <form method="POST" action="/employees/update/{{ emp.id }}">
                 <div class="row g-3">
                     <div class="col-md-6">
@@ -29,12 +35,12 @@
                         <input type="text" class="form-control" name="code" value="{{ emp.code or '' }}" placeholder="Bo'sh qolsa EMP-{{ emp.id }}">
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Oylik</label>
-                        <input type="number" class="form-control" name="salary" value="{{ emp.salary or 0 }}" step="100000">
+                        <label class="form-label">Oylik <span class="text-muted small">(Kadr o'zgarishi orqali)</span></label>
+                        <input type="number" class="form-control bg-light" value="{{ emp.salary or 0 }}" step="100000" disabled>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Ish haqi turi</label>
-                        <select class="form-select" name="salary_type">
+                        <label class="form-label">Ish haqi turi <span class="text-muted small">(Kadr o'zgarishi orqali)</span></label>
+                        <select class="form-select bg-light" disabled>
                             <option value="">— Tanlang —</option>
                             <option value="oylik" {% if emp.salary_type == 'oylik' %}selected{% endif %}>Oylik</option>
                             <option value="soatlik" {% if emp.salary_type == 'soatlik' %}selected{% endif %}>Soatlik</option>
@@ -48,11 +54,11 @@
                         <small class="text-muted">Masalan: 4 = oyiga 4 kun dam</small>
                     </div>
                     <div class="col-md-3">
-                        <label class="form-label">Bo'lak ishlar (bir nechta tanlash mumkin)</label>
-                        <div class="border rounded p-2" style="max-height: 180px; overflow:auto;">
+                        <label class="form-label">Bo'lak ishlar <span class="text-muted small">(Kadr o'zgarishi orqali)</span></label>
+                        <div class="border rounded p-2 bg-light" style="max-height: 180px; overflow:auto;">
                             {% for t in piecework_tasks %}
                             <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="piecework_task_ids" value="{{ t.id }}" id="edit_pw_{{ t.id }}"
+                                <input class="form-check-input" type="checkbox" value="{{ t.id }}" id="edit_pw_{{ t.id }}" disabled
                                     {% if emp.piecework_tasks and (t in emp.piecework_tasks) %}checked{% endif %}>
                                 <label class="form-check-label" for="edit_pw_{{ t.id }}">
                                     {{ t.name or t.code or t.id }} — {{ "{:,.0f}".format(t.price_per_unit or 0) }} so'm/{{ t.unit_name or 'birlik' }}
@@ -60,15 +66,14 @@
                             </div>
                             {% endfor %}
                         </div>
-                        <small class="text-muted">Bo'lak: oylik = ishlab chiqarilgan × stavka. Bo'lak + oylik: oylik = max(mehnat haqi, bo'lak hisobi).</small>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Lavozimi</label>
-                        <input type="text" class="form-control" name="position" value="{{ emp.position or '' }}">
+                        <label class="form-label">Lavozimi <span class="text-muted small">(Kadr o'zgarishi orqali)</span></label>
+                        <input type="text" class="form-control bg-light" value="{{ emp.position or '' }}" disabled>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label">Bo'lim</label>
-                        <select class="form-select" name="department">
+                        <label class="form-label">Bo'lim <span class="text-muted small">(Kadr o'zgarishi orqali)</span></label>
+                        <select class="form-select bg-light" disabled>
                             <option value="">— Tanlanmagan —</option>
                             {% for d in departments %}
                             <option value="{{ d.id }}"

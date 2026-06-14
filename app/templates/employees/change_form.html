@@ -1,34 +1,68 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="container py-3" style="max-width:640px;">
-  <h4 class="mb-3">Yangi kadr o'zgarishi &mdash; {{ emp.full_name }}</h4>
+  <h4 class="mb-3">{% if doc %}Kadr o'zgarishini tahrirlash{% else %}Yangi kadr o'zgarishi{% endif %} &mdash; {{ emp.full_name }}</h4>
   {% if request.query_params.get('error') %}<div class="alert alert-danger py-2">{{ request.query_params.get('error') }}</div>{% endif %}
-  <form method="post" action="/employees/change/create">
+  <form method="post" action="{% if doc %}/employees/change/{{ doc.id }}/update{% else %}/employees/change/create{% endif %}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
     <input type="hidden" name="employee_id" value="{{ emp.id }}">
     <div class="row g-2 mb-3">
-      <div class="col"><label class="form-label">Buyruq sanasi</label><input type="date" name="doc_date" class="form-control" value="{{ today }}" required></div>
-      <div class="col"><label class="form-label">Qachondan kuchga kiradi</label><input type="date" name="effective_date" class="form-control" value="{{ today }}" required></div>
+      <div class="col"><label class="form-label">Buyruq sanasi</label><input type="date" id="doc_date" name="doc_date" class="form-control" value="{{ today }}" required></div>
+      <div class="col">
+        <label class="form-label">Qachondan kuchga kiradi</label>
+        <input type="date" id="effective_date" name="effective_date" class="form-control bg-light" value="{{ default_effective }}" readonly required>
+        <div class="form-text" id="eff_hint">Avtomatik: buyruq sanasidan keyingi oy boshidan kuchga kiradi.</div>
+      </div>
     </div>
     <div class="card mb-2"><div class="card-body py-2">
-      <label class="form-check"><input type="checkbox" name="change_salary" value="1" class="form-check-input"> Ish haqi (joriy: {{ "{:,.0f}".format(cur_salary or 0) }})</label>
-      <input type="number" step="any" name="new_salary" class="form-control mt-1" placeholder="Yangi ish haqi">
+      <label class="form-check"><input type="checkbox" name="change_salary" value="1" class="form-check-input" {% if doc and doc.change_salary %}checked{% endif %}> Ish haqi (joriy: {{ "{:,.0f}".format(cur_salary or 0) }})</label>
+      <input type="number" step="any" name="new_salary" class="form-control mt-1" placeholder="Yangi ish haqi" value="{% if doc and doc.change_salary and doc.new_salary is not none %}{{ doc.new_salary|int }}{% endif %}">
     </div></div>
     <div class="card mb-2"><div class="card-body py-2">
-      <label class="form-check"><input type="checkbox" name="change_position" value="1" class="form-check-input"> Lavozim (joriy: {{ emp.position or '&mdash;' }})</label>
-      <input type="text" name="new_position" class="form-control mt-1" placeholder="Yangi lavozim">
+      <label class="form-check"><input type="checkbox" name="change_position" value="1" class="form-check-input" {% if doc and doc.change_position %}checked{% endif %}> Lavozim (joriy: {{ emp.position or '&mdash;' }})</label>
+      <input type="text" name="new_position" list="positions_list" class="form-control mt-1" placeholder="Mavjudlardan tanlang yoki yangisini yozing" autocomplete="off" value="{% if doc and doc.change_position %}{{ doc.new_position or '' }}{% endif %}">
+      <datalist id="positions_list">{% for p in positions %}<option value="{{ p }}"></option>{% endfor %}</datalist>
     </div></div>
     <div class="card mb-2"><div class="card-body py-2">
-      <label class="form-check"><input type="checkbox" name="change_department" value="1" class="form-check-input"> Bo'lim (joriy: {{ emp.department or '&mdash;' }})</label>
-      <input type="text" name="new_department" class="form-control mt-1" placeholder="Yangi bo'lim">
+      <label class="form-check"><input type="checkbox" name="change_department" value="1" class="form-check-input" {% if doc and doc.change_department %}checked{% endif %}> Bo'lim (joriy: {{ emp.department or '&mdash;' }})</label>
+      <input type="text" name="new_department" list="departments_list" class="form-control mt-1" placeholder="Mavjudlardan tanlang yoki yangisini yozing" autocomplete="off" value="{% if doc and doc.change_department %}{{ doc.new_department or '' }}{% endif %}">
+      <datalist id="departments_list">{% for d in departments %}<option value="{{ d }}"></option>{% endfor %}</datalist>
     </div></div>
     <div class="card mb-2"><div class="card-body py-2">
-      <label class="form-check"><input type="checkbox" name="change_salary_type" value="1" class="form-check-input"> Ish haqi turi (joriy: {{ cur_type or '&mdash;' }})</label>
-      <select name="new_salary_type" class="form-select mt-1"><option value="">&#8212;</option><option value="oylik">oylik</option><option value="soatlik">soatlik</option><option value="bo'lak">bo'lak</option></select>
+      <label class="form-check"><input type="checkbox" name="change_salary_type" value="1" class="form-check-input" {% if doc and doc.change_salary_type %}checked{% endif %}> Ish haqi turi (joriy: {{ cur_type or '&mdash;' }})</label>
+      <select name="new_salary_type" class="form-select mt-1">
+        <option value="">&#8212;</option>
+        {% set sel = doc.new_salary_type if (doc and doc.change_salary_type) else '' %}
+        <option value="oylik" {% if sel == 'oylik' %}selected{% endif %}>oylik</option>
+        <option value="soatlik" {% if sel == 'soatlik' %}selected{% endif %}>soatlik</option>
+        <option value="bo'lak" {% if sel == "bo'lak" %}selected{% endif %}>bo'lak</option>
+      </select>
     </div></div>
-    <div class="mb-3"><label class="form-label">Sabab</label><input type="text" name="reason" class="form-control" placeholder="Masalan: ish haqi oshirildi"></div>
-    <button type="submit" class="btn btn-primary">Saqlash (qoralama)</button>
-    <a href="/employees/changes?employee_id={{ emp.id }}" class="btn btn-outline-secondary">Bekor</a>
+    <div class="mb-3"><label class="form-label">Sabab</label><input type="text" name="reason" class="form-control" placeholder="Masalan: ish haqi oshirildi" value="{{ doc.reason or '' if doc else '' }}"></div>
+    <button type="submit" class="btn btn-primary">{% if doc %}Saqlash{% else %}Saqlash (qoralama){% endif %}</button>
+    <a href="/employees/changes" class="btn btn-outline-secondary">Bekor</a>
   </form>
 </div>
+<script>
+// Buyruq sanasi o'zgarganda kuchga kirish sanasini avto-hisoblash.
+// Qoida (server bilan bir xil): har doim KEYINGI oyning 1-kuni (31.05 -> 01.06; 14.06 -> 01.07).
+(function () {
+  var docInput = document.getElementById('doc_date');
+  var effInput = document.getElementById('effective_date');
+  if (!docInput || !effInput) return;
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function computeEffective(docStr) {
+    var p = docStr.split('-');
+    if (p.length !== 3) return null;
+    var y = parseInt(p[0], 10), m = parseInt(p[1], 10) - 1; // m: 0-based
+    m += 1;                          // har doim keyingi oy boshi
+    if (m > 11) { m = 0; y += 1; }
+    return y + '-' + pad(m + 1) + '-01';
+  }
+  docInput.addEventListener('change', function () {
+    var eff = computeEffective(docInput.value);
+    if (eff) effInput.value = eff;
+  });
+})();
+</script>
 {% endblock %}

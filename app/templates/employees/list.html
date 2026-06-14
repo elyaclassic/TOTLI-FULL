@@ -180,6 +180,9 @@
                                     <a href="/employees/dismissal/create?employee_id={{ emp.id }}" class="btn-act warning" title="Ishdan bo'shatish"><i class="bi bi-person-x"></i></a>
                                     {% endif %}
                                     <a href="/employees/edit/{{ emp.id }}" class="btn-act" title="Tahrirlash"><i class="bi bi-pencil"></i></a>
+                                    {% if emp.is_active %}
+                                    <a href="/employees/change/new?employee_id={{ emp.id }}" class="btn-act" title="Kadr o'zgarishi (ish haqi/lavozim)"><i class="bi bi-pencil-square"></i></a>
+                                    {% endif %}
                                     <form method="POST" action="/employees/delete/{{ emp.id }}" class="d-inline" onsubmit="return confirm('Ushbu xodimni rostdan ham o\'chirishni xohlaysizmi?');">
                                         <button type="submit" class="btn-act danger" title="O'chirish"><i class="bi bi-trash"></i></button>
                                     </form>

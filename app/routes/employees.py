@@ -175,9 +175,13 @@ async def employee_update(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
-    """Xodim ma'lumotlarini yangilash. Kod bo'sh qolsa avtomatik EMP-<id> qo'yiladi."""
-    if salary < 0:
-        raise HTTPException(status_code=400, detail="Maosh manfiy bo'lishi mumkin emas")
+    """Xodim ma'lumotlarini yangilash. Kod bo'sh qolsa avtomatik EMP-<id> qo'yiladi.
+
+    MUHIM (foydalanuvchi qarori 2026-06-14): ish haqi (salary), ish haqi turi (salary_type),
+    lavozim (position), bo'lim (department) va bo'lak ishlar (piecework) BU YERDAN
+    O'ZGARTIRILMAYDI — faqat "Kadr o'zgarishi" hujjati orqali (effective-date'li, tarix bilan).
+    Bu yerda faqat F.I.O, kod, telefon, dam olish kunlari o'zgaradi. Form'da bu maydonlar
+    yuborilsa ham ataylab e'tiborga olinmaydi (disabled aylanib o'tilsa ham himoya)."""
     from urllib.parse import quote
     emp = db.query(Employee).filter(Employee.id == employee_id).first()
     if not emp:
@@ -188,35 +192,10 @@ async def employee_update(
         return RedirectResponse(url="/employees?error=" + quote("Bunday kod boshqa xodimda mavjud: " + code_val), status_code=303)
     emp.full_name = full_name
     emp.code = code_val
-    emp.position = position
-    dept_id_str = (department or "").strip()
-    if dept_id_str.isdigit():
-        dept = db.query(Department).filter(Department.id == int(dept_id_str)).first()
-        if dept:
-            emp.department_id = dept.id
-            emp.department = dept.name
-        else:
-            emp.department_id = None
-            emp.department = ""
-    else:
-        emp.department = dept_id_str
-        emp.department_id = None
     emp.phone = phone
-    emp.salary = salary
-    st = (salary_type or "").strip() or None
-    if st and st not in ("oylik", "soatlik", "bo'lak", "bo'lak_oylik"):
-        st = None
-    emp.salary_type = st
     if monthly_rest_days is not None and 0 <= monthly_rest_days <= 15:
         emp.monthly_rest_days = int(monthly_rest_days)
-    task_ids = [int(x) for x in (piecework_task_ids or []) if str(x).strip().isdigit()]
-    task_ids = list(dict.fromkeys(task_ids))
-    emp.piecework_task_id = task_ids[0] if task_ids else None  # legacy
-    if st in ("bo'lak", "bo'lak_oylik") and task_ids:
-        tasks = db.query(PieceworkTask).filter(PieceworkTask.id.in_(task_ids)).all()
-        emp.piecework_tasks = tasks
-    else:
-        emp.piecework_tasks = []
+    # salary / salary_type / position / department / piecework — ataylab O'ZGARTIRILMAYDI.
     db.commit()
     return RedirectResponse(url="/employees?updated=1", status_code=303)
 
