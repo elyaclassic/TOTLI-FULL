@@ -104,9 +104,10 @@ async def partner_add(
         existing_by_phone = db.query(Partner).filter(Partner.phone == phone).first()
         if existing_by_phone:
             raise HTTPException(status_code=400, detail=f"'{phone}' telefon raqamli kontragent allaqachon mavjud!")
+    from app.utils.partner_code import generate_partner_code
     partner = Partner(
         name=name,
-        code=None,
+        code=generate_partner_code(db),
         type=type,
         phone=phone,
         address=address,
@@ -727,8 +728,8 @@ async def import_partners(
             if agent:
                 agent_id = agent.id
         if not partner:
-            count = db.query(Partner).count()
-            code = f"P{count + 1:04d}"
+            from app.utils.partner_code import generate_partner_code
+            code = generate_partner_code(db)
             partner = Partner(
                 code=code,
                 name=name,
