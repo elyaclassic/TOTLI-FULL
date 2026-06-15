@@ -160,8 +160,9 @@
                                 <a href="/supervisor/agent-payments/edit/{{ p.id }}" class="btn btn-sm btn-outline-primary py-0 px-2" title="Tahrirlash">
                                     <i class="bi bi-pencil"></i>
                                 </a>
-                                <form method="post" action="/supervisor/agent-payments/confirm/{{ p.id }}" style="display:inline;" onsubmit="return confirm('{{ "{:,.0f}".format(p.amount or 0) }} so\'m tasdiqlansimi?')">
-                                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash">
+                                <form method="post" action="/supervisor/agent-payments/confirm/{{ p.id }}" style="display:inline;" onsubmit="return askReceivedAmount(this, {{ p.amount or 0 }})">
+                                    <input type="hidden" name="received_amount" value="">
+                                    <button type="submit" class="btn btn-sm btn-success" title="Tasdiqlash (qabul qilingan summani kiritasiz)">
                                         <i class="bi bi-check-lg"></i>
                                     </button>
                                 </form>
@@ -370,4 +371,31 @@
     </div>
 </div>
 {% endif %}
+<script>
+// Agent to'lovini tasdiqlashda HAQIQATAN topshirilgan summani so'raydi.
+// Kam bo'lsa farq agentning ish haqi qarziga yoziladi (server hisoblaydi).
+function askReceivedAmount(form, fullAmount) {
+  var def = fullAmount ? Math.round(fullAmount) : '';
+  var inp = prompt(
+    "Agent HAQIQATAN topshirgan summani kiriting (so'm).\n\n" +
+    "To'liq summa: " + Math.round(fullAmount).toLocaleString('ru-RU') + " so'm\n" +
+    "Kam kiritsangiz — farq agentning ish haqi qarziga yoziladi.\n" +
+    "To'liq bo'lsa — shu qiymatni qoldiring.",
+    def
+  );
+  if (inp === null) return false;
+  var val = parseFloat(String(inp).replace(/[^0-9.]/g, ''));
+  if (isNaN(val) || val <= 0) { alert("Noto'g'ri summa kiritildi."); return false; }
+  if (val > fullAmount + 0.5) { alert("Topshirilgan summa to'liq summadan ko'p bo'lishi mumkin emas."); return false; }
+  form.querySelector('input[name=received_amount]').value = val;
+  if (val < fullAmount - 0.5) {
+    return confirm(
+      "Topshirildi: " + val.toLocaleString('ru-RU') + " so'm\n" +
+      "Agent qarziga yoziladi: " + Math.round(fullAmount - val).toLocaleString('ru-RU') + " so'm\n\n" +
+      "Davom etilsinmi?"
+    );
+  }
+  return true;
+}
+</script>
 {% endblock %}

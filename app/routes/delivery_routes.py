@@ -2,6 +2,7 @@
 Yetkazib berish — haydovchilar, yetkazishlar, xarita, supervayzer.
 """
 from datetime import datetime
+from typing import Optional
 from fastapi import APIRouter, Request, Depends, Form, HTTPException
 from sqlalchemy.orm import Session
 
@@ -26,6 +27,7 @@ from app.models.database import (
     Product,
     Stock,
     Warehouse,
+    EmployeeAdvance,
 )
 from app.deps import require_admin, require_admin_or_manager
 from app.services.stock_service import create_stock_movement, delete_stock_movements_for_document
@@ -1544,10 +1546,16 @@ def _delete_linked_agent_payment(db, ap) -> int:
 async def supervisor_confirm_agent_payment(
     request: Request,
     payment_id: int,
+    received_amount: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_manager),
 ):
-    """Agent to'lovini tasdiqlash — mijoz qarzidan ayirish va kassaga kirim qilish."""
+    """Agent to'lovini tasdiqlash — mijoz qarzidan ayirish va kassaga kirim qilish.
+
+    received_amount (ixtiyoriy): agent HAQIQATAN topshirgan summa. Bo'sh bo'lsa = to'liq.
+    Agar to'liqdan kam bo'lsa: kassaga faqat topshirilgan kiradi, mijoz qarzi TO'LIQ
+    yopiladi (mijoz to'lagan), farq esa agentning o'z qarzi (EmployeeAdvance, ish haqidan
+    ushlanadi). Balans: to'liq = kassa + agent_qarzi."""
     ap = db.query(AgentPayment).filter(AgentPayment.id == payment_id).first()
     if not ap:
         return RedirectResponse(url="/supervisor/agent-payments?error=not_found", status_code=303)
@@ -1564,6 +1572,16 @@ async def supervisor_confirm_agent_payment(
     if claim.rowcount == 0:
         return RedirectResponse(url="/supervisor/agent-payments?error=already_processed", status_code=303)
     db.refresh(ap)
+
+    # Qabul qilingan (agent topshirgan) summa — bo'sh/noto'g'ri bo'lsa to'liq summa
+    full_amount = float(ap.amount or 0)
+    try:
+        accepted = float(received_amount) if received_amount not in (None, "") else full_amount
+    except (ValueError, TypeError):
+        accepted = full_amount
+    if accepted <= 0 or accepted > full_amount:
+        accepted = full_amount
+    shortfall = round(full_amount - accepted, 2)  # agent topshirmagan (uning qarzi)
 
     # 2. Mijoz partner'ini olish (keyinroq recompute + notify uchun)
     partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
@@ -1610,12 +1628,13 @@ async def supervisor_confirm_agent_payment(
         type="income",
         cash_register_id=cash_register.id,
         partner_id=ap.partner_id,
-        amount=float(ap.amount or 0),
+        amount=accepted,  # kassaga FAQAT agent topshirgan summa kiradi
         payment_type=ap.payment_type,
         category="agent_collection",
         description=(
             f"Agent inkassatsiya: {partner.name if partner else ''}"
             + (f" — {ap.notes}" if ap.notes else "")
+            + (f" (topshirildi {accepted:,.0f}/{full_amount:,.0f}, qoldi agent qarzi {shortfall:,.0f})" if shortfall > 0 else "")
             + f" [AP#{ap.id}]"
         ),
         user_id=current_user.id,
@@ -1625,8 +1644,28 @@ async def supervisor_confirm_agent_payment(
     db.flush()
     ap.payment_id = payment.id  # M3: FK bog'lash (category-match o'rniga aniq Payment)
     logger.info(
-        f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), amount={ap.amount}"
+        f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), "
+        f"mijoz_to'ladi={full_amount} topshirildi={accepted} agent_qarzi={shortfall}"
     )
+
+    # Agent topshirmagan summa → uning o'z qarzi (EmployeeAdvance, kassasiz, ish haqidan ushlanadi)
+    if shortfall > 0:
+        agent = db.query(Agent).filter(Agent.id == ap.agent_id).first()
+        if agent and agent.employee_id:
+            db.add(EmployeeAdvance(
+                employee_id=agent.employee_id,
+                amount=shortfall,
+                advance_date=datetime.now().date(),
+                note=(f"Inkassatsiya topshirilmagan: {partner.name if partner else ''} "
+                      f"({accepted:,.0f}/{full_amount:,.0f}) [AP#{ap.id}]"),
+                cash_register_id=None,   # kassaga tegmaydi — faqat xodim qarzi
+                is_product=False,
+                confirmed_at=datetime.now(),
+                payment_id=None,
+            ))
+            logger.info(f"AP#{ap.id}: agent emp#{agent.employee_id} qarziga {shortfall} yozildi (EmployeeAdvance)")
+        else:
+            logger.warning(f"AP#{ap.id}: shortfall={shortfall} lekin agent#{ap.agent_id} xodimga bog'lanmagan — qarz yozilmadi")
 
     # 4. Buyurtmalar qarzini kamaytirish (FIFO — eng eski buyurtmadan boshlab)
     remaining = float(ap.amount or 0)
@@ -1923,6 +1962,21 @@ async def supervisor_edit_driver_payment(
     return RedirectResponse(url="/supervisor/agent-payments?info=" + quote("To'lov tahrirlandi"), status_code=303)
 
 
+def _delete_shortfall_advance(db, ap) -> float:
+    """Inkassatsiya qisman to'lovida yaratilgan agent qarzini (EmployeeAdvance) o'chiradi.
+    Kassasiz advance — to'g'ridan o'chirish xavfsiz (kassa/balansga ta'sir yo'q, faqat oylik qarz)."""
+    marker = f"[AP#{ap.id}]"
+    advs = db.query(EmployeeAdvance).filter(
+        EmployeeAdvance.note.like(f"%{marker}%"),
+        EmployeeAdvance.cash_register_id.is_(None),
+    ).all()
+    removed = 0.0
+    for a in advs:
+        removed += float(a.amount or 0)
+        db.delete(a)
+    return removed
+
+
 @router.post("/supervisor/agent-payments/revert/{payment_id}")
 async def supervisor_revert_agent_payment(
     request: Request,
@@ -1941,6 +1995,8 @@ async def supervisor_revert_agent_payment(
     #    BARCHA bir xil summali agent_collection to'lovni o'chirib, noto'g'ri drift berardi)
     _delete_linked_agent_payment(db, ap)
     ap.payment_id = None
+    # Qisman to'lovda yaratilgan agent qarzini ham bekor qilish
+    _delete_shortfall_advance(db, ap)
 
     # 2. Statusni pending ga qaytarish
     ap.status = "pending"
@@ -1981,6 +2037,7 @@ async def supervisor_delete_agent_payment(
     if ap.status == "confirmed":
         partner_id_for_recompute = ap.partner_id
         _delete_linked_agent_payment(db, ap)  # M3 helper: FK orqali aniq
+        _delete_shortfall_advance(db, ap)     # qisman to'lovdagi agent qarzini ham o'chirish
 
     db.delete(ap)
 

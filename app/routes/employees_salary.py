@@ -116,6 +116,28 @@ async def employee_salary_page(
             product_purchase_sums[a.employee_id] = product_purchase_sums.get(a.employee_id, 0) + (a.amount or 0)
         else:
             advance_sums[a.employee_id] = advance_sums.get(a.employee_id, 0) + (a.amount or 0)
+
+    # --- Agent komissiya oyligi: agent xodim uchun oylik = o'sha oyda YIG'GAN puli x commission% ---
+    # Yig'gan = confirmed AgentPayment.amount (mijoz to'lagan, to'liq). Topshirmagan pul esa
+    # alohida EmployeeAdvance qarzi sifatida advance_sums'da hisobga olingan (oylikdan ayriladi).
+    agent_commission_base = {}  # employee_id -> hisoblangan oylik (yig'gan x pct/100)
+    from app.models.database import Agent as _Agent, AgentPayment as _AP
+    _agents = db.query(_Agent).filter(_Agent.employee_id.isnot(None)).all()
+    if _agents:
+        _agent_ids = [a.id for a in _agents]
+        _collected = dict(
+            db.query(_AP.agent_id, func.coalesce(func.sum(_AP.amount), 0))
+            .filter(_AP.status == "confirmed",
+                    func.date(_AP.created_at) >= start_d,
+                    func.date(_AP.created_at) <= end_d,
+                    _AP.agent_id.in_(_agent_ids))
+            .group_by(_AP.agent_id).all()
+        )
+        for a in _agents:
+            pct = float(a.commission_percent or 0)
+            collected = float(_collected.get(a.id, 0) or 0)
+            agent_commission_base[a.employee_id] = round(collected * pct / 100.0, 2)
+
     # Kvota qo'llash: mahsulot xaridining kvotadan oshgan qismi advance ga qo'shiladi
     for emp_id, total_purchase in product_purchase_sums.items():
         emp_obj = next((e for e in employees if e.id == emp_id), None)
@@ -310,7 +332,13 @@ async def employee_salary_page(
         s = salaries.get(emp.id)
         piecework_amount = float(piecework_calculated.get(emp.id, 0) or 0)
         base_source = ""
-        if emp.id in group_member_ids and emp.id in piecework_calculated:
+        if emp.id in agent_commission_base:
+            # Agent xodim: oylik = o'sha oyda yig'gan puli x commission% (foiz asosida).
+            # Kunlik proratsiya QO'LLANMAYDI; topshirmagan pul advance sifatida ayriladi.
+            base = agent_commission_base[emp.id]
+            base_source = "agent"
+            piecework_amount = 0.0
+        elif emp.id in group_member_ids and emp.id in piecework_calculated:
             mehnat_haqi = float(latest_doc_salary.get(emp.id, 0) or 0) or float(emp.salary or 0)
             piece_total = piecework_amount
             base = max(mehnat_haqi, piece_total)
@@ -333,7 +361,7 @@ async def employee_salary_page(
         base = float(base or 0)
         calculated_base = None
         emp_working_days = working_days_by_emp_total.get(emp.id, working_days_in_month)
-        if emp_working_days and emp_working_days > 0:
+        if base_source != "agent" and emp_working_days and emp_working_days > 0:
             contract_monthly = float(latest_doc_salary.get(emp.id, 0) or 0) or float(emp.salary or 0)
             worked_days = worked_days_by_emp.get(emp.id, 0) or 0
             if getattr(emp, "salary_type", None) == "oylik":
