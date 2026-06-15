@@ -13,7 +13,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, PatternFill
 
 from app.core import templates
-from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, ProductionItem, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category
+from app.models.database import get_db, Order, OrderItem, Stock, StockMovement, Product, Partner, Warehouse, User, Production, ProductionItem, Recipe, StockAdjustmentDoc, StockAdjustmentDocItem, Employee, Purchase, PurchaseItem, WarehouseTransfer, Payment, ProductPrice, ExpenseDoc, ExpenseDocItem, ExpenseType, Salary, PartnerBalanceDoc, PartnerBalanceDocItem, AuditLog, CashRegister, CashTransfer, Category, Agent, PartnerAgent
 from app.deps import get_current_user, require_auth, require_admin, require_admin_or_manager
 from app.utils.user_scope import get_warehouses_for_user
 from app.utils.rate_limit import check_api_rate_limit
@@ -583,31 +583,11 @@ def _check_production_quantity_mismatch(db: Session, rows: list) -> None:
             r["document_quantity"] = expected
 
 
-@router.get("/stock/source", response_class=HTMLResponse)
-async def report_stock_source(
-    request: Request,
-    warehouse_id: Optional[str] = None,
-    product_id: Optional[str] = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_auth),
-):
-    """Berilgan ombor + mahsulot uchun qoldiq manbai — barcha harakatlar (qaysi hujjatdan kirgan/chiqqan)."""
-    if not current_user:
-        return RedirectResponse(url="/login", status_code=303)
-    try:
-        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
-    except (ValueError, TypeError):
-        warehouse_id = None
-    try:
-        product_id = int(product_id) if product_id and str(product_id).strip() else None
-    except (ValueError, TypeError):
-        product_id = None
-    if not warehouse_id or not product_id:
-        return RedirectResponse(url="/reports/stock", status_code=303)
-    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not warehouse or not product:
-        return RedirectResponse(url="/reports/stock", status_code=303)
+def _compute_stock_source_data(db: Session, warehouse, product) -> dict:
+    """Qoldiq manbai uchun harakatlar ro'yxati + statistika.
+    GET (HTML) va Excel export ikkalasi shu helperni ishlatadi (DRY — bir xil natija)."""
+    warehouse_id = warehouse.id
+    product_id = product.id
     movements = (
         db.query(StockMovement)
         .filter(
@@ -714,14 +694,7 @@ async def report_stock_source(
         key=lambda kv: abs(kv[1]["in"] + kv[1]["out"]),
         reverse=True,
     )
-
-    msg = request.query_params.get("msg") or ""
-    error = request.query_params.get("error") or ""
-    removed = request.query_params.get("removed")
-    return templates.TemplateResponse("reports/stock_source.html", {
-        "request": request,
-        "warehouse": warehouse,
-        "product": product,
+    return {
         "movements": rows,
         "current_qty": current_qty,
         "is_dona": is_dona,
@@ -730,12 +703,110 @@ async def report_stock_source(
         "ledger_balance": ledger_balance,
         "drift": drift,
         "type_totals": type_totals_sorted,
+    }
+
+
+def _resolve_stock_source_params(db, warehouse_id, product_id):
+    """warehouse_id/product_id ni int'ga aylantirib, ombor+mahsulotni qaytaradi (yoki None)."""
+    try:
+        warehouse_id = int(warehouse_id) if warehouse_id and str(warehouse_id).strip() else None
+    except (ValueError, TypeError):
+        warehouse_id = None
+    try:
+        product_id = int(product_id) if product_id and str(product_id).strip() else None
+    except (ValueError, TypeError):
+        product_id = None
+    if not warehouse_id or not product_id:
+        return None, None
+    warehouse = db.query(Warehouse).filter(Warehouse.id == warehouse_id).first()
+    product = db.query(Product).filter(Product.id == product_id).first()
+    return warehouse, product
+
+
+@router.get("/stock/source", response_class=HTMLResponse)
+async def report_stock_source(
+    request: Request,
+    warehouse_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Berilgan ombor + mahsulot uchun qoldiq manbai — barcha harakatlar (qaysi hujjatdan kirgan/chiqqan)."""
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    warehouse, product = _resolve_stock_source_params(db, warehouse_id, product_id)
+    if not warehouse or not product:
+        return RedirectResponse(url="/reports/stock", status_code=303)
+    data = _compute_stock_source_data(db, warehouse, product)
+    msg = request.query_params.get("msg") or ""
+    error = request.query_params.get("error") or ""
+    removed = request.query_params.get("removed")
+    return templates.TemplateResponse("reports/stock_source.html", {
+        "request": request,
+        "warehouse": warehouse,
+        "product": product,
         "page_title": "Qoldiq manbai",
         "current_user": current_user,
         "msg": msg,
         "error": error,
         "removed": removed,
+        **data,
     })
+
+
+@router.get("/stock/source/export")
+async def report_stock_source_export(
+    warehouse_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_auth),
+):
+    """Qoldiq manbai harakatlarini Excel'ga eksport qiladi (joriy ombor+mahsulot bo'yicha)."""
+    if not current_user:
+        return RedirectResponse(url="/login", status_code=303)
+    warehouse, product = _resolve_stock_source_params(db, warehouse_id, product_id)
+    if not warehouse or not product:
+        return RedirectResponse(url="/reports/stock", status_code=303)
+    data = _compute_stock_source_data(db, warehouse, product)
+    is_dona = data["is_dona"]
+
+    def _fmt_qty(v):
+        return int(round(v)) if is_dona else round(float(v or 0), 3)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Qoldiq manbai"
+    ws.append([f"Qoldiq manbai — {product.name} — {warehouse.name}"])
+    ws.append([f"Haqiqiy qoldiq: {_fmt_qty(data['current_qty'])}  |  "
+               f"Kirim: {_fmt_qty(data['total_in'])}  |  Chiqim: {_fmt_qty(data['total_out'])}  |  "
+               f"Ledger: {_fmt_qty(data['ledger_balance'])}  |  Drift: {_fmt_qty(data['drift'])}"])
+    ws.append([])
+    ws.append(["Sana", "Operatsiya", "Hujjat", "Kirim/Chiqim", "Yig'ilgan qoldiq", "Izoh"])
+    for r in data["movements"]:
+        note = ""
+        if r.get("is_duplicate"):
+            note = "DUBLIKAT"
+        elif r.get("wrong_warehouse"):
+            note = "OMBOR MOS EMAS"
+        ws.append([
+            r["date"],
+            r["document_type_label"],
+            r["document_number"],
+            _fmt_qty(r["quantity_change"]),
+            _fmt_qty(r["quantity_after"]),
+            note,
+        ])
+    for col, width in zip("ABCDEF", (18, 22, 24, 14, 16, 16)):
+        ws.column_dimensions[col].width = width
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    fname = f"qoldiq_manbai_{product.id}_wh{warehouse.id}.xlsx"
+    return StreamingResponse(
+        stream,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
 
 
 @router.post("/stock/source/remove-movement")
@@ -1905,10 +1976,46 @@ async def report_employees(request: Request, db: Session = Depends(get_db), curr
     })
 
 
+def _apply_debtors_agent_filter(db, q, agent_id):
+    """Qarzdorlar query'siga agent filtri. agent_id:
+       - None/bo'sh -> filtrsiz (barcha)
+       - 'all'      -> faqat agent mijozlari (asosiy agent_id yoki qo'shimcha PartnerAgent bor)
+       - <son>      -> aniq agentning mijozlari (asosiy yoki qo'shimcha)"""
+    if not agent_id:
+        return q
+    if str(agent_id) == "all":
+        sub = db.query(PartnerAgent.partner_id)
+        return q.filter(or_(Partner.agent_id.isnot(None), Partner.id.in_(sub)))
+    if str(agent_id).isdigit():
+        aid = int(agent_id)
+        sub = db.query(PartnerAgent.partner_id).filter(PartnerAgent.agent_id == aid)
+        return q.filter(or_(Partner.agent_id == aid, Partner.id.in_(sub)))
+    return q
+
+
+def _debtor_agent_names(db, debtors):
+    """partner_id -> 'Agent1, Agent2' (asosiy Partner.agent_id + qo'shimcha PartnerAgent)."""
+    if not debtors:
+        return {}
+    pids = [p.id for p in debtors]
+    agent_map = {a.id: (a.full_name or a.code or f"#{a.id}") for a in db.query(Agent).all()}
+    result = {}
+    for p in debtors:
+        names = set()
+        if p.agent_id and p.agent_id in agent_map:
+            names.add(agent_map[p.agent_id])
+        result[p.id] = names
+    for pa in db.query(PartnerAgent).filter(PartnerAgent.partner_id.in_(pids)).all():
+        if pa.agent_id in agent_map:
+            result.setdefault(pa.partner_id, set()).add(agent_map[pa.agent_id])
+    return {pid: ", ".join(sorted(names)) for pid, names in result.items()}
+
+
 @router.get("/debts", response_class=HTMLResponse)
 async def report_debts(
     request: Request,
     overdue_days: Optional[int] = None,
+    agent_id: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_auth),
 ):
@@ -1934,27 +2041,36 @@ async def report_debts(
             q = q.filter(Partner.id.in_(ids))
         else:
             q = q.filter(Partner.id == -1)
+    q = _apply_debtors_agent_filter(db, q, agent_id)
     debtors = q.order_by(Partner.name).all()
     # Mijozlar qarzi (balance > 0)
     total_debt = sum(p.balance for p in debtors if p.balance > 0)
     # Ta'minotchilarga qarzimiz (balance < 0)
     total_credit = sum(abs(p.balance) for p in debtors if p.balance < 0)
+    agents = db.query(Agent).filter(Agent.is_active == True).order_by(Agent.full_name).all()
+    agent_names = _debtor_agent_names(db, debtors)
     return templates.TemplateResponse("reports/debts.html", {
         "request": request,
         "debtors": debtors,
         "total_debt": total_debt,
         "total_credit": total_credit,
+        "agents": agents,
+        "selected_agent": str(agent_id) if agent_id else "",
+        "agent_names": agent_names,
         "page_title": "Qarzdorlik hisoboti",
         "current_user": current_user,
     })
 
 
 @router.get("/debts/export")
-async def report_debts_export(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
+async def report_debts_export(request: Request, agent_id: Optional[str] = None, db: Session = Depends(get_db), current_user: User = Depends(require_auth)):
     _check_export_rate_limit(request)
     if not current_user:
         return RedirectResponse(url="/login", status_code=303)
-    debtors = db.query(Partner).filter(Partner.is_active == True, Partner.balance != 0).order_by(Partner.name).all()
+    q = db.query(Partner).filter(Partner.is_active == True, Partner.balance != 0)
+    q = _apply_debtors_agent_filter(db, q, agent_id)
+    debtors = q.order_by(Partner.name).all()
+    agent_names = _debtor_agent_names(db, debtors)
     wb = Workbook()
     ws = wb.active
     ws.title = "Qarzdorlik"
@@ -1962,20 +2078,21 @@ async def report_debts_export(request: Request, db: Session = Depends(get_db), c
     ws["A1"] = "Qarzdorlik hisoboti"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A2"] = datetime.now().strftime("%d.%m.%Y %H:%M")
-    ws.append(["Kod", "Mijoz", "Telefon", "Balans (qarz +)", "Kredit limiti"])
-    for c in range(1, 6):
+    ws.append(["Kod", "Mijoz", "Agent", "Telefon", "Balans (qarz +)", "Kredit limiti"])
+    for c in range(1, 7):
         ws.cell(row=4, column=c).fill = header_fill
         ws.cell(row=4, column=c).font = Font(bold=True, color="FFFFFF")
     for p in debtors:
         ws.append([
             p.code or "",
             p.name or "",
+            agent_names.get(p.id, ""),
             p.phone or "",
             float(p.balance or 0),
             float(p.credit_limit or 0),
         ])
     total = sum(p.balance for p in debtors if (p.balance or 0) > 0)
-    ws.append(["", "", "JAMI QARZ:", total, ""])
+    ws.append(["", "", "", "JAMI QARZ:", total, ""])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

@@ -25,14 +25,26 @@
 
 <!-- Data table card -->
 <div class="card data-table">
-    <div class="card-header">
+    <div class="card-header flex-wrap gap-2">
         <span class="d-flex align-items-center gap-2">
             <i class="bi bi-exclamation-triangle text-warning"></i>
             <span>Qarzdorlik hisoboti</span>
         </span>
-        <a href="/reports/debts/export" class="top-btn btn btn-success">
-            <i class="bi bi-file-earmark-excel"></i> Excel
-        </a>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <form method="get" action="/reports/debts" class="d-flex align-items-center gap-2 mb-0">
+                <label class="small fw-semibold mb-0">Agent:</label>
+                <select name="agent_id" class="form-select form-select-sm" style="min-width:200px;" onchange="this.form.submit()">
+                    <option value="" {% if not selected_agent %}selected{% endif %}>Barchasi (hamma kontragent)</option>
+                    <option value="all" {% if selected_agent == 'all' %}selected{% endif %}>Faqat agent mijozlari</option>
+                    {% for a in agents %}
+                    <option value="{{ a.id }}" {% if selected_agent == a.id|string %}selected{% endif %}>{{ a.full_name or a.code }}</option>
+                    {% endfor %}
+                </select>
+            </form>
+            <a href="/reports/debts/export{% if selected_agent %}?agent_id={{ selected_agent }}{% endif %}" class="top-btn btn btn-success">
+                <i class="bi bi-file-earmark-excel"></i> Excel
+            </a>
+        </div>
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
@@ -42,6 +54,7 @@
                         <th style="width:48px">#</th>
                         <th>Kodi</th>
                         <th>Kontragent</th>
+                        <th>Agent</th>
                         <th>Turi</th>
                         <th>Telefon</th>
                         <th class="text-end">Balans (so'm)</th>
@@ -58,6 +71,7 @@
                             <td class="muted-cell">{{ loop.index }}</td>
                             <td><code class="num-cell">{{ partner.code }}</code></td>
                             <td><strong>{{ partner.name }}</strong> <i class="bi bi-box-arrow-up-right small text-muted"></i></td>
+                            <td class="small">{{ agent_names.get(partner.id, '') or '—' }}</td>
                             <td>
                                 {% if partner.type == 'customer' %}
                                     <span class="badge-active">Mijoz</span>
@@ -83,7 +97,7 @@
                         {% endfor %}
                     {% else %}
                         <tr>
-                            <td colspan="7" class="text-center muted-cell py-5">
+                            <td colspan="8" class="text-center muted-cell py-5">
                                 <i class="bi bi-check-circle fs-2 d-block mb-2 text-success opacity-60"></i>
                                 Qarzdorlar topilmadi
                             </td>
