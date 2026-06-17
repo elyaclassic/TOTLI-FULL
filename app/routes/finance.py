@@ -919,11 +919,15 @@ def _payment_apply_balance(db: Session, payment: Payment, sign: int):
     """
     _sync_cash_balance(db, payment.cash_register_id)
     if payment.partner_id:
-        from app.services.partner_balance_service import recompute_partner_balance
+        from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
         recompute_partner_balance(db, payment.partner_id,
                                   reason=f"payment_{payment.type or 'unknown'}",
                                   ref=payment.number)
+        # Per-order paid/debt'ni ham izchillash — aks holda umumiy "Kirim" to'lovi
+        # (category=other) order qarzini yangilamay, buyurtmalar eskirgan "qarz"da
+        # ko'rinib qolardi (Namangan/OILA KAFE/Hoji Aka drifti 2026-06-17).
+        recompute_partner_order_debts(db, payment.partner_id)
 
 
 @router.post("/payment/{payment_id}/confirm")
