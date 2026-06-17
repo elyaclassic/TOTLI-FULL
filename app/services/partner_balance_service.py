@@ -198,6 +198,22 @@ def recompute_partner_order_debts(db: Session, partner_id: int) -> int:
             fifo_pool += (amt - take)  # ortiqcha -> FIFO
         else:
             fifo_pool += amt
+    # Eski/boshlang'ich qarz (PartnerBalanceDoc) — orderlardan ESKIROQ (tizim boshlanish
+    # snapshot'i). Order_id'siz to'lovlar (agent inkassatsiya) AVVAL shu eski qarzni yopishi
+    # kerak, keyin orderlarga. Aks holda eski qarz uchun yiqilgan pul yangi orderlarni
+    # noto'g'ri "to'langan" qilib qo'yardi (Meva Uz/Al Fajr insidenti 2026-06-17).
+    opening_debt = 0.0
+    for item in (
+        db.query(PartnerBalanceDocItem)
+        .join(PartnerBalanceDoc, PartnerBalanceDocItem.doc_id == PartnerBalanceDoc.id)
+        .filter(
+            PartnerBalanceDocItem.partner_id == partner_id,
+            PartnerBalanceDoc.status == "confirmed",
+        )
+    ):
+        opening_debt += float(item.balance or 0)
+    if opening_debt > 0 and fifo_pool > 0:
+        fifo_pool -= min(fifo_pool, opening_debt)  # eski qarz to'lovni yutadi
     # FIFO pool -> qolgan qarzli orderlarga (eng eski birinchi)
     for o in eligible:
         if fifo_pool <= 1e-9:

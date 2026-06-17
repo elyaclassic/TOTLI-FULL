@@ -1579,74 +1579,85 @@ async def supervisor_confirm_agent_payment(
         accepted = float(received_amount) if received_amount not in (None, "") else full_amount
     except (ValueError, TypeError):
         accepted = full_amount
-    if accepted <= 0 or accepted > full_amount:
+    # accepted == 0 ruxsat: agent inkassatsiya qildi (mijoz qarzi yopiladi) lekin pulni
+    # topshirmadi → kassaga 0 kiradi, butun summa agent qarziga (shortfall = full_amount).
+    if accepted < 0 or accepted > full_amount:
         accepted = full_amount
     shortfall = round(full_amount - accepted, 2)  # agent topshirmagan (uning qarzi)
 
     # 2. Mijoz partner'ini olish (keyinroq recompute + notify uchun)
     partner = db.query(Partner).filter(Partner.id == ap.partner_id).first()
 
-    # 3. Tegishli kassaga kirim qilish — payment_type bo'yicha qat'iy moslashtirish
-    pay_type_map = {
-        "naqd": "naqd",
-        "plastik": "plastik",
-        "perechisleniye": "perechisleniye",
-        "click": "click",
-        "terminal": "terminal",
-    }
-    ap_pay_type = (ap.payment_type or "").lower().strip()
-    cash_type = pay_type_map.get(ap_pay_type)
-    if not cash_type:
-        db.rollback()
-        return RedirectResponse(
-            url="/supervisor/agent-payments?error=" + quote(
-                f"Noma'lum to'lov turi: {ap.payment_type!r}. Admin bilan bog'laning."
-            ),
-            status_code=303,
-        )
-    cash_register = db.query(CashRegister).filter(
-        CashRegister.payment_type == cash_type,
-        CashRegister.is_active == True,
-        CashRegister.currency == "UZS",
-    ).order_by(CashRegister.id.asc()).first()
-    if not cash_register:
-        db.rollback()
-        return RedirectResponse(
-            url="/supervisor/agent-payments?error=" + quote(
-                f"'{cash_type}' turidagi faol kassa topilmadi. Avval kassa yarating."
-            ),
-            status_code=303,
-        )
+    # 3. Tegishli kassaga kirim — FAQAT agent pul topshirgan bo'lsa (accepted > 0).
+    #    accepted == 0: agent umuman topshirmadi → kassaga 0 so'm Payment YARATILMAYDI
+    #    (kassa jurnali toza qoladi), butun summa pastda agent qarziga yoziladi.
+    payment_number = None
+    if accepted > 0:
+        pay_type_map = {
+            "naqd": "naqd",
+            "plastik": "plastik",
+            "perechisleniye": "perechisleniye",
+            "click": "click",
+            "terminal": "terminal",
+        }
+        ap_pay_type = (ap.payment_type or "").lower().strip()
+        cash_type = pay_type_map.get(ap_pay_type)
+        if not cash_type:
+            db.rollback()
+            return RedirectResponse(
+                url="/supervisor/agent-payments?error=" + quote(
+                    f"Noma'lum to'lov turi: {ap.payment_type!r}. Admin bilan bog'laning."
+                ),
+                status_code=303,
+            )
+        cash_register = db.query(CashRegister).filter(
+            CashRegister.payment_type == cash_type,
+            CashRegister.is_active == True,
+            CashRegister.currency == "UZS",
+        ).order_by(CashRegister.id.asc()).first()
+        if not cash_register:
+            db.rollback()
+            return RedirectResponse(
+                url="/supervisor/agent-payments?error=" + quote(
+                    f"'{cash_type}' turidagi faol kassa topilmadi. Avval kassa yarating."
+                ),
+                status_code=303,
+            )
 
-    last_payment = db.query(Payment).order_by(Payment.id.desc()).first()
-    next_num = (last_payment.id + 1) if last_payment else 1
-    payment_number = f"AGT-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
+        last_payment = db.query(Payment).order_by(Payment.id.desc()).first()
+        next_num = (last_payment.id + 1) if last_payment else 1
+        payment_number = f"AGT-{datetime.now().strftime('%Y%m%d')}-{next_num:04d}"
 
-    payment = Payment(
-        number=payment_number,
-        date=datetime.now(),
-        type="income",
-        cash_register_id=cash_register.id,
-        partner_id=ap.partner_id,
-        amount=accepted,  # kassaga FAQAT agent topshirgan summa kiradi
-        payment_type=ap.payment_type,
-        category="agent_collection",
-        description=(
-            f"Agent inkassatsiya: {partner.name if partner else ''}"
-            + (f" — {ap.notes}" if ap.notes else "")
-            + (f" (topshirildi {accepted:,.0f}/{full_amount:,.0f}, qoldi agent qarzi {shortfall:,.0f})" if shortfall > 0 else "")
-            + f" [AP#{ap.id}]"
-        ),
-        user_id=current_user.id,
-        status="confirmed",
-    )
-    db.add(payment)
-    db.flush()
-    ap.payment_id = payment.id  # M3: FK bog'lash (category-match o'rniga aniq Payment)
-    logger.info(
-        f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), "
-        f"mijoz_to'ladi={full_amount} topshirildi={accepted} agent_qarzi={shortfall}"
-    )
+        payment = Payment(
+            number=payment_number,
+            date=datetime.now(),
+            type="income",
+            cash_register_id=cash_register.id,
+            partner_id=ap.partner_id,
+            amount=accepted,  # kassaga FAQAT agent topshirgan summa kiradi
+            payment_type=ap.payment_type,
+            category="agent_collection",
+            description=(
+                f"Agent inkassatsiya: {partner.name if partner else ''}"
+                + (f" — {ap.notes}" if ap.notes else "")
+                + (f" (topshirildi {accepted:,.0f}/{full_amount:,.0f}, qoldi agent qarzi {shortfall:,.0f})" if shortfall > 0 else "")
+                + f" [AP#{ap.id}]"
+            ),
+            user_id=current_user.id,
+            status="confirmed",
+        )
+        db.add(payment)
+        db.flush()
+        ap.payment_id = payment.id  # M3: FK bog'lash (category-match o'rniga aniq Payment)
+        logger.info(
+            f"AP#{ap.id} confirmed: payment_type={ap_pay_type!r} -> kassa#{cash_register.id} ({cash_register.name!r}), "
+            f"mijoz_to'ladi={full_amount} topshirildi={accepted} agent_qarzi={shortfall}"
+        )
+    else:
+        logger.info(
+            f"AP#{ap.id} confirmed: accepted=0 — agent pul topshirmadi, kassaga tegilmadi; "
+            f"butun {full_amount:,.0f} agent qarziga yoziladi"
+        )
 
     # Agent topshirmagan summa → uning o'z qarzi (EmployeeAdvance, kassasiz, ish haqidan ushlanadi)
     if shortfall > 0:
@@ -1667,27 +1678,16 @@ async def supervisor_confirm_agent_payment(
         else:
             logger.warning(f"AP#{ap.id}: shortfall={shortfall} lekin agent#{ap.agent_id} xodimga bog'lanmagan — qarz yozilmadi")
 
-    # 4. Buyurtmalar qarzini kamaytirish (FIFO — eng eski buyurtmadan boshlab)
-    remaining = float(ap.amount or 0)
-    if remaining > 0:
-        debt_orders = (
-            db.query(Order)
-            .filter(Order.partner_id == ap.partner_id, Order.debt > 0, Order.type == "sale")
-            .order_by(Order.date.asc())
-            .all()
-        )
-        for order in debt_orders:
-            if remaining <= 0:
-                break
-            order_debt = float(order.debt or 0)
-            if order_debt <= 0:
-                continue
-            pay_this = min(remaining, order_debt)
-            order.paid = float(order.paid or 0) + pay_this
-            order.debt = order_debt - pay_this
-            remaining -= pay_this
-
-    # Site 2: agent_payment_confirm — recompute after Payment added + FIFO debt reduction
+    # 4. Buyurtmalar paid/debt — KANONIK allokatsiya (recompute_partner_order_debts).
+    #    Eski qo'lda FIFO (ap.amount'ni to'g'ridan-to'g'ri orderga) OLIB TASHLANDI — 2 ta bug:
+    #      (a) mijozning eski/boshlang'ich qarzini (PartnerBalanceDoc) e'tiborga olmasdi →
+    #          eski qarz uchun yiqilgan inkassatsiya YANGI orderga noto'g'ri tushardi
+    #          (Meva Uz/Al Fajr 2026-06-17);
+    #      (b) accepted=0 (agent topshirmagan) holatda Payment YO'Q, lekin order.paid yozardi →
+    #          recompute_partner_order_debts (Payment'dan derive) bilan zid, order.paid "uchib"
+    #          ketardi.
+    #    recompute_partner_order_debts confirmed Payment'lardan derive qiladi va eski qarzni
+    #    AVVAL yutadi → mijoz haqiqatan to'lamaguncha (Payment) order qarzdor qoladi.
     if ap.partner_id:
         from app.services.partner_balance_service import recompute_partner_balance, recompute_partner_order_debts
         db.flush()
@@ -1697,6 +1697,7 @@ async def supervisor_confirm_agent_payment(
             ref=payment_number,
             actor=current_user.username if current_user else None,
         )
+        recompute_partner_order_debts(db, ap.partner_id)  # eski qarz-aware per-order allokatsiya
 
     _resync_active_cash(db)  # kassa balansini sync (inkassatsiya kirimi)
     db.commit()
