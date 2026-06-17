@@ -984,24 +984,37 @@ async def sales_confirm(
         return RedirectResponse(url=f"/sales/edit/{order_id}?confirmed=1", status_code=303)
 
     # POS flow — stock yetadimi tekshir, yetsa darrov yetkaziladi
-    from app.services.stock_reservation import get_reserved_quantity, reservation_override, log_reservation_override
+    from app.services.stock_reservation import (
+        get_reserved_quantity, reservation_override, log_reservation_override,
+        reserving_orders_hint, get_reserving_orders, notify_reservation_override,
+    )
     from app.utils.stock_at_date import get_stock_at_date
     _override = reservation_override(current_user, force)
     _bypassed = []
+    _ovr_lines, _ovr_orders = [], {}  # override bo'lganda: TG matni + ta'sirlangan waiting orderlar
     insufficient = []
     for item in order.items:
         wh_id = item.warehouse_id if item.warehouse_id else order.warehouse_id
+        _rr = get_reserved_quantity(db, wh_id, item.product_id)
         if _override:
             have = get_stock_at_date(db, wh_id, item.product_id)
-            _rr = get_reserved_quantity(db, wh_id, item.product_id)
             if _rr > 1e-6:
                 _bypassed.append(_rr)
+                _pn = item.product.name if item.product else f"#{item.product_id}"
+                _affected = get_reserving_orders(db, wh_id, item.product_id)
+                for (_o, _q) in _affected:
+                    _ovr_orders[_o.id] = _o
+                _ovr_lines.append(f"{_pn}: {_rr:g} band ({', '.join(o.number for o, _ in _affected) or '—'})")
         else:
             have = get_available_stock(db, wh_id, item.product_id)
         need = float(item.quantity or 0)
         if have + 1e-6 < need:
             pname = item.product.name if item.product else f"#{item.product_id}"
-            insufficient.append(f"{pname}: kerak {need:g}, bor {have:g}")
+            _hint = ""
+            if not _override and _rr > 1e-6:
+                _oh = reserving_orders_hint(db, wh_id, item.product_id)
+                _hint = f" ({_oh} band)" if _oh else ""
+            insufficient.append(f"{pname}: kerak {need:g}, bor {have:g}{_hint}")
 
     if insufficient:
         # POS sotuvida ishlab chiqarish AVTOMAT yaratilmaydi — manager hal qiladi
@@ -1016,6 +1029,11 @@ async def sales_confirm(
     # Zaxira chetlash audit — faqat buyurtma to'siqsiz o'tganda yoziladi (fantom yozuvdan himoya)
     for _rr in _bypassed:
         log_reservation_override(db, current_user, "Sale", order.number, _rr)
+    # Band chetlab o'tilsa — rahbarlarga TG + ta'sirlangan waiting buyurtmalarga signal
+    # (DB yozuvlari quyidagi db.commit() bilan birga saqlanadi)
+    if _override and _ovr_lines:
+        notify_reservation_override(db, current_user, "POS sotuvi", order.number,
+                                    _ovr_lines, list(_ovr_orders.values()))
 
     # Atomik UPDATE — status'ni delivered'ga o'tkazish
     claim = db.execute(

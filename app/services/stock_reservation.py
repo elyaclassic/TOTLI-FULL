@@ -88,6 +88,98 @@ def get_all_reservations(db) -> dict:
     return {(r.wh, r.pid): float(r.qty or 0) for r in rows}
 
 
+def get_reserving_orders(db, warehouse_id, product_id):
+    """waiting_production (type=sale) buyurtmalar shu (warehouse, product) ni band qilgan.
+
+    Qaytaradi: [(Order, reserved_qty), ...] — sana bo'yicha (FIFO seniority).
+    Override dialogi va bounce-signal uchun: KIM bandni egallaганини aniqlaydi.
+    """
+    rows = (
+        db.query(Order, OrderItem.quantity)
+        .join(OrderItem, OrderItem.order_id == Order.id)
+        .filter(
+            Order.status == "waiting_production",
+            Order.type == "sale",
+            OrderItem.product_id == product_id,
+            func.coalesce(OrderItem.warehouse_id, Order.warehouse_id) == warehouse_id,
+        )
+        .order_by(Order.date, Order.id)
+        .all()
+    )
+    return [(o, float(q or 0)) for (o, q) in rows]
+
+
+def reserving_orders_hint(db, warehouse_id, product_id, limit=4) -> str:
+    """Block xabari uchun qisqa matn: band qilgan buyurtma raqamlari.
+    Masalan: 'AGT-20260611-021, AGT-20260612-003 +2'. Band yo'q bo'lsa bo'sh string."""
+    orders = get_reserving_orders(db, warehouse_id, product_id)
+    if not orders:
+        return ""
+    nums = [o.number for (o, _q) in orders[:limit]]
+    extra = "" if len(orders) <= limit else f" +{len(orders) - limit}"
+    return ", ".join(nums) + extra
+
+
+def notify_reservation_override(db, current_user, entity_label, entity_number, lines, affected_orders) -> None:
+    """Band ataylab chetlab o'tilganda:
+      1) rahbarlarga Telegram (kim, qaysi hujjat, qaysi band) — fire-and-forget;
+      2) ta'sirlangan waiting buyurtmalarga izoh + admin/menejerlarga in-app signal
+         (bounce-signal: bu order qayta ishlab chiqarishga tushishi mumkin).
+
+    lines: ["MALINALI: 4 band (AGT-...-021)", ...]
+    affected_orders: unikal Order ro'yxati (band egalari).
+    Hech qachon asosiy tranzaksiyani buzmaydi (har bo'lak alohida try/except)."""
+    from datetime import datetime as _dt
+    actor = (getattr(current_user, "username", None) or getattr(current_user, "full_name", None) or "—")
+    # 1) Telegram (rahbarlarga)
+    try:
+        from app.bot.services.notifier import send_notify_sync
+        body = (
+            f"⚠️ <b>Rezervatsiya (band) chetlab o'tildi</b>\n"
+            f"{entity_label}: <b>{entity_number}</b>\n"
+            f"Kim: {actor}\n"
+            f"Ta'sirlangan band:\n• " + "\n• ".join(lines[:12])
+        )
+        if affected_orders:
+            body += "\n\nBu buyurtmalar qayta «ishlab chiqarishga» tushishi mumkin."
+        send_notify_sync(body)
+    except Exception:
+        pass
+    # 2) Bounce-signal: order izohiga + in-app bildirishnoma
+    try:
+        from app.utils.notifications import create_notification
+        from app.models.database import User as _User
+        stamp = _dt.now().strftime("%d.%m %H:%M")
+        managers = db.query(_User).filter(
+            _User.is_active == True, _User.role.in_(["admin", "manager", "menejer", "rahbar", "raxbar"])
+        ).all()
+        for o in affected_orders:
+            try:
+                note_add = (f"\n[{stamp}] Band chetlab o'tildi ({entity_number}, {actor}) — "
+                            f"tovar boshqa hujjatga ketdi, buyurtma qayta ishlab chiqarishga tushishi mumkin.")
+                o.note = (o.note or "") + note_add
+            except Exception:
+                pass
+            for u in managers:
+                try:
+                    create_notification(
+                        db=db,
+                        title="Band chetlab o'tildi",
+                        message=(f"{entity_number} ({actor}) buyurtma {o.number} uchun band qilingan tovarni oldi. "
+                                 f"Bu buyurtma qayta ishlab chiqarishga tushishi mumkin."),
+                        notification_type="warning",
+                        user_id=u.id,
+                        priority="high",
+                        action_url=f"/sales/edit/{o.id}",
+                        related_entity_type="order",
+                        related_entity_id=o.id,
+                    )
+                except Exception:
+                    pass
+    except Exception:
+        pass
+
+
 def reservation_override(current_user, force) -> bool:
     """force truthy VA user_can_override (rol) bo'lsa True (band e'tiborga olinmaydi)."""
     if not force:
