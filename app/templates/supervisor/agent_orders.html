@@ -131,12 +131,9 @@
             <td><small class="fw-semibold">{{ agent_names.get(order.agent_id, '—') }}</small></td>
             <td class="muted-cell"><small>{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '-' }}</small></td>
             <td>
-              {% if order.partner %}{{ order.partner.name }}
+              {% if order.partner %}{{ order.partner.name }}{% if order.partner.latitude and order.partner.longitude %} <a href="https://yandex.uz/maps/?pt={{ order.partner.longitude }},{{ order.partner.latitude }}&z=17&l=map" target="_blank" rel="noopener" class="text-primary text-decoration-none" title="Xaritada ko'rish"><i class="bi bi-geo-alt-fill"></i></a>{% endif %}
                 {% if order.partner.phone %}<br><small class="text-muted"><i class="bi bi-telephone"></i> {{ order.partner.phone }}</small>{% endif %}
                 {% if order.partner.address %}<br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ order.partner.address }}</small>{% endif %}
-                {% if order.partner.latitude and order.partner.longitude %}
-                <br><a href="https://yandex.uz/maps/?pt={{ order.partner.longitude }},{{ order.partner.latitude }}&z=17&l=map" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary py-0 px-1 mt-1" title="Xaritada ko'rish"><i class="bi bi-geo-alt-fill"></i> Lokatsiya</a>
-                {% endif %}
               {% else %}-{% endif %}
             </td>
             <td class="text-end">
