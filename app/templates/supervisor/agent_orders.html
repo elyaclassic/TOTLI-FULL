@@ -133,6 +133,10 @@
             <td>
               {% if order.partner %}{{ order.partner.name }}
                 {% if order.partner.phone %}<br><small class="text-muted"><i class="bi bi-telephone"></i> {{ order.partner.phone }}</small>{% endif %}
+                {% if order.partner.address %}<br><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ order.partner.address }}</small>{% endif %}
+                {% if order.partner.latitude and order.partner.longitude %}
+                <br><a href="https://yandex.uz/maps/?pt={{ order.partner.longitude }},{{ order.partner.latitude }}&z=17&l=map" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary py-0 px-1 mt-1" title="Xaritada ko'rish"><i class="bi bi-geo-alt-fill"></i> Lokatsiya</a>
+                {% endif %}
               {% else %}-{% endif %}
             </td>
             <td class="text-end">
