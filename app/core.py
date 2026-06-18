@@ -4,8 +4,27 @@ Loyiha uchun umumiy obyektlar — template, keyinchalik config.
 import json
 from datetime import datetime, date
 from fastapi.templating import Jinja2Templates
+import starlette as _starlette
 
-templates = Jinja2Templates(directory="app/templates")
+# Starlette versiyasi: 0.29+ da TemplateResponse signature (request, name, context) ga
+# o'zgardi (eski (name, context) 0.36+ da olib tashlandi). Kod hamma joyda eski usulda
+# `TemplateResponse("x.html", {...})` yozadi — quyidagi compat ikkala versiyada ham ishlaydi
+# (eski starlette'da asl xatti-harakat, yangisida eski signature -> yangiga avtomatik moslanadi).
+_st_ver = tuple(int(p) for p in _starlette.__version__.split(".")[:2] if p.isdigit())
+
+
+class _CompatJinja2Templates(Jinja2Templates):
+    def TemplateResponse(self, *args, **kwargs):
+        if _st_ver >= (0, 29) and args and isinstance(args[0], str):
+            name = args[0]
+            context = args[1] if len(args) > 1 else (kwargs.pop("context", None) or {})
+            kwargs.pop("context", None)
+            request = context.get("request")
+            return super().TemplateResponse(request, name, context, **kwargs)
+        return super().TemplateResponse(*args, **kwargs)
+
+
+templates = _CompatJinja2Templates(directory="app/templates")
 templates.env.globals["getattr"] = getattr
 
 
