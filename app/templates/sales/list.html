@@ -165,7 +165,7 @@ function toggleSensitiveStats() {
           <td class="text-muted">{{ loop.index }}</td>
           <td><a href="/sales/edit/{{ order.id }}" class="fw-semibold text-decoration-none">{{ order.number }}</a></td>
           <td class="muted-cell">{{ order.date.strftime('%d.%m.%Y %H:%M') if order.date else '—' }}</td>
-          <td>{{ order.partner.name if order.partner else '—' }}</td>
+          <td>{% if order.partner %}{{ order.partner.name }}{% elif order.employee_id %}<span class="text-info"><i class="bi bi-person-badge"></i> {{ emp_name_map.get(order.employee_id, 'Xodim') }} <small class="text-muted">(xodim)</small></span>{% else %}—{% endif %}</td>
           <td class="muted-cell">{{ order.warehouse.name if order.warehouse else '—' }}</td>
           <td class="text-end sum-cell">{{ "{:,.0f}".format(order.total or 0) }}</td>
           <td>

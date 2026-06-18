@@ -326,9 +326,17 @@ async def sales_list(
     pq = pagination_query_string(filter_params)
     active_drivers = db.query(Driver).filter(Driver.is_active == True).order_by(Driver.full_name).all()
     today_iso = datetime.now().date().isoformat()
+    # Xodimga sotilgan buyurtmalar (Order.employee_id, mijozsiz) uchun xodim nomlari xaritasi.
+    # 1 query — N+1 yo'q. Template "Mijoz" ustunida xodim nomini ko'rsatadi.
+    _emp_ids = {o.employee_id for o in orders if getattr(o, "employee_id", None)}
+    emp_name_map = {}
+    if _emp_ids:
+        from app.models.database import Employee as _Emp
+        emp_name_map = {e.id: e.full_name for e in db.query(_Emp).filter(_Emp.id.in_(_emp_ids)).all()}
     return templates.TemplateResponse("sales/list.html", {
         "request": request,
         "orders": orders,
+        "emp_name_map": emp_name_map,
         "order_pay_types": order_pay_types,
         "total_sum": total_sum,
         "naqd_sum": naqd_sum,
