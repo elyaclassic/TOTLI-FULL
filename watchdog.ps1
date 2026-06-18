@@ -64,6 +64,20 @@ try {
 
 if (-not $server_ok) {
     Write-WLog "SERVER OFF -- restarting"
+    # MUHIM (2026-06-18): server HANG bo'lsa (port 8080 band, lekin HTTP javob yo'q),
+    # eski jarayon portni ushlab turadi -> yangi uvicorn bind qila olmay o'ladi -> tiklanmaydi.
+    # Shu sabab oldin qo'lda kill qilish kerak edi. Endi avtomatik: portni ushlagan
+    # osilgan jarayonni o'ldiramiz, keyin yangi server ko'tariladi (port bo'sh bo'lsa skip).
+    try {
+        $stuck = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+        foreach ($c in $stuck) {
+            if ($c.OwningProcess) {
+                Stop-Process -Id $c.OwningProcess -Force -ErrorAction SilentlyContinue
+                Write-WLog "Killed STUCK process PID $($c.OwningProcess) holding port 8080"
+            }
+        }
+        if ($stuck) { Start-Sleep -Seconds 2 }  # port bo'shashini kut
+    } catch { Write-WLog "kill-before-restart xato: $_" }
     if (Start-Hidden $SERVER_RUNNER "server") {
         Start-Sleep -Seconds 15
         try {

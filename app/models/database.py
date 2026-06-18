@@ -38,6 +38,10 @@ def _set_sqlite_pragma(conn, _):
     """Har bir ulanishda SQLite tezligini oshirish uchun PRAGMA."""
     cursor = conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
+    # DB lock'da darrov "database is locked" bermasdan, 30s gacha kutish. Jonli backup
+    # (har 5 daq) + kunlik backup + bir vaqtdagi so'rovlar to'qnashganda lock bo'shashini
+    # kutadi — server osilishi/xato o'rniga so'rov tinch yakunlanadi.
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA cache_size=-64000")
     cursor.execute("PRAGMA temp_store=MEMORY")
