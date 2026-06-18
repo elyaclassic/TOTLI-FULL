@@ -1175,13 +1175,28 @@ async def agent_stats(request: Request, token: str = None, db: Session = Depends
             return {"success": False, "error": "Token noto'g'ri"}
         today = datetime.now().date()
         partners_count = db.query(Partner).filter(Partner.agent_id == agent.id, Partner.is_active == True).count()
-        today_orders_q = (
-            db.query(sa_func.count(Order.id), sa_func.coalesce(sa_func.sum(Order.total), 0))
-            .filter(Order.agent_id == agent.id, sa_func.date(Order.created_at) == today)
-            .first()
+        # Sotuv va almashtirish ALOHIDA — parent only, cancelledsiz.
+        # Ilgari filtrsiz edi: almashtirish child (yangi tovar) ikki marta qo'shilib,
+        # type ajratilmasdi -> noto'g'ri yuqori "Bugun" summa (mas. 20.29M, aslida sotuv 5.28M).
+        _today_base = (
+            db.query(Order.type, sa_func.count(Order.id), sa_func.coalesce(sa_func.sum(Order.total), 0))
+            .filter(Order.agent_id == agent.id,
+                    sa_func.date(Order.created_at) == today,
+                    Order.parent_order_id.is_(None),
+                    Order.status != "cancelled")
+            .group_by(Order.type).all()
         )
-        today_count = int(today_orders_q[0] or 0)
-        today_total = float(today_orders_q[1] or 0)
+        today_count = 0
+        today_total = 0.0
+        today_exchange_count = 0
+        today_exchange_total = 0.0
+        for _t, _c, _s in _today_base:
+            if _t == "return_sale":
+                today_exchange_count += int(_c or 0)
+                today_exchange_total += float(_s or 0)
+            else:
+                today_count += int(_c or 0)
+                today_total += float(_s or 0)
         # Qarz: agent mijozlaridagi balance + agent buyurtmalaridagi debt
         partner_debt = db.query(sa_func.coalesce(sa_func.sum(Partner.balance), 0)).filter(Partner.agent_id == agent.id, Partner.is_active == True).scalar() or 0
         order_debt = db.query(sa_func.coalesce(sa_func.sum(Order.debt), 0)).filter(Order.agent_id == agent.id, Order.debt > 0).scalar() or 0
@@ -1193,6 +1208,8 @@ async def agent_stats(request: Request, token: str = None, db: Session = Depends
                 "partners_count": partners_count,
                 "today_orders": today_count,
                 "today_total": today_total,
+                "today_exchange_orders": today_exchange_count,
+                "today_exchange_total": today_exchange_total,
                 "total_debt": float(total_debt),
             },
         }

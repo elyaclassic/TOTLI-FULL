@@ -34,7 +34,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [OK] APK muvaffaqiyatli tayyor — v2.0.14+62
+echo [OK] APK muvaffaqiyatli tayyor — v2.0.15+63
 echo Yo'l: app\static\totli-agent.apk
 echo Foydalanuvchilar avtomatik yangilanish xabarini olishadi
 echo.

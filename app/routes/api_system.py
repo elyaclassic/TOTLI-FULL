@@ -48,11 +48,11 @@ async def app_version():
     Aks holda yangilanish loop yoki "yangilanish bor" xabari noto'g'ri ishlaydi.
     """
     return {
-        "version": "2.0.14",
-        "build": 62,
+        "version": "2.0.15",
+        "build": 63,
         "force_update": False,
         "download_url": "/api/app/download",
-        "changelog": "Kassa/to'lov ekranida mijozni telefon raqami bo'yicha ham qidirish mumkin (avval faqat nom bo'yicha edi).",
+        "changelog": "Bosh sahifada bugungi savdo va almashtirish (obmen) alohida ko'rsatiladi — endi haqiqiy sotuv summasi aniq ko'rinadi.",
     }
 
 

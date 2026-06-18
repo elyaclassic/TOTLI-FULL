@@ -195,8 +195,12 @@ async def agent_detail(
         .limit(50)
         .all()
     )
-    # Tanlangan oraliq bo'yicha buyurtmalar (filter sanasiga ergashadi)
-    range_q = db.query(
+    # Tanlangan oraliq bo'yicha buyurtmalar (filter sanasiga ergashadi).
+    # Sotuv va almashtirish (type='return_sale') ALOHIDA: almashtirishda mijoz eski
+    # tovarni qaytarib teng qiymatda yangi tovar oladi — sof pul harakati 0, shuning
+    # uchun uni haqiqiy sotuv summasiga aralashtirmaymiz.
+    _range_base = db.query(
+        Order.type,
         func.count(Order.id),
         func.coalesce(func.sum(Order.total), 0),
     ).filter(
@@ -205,9 +209,19 @@ async def agent_detail(
         Order.date <= d_to,
         Order.parent_order_id.is_(None),
         Order.status != "cancelled",
-    ).first()
-    range_orders_count = int(range_q[0] or 0)
-    range_orders_total = float(range_q[1] or 0)
+    ).group_by(Order.type).all()
+    range_sale_count = range_sale_total = 0
+    range_exchange_count = 0
+    range_exchange_total = 0.0
+    for _t, _c, _s in _range_base:
+        if _t == "return_sale":
+            range_exchange_count += int(_c or 0)
+            range_exchange_total += float(_s or 0)
+        else:
+            range_sale_count += int(_c or 0)
+            range_sale_total += float(_s or 0)
+    range_orders_count = range_sale_count + range_exchange_count
+    range_orders_total = range_sale_total + range_exchange_total
     # Label uchun — bugun yoki oraliq
     is_today_only = (d_from.date() == today.date() and d_to.date() == today.date())
     if is_today_only:
@@ -274,6 +288,10 @@ async def agent_detail(
         "order_delivered_at": order_delivered_at,
         "today_orders_count": range_orders_count,
         "today_orders_total": range_orders_total,
+        "today_sale_count": range_sale_count,
+        "today_sale_total": range_sale_total,
+        "today_exchange_count": range_exchange_count,
+        "today_exchange_total": range_exchange_total,
         "range_label": range_label,
         "missing_items": missing_items,
         "current_user": current_user,

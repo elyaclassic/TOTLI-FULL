@@ -37,6 +37,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _partnersCount = 0;
   int _todayOrders = 0;
   double _todayTotal = 0;
+  int _todayExchangeOrders = 0;
+  double _todayExchangeTotal = 0;
   double _totalDebt = 0;
 
   // Oylik savdo rejasi
@@ -87,6 +89,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             _partnersCount = s['partners_count'] ?? 0;
             _todayOrders = s['today_orders'] ?? 0;
             _todayTotal = (s['today_total'] ?? 0).toDouble();
+            _todayExchangeOrders = s['today_exchange_orders'] ?? 0;
+            _todayExchangeTotal = (s['today_exchange_total'] ?? 0).toDouble();
             _totalDebt = (s['total_debt'] ?? 0).toDouble();
           });
         }
@@ -630,13 +634,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(children: [
             _buildStatCard('Mijozlar', '$_partnersCount', Icons.people, Colors.blue, onTap: () => setState(() => _currentTab = 1)),
-            _buildStatCard('Bugun', '$_todayOrders ta', Icons.shopping_cart, Colors.green, onTap: () => setState(() => _currentTab = 2)),
+            _buildStatCard('Bugun sotuv', '$_todayOrders ta', Icons.shopping_cart, Colors.green, onTap: () => setState(() => _currentTab = 2)),
           ]),
           const SizedBox(height: 8),
           Row(children: [
-            _buildStatCard('Bugun summa', _formatMoney(_todayTotal), Icons.attach_money, Colors.orange, onTap: () => setState(() => _currentTab = 2)),
+            _buildStatCard('Sotuv summa', _formatMoney(_todayTotal), Icons.attach_money, Colors.orange, onTap: () => setState(() => _currentTab = 2)),
             _buildStatCard('Jami qarz', _formatMoney(_totalDebt), Icons.account_balance, Colors.red, onTap: _showDebtors),
           ]),
+          // Almashtirish (obmen) — tovar↔tovar, sof pul harakati 0. Faqat bor bo'lsa ko'rsatiladi.
+          if (_todayExchangeOrders > 0) ...[
+            const SizedBox(height: 8),
+            Row(children: [
+              _buildStatCard('Almashtirish', '$_todayExchangeOrders ta', Icons.swap_horiz, Colors.amber, onTap: () => setState(() => _currentTab = 2)),
+              _buildStatCard('Almashtirish summa', _formatMoney(_todayExchangeTotal), Icons.swap_horiz, Colors.amber, onTap: () => setState(() => _currentTab = 2)),
+            ]),
+          ],
           const SizedBox(height: 12),
           _buildSalesPlanCard(),
           const SizedBox(height: 20),

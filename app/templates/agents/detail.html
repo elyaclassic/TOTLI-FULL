@@ -96,9 +96,14 @@
             <div class="card-header">
                 <span>
                     <i class="bi bi-bag-check"></i> Agent buyurtmalari ({{ orders|length if orders else 0 }})
-                    <span class="badge bg-success ms-2" title="Tanlangan sana oralig'i bo'yicha (cancelledsiz)">
-                        {{ range_label or 'Bugun' }}: {{ today_orders_count }} ta · {{ "{:,.0f}".format(today_orders_total) }} so'm
+                    <span class="badge bg-success ms-2" title="Sotuv: haqiqiy pul keladigan buyurtmalar (cancelledsiz)">
+                        {{ range_label or 'Bugun' }}: Sotuv {{ today_sale_count }} ta · {{ "{:,.0f}".format(today_sale_total) }} so'm
                     </span>
+                    {% if today_exchange_count %}
+                    <span class="badge bg-warning text-dark ms-1" title="Almashtirish (obmen): tovar↔tovar, sof pul harakati 0">
+                        Almashtirish {{ today_exchange_count }} ta · {{ "{:,.0f}".format(today_exchange_total) }} so'm
+                    </span>
+                    {% endif %}
                 </span>
                 <div class="d-flex gap-2 flex-wrap align-items-center">
                     {% if current_user and current_user.role in ['admin', 'manager'] %}
