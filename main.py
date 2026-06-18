@@ -370,7 +370,13 @@ async def startup():
             print("[Startup] Telegram chat bot ishga tushmadi:", e)
         try:
             from app.bot.main import start_bot
-            await start_bot()
+            # MUHIM (2026-06-17 incident): start_bot ichida Telegram API'ga await qilingan
+            # tarmoq chaqiruvlari bor (delete_webhook/get_me). Telegram sekin/uzilsa yoki
+            # tez-restartda getUpdates 409 konflikti bo'lsa, await OSILIB QOLIB startup'ni
+            # bloklaydi -> uvicorn portni bind qilmaydi -> server umuman ko'tarilmaydi.
+            # Fonda ishga tushiramiz: bot Telegram'dan qat'i nazar SERVER bind bo'lsin.
+            import asyncio as _aio
+            _aio.create_task(start_bot())
         except Exception as e:
             print("[Startup] Telegram hisobot bot ishga tushmadi:", e)
     # Senior/Expert botlar endi ALOHIDA jarayonda (scripts/senior_bots_standalone.py)

@@ -141,7 +141,17 @@ async def purchase_new(
     if redirect:
         return redirect
     products = db.query(Product).filter(Product.is_active == True).all()
-    partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
+    # Kontragentlar — POS sotuvi kabi: foydalanuvchiga biriktirilgan (User.partners_list)
+    # bo'lsa FAQAT shular ko'rinadi, aks holda (admin/biriktirilmagan) hammasi.
+    from sqlalchemy.orm import joinedload
+    _uwp = db.query(User).options(joinedload(User.partners_list)).filter(User.id == current_user.id).first()
+    _assigned = []
+    if _uwp and getattr(_uwp, "partners_list", None):
+        _assigned = [p for p in _uwp.partners_list if getattr(p, "is_active", True)]
+    if _assigned:
+        partners = sorted(_assigned, key=lambda p: (p.name or ""))
+    else:
+        partners = db.query(Partner).filter(Partner.is_active == True).order_by(Partner.name).all()
     warehouses = get_warehouses_for_user(db, current_user)
     return templates.TemplateResponse("purchases/new.html", {
         "request": request,

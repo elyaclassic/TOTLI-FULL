@@ -117,14 +117,20 @@ async def employee_salary_page(
         else:
             advance_sums[a.employee_id] = advance_sums.get(a.employee_id, 0) + (a.amount or 0)
 
-    # --- Agent komissiya oyligi: agent xodim uchun oylik = o'sha oyda YIG'GAN puli x commission% ---
-    # Yig'gan = confirmed AgentPayment.amount (mijoz to'lagan, to'liq). Topshirmagan pul esa
-    # alohida EmployeeAdvance qarzi sifatida advance_sums'da hisobga olingan (oylikdan ayriladi).
-    agent_commission_base = {}  # employee_id -> hisoblangan oylik (yig'gan x pct/100)
-    from app.models.database import Agent as _Agent, AgentPayment as _AP
+    # --- Agent komissiya oyligi: agent xodim uchun oylik = o'sha oyda mijozlaridan
+    #     YIG'ILGAN HAMMA pul x commission% (2026-06-16: faqat agent o'zi yig'gandan kengaytirildi) ---
+    # Baza ikki qismdan iborat:
+    #   A) Agent O'ZI inkassatsiya qilgan (confirmed AgentPayment.amount = mijoz to'lagan to'liq)
+    #   B) Agent mijozlaridan (Partner.agent_id) kelgan BOSHQA confirmed to'lovlar: haydovchi
+    #      yetkazib olgan (category='delivery'), admin/menejer kiritgan ('other'/'sale') va h.k.
+    #      'agent_collection' QO'SHILMAYDI — u (A) AgentPayment'dan keladi (ikki marta sanalmasin).
+    # Topshirmagan pul alohida EmployeeAdvance qarzi sifatida advance_sums'da ayriladi.
+    agent_commission_base = {}  # employee_id -> hisoblangan oylik (yig'ilgan x pct/100)
+    from app.models.database import Agent as _Agent, AgentPayment as _AP, Partner as _Partner, Payment as _Pay
     _agents = db.query(_Agent).filter(_Agent.employee_id.isnot(None)).all()
     if _agents:
         _agent_ids = [a.id for a in _agents]
+        # A) Agent o'zi inkassatsiya qilgan (AgentPayment)
         _collected = dict(
             db.query(_AP.agent_id, func.coalesce(func.sum(_AP.amount), 0))
             .filter(_AP.status == "confirmed",
@@ -135,8 +141,20 @@ async def employee_salary_page(
         )
         for a in _agents:
             pct = float(a.commission_percent or 0)
-            collected = float(_collected.get(a.id, 0) or 0)
-            agent_commission_base[a.employee_id] = round(collected * pct / 100.0, 2)
+            base_collected = float(_collected.get(a.id, 0) or 0)
+            # B) Agent mijozlaridan kelgan boshqa to'lovlar (agent_collection'siz, dublni oldini olib)
+            _mijoz_ids = [r[0] for r in db.query(_Partner.id).filter(_Partner.agent_id == a.id).all()]
+            base_other = 0.0
+            if _mijoz_ids:
+                base_other = float(db.query(func.coalesce(func.sum(_Pay.amount), 0)).filter(
+                    _Pay.partner_id.in_(_mijoz_ids),
+                    _Pay.type == "income",
+                    _Pay.status == "confirmed",
+                    _Pay.category != "agent_collection",
+                    func.date(_Pay.date) >= start_d,
+                    func.date(_Pay.date) <= end_d,
+                ).scalar() or 0)
+            agent_commission_base[a.employee_id] = round((base_collected + base_other) * pct / 100.0, 2)
 
     # Kvota qo'llash: mahsulot xaridining kvotadan oshgan qismi advance ga qo'shiladi
     for emp_id, total_purchase in product_purchase_sums.items():

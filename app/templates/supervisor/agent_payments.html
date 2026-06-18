@@ -385,7 +385,8 @@ function askReceivedAmount(form, fullAmount) {
   );
   if (inp === null) return false;
   var val = parseFloat(String(inp).replace(/[^0-9.]/g, ''));
-  if (isNaN(val) || val <= 0) { alert("Noto'g'ri summa kiritildi."); return false; }
+  // 0 ruxsat: agent pulni topshirmadi → butun summa uning qarziga yoziladi
+  if (isNaN(val) || val < 0) { alert("Noto'g'ri summa kiritildi."); return false; }
   if (val > fullAmount + 0.5) { alert("Topshirilgan summa to'liq summadan ko'p bo'lishi mumkin emas."); return false; }
   form.querySelector('input[name=received_amount]').value = val;
   if (val < fullAmount - 0.5) {
