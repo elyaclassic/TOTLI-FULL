@@ -90,6 +90,23 @@ def compute_partner_balance(db: Session, partner_id: int) -> float:
         else:
             total += amt
 
+    # Agent inkassatsiya (Yondashuv B, 2026-06-19): mijoz agentga to'lagani = mijoz qarzi
+    # TO'LIQ yopiladi. Kassaga kelgan qism (Payment, accepted) yuqorida income sifatida
+    # ayirildi. Agent TOPSHIRMAGAN qism (shortfall = full - kassaga) ham mijoz qarzini
+    # kamaytiradi — mijoz to'ladi, agent ushlab turibdi (bu agentning EmployeeAdvance qarzi,
+    # kassaga emas). Shu sabab kassa va agent qarzi logikasiga tegmasdan, faqat shu yerda.
+    from app.models.database import AgentPayment as _AgPay
+    for ap in db.query(_AgPay).filter(
+        _AgPay.partner_id == partner_id,
+        _AgPay.status == "confirmed",
+    ):
+        full_ap = float(ap.amount or 0)
+        cash_ap = 0.0
+        if ap.payment_id:
+            _pay = db.query(Payment).filter(Payment.id == ap.payment_id).first()
+            cash_ap = float(_pay.amount or 0) if _pay else 0.0
+        total -= max(0.0, full_ap - cash_ap)
+
     for p in db.query(Purchase).filter(
         Purchase.partner_id == partner_id,
         Purchase.status == "confirmed",
