@@ -141,7 +141,11 @@
             <div class="card data-table h-100">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <span class="num-cell">#{{ delivery.id }}</span>
+                        {% if delivery.order_id %}
+                        <a href="/sales/edit/{{ delivery.order_id }}" class="num-cell text-decoration-none fw-bold" title="Buyurtmani ochish">{{ delivery.order_number or ('#' ~ delivery.id) }}</a>
+                        {% else %}
+                        <span class="num-cell">{{ delivery.order_number or ('#' ~ delivery.id) }}</span>
+                        {% endif %}
                         {% if delivery.status == 'pending' %}
                         <span class="badge-draft">Kutilmoqda</span>
                         {% elif delivery.status == 'picked_up' %}
@@ -150,10 +154,21 @@
                         <span class="badge-active">Yo'lda</span>
                         {% endif %}
                     </div>
+                    {% set mijoz = delivered_mijoz_map.get(delivery.order_id) %}
+                    {% if mijoz %}
+                    <p class="mb-1 fw-semibold" style="font-size:13px;"><i class="bi bi-shop text-muted me-1"></i>{{ mijoz }}</p>
+                    {% endif %}
                     <p class="mb-1" style="font-size:13px;"><i class="bi bi-geo text-muted me-1"></i>{{ delivery.delivery_address }}</p>
-                    <p class="mb-1 muted-cell"><i class="bi bi-clock me-1"></i>{{ delivery.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    <p class="mb-1 muted-cell"><i class="bi bi-box-arrow-right me-1"></i>Yo'lga chiqdi: {{ delivery.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    {% if delivery.delivered_at %}
+                    <p class="mb-1 muted-cell text-success"><i class="bi bi-check2-circle me-1"></i>Yetkazildi: {{ delivery.delivered_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    {% endif %}
                     {% if delivery.driver %}
                     <p class="mb-0 muted-cell"><i class="bi bi-person me-1"></i>{{ delivery.driver.full_name }}</p>
+                    {% endif %}
+                    {% set seg = segment_km_map.get(delivery.id) if segment_km_map else none %}
+                    {% if seg is not none %}
+                    <p class="mb-0 muted-cell"><i class="bi bi-signpost-2 me-1"></i>Oldingi nuqtadan: {{ "%.1f"|format(seg) }} km</p>
                     {% endif %}
                 </div>
             </div>
@@ -171,6 +186,144 @@
         </div>
         {% endif %}
     </div>
+
+    <!-- Delivered deliveries -->
+    <div class="page-header mb-3 mt-4">
+        <h5><i class="bi bi-check2-circle"></i> Yakunlangan yetkazishlar
+            <span class="badge bg-success ms-1">{{ d_total_count }}</span>
+        </h5>
+    </div>
+
+    <form method="get" action="/delivery" class="card data-table mb-3">
+        <div class="card-body py-2">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-2 col-6">
+                    <label class="form-label mb-0 small text-muted">Holat</label>
+                    <select name="d_status" class="form-select form-select-sm">
+                        <option value="delivered" {% if d_status == 'delivered' %}selected{% endif %}>Yetkazilgan</option>
+                        <option value="failed" {% if d_status == 'failed' %}selected{% endif %}>Muvaffaqiyatsiz</option>
+                        <option value="cancelled" {% if d_status == 'cancelled' %}selected{% endif %}>Bekor qilingan</option>
+                        <option value="all" {% if d_status == 'all' %}selected{% endif %}>Barchasi</option>
+                    </select>
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label mb-0 small text-muted">Sanadan</label>
+                    <input type="date" class="form-control form-control-sm" name="d_from" value="{{ d_from or '' }}">
+                </div>
+                <div class="col-md-2 col-6">
+                    <label class="form-label mb-0 small text-muted">Sanagacha</label>
+                    <input type="date" class="form-control form-control-sm" name="d_to" value="{{ d_to or '' }}">
+                </div>
+                <div class="col-md-4 col-12">
+                    <label class="form-label mb-0 small text-muted">Qidirish (manzil, raqam, haydovchi)</label>
+                    <input type="text" class="form-control form-control-sm" name="d_q" value="{{ d_q or '' }}" placeholder="Masalan: Charxiy yoki AGT-...">
+                </div>
+                <div class="col-md-2 col-12 d-flex gap-1">
+                    <button type="submit" class="btn btn-sm btn-success flex-fill"><i class="bi bi-search"></i> Qidirish</button>
+                    {% if d_from or d_to or d_q or d_status != 'delivered' %}
+                    <a href="/delivery" class="btn btn-sm btn-outline-secondary" title="Tozalash"><i class="bi bi-x-lg"></i></a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </form>
+
+    {% if daily_totals %}
+    <div class="card data-table mb-3">
+        <div class="card-body py-2">
+            <h6 class="mb-2"><i class="bi bi-signpost-split text-success"></i> Kunlik masofa <small class="text-muted">(taxminiy — havo masofasi)</small></h6>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead><tr><th>Haydovchi</th><th>Sana</th><th class="text-end">Jami masofa</th></tr></thead>
+                    <tbody>
+                        {% for dt in daily_totals %}
+                        <tr class="route-row" style="cursor:pointer"
+                            data-idx="{{ loop.index0 }}"
+                            data-title="{{ dt.driver_name }} · {{ dt.date.strftime('%d.%m.%Y') }}"
+                            data-km="{{ "%.1f"|format(dt.total_km) }}"
+                            title="Marshrutni xaritada ko'rish">
+                            <td>{{ dt.driver_name }} <i class="bi bi-geo-alt-fill text-success small"></i></td>
+                            <td class="muted-cell">{{ dt.date.strftime('%d.%m.%Y') }}</td>
+                            <td class="text-end fw-bold">{{ "%.1f"|format(dt.total_km) }} km</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="row g-3">
+        {% for delivery in delivered_deliveries %}
+        <div class="col-md-4">
+            <div class="card data-table h-100">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        {% if delivery.order_id %}
+                        <a href="/sales/edit/{{ delivery.order_id }}" class="num-cell text-decoration-none fw-bold" title="Buyurtmani ochish">{{ delivery.order_number or ('#' ~ delivery.id) }}</a>
+                        {% else %}
+                        <span class="num-cell">{{ delivery.order_number or ('#' ~ delivery.id) }}</span>
+                        {% endif %}
+                        {% if delivery.status == 'delivered' %}<span class="badge-done">Yetkazilgan</span>
+                        {% elif delivery.status == 'failed' %}<span class="badge-cancelled">Muvaffaqiyatsiz</span>
+                        {% elif delivery.status == 'cancelled' %}<span class="badge-inactive">Bekor qilingan</span>
+                        {% else %}<span class="badge-inactive">{{ delivery.status }}</span>{% endif %}
+                    </div>
+                    {% set mijoz = delivered_mijoz_map.get(delivery.order_id) %}
+                    {% if mijoz %}
+                    <p class="mb-1 fw-semibold" style="font-size:13px;"><i class="bi bi-shop text-muted me-1"></i>{{ mijoz }}</p>
+                    {% endif %}
+                    <p class="mb-1" style="font-size:13px;"><i class="bi bi-geo text-muted me-1"></i>{{ delivery.delivery_address }}</p>
+                    <p class="mb-1 muted-cell"><i class="bi bi-box-arrow-right me-1"></i>Yo'lga chiqdi: {{ delivery.created_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    {% if delivery.delivered_at %}
+                    <p class="mb-1 muted-cell text-success"><i class="bi bi-check2-circle me-1"></i>Yetkazildi: {{ delivery.delivered_at.strftime('%d.%m.%Y %H:%M') }}</p>
+                    {% endif %}
+                    {% if delivery.driver %}
+                    <p class="mb-0 muted-cell"><i class="bi bi-person me-1"></i>{{ delivery.driver.full_name }}</p>
+                    {% endif %}
+                    {% set seg = segment_km_map.get(delivery.id) if segment_km_map else none %}
+                    {% if seg is not none %}
+                    <p class="mb-0 muted-cell"><i class="bi bi-signpost-2 me-1"></i>Oldingi nuqtadan: {{ "%.1f"|format(seg) }} km</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% if not delivered_deliveries %}
+        <div class="col-12">
+            <div class="card data-table">
+                <div class="card-body text-center text-muted py-5">
+                    <i class="bi bi-check2-circle fs-2 d-block mb-2 opacity-25"></i>
+                    {% if d_from or d_to or d_q %}Bu filtr bo'yicha yetkazilgan yetkazish topilmadi.{% else %}Hozircha yetkazilgan yetkazishlar yo'q.{% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if d_total_pages > 1 %}
+    <nav class="mt-3 mb-4">
+        <ul class="pagination justify-content-center flex-wrap mb-0">
+            <li class="page-item {% if d_page <= 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ d_qs }}{{ '&' if d_qs != '?' else '' }}page={{ d_page - 1 }}">&laquo;</a>
+            </li>
+            {% for p in range(1, d_total_pages + 1) %}
+            {% if p == 1 or p == d_total_pages or (p >= d_page - 2 and p <= d_page + 2) %}
+            <li class="page-item {% if p == d_page %}active{% endif %}">
+                <a class="page-link" href="{{ d_qs }}{{ '&' if d_qs != '?' else '' }}page={{ p }}">{{ p }}</a>
+            </li>
+            {% elif p == d_page - 3 or p == d_page + 3 %}
+            <li class="page-item disabled"><span class="page-link">…</span></li>
+            {% endif %}
+            {% endfor %}
+            <li class="page-item {% if d_page >= d_total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ d_qs }}{{ '&' if d_qs != '?' else '' }}page={{ d_page + 1 }}">&raquo;</a>
+            </li>
+        </ul>
+        <p class="text-center text-muted small mt-2 mb-0">Jami {{ d_total_count }} ta · {{ d_page }}/{{ d_total_pages }}-sahifa</p>
+    </nav>
+    {% endif %}
 
 </div><!-- /container-fluid -->
 
@@ -249,6 +402,91 @@
     if (searchInput)   searchInput.addEventListener('input', applyFilters);
     if (vehicleFilter) vehicleFilter.addEventListener('change', applyFilters);
     if (statusFilter)  statusFilter.addEventListener('change', applyFilters);
+})();
+</script>
+
+<!-- Marshrut nuqtalari (xarita modal uchun) — script tegida, attribute escape muammosisiz -->
+<script>
+window.DAILY_ROUTES = [
+{% for dt in daily_totals %}{{ dt.route_points|tojson }}{{ "," if not loop.last else "" }}
+{% endfor %}];
+</script>
+
+<!-- Marshrut xaritasi modal -->
+<div class="modal fade" id="routeMapModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width:95vw;">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="routeMapTitle"><i class="bi bi-map"></i> Marshrut</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="routeMap" style="width:100%; height:82vh; background:#f2f2f2;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if yandex_maps_key %}
+<script src="https://api-maps.yandex.ru/2.1/?apikey={{ yandex_maps_key }}&lang=uz_UZ"></script>
+{% endif %}
+<script>
+(function(){
+    var mapInstance = null;
+    var currentRoute = [];
+    var modalEl = document.getElementById('routeMapModal');
+    if (!modalEl) return;
+    // HTML-escape (XSS himoyasi): manzil/nom/raqam DB'dan keladi, ishonchsiz
+    function esc(s){ var d = document.createElement('div'); d.textContent = (s == null ? '' : String(s)); return d.innerHTML; }
+    document.querySelectorAll('.route-row').forEach(function(row){
+        row.addEventListener('click', function(){
+            var idx = parseInt(row.getAttribute('data-idx'), 10);
+            currentRoute = (window.DAILY_ROUTES && window.DAILY_ROUTES[idx]) ? window.DAILY_ROUTES[idx] : [];
+            // textContent — innerHTML emas (XSS himoyasi: data-title DB'dan)
+            var t = document.getElementById('routeMapTitle');
+            t.textContent = '';
+            var icon = document.createElement('i'); icon.className = 'bi bi-map';
+            t.appendChild(icon);
+            t.appendChild(document.createTextNode(' ' + row.getAttribute('data-title') + ' — ' + row.getAttribute('data-km') + ' km'));
+            new bootstrap.Modal(modalEl).show();
+        });
+    });
+    modalEl.addEventListener('shown.bs.modal', function(){
+        var box = document.getElementById('routeMap');
+        if (typeof ymaps === 'undefined') {
+            box.innerHTML = '<div class="p-4 text-center text-muted">Xarita yuklanmadi — kalit sozlanmagan yoki internet yo\'q.</div>';
+            return;
+        }
+        ymaps.ready(function(){
+            if (mapInstance) { try { mapInstance.destroy(); } catch(e){} mapInstance = null; }
+            box.innerHTML = '';
+            var coords = currentRoute.map(function(p){ return [p.lat, p.lon]; });
+            if (!coords.length) { box.innerHTML = '<div class="p-4 text-center text-muted">Koordinata yo\'q.</div>'; return; }
+            mapInstance = new ymaps.Map('routeMap', { center: coords[0], zoom: 12, controls: ['zoomControl','typeSelector'] });
+            mapInstance.geoObjects.add(new ymaps.Polyline(coords, {}, { strokeColor:'#2E7D32', strokeWidth:3, strokeOpacity:0.85 }));
+            currentRoute.forEach(function(p){
+                // esc() — DB'dan, XSS himoyasi. seg/n raqam (xavfsiz)
+                var mijoz = p.mijoz ? esc(p.mijoz) : esc(p.title);
+                // sarlavha: "1. Mijoz nomi" (tartib raqam bilan)
+                var hdr = (p.n==='S' ? 'Boshlanish (GPS)' : (esc(p.n) + '. ' + mijoz));
+                // birinchi yetkazish — boshlanish (GPS) nuqtadan, qolganlari oldingi nuqtadan
+                var distLbl = (p.n===1 ? 'Boshlanishdan' : 'Oldingidan');
+                // hover (hint) — sarlavha + masofa
+                var hint = hdr + (p.seg!=null ? (' · ' + distLbl + ' ' + p.seg + ' km') : '');
+                var body = esc(p.addr)
+                    + (p.title && p.mijoz ? ('<br><small>'+esc(p.title)+'</small>') : '')
+                    + (p.time ? ('<br>Vaqt: '+esc(p.time)) : '')
+                    + (p.seg!=null ? ('<br>'+distLbl+': '+p.seg+' km') : '');
+                mapInstance.geoObjects.add(new ymaps.Placemark([p.lat,p.lon], {
+                    iconContent: esc(p.n),
+                    hintContent: hint,            // sichqoncha ustiga borganda (hover) — masofa bilan
+                    balloonContentHeader: hdr,    // bosilganda (to'liq)
+                    balloonContentBody: body
+                }, { preset: (p.n==='S' ? 'islands#grayCircleIcon' : 'islands#greenCircleIcon') }));
+            });
+            try { mapInstance.setBounds(mapInstance.geoObjects.getBounds(), { checkZoomRange:true, zoomMargin:40 }); } catch(e){}
+        });
+    });
 })();
 </script>
 {% endblock %}

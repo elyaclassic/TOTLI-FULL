@@ -295,7 +295,7 @@
     }
     function updateBulkBtn() {
         const checked = Array.from(document.querySelectorAll('.order-cb:checked'));
-        const excelStatuses = ['confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
+        const excelStatuses = ['draft', 'confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
         const excelCount = checked.filter(cb => excelStatuses.includes(cb.dataset.status)).length;
         document.getElementById('bulkCount').textContent = excelCount;
         document.getElementById('bulkExcelBtn').disabled = excelCount === 0;
@@ -319,9 +319,9 @@
         }
     }
     function exportSelectedToExcel() {
-        const excelStatuses = ['confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
+        const excelStatuses = ['draft', 'confirmed', 'completed', 'waiting_production', 'out_for_delivery'];
         const ids = Array.from(document.querySelectorAll('.order-cb:checked')).filter(cb => excelStatuses.includes(cb.dataset.status)).map(cb => cb.dataset.id);
-        if (ids.length === 0) { alert("Hech qanday tasdiqlangan/kutilayotgan buyurtma tanlanmagan"); return; }
+        if (ids.length === 0) { alert("Hech qanday buyurtma tanlanmagan"); return; }
         window.location.href = '/sales/nakladnoy/excel/bulk?ids=' + ids.join(',');
     }
     async function confirmSelected() {

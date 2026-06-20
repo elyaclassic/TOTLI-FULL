@@ -54,8 +54,98 @@ def _resync_active_cash(db):
         sync_cash_balance(db, _cr.id)
 
 
+def compute_delivery_distances(db: Session, deliveries):
+    """Yetkazishlar masofasi (1-bosqich: haversine).
+
+    Har (haydovchi, kun) bo'yicha guruhlaydi, o'sha kungi birinchi GPS nuqtadan
+    boshlab delivered_at tartibida ketma-ket haversine masofa hisoblaydi.
+    Qaytaradi: (segment_km_map, daily_totals)
+      segment_km_map: {delivery_id: km|None}  — oldingi nuqtadan masofa
+      daily_totals: [{driver_name, date, total_km}]
+    """
+    from app.utils.geo import haversine_km
+    from collections import defaultdict
+    from app.models.database import Order as _Order, Partner as _Partner
+
+    # Mijoz nomlari (order -> partner) — marker hover/balloon uchun
+    _oids = list({d.order_id for d in deliveries if d.order_id})
+    mijoz_map = {}
+    if _oids:
+        for _oid, _pname in (
+            db.query(_Order.id, _Partner.name)
+            .outerjoin(_Partner, _Order.partner_id == _Partner.id)
+            .filter(_Order.id.in_(_oids))
+            .all()
+        ):
+            mijoz_map[_oid] = _pname
+
+    groups = defaultdict(list)
+    for d in deliveries:
+        if not d.delivered_at:
+            continue
+        groups[(d.driver_id, d.delivered_at.date())].append(d)
+
+    segment_km_map = {}
+    daily_totals = []
+    for (driver_id, day), items in groups.items():
+        items.sort(key=lambda x: x.delivered_at)
+        # GPS start — o'sha kun + haydovchining birinchi yozilgan nuqtasi
+        gps_start = None
+        if driver_id:
+            day_start = datetime(day.year, day.month, day.day, 0, 0, 0)
+            day_end = datetime(day.year, day.month, day.day, 23, 59, 59)
+            loc = (
+                db.query(DriverLocation)
+                .filter(
+                    DriverLocation.driver_id == driver_id,
+                    DriverLocation.recorded_at >= day_start,
+                    DriverLocation.recorded_at <= day_end,
+                )
+                .order_by(DriverLocation.recorded_at)
+                .first()
+            )
+            if loc and loc.latitude and loc.longitude:
+                gps_start = (float(loc.latitude), float(loc.longitude))
+        prev = gps_start
+        total = 0.0
+        pts = []  # marshrut nuqtalari (xarita modal uchun)
+        if gps_start:
+            pts.append({"lat": gps_start[0], "lon": gps_start[1], "n": "S",
+                        "title": "Boshlanish (GPS)", "mijoz": "", "addr": "", "time": "", "seg": None})
+        n = 0
+        for d in items:
+            if not (d.latitude and d.longitude):
+                segment_km_map[d.id] = None
+                continue
+            if prev:
+                seg = haversine_km(prev[0], prev[1], float(d.latitude), float(d.longitude))
+                segment_km_map[d.id] = round(seg, 1)
+                total += seg
+            else:
+                segment_km_map[d.id] = None  # birinchi nuqta, GPS start yo'q
+            prev = (float(d.latitude), float(d.longitude))
+            n += 1
+            pts.append({
+                "lat": float(d.latitude), "lon": float(d.longitude), "n": n,
+                "title": d.order_number or f"#{d.id}",
+                "mijoz": mijoz_map.get(d.order_id) or "",
+                "addr": d.delivery_address or "",
+                "time": d.delivered_at.strftime("%H:%M") if d.delivered_at else "",
+                "seg": segment_km_map.get(d.id),
+            })
+        driver = items[0].driver
+        daily_totals.append({
+            "driver_name": (driver.full_name if driver else "—"),
+            "date": day,
+            "total_km": round(total, 1),
+            "route_points": pts,
+        })
+    daily_totals.sort(key=lambda x: (x["date"], x["driver_name"]), reverse=True)
+    return segment_km_map, daily_totals
+
+
 @router.get("/delivery", response_class=HTMLResponse)
-async def delivery_list(request: Request, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
+async def delivery_list(request: Request, d_from: str = "", d_to: str = "", d_q: str = "", d_status: str = "delivered", page: int = 1, db: Session = Depends(get_db), current_user: User = Depends(require_admin_or_manager)):
     drivers = db.query(Driver).all()
     today = datetime.now().date()
     driver_ids = [d.id for d in drivers]
@@ -94,11 +184,78 @@ async def delivery_list(request: Request, db: Session = Depends(get_db), current
         driver.today_deliveries = today_count_map.get(driver.id, 0)
         driver.pending_deliveries = pending_count_map.get(driver.id, 0)
     deliveries = db.query(Delivery).order_by(Delivery.created_at.desc()).limit(50).all()
+    # Yakunlangan yetkazishlar — holat (delivered/cancelled/failed/all) + sana filtri + qidiruv
+    from sqlalchemy import or_
+    _status_map = {
+        "delivered": ["delivered"],
+        "cancelled": ["cancelled"],
+        "failed": ["failed"],
+        "all": ["delivered", "failed", "cancelled"],
+    }
+    _statuses = _status_map.get(d_status, ["delivered"])
+    delivered_q = db.query(Delivery).filter(Delivery.status.in_(_statuses))
+    if d_from:
+        try:
+            delivered_q = delivered_q.filter(Delivery.created_at >= datetime.strptime(d_from, "%Y-%m-%d"))
+        except ValueError:
+            pass
+    if d_to:
+        try:
+            _to = datetime.strptime(d_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+            delivered_q = delivered_q.filter(Delivery.created_at <= _to)
+        except ValueError:
+            pass
+    d_q_clean = (d_q or "").strip()
+    if d_q_clean:
+        like = f"%{d_q_clean}%"
+        delivered_q = delivered_q.outerjoin(Driver, Delivery.driver_id == Driver.id).filter(
+            or_(
+                Delivery.delivery_address.ilike(like),
+                Delivery.order_number.ilike(like),
+                Delivery.number.ilike(like),
+                Driver.full_name.ilike(like),
+            )
+        )
+    # Sahifalash (pagination) — har sahifada 30 ta
+    from app.utils.pagination import paginate, pagination_query_string
+    delivered_q = delivered_q.order_by(Delivery.created_at.desc())
+    pg = paginate(delivered_q, page, per_page=30)
+    delivered_deliveries = pg["items"]
+    # Masofa (haversine) — BUTUN filtrlangan dataset (pagination'siz), guruh to'liq bo'lsin
+    segment_km_map, daily_totals = compute_delivery_distances(db, delivered_q.all())
+    # Yetkazilgan yetkazishlar uchun mijoz nomlari (order -> partner), 1 ta JOIN query
+    from app.models.database import Order, Partner
+    delivered_mijoz_map: dict = {}
+    _order_ids = list(
+        {d.order_id for d in delivered_deliveries if d.order_id}
+        | {d.order_id for d in deliveries if d.order_id}
+    )
+    if _order_ids:
+        for oid, pname in (
+            db.query(Order.id, Partner.name)
+            .outerjoin(Partner, Order.partner_id == Partner.id)
+            .filter(Order.id.in_(_order_ids))
+            .all()
+        ):
+            delivered_mijoz_map[oid] = pname
     return templates.TemplateResponse("delivery/list.html", {
         "request": request,
         "current_user": current_user,
         "drivers": drivers,
         "deliveries": deliveries,
+        "delivered_deliveries": delivered_deliveries,
+        "delivered_mijoz_map": delivered_mijoz_map,
+        "segment_km_map": segment_km_map,
+        "daily_totals": daily_totals,
+        "yandex_maps_key": __import__("os").getenv("YANDEX_MAPS_API_KEY", ""),
+        "d_from": d_from,
+        "d_to": d_to,
+        "d_q": d_q_clean,
+        "d_status": d_status,
+        "d_page": pg["page"],
+        "d_total_pages": pg["total_pages"],
+        "d_total_count": pg["total_count"],
+        "d_qs": pagination_query_string({"d_from": d_from, "d_to": d_to, "d_q": d_q_clean, "d_status": d_status}),
         "page_title": "Yetkazib berish",
     })
 

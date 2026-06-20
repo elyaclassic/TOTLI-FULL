@@ -2253,6 +2253,34 @@ def _build_partner_movements(db: Session, partner_id: int, date_from: datetime, 
             "credit": 0.0,
         })
 
+    # Agent inkassatsiya shortfall (Yondashuv B, 2026-06-19): mijoz agentga to'ladi,
+    # agent kassaga topshirmadi -> mijoz qarzi shu summa kamayadi (CREDIT). Kassaga kelgan
+    # qism (Payment) yuqorida alohida credit. compute_partner_balance bilan izchil bo'lishi
+    # SHART — aks holda recon davr oxiri qoldig'i partner.balance'dan farq qiladi.
+    from app.models.database import AgentPayment as _AgPay
+    for ap in db.query(_AgPay).filter(
+        _AgPay.partner_id == partner_id,
+        _AgPay.status == "confirmed",
+    ):
+        full_ap = float(ap.amount or 0)
+        cash_ap = 0.0
+        if ap.payment_id:
+            _pay = db.query(Payment).filter(Payment.id == ap.payment_id).first()
+            cash_ap = float(_pay.amount or 0) if _pay else 0.0
+        shortfall = max(0.0, full_ap - cash_ap)
+        if shortfall <= 0:
+            continue
+        ap_date = ap.created_at or date_from_start
+        rows.append({
+            "date": ap_date,
+            "doc_type": "Agent inkassatsiya",
+            "doc_number": f"AP#{ap.id}",
+            "doc_label": f"Agent inkassatsiya (kassaga topshirilmagan) AP#{ap.id} {ap_date.strftime('%d.%m.%Y %H:%M') if ap_date else ''}".strip(),
+            "doc_url": "",
+            "debit": 0.0,
+            "credit": shortfall,
+        })
+
     rows.sort(key=lambda r: r["date"])
     opening_debit = 0.0
     opening_credit = 0.0

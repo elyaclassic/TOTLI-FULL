@@ -1785,8 +1785,14 @@ async def qoldiqlar_tovar_hujjat_tasdiqlash(
                 note=f"{'Qoldiq kiritish' if is_qld else 'Inventarizatsiya'}: {doc.number}",
                 created_at=doc.date,
             )
-        # C2: QLD/INV qoldiq kiritish tan narx hodisasi EMAS — Product.purchase_price'ga
-        # tegmaymiz (eski overwrite buzilish manbai edi). Tan narx production'da yangilanadi.
+        # C2: QLD/INV qoldiq kiritish mavjud tan narxni OVERWRITE qilmaydi —
+        # Product.purchase_price'ga tegmaymiz (eski overwrite buzilish manbai edi).
+        # ISTISNO (yangi filial/mahsulot): purchase_price BO'SH (0/None) bo'lsa va hujjatda
+        # tan narx kiritilgan bo'lsa — boshlang'ich tan narxni hujjatdan to'ldiramiz.
+        # Bu faqat bo'sh narxni o'rnatadi; mavjud narx hech qachon ustiga yozilmaydi.
+        _prod = item.product or db.query(Product).filter(Product.id == item.product_id).first()
+        if _prod and not (_prod.purchase_price or 0) and (item.cost_price or 0) > 0:
+            _prod.purchase_price = item.cost_price
 
     # Faqat hujjatdagi tovarlar yangilanadi — boshqa tovarlarning qoldig'iga tegmaydi
 

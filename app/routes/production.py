@@ -1707,7 +1707,6 @@ async def create_production(
             # Mavjud production ning ichidagi miqdorlarni olish
             existing_items = {pi.product_id: round(float(pi.quantity or 0), 4) for pi in cand.production_items}
             if existing_items == new_items:
-                from urllib.parse import quote
                 msg = quote(f"Oxirgi 5 daqiqada aynan shu retsept, miqdor va tarkib bilan buyurtma yaratilgan: {cand.number}.")
                 return RedirectResponse(url=f"/production?error=duplicate&msg={msg}", status_code=303)
     if output_warehouse_id is None:
@@ -1716,13 +1715,18 @@ async def create_production(
     if not recipe:
         raise HTTPException(status_code=404, detail="Retsept topilmadi")
     # Operator: forma orqali tanlangan yoki joriy foydalanuvchiga bog'langan xodim.
-    # Operator MAJBURIY — admin (employee link yo'q) tanlamasdan PR yaratsa, bu PR
-    # boshqa operatorlarga ko'rinmaydi (filter intended) → ish bekorga turadi.
+    # Operator: forma orqali tanlangan yoki joriy foydalanuvchiga bog'langan xodim.
+    # Operator oddiy operator/ishlab chiqarish roli uchun MAJBURIY — tanlamasdan PR
+    # yaratsa, bu PR boshqa operatorlarga ko'rinmaydi (filter intended).
+    # AMMO admin/menejer/rahbar tezkor formadan operatorsiz ham PR yarata oladi
+    # (tezkor formada operator maydoni yo'q; ular can_view_all bo'lgani uchun ko'radi).
     effective_operator_id = int(operator_id) if operator_id else None
     if effective_operator_id is None and current_user:
         current_user_employee = db.query(Employee).filter(Employee.user_id == current_user.id).first()
         effective_operator_id = current_user_employee.id if current_user_employee else None
-    if effective_operator_id is None:
+    _role = (current_user.role or "").strip().lower() if current_user else ""
+    _is_admin = _role in ("admin", "manager", "menejer", "rahbar", "raxbar")
+    if effective_operator_id is None and not _is_admin:
         msg = quote("Operator tanlanmagan. Iltimos, formada operator (xodim) tanlang.")
         return RedirectResponse(url=f"/production?error=operator_required&detail={msg}", status_code=303)
     max_stage = _recipe_max_stage(recipe)
