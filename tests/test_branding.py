@@ -82,9 +82,14 @@ def test_save_branding_image(tmp_path, monkeypatch):
 
 
 def test_upload_requires_admin(client, db, agent_user):
-    """Admin bo'lmagan foydalanuvchi yuklay olmaydi."""
+    """Admin bo'lmagan foydalanuvchi yuklay olmaydi (JSON so'rovda 403)."""
+    from app.utils.auth import create_session_token, generate_csrf_token
     from app.deps import get_current_user
     from main import app
+
+    # agent_user uchun to'g'ri session token — auth middleware o'tadi
+    token = create_session_token(agent_user.id, user_type="user")
+    csrf = generate_csrf_token()
 
     app.dependency_overrides[get_current_user] = lambda: agent_user
     try:
@@ -92,8 +97,16 @@ def test_upload_requires_admin(client, db, agent_user):
             "/admin/branding/upload",
             data={"slot": "logo_main"},
             files={"image": ("x.png", b"x", "image/png")},
+            headers={
+                "Accept": "application/json",
+                "X-CSRF-Token": csrf,
+            },
+            cookies={
+                "session_token": token,
+                "csrf_token": csrf,
+            },
             follow_redirects=False,
         )
-        assert resp.status_code in (302, 303, 401, 403)
+        assert resp.status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_user, None)
