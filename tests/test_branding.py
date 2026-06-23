@@ -81,6 +81,15 @@ def test_save_branding_image(tmp_path, monkeypatch):
     assert (fake_dir / fname).is_file()
 
 
+def test_login_page_uses_branding(client):
+    """Login sahifasi branding() global'ini ishlatadi — xatosiz render bo'ladi."""
+    from app.services import branding_service
+    branding_service.invalidate_branding_cache()   # oldingi test dirty cache'ni tozalash
+    resp = client.get("/login")
+    assert resp.status_code == 200
+    assert "/static/images/" in resp.text
+
+
 def test_upload_requires_admin(client, db, agent_user):
     """Admin bo'lmagan foydalanuvchi yuklay olmaydi (JSON so'rovda 403)."""
     from app.utils.auth import create_session_token, generate_csrf_token

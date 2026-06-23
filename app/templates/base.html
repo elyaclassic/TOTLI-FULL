@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ page_title }} - TOTLI HOLVA</title>
-    <link rel="icon" href="/static/images/logo.png" type="image/png">
+    <link rel="icon" href="{{ branding().logo_main }}" type="image/png">
     <meta name="csrf-token" content="{{ csrf_token_from_request(request) }}">
 
     <!-- Tungi rejim — sahifa yuklangan paytda darhol qo'llash (FOUC oldini olish) -->
@@ -889,7 +889,7 @@
     <!-- Sidebar -->
     <nav class="sidebar">
         <div class="logo">
-            <img src="/static/images/logo_circle.png" alt="TOTLI HOLVA"
+            <img src="{{ branding().logo_circle }}" alt="TOTLI HOLVA"
                 style="width: 240px; height: 240px; object-fit: contain; display: block;">
             <span
                 style="color: #FFB50D; font-size: 14px; text-transform: uppercase; letter-spacing: 2px; display: block; margin-top: 5px; font-weight: 700;">SWEETS</span>
@@ -1805,7 +1805,7 @@
 
             // Browser Notification API (faqat ruxsat bo'lsa)
             if (isHigh && window.Notification && Notification.permission === 'granted') {
-                new Notification(title, { body: message, icon: '/static/images/logo.png' });
+                new Notification(title, { body: message, icon: '{{ branding().logo_main }}' });
             }
 
             // 8 soniyadan keyin avtomatik yopiladi
