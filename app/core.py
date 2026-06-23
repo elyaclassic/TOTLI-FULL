@@ -75,3 +75,7 @@ templates.env.filters["tojson"] = _tojson
 # Template'lar `{% if user_can_override(current_user) %}` deb ishlatadi (5 joyda rol ro'yxati DRY).
 from app.services.stock_reservation import user_can_override as _user_can_override
 templates.env.globals["user_can_override"] = _user_can_override
+
+# Brending (logo) — barcha templatelarga avtomatik. Runtime cache, DB session kerak emas.
+from app.services.branding_service import get_branding_cached as _get_branding
+templates.env.globals["branding"] = _get_branding

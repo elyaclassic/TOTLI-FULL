@@ -34,3 +34,30 @@ def resolve_branding(db) -> dict:
     except Exception:
         pass
     return result
+
+
+_cache = None
+
+
+def _load_branding() -> dict:
+    """DB session ochib resolve_branding'ni chaqiradi (runtime)."""
+    from app.models.database import SessionLocal
+    db = SessionLocal()
+    try:
+        return resolve_branding(db)
+    finally:
+        db.close()
+
+
+def get_branding_cached() -> dict:
+    """Runtime cache — Jinja global shuni ishlatadi. Kam o'zgaradi."""
+    global _cache
+    if _cache is None:
+        _cache = _load_branding()
+    return _cache
+
+
+def invalidate_branding_cache() -> None:
+    """Logo yangilanganda/qaytarilganda chaqiriladi."""
+    global _cache
+    _cache = None
