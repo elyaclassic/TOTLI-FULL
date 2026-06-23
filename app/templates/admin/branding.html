@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid py-3">
+  <h3 class="mb-3"><i class="bi bi-image"></i> Brending sozlamalari</h3>
+
+  {% if msg == "saved" %}<div class="alert alert-success">Logo saqlandi.</div>{% endif %}
+  {% if msg == "reset" %}<div class="alert alert-info">Standart logoga qaytarildi.</div>{% endif %}
+  {% if err == "ext" %}<div class="alert alert-danger">Faqat PNG / JPG / WEBP qabul qilinadi.</div>{% endif %}
+  {% if err == "size" %}<div class="alert alert-danger">Rasm hajmi 2 MB dan oshmasligi kerak.</div>{% endif %}
+  {% if err == "invalid" %}<div class="alert alert-danger">Fayl haqiqiy rasm emas yoki buzilgan.</div>{% endif %}
+  {% if err == "slot" %}<div class="alert alert-danger">Noto'g'ri logo turi.</div>{% endif %}
+
+  <div class="row g-3">
+    {% set slots = [
+        ("logo_main", "Asosiy logo", "Favicon va bildirishnomalar uchun (to'rtburchak).", current.logo_main),
+        ("logo_circle", "Dumaloq logo", "Yon panel (sidebar) va kirish sahifasi uchun.", current.logo_circle)
+    ] %}
+    {% for slot, title, hint, src in slots %}
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body text-center">
+          <h5 class="card-title">{{ title }}</h5>
+          <p class="text-muted small">{{ hint }}</p>
+          <img src="{{ src }}?v={{ range(100000) | random }}" alt="{{ title }}"
+               style="max-width: 160px; max-height: 160px; object-fit: contain;"
+               class="mb-3 border rounded p-2">
+          <form action="/admin/branding/upload" method="post" enctype="multipart/form-data" class="mb-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <input type="hidden" name="slot" value="{{ slot }}">
+            <input type="file" name="image" accept="image/png,image/jpeg,image/webp" required class="form-control mb-2">
+            <button type="submit" class="btn btn-primary w-100">
+              <i class="bi bi-upload"></i> Yuklash
+            </button>
+          </form>
+          <form action="/admin/branding/reset" method="post"
+                onsubmit="return confirm('Standart logoga qaytarilsinmi?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token_from_request(request) }}">
+            <input type="hidden" name="slot" value="{{ slot }}">
+            <button type="submit" class="btn btn-outline-secondary btn-sm w-100">
+              <i class="bi bi-arrow-counterclockwise"></i> Standartga qaytarish
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

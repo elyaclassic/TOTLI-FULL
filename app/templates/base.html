@@ -1290,6 +1290,13 @@
                 </a>
             </li>
             {% endif %}
+            {% if current_user and current_user.role == 'admin' %}
+            <li class="nav-item">
+                <a class="nav-link {% if page_title == 'Brending sozlamalari' %}active{% endif %}" href="/admin/branding">
+                    <i class="bi bi-image"></i> Brending
+                </a>
+            </li>
+            {% endif %}
 
             <!-- HISOBOTLAR -->
             <li class="nav-item mt-3">
