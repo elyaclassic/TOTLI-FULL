@@ -2536,5 +2536,14 @@ class ClosedPeriod(Base):
     user = relationship("User", foreign_keys=[closed_by])
 
 
+class AppSetting(Base):
+    """Universal key-value sozlamalar (logo, kelajakda kompaniya nomi/rang va h.k.)."""
+    __tablename__ = "app_settings"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(Text, nullable=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 if __name__ == "__main__":
     init_db()
