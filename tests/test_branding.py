@@ -65,3 +65,35 @@ def test_cache_invalidation(monkeypatch):
     third = branding_service.get_branding_cached()
     assert calls["n"] == 2           # invalidate'dan keyin qayta yuklandi
     assert third != first
+
+
+def test_save_branding_image(tmp_path, monkeypatch):
+    """save_branding_image faylni timestamp nomi bilan saqlaydi."""
+    from app.services import branding_service
+
+    fake_dir = tmp_path / "branding"
+    monkeypatch.setattr(branding_service, "BRANDING_DIR", str(fake_dir))
+
+    fname = branding_service.save_branding_image("logo_main", b"PNGDATA", "png")
+
+    assert fname.startswith("logo_main_")
+    assert fname.endswith(".png")
+    assert (fake_dir / fname).is_file()
+
+
+def test_upload_requires_admin(client, db, agent_user):
+    """Admin bo'lmagan foydalanuvchi yuklay olmaydi."""
+    from app.deps import get_current_user
+    from main import app
+
+    app.dependency_overrides[get_current_user] = lambda: agent_user
+    try:
+        resp = client.post(
+            "/admin/branding/upload",
+            data={"slot": "logo_main"},
+            files={"image": ("x.png", b"x", "image/png")},
+            follow_redirects=False,
+        )
+        assert resp.status_code in (302, 303, 401, 403)
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

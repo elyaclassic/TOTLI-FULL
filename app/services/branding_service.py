@@ -4,6 +4,7 @@ resolve_branding(db) -> sof funksiya, DB'dan logo yo'llarini o'qiydi, fayl
 mavjudligini tekshiradi, yo'q bo'lsa standartga qaytadi.
 """
 import os
+import time
 
 BRANDING_KEYS = ("logo_main", "logo_circle")
 
@@ -13,6 +14,34 @@ DEFAULTS = {
 }
 
 BRANDING_DIR = os.path.join("app", "static", "images", "branding")
+
+ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp"}
+MAX_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+def save_branding_image(slot: str, contents: bytes, ext: str) -> str:
+    """Rasmni branding papkasiga timestamp nomi bilan saqlaydi. Fayl nomini qaytaradi."""
+    os.makedirs(BRANDING_DIR, exist_ok=True)
+    ts = int(time.time())
+    filename = f"{slot}_{ts}.{ext}"
+    with open(os.path.join(BRANDING_DIR, filename), "wb") as f:
+        f.write(contents)
+    return filename
+
+
+def cleanup_old_branding(slot: str, keep: str) -> None:
+    """slot prefiksli, keep'dan boshqa eski fayllarni o'chiradi."""
+    try:
+        if not os.path.isdir(BRANDING_DIR):
+            return
+        for name in os.listdir(BRANDING_DIR):
+            if name.startswith(f"{slot}_") and name != keep:
+                try:
+                    os.remove(os.path.join(BRANDING_DIR, name))
+                except OSError:
+                    pass
+    except Exception:
+        pass
 
 
 def resolve_branding(db) -> dict:
