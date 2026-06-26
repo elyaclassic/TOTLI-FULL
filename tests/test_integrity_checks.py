@@ -16,7 +16,7 @@ def _mem_db():
             partner_id INTEGER, warehouse_id INTEGER, price_type_id INTEGER,
             source TEXT, subtotal REAL, total REAL, paid REAL, debt REAL,
             discount_percent REAL DEFAULT 0, discount_amount REAL DEFAULT 0,
-            payment_type TEXT
+            payment_type TEXT, parent_order_id INTEGER
         );
         CREATE TABLE order_items (
             id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER,
@@ -147,3 +147,36 @@ def test_agent_debt_agent_confirmed_excluded():
     cur.execute("INSERT INTO orders (id,type,status,source,total,paid,debt) VALUES (2,'sale','out_for_delivery','agent',500,0,0)")
     count, msg = ic.check_agent_debt_desync(cur)
     assert count == 0, f"agent confirmed/out_for_delivery chiqarilishi kerak, topildi {count}"
+
+
+# --- Обмен phantom debt (2026-06-26, #402 holati) ---
+
+def test_obmen_phantom_debt_detects():
+    """Child sotuv delivered + parent qaytarish muallaq (confirmed) = phantom debt."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,number,type,status) VALUES (1,'AGT-020','return_sale','confirmed')")
+    cur.execute("INSERT INTO orders (id,number,type,status,parent_order_id) VALUES (2,'AGT-021','sale','delivered',1)")
+    count, msg = ic.check_obmen_phantom_debt(cur)
+    assert count == 1, f"1 phantom debt kutilgan, topildi {count}"
+    assert msg and "phantom" in msg.lower()
+
+
+def test_obmen_phantom_debt_clean_both_delivered():
+    """Parent qaytarish ham delivered — to'g'ri yakunlangan Обмен, drift yo'q."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,number,type,status) VALUES (1,'AGT-020','return_sale','delivered')")
+    cur.execute("INSERT INTO orders (id,number,type,status,parent_order_id) VALUES (2,'AGT-021','sale','delivered',1)")
+    count, msg = ic.check_obmen_phantom_debt(cur)
+    assert count == 0 and msg is None
+
+
+def test_obmen_phantom_debt_cancelled_child_excluded():
+    """Child sotuv CANCELLED — zararsiz (balansga ta'sir 0), chiqariladi (#388/#148 holati)."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO orders (id,number,type,status) VALUES (1,'AGT-001','return_sale','confirmed')")
+    cur.execute("INSERT INTO orders (id,number,type,status,parent_order_id) VALUES (2,'AGT-002','sale','cancelled',1)")
+    count, msg = ic.check_obmen_phantom_debt(cur)
+    assert count == 0, f"cancelled child chiqarilishi kerak, topildi {count}"

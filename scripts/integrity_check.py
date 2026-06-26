@@ -360,6 +360,36 @@ def check_agent_debt_desync(cur) -> tuple[int, str | None]:
     return len(bad), msg
 
 
+def check_obmen_phantom_debt(cur) -> tuple[int, str | None]:
+    """Обмен juftligida yangi sotuv (child) yetkazilgan, lekin qaytarish (parent
+    return_sale) muallaq (confirmed/out_for_delivery) qolgan — phantom debt.
+
+    Sotuv qarz qo'shadi, qaytarish esa kredit qo'llamaydi (apply_return faqat
+    delivered'da) → mijoz qaytarish summasi qadar ortiqcha qarzdor ko'rinadi
+    (#402 'asmo 2 glabal' holati, 2026-06-26).
+
+    Child CANCELLED bo'lsa zararsiz (sotuv qarz qo'shmaydi, qaytarish ham nol) —
+    faqat child='delivered' chiqariladi.
+    """
+    cur.execute("""
+        SELECT child.number, child.partner_id, parent.number, parent.status, parent.total
+        FROM orders child
+        JOIN orders parent ON parent.id = child.parent_order_id
+        WHERE child.type = 'sale' AND child.status = 'delivered'
+          AND parent.type = 'return_sale'
+          AND parent.status NOT IN ('delivered', 'cancelled')
+    """)
+    rows = cur.fetchall()
+    if not rows:
+        return 0, None
+    msg = f"❌ <b>Обмен phantom debt</b> (sotuv yetkazilgan, qaytarish muallaq): {len(rows)} ta\n"
+    for r in rows[:5]:
+        msg += f"  sotuv {r[0]} → qaytarish {r[2]} status={r[3]} ({float(r[4] or 0):,.0f}) partner#{r[1]}\n"
+    if len(rows) > 5:
+        msg += f"  ...va yana {len(rows) - 5} ta\n"
+    return len(rows), msg
+
+
 def check_partner_balance_drift_orm(db) -> tuple[int, str | None]:
     """Partner.balance != compute_partner_balance(hujjatlar) — drift.
 
@@ -406,6 +436,7 @@ CHECKS = [
     ("Noto'g'ri ombordan sotuv", check_sale_from_wrong_warehouse),
     ("Narx turi (price_type) NULL", check_null_price_type),
     ("Qarz desync (debt vs total-paid)", check_agent_debt_desync),
+    ("Обмен phantom debt (sotuv yetkazilgan, qaytarish muallaq)", check_obmen_phantom_debt),
 ]
 
 
