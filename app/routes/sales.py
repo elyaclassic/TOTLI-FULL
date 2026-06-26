@@ -1413,8 +1413,42 @@ def _revert_return_sale_exchange(db, order, current_user):
             url="/sales?error=exchange_revert&detail=" + quote(
                 "To'lovli almashtirishni bu yerdan bekor qilib bo'lmaydi. Admin bilan bog'laning."),
             status_code=303)
+    from app.models.database import Delivery as DeliveryModel
     affected = set()
     for d in docs:
+        # out_for_delivery — /dispatch ombordan chiqargan (faqat sale uchun;
+        # return_sale dispatch stock chiqarmaydi). Draft'ga qaytarishdan oldin
+        # chiqimni qaytarish SHART — aks holda tahrirlab qayta dispatch qilinsa
+        # ombor IKKI marta kamayadi (drift). Oddiy sotuv revert'i kabi (sales_revert).
+        if (d.status or "") == "out_for_delivery" and (d.type or "") == "sale":
+            for item in (d.items or []):
+                wh_id = item.warehouse_id if item.warehouse_id else d.warehouse_id
+                if not wh_id or not item.product_id:
+                    continue
+                create_stock_movement(
+                    db=db,
+                    warehouse_id=wh_id,
+                    product_id=item.product_id,
+                    quantity_change=float(item.quantity or 0),
+                    operation_type="dispatch_revert",
+                    document_type="Sale",
+                    document_id=d.id,
+                    document_number=d.number,
+                    user_id=current_user.id if current_user else None,
+                    note=f"Almashtirishni bekor qilish (chiqim qaytarildi): {d.number}",
+                    created_at=datetime.now(),
+                )
+        # Yetkazilmagan (ochiq) delivery'larni bekor qilish — aks holda haydovchi
+        # ilovasida 'pending' bo'lib qoladi va qayta yetkazilib double-count chiqaradi.
+        for delivery in db.query(DeliveryModel).filter(
+            DeliveryModel.order_id == d.id,
+            DeliveryModel.status.in_(["pending", "in_progress", "failed", "picked_up"]),
+        ).all():
+            delivery.status = "cancelled"
+        # Qayta dispatch uchun toza holat
+        d.delivery_date = None
+        d.dispatched_at = None
+        d.pending_driver_id = None
         d.status = "draft"
         if d.partner_id:
             affected.add(d.partner_id)
