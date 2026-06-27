@@ -279,25 +279,33 @@ def check_subtotal_desync(cur) -> tuple[int, str | None]:
 def check_sale_from_wrong_warehouse(cur) -> tuple[int, str | None]:
     """Sotuv Vozvrat (wh=7) yoki Xom ashyo (wh=1) ombordan bo'lmasligi kerak.
 
-    Order.warehouse_id yoki biror OrderItem.warehouse_id shu omborlarda bo'lsa.
+    Shubhali OrderItem:
+      - wh=7 (Vozvrat) dan har qanday sotuv, YOKI
+      - wh=1 (Xom ashyo) dan NO-xom-ashyo (tayyor/yarim_tayyor) mahsulot sotuvi.
+    ISTISNO (2026-06-27): xom ashyo turidagi mahsulot (products.type='hom_ashyo')
+    Xom ashyo ombordan (wh=1) sotilishi LEGITIM (masalan saryog') — false positive emas.
     """
     cur.execute("""
         SELECT DISTINCT o.id, o.number, o.warehouse_id,
                (SELECT GROUP_CONCAT(DISTINCT oi.warehouse_id)
-                FROM order_items oi
-                WHERE oi.order_id = o.id AND oi.warehouse_id IN (1, 7)) AS bad_item_wh
+                FROM order_items oi JOIN products p ON p.id = oi.product_id
+                WHERE oi.order_id = o.id
+                  AND (oi.warehouse_id = 7
+                       OR (oi.warehouse_id = 1 AND COALESCE(p.type, '') != 'hom_ashyo'))
+               ) AS bad_item_wh
         FROM orders o
         WHERE o.type = 'sale' AND o.status NOT IN ('cancelled', 'draft')
-          AND (
-            o.warehouse_id IN (1, 7)
-            OR EXISTS (SELECT 1 FROM order_items oi
-                       WHERE oi.order_id = o.id AND oi.warehouse_id IN (1, 7))
+          AND EXISTS (
+            SELECT 1 FROM order_items oi JOIN products p ON p.id = oi.product_id
+            WHERE oi.order_id = o.id
+              AND (oi.warehouse_id = 7
+                   OR (oi.warehouse_id = 1 AND COALESCE(p.type, '') != 'hom_ashyo'))
           )
     """)
     rows = cur.fetchall()
     if not rows:
         return 0, None
-    msg = f"❌ <b>Noto'g'ri ombordan sotuv</b> (Vozvrat=7/Xom ashyo=1): {len(rows)} ta\n"
+    msg = f"❌ <b>Noto'g'ri ombordan sotuv</b> (Vozvrat=7 yoki Xom ashyo=1'dan tayyor mahsulot): {len(rows)} ta\n"
     for r in rows[:5]:
         item_part = f", qator_wh={r[3]}" if r[3] else ""
         msg += f"  #{r[0]} {r[1] or ''} order_wh={r[2]}{item_part}\n"

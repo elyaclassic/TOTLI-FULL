@@ -22,6 +22,9 @@ def _mem_db():
             id INTEGER PRIMARY KEY, order_id INTEGER, product_id INTEGER,
             warehouse_id INTEGER, quantity REAL, price REAL, total REAL
         );
+        CREATE TABLE products (
+            id INTEGER PRIMARY KEY, name TEXT, type TEXT
+        );
     ''')
     return conn
 
@@ -49,17 +52,49 @@ def test_subtotal_desync_clean():
 def test_wrong_warehouse_detects():
     conn = _mem_db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (1,'sale','delivered',7)")
-    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (2,'sale','completed',1)")
-    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (3,'sale','completed',5)")
+    cur.execute("INSERT INTO products (id,name,type) VALUES (1,'Tayyor halva','tayyor')")
+    cur.execute("INSERT INTO products (id,name,type) VALUES (2,'Saryog','hom_ashyo')")
+    # order1: Vozvrat(7) dan tayyor mahsulot -> shubhali
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (1,'sale','delivered')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (1,1,7)")
+    # order2: Xom ashyo(1) dan TAYYOR mahsulot -> shubhali
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (2,'sale','completed')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (2,1,1)")
+    # order3: tayyor mahsulot ombori(5) -> toza
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (3,'sale','completed')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (3,1,5)")
     count, msg = ic.check_sale_from_wrong_warehouse(cur)
     assert count == 2, f"2 noto'g'ri kutilgan, topildi {count}"
+
+
+def test_wrong_warehouse_raw_material_excluded():
+    """Xom ashyo (hom_ashyo) mahsulot Xom ashyo ombordan (wh1) sotilsa -> LEGITIM."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO products (id,name,type) VALUES (2,'Saryog','hom_ashyo')")
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (1,'sale','delivered')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (1,2,1)")
+    count, msg = ic.check_sale_from_wrong_warehouse(cur)
+    assert count == 0, f"xom ashyo wh1 sotuvi legitim (false positive emas), topildi {count}"
+
+
+def test_wrong_warehouse_raw_from_vozvrat_still_flagged():
+    """Xom ashyo bo'lsa ham Vozvrat(7) dan sotuv shubhali bo'lib qoladi."""
+    conn = _mem_db()
+    cur = conn.cursor()
+    cur.execute("INSERT INTO products (id,name,type) VALUES (2,'Saryog','hom_ashyo')")
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (1,'sale','delivered')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (1,2,7)")
+    count, msg = ic.check_sale_from_wrong_warehouse(cur)
+    assert count == 1, f"Vozvrat(7) sotuvi xom ashyo bo'lsa ham shubhali, topildi {count}"
 
 
 def test_wrong_warehouse_clean():
     conn = _mem_db()
     cur = conn.cursor()
-    cur.execute("INSERT INTO orders (id,type,status,warehouse_id) VALUES (1,'sale','completed',5)")
+    cur.execute("INSERT INTO products (id,name,type) VALUES (1,'Tayyor','tayyor')")
+    cur.execute("INSERT INTO orders (id,type,status) VALUES (1,'sale','completed')")
+    cur.execute("INSERT INTO order_items (order_id,product_id,warehouse_id) VALUES (1,1,5)")
     count, msg = ic.check_sale_from_wrong_warehouse(cur)
     assert count == 0 and msg is None
 
