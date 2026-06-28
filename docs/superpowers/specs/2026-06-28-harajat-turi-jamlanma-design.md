@@ -72,8 +72,8 @@ Natija summa bo'yicha kamayish tartibida saralanadi. Har qator ulushi = summa / 
 ## O'zgaradigan fayllar
 
 - `app/routes/finance.py` — `finance_harajatlar`:
-  - `kind` parametri → `etype` (yoki `etype` qo'shib `kind` deprecate)
-  - HD va PAY filtr mantig'ini `etype` ga moslash
+  - `kind` parametri olib tashlanadi, o'rniga `etype` parametri qo'shiladi (foydalanuvchi tanlovi: almashtirish). `kind_options` o'chiriladi.
+  - HD va PAY filtr mantig'ini `etype` ga moslash (`et:<id>` → ExpenseDocItem bo'yicha, `cat:<code>` → Payment.category bo'yicha)
   - jamlanma agregatsiyasini hisoblab template'ga uzatish (`type_breakdown`, `expense_types` ro'yxati, `pay_categories` label xaritasi)
 - `app/templates/finance/harajatlar.html`:
   - "Tur" dropdown → "Harajat turi" (optgroup'li)
