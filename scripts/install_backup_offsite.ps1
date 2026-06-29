@@ -40,9 +40,9 @@ if (-not $python) {
     exit 1
 }
 
-& $python "$root\scripts\backup_offsite.py" 2>&1 | ForEach-Object {
-    if ($_) { Add-Content -Path "$root\backup_offsite.log" -Value $_ }
-}
+# backup_offsite.py O'ZI backup_offsite.log ga yozadi (log() funksiyasi faylga + print).
+# stdout'ni QAYTA log'ga yozmaymiz — aks holda har qator 2 marta yozilardi (dublikat fix 2026-06-29).
+& $python "$root\scripts\backup_offsite.py"
 exit $LASTEXITCODE
 '@
 Set-Content -Path $runner -Value $runnerContent -Encoding UTF8 -Force
