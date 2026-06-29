@@ -81,14 +81,19 @@ def send_telegram(text: str) -> None:
         pass
 
 
-def find_latest_backup() -> Path:
-    """backups/live/ dan eng yangi .db.gz qaytaradi."""
+def find_latest_backups(limit: int = 5) -> list[Path]:
+    """backups/live/ dan eng yangi .db.gz fayllarni (mtime kamayish tartibida) qaytaradi.
+
+    Bir nechta nomzod qaytaramiz: eng yangisi jonli backup tomonidan hali
+    yozilayotgan (yarim) bo'lishi mumkin (race condition) — bunday holda
+    chaqiruvchi tomon keyingi to'liq faylga o'tadi.
+    """
     if not LIVE_BACKUP_DIR.exists():
         raise FileNotFoundError(f"Live backup dir topilmadi: {LIVE_BACKUP_DIR}")
     files = sorted(LIVE_BACKUP_DIR.glob("*.db.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
     if not files:
         raise FileNotFoundError(f"backups/live ichida .db.gz fayl yo'q")
-    return files[0]
+    return files[:limit]
 
 
 def verify_gzip(path: Path) -> bool:
@@ -155,18 +160,34 @@ def main() -> int:
         return 1
 
     try:
-        latest = find_latest_backup()
+        candidates = find_latest_backups(limit=5)
     except FileNotFoundError as e:
         log(f"ERROR: {e}")
         send_telegram(f"❌ Off-site backup: {e}")
         healthcheck_ping(healthcheck, success=False)
         return 1
 
-    if not verify_gzip(latest):
-        log(f"ERROR: source fayl gzip buzilgan: {latest.name}")
-        send_telegram(f"❌ Off-site backup: source corrupt {latest.name}")
+    # Eng yangi nomzodlardan birinchi to'liq (gzip-valid) faylni tanlaymiz.
+    # Eng yangisi jonli backup tomonidan hali yozilayotgan bo'lishi mumkin —
+    # bunday holda keyingi (oldingi, to'liq yozilgan) faylga o'tamiz.
+    latest = None
+    skipped = []
+    for cand in candidates:
+        if verify_gzip(cand):
+            latest = cand
+            break
+        skipped.append(cand.name)
+
+    if latest is None:
+        names = ", ".join(skipped) if skipped else "(nomzod yo'q)"
+        log(f"ERROR: hech qaysi so'nggi nusxa gzip-valid emas: {names}")
+        send_telegram(f"❌ Off-site backup: so'nggi nusxalar buzuq: {names}")
         healthcheck_ping(healthcheck, success=False)
         return 1
+
+    if skipped:
+        log(f"INFO: {len(skipped)} ta yangi fayl o'tkazib yuborildi (hali yozilayotgan/buzuq): "
+            f"{', '.join(skipped)}; ishlatildi: {latest.name}")
 
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     target_file = target_dir / f"totli_holva_{timestamp}_offsite.db.gz"
